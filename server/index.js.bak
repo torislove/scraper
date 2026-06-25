@@ -1,0 +1,2316 @@
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const cron = require('node-cron');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const Fuse = require('fuse.js');
+const MiniSearch = require('minisearch');
+const multer = require('multer');
+const cloudinary = require('cloudinary').v2;
+const { HttpsProxyAgent } = require('https-proxy-agent');
+
+// Load .env — try the backend shared .env first (local), then process.env (Render)
+const backendEnvPath = path.join(__dirname, '../../backend/.env');
+if (fs.existsSync(backendEnvPath)) {
+  require('dotenv').config({ path: backendEnvPath });
+} else {
+  require('dotenv').config();
+}
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const upload = multer({ dest: 'uploads/' });
+
+const app = express();
+// CORS: allow Firebase-hosted frontends and local dev
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://gomandap-leads.web.app',
+    'https://gomandap-leads.firebaseapp.com',
+    /\.web\.app$/,
+    /\.firebaseapp\.com$/
+  ],
+  credentials: true
+}));
+app.use(express.json());
+
+// ===== GLOBAL ERROR HANDLERS TO PREVENT SERVER CRASHES =====
+// Handle uncaught promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
+  // Don't exit - let the server keep running
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error);
+  // Don't exit - let the server keep running
+});
+
+// Health check endpoint (Render pings this to verify the service is up)
+app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'gomandap-scraper' }));
+app.get('/', (req, res) => res.json({ status: 'ok', message: 'Gomandap Scraper API is running.' }));
+
+const PORT = process.env.SCRAPER_PORT || (process.env.RENDER ? process.env.PORT : 5002);
+
+function buildScrapeQuery(category, location) {
+  return `${category || ''} in ${location || ''}`.trim();
+}
+
+// Playwright: Only load if not in production or if ENABLE_PLAYWRIGHT env is set
+const PLAYWRIGHT_ENABLED = process.env.ENABLE_PLAYWRIGHT === 'true' || process.env.NODE_ENV !== 'production';
+let playwrightExtra = null;
+let browserEngines = { chromium: null, firefox: null, webkit: null };
+let stealth = null;
+// Backward-compat shim: some modules reference `chromium` directly.
+let chromium = null;
+const activeCronJobs = {};
+if (PLAYWRIGHT_ENABLED) {
+  try {
+    playwrightExtra = require('playwright-extra');
+    // expose available browser engines
+    browserEngines.chromium = playwrightExtra.chromium;
+    // Provide a minimal global shim for legacy code that expects `chromium` variable
+    try { global.chromium = browserEngines.chromium; } catch (e) {}
+    browserEngines.firefox = playwrightExtra.firefox || null;
+    browserEngines.webkit = playwrightExtra.webkit || null;
+    // Legacy shim removed; callers should use `browserEngines.chromium` instead
+
+    stealth = require('puppeteer-extra-plugin-stealth')();
+    // Attach stealth plugin to available engines
+    Object.values(browserEngines).forEach(engine => {
+      try { engine && engine.use && engine.use(stealth); } catch(e) {}
+    });
+
+    console.log('[Playwright] Browser engine loaded.');
+  } catch (e) {
+    console.warn('[Playwright] Not available on this server. Scraping will use Cheerio only.');
+  }
+} else {
+  console.log('[Playwright] Disabled in production. Using Cheerio-only scraping.');
+}
+const DATA_FILE = path.join(__dirname, 'data', 'scraped_vendors.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(path.join(__dirname, 'data'))) {
+  fs.mkdirSync(path.join(__dirname, 'data'));
+}
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+}
+
+const mongoose = require('mongoose');
+const StagingLead = require('./models/StagingLead');
+
+// Connect to MongoDB
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/gomandap_scraper')
+  .then(() => console.log('Scraper connected to MongoDB'))
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Load regions
+const REGIONS_FILE = path.join(__dirname, 'data', 'regions.json');
+const getRegions = () => fs.existsSync(REGIONS_FILE) ? JSON.parse(fs.readFileSync(REGIONS_FILE, 'utf-8')) : {};
+
+// Telecaller Data
+const EMPLOYEES_FILE = path.join(__dirname, 'data', 'employees.json');
+if (!fs.existsSync(EMPLOYEES_FILE)) {
+  fs.writeFileSync(EMPLOYEES_FILE, JSON.stringify([
+    { id: 'emp_1', username: 'telecaller1', password: 'password123', name: 'Agent 1', location: 'Guntur', role: 'employee' }
+  ]));
+}
+const getEmployees = () => JSON.parse(fs.readFileSync(EMPLOYEES_FILE, 'utf-8'));
+const writeEmployees = (data) => fs.writeFileSync(EMPLOYEES_FILE, JSON.stringify(data, null, 2));
+
+// Admin Credentials
+const ADMIN_FILE = path.join(__dirname, 'data', 'admin.json');
+if (!fs.existsSync(ADMIN_FILE)) {
+  fs.writeFileSync(ADMIN_FILE, JSON.stringify({ username: 'admin', password: 'password123' }));
+}
+const getAdminCredentials = () => JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf-8'));
+
+// Auth Login API
+app.post('/api/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  const admin = getAdminCredentials();
+  
+  if (username === admin.username && password === admin.password) {
+    return res.json({ success: true, user: { role: 'admin', name: 'Administrator' } });
+  }
+
+  const employees = getEmployees();
+  const employee = employees.find(e => e.username === username && e.password === password);
+  if (employee) {
+    return res.json({ success: true, user: { role: 'employee', name: employee.name, location: employee.location, id: employee.id, avatar: employee.avatar } });
+  }
+
+  res.status(401).json({ success: false, message: 'Invalid credentials' });
+});
+
+// Update Admin Credentials API
+app.put('/api/auth/admin', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
+  fs.writeFileSync(ADMIN_FILE, JSON.stringify({ username, password }));
+  res.json({ success: true, message: 'Admin credentials updated' });
+});
+
+// ===== SAFE PROMISE WRAPPER =====
+// Wraps async functions to prevent unhandled rejections from crashing the server
+async function safeExecute(fn, name = 'Operation') {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error(`[SafeExecute] ${name} failed:`, error.message);
+    addLog(`[SafeExecute] ${name} failed: ${error.message}`);
+    return null;
+  }
+}
+
+const CATEGORIES = [
+  "Banquet Halls", "Kalyana Mandapams", "Open Lawns & Farmhouses", 
+  "Resorts & Destination Venues", "5-Star Hotels", "Party & Mini Halls", 
+  "Temples & Ashrams", "Wedding Photographers", "Candid Photographers", 
+  "Pre-Wedding Shoots", "Cinematographers", "Drone Specialists", 
+  "Instant Photo Booths", "Decorators", "Caterers", "Makeup Artists", 
+  "Mehndi Designers", "Wedding Clothes / Boutiques", "Jewelry Shops", 
+  "Wedding Cards & Invites", "Cars & Buses (Travel)", "Astrologers / Pundits", 
+  "Honeymoon Packages", "Event Planners"
+];
+
+// Batch Queue State
+let batchQueue = [];
+let isBatchRunning = false;
+let batchProgress = { total: 0, completed: 0, currentTask: '', isActive: false };
+
+// Global Abort Signal & Kill Switch
+let globalAbortSignal = false;
+let activeBrowsers = [];
+
+// System Logs for Activity Dashboard
+let systemLogs = [];
+function addLog(msg) {
+  console.log(msg);
+  systemLogs.push(msg);
+  if (systemLogs.length > 50) systemLogs.shift();
+}
+
+// SSE clients for real-time logs
+let sseClients = [];
+function sendSse(msg) {
+  // Escape newlines
+  const safe = msg.replace(/\n/g, '\\n');
+  sseClients.forEach(res => {
+    try { res.write(`data: ${safe}\n\n`); } catch (e) {}
+  });
+}
+
+// Emit vendor event to SSE clients (payload should be a plain object)
+function emitVendorEvent(vendorObj, action = 'inserted') {
+  try {
+    const payload = { action, vendor: vendorObj };
+    const safe = JSON.stringify(payload).replace(/\n/g, '\\n');
+    sseClients.forEach(res => {
+      try { res.write('event: vendor\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
+    });
+  } catch (e) { console.error('Failed to emit vendor SSE', e.message); }
+}
+
+function addLog(msg) {
+  console.log(msg);
+  systemLogs.push(msg);
+  if (systemLogs.length > 200) systemLogs.shift();
+  // broadcast to SSE clients
+  try { sendSse(msg); } catch (e) {}
+}
+
+app.get('/api/logs', (req, res) => res.json(systemLogs));
+
+// Server-Sent Events endpoint for real-time activity stream
+app.get('/api/logs/stream', (req, res) => {
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  // Send initial payload as an 'init' event
+  res.write('event: init\n');
+  res.write(`data: ${JSON.stringify(systemLogs).replace(/\n/g, '\\n')}\n\n`);
+
+  sseClients.push(res);
+
+  req.on('close', () => {
+    sseClients = sseClients.filter(r => r !== res);
+  });
+});
+
+// NLP & Spelling Correction Setup
+const categoryFuse = new Fuse(CATEGORIES, { includeScore: true, threshold: 0.6 });
+
+const getFlatLocations = () => {
+  const regions = getRegions();
+  let allLocs = [];
+  for (const [district, mandals] of Object.entries(regions)) {
+    allLocs.push({ type: 'district', name: district });
+    if (mandals) {
+      for (const m of mandals) {
+        allLocs.push({ type: 'mandal', name: m, district: district });
+      }
+    }
+  }
+  return allLocs;
+};
+
+// Initialize MiniSearch for Locations
+let locationSearch = new MiniSearch({
+  fields: ['name', 'district'], 
+  storeFields: ['name', 'type', 'district'],
+  searchOptions: { fuzzy: 0.2, prefix: true }
+});
+// Add unique IDs to the locations so MiniSearch can index them
+const indexLocations = () => {
+  locationSearch.removeAll();
+  const flat = getFlatLocations().map((loc, i) => ({ id: `loc_${i}`, ...loc }));
+  locationSearch.addAll(flat);
+};
+indexLocations();
+
+// API: Get Regions
+app.get('/api/regions', (req, res) => {
+  res.json(getRegions());
+});
+
+// API: Get Knowledge Base (Categories + Flat Locations)
+app.get('/api/knowledge', (req, res) => {
+  res.json({
+    categories: CATEGORIES,
+    locations: getFlatLocations()
+  });
+});
+
+// Open-Source Proxy Rotator Setup
+let proxyList = [];
+
+async function fetchProxies() {
+  try {
+    console.log('[Proxy Rotator] Fetching fresh open-source proxies from GitHub (TheSpeedX)...');
+    const res = await axios.get('https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt');
+    const lines = res.data.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    proxyList = lines.map(ipPort => `http://${ipPort}`);
+    console.log(`[Proxy Rotator] Loaded ${proxyList.length} proxies.`);
+  } catch (error) {
+    console.error('[Proxy Rotator] Failed to fetch proxies:', error.message);
+  }
+}
+
+// Fetch proxies on startup and every hour
+fetchProxies();
+setInterval(fetchProxies, 60 * 60 * 1000);
+
+// Proxy Rotator Helper for Axios
+async function axiosWithProxy(url, options = {}, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    // 80% chance to use proxy if available, to distribute load but keep some direct
+    const useProxy = proxyList.length > 0 && Math.random() > 0.2; 
+    let httpsAgent = null;
+    let selectedProxy = null;
+
+    if (useProxy) {
+      selectedProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+      httpsAgent = new HttpsProxyAgent(selectedProxy);
+    }
+
+    try {
+      const response = await axios.get(url, {
+        ...options,
+        httpsAgent: httpsAgent,
+        proxy: false // Tell axios not to use its default proxy behavior
+      });
+      return response;
+    } catch (error) {
+      console.warn(`[Proxy Rotator] Proxy ${selectedProxy || 'Direct'} failed (${i+1}/${retries}). Retrying...`);
+    }
+  }
+  
+  // Final fallback directly without proxy
+  console.log(`[Proxy Rotator] All proxies failed for ${url}. Falling back to direct connection.`);
+  return axios.get(url, { ...options, httpsAgent: null, proxy: false });
+}
+
+// Helper to generate a random IP address
+function getRandomIP() {
+  return `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+}
+
+// API: Dynamic Global Location Search (Nominatim Proxy with IP Spoofing & Open-Source Proxy Rotation)
+app.get('/api/location/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.json([]);
+
+  try {
+    const fakeIP = getRandomIP();
+    // Using axiosWithProxy instead of raw axios!
+    const response = await axiosWithProxy(`https://nominatim.openstreetmap.org/search`, {
+      params: {
+        q: query,
+        format: 'json',
+        addressdetails: 1,
+        limit: 5,
+        countrycodes: 'in' // Restrict to India to keep it relevant, remove this param for truly global
+      },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'X-Forwarded-For': fakeIP,
+        'X-Real-IP': fakeIP
+      },
+      timeout: 5000 // Keep timeout strict since proxies can hang
+    });
+
+    const parsedLocations = response.data.map(item => ({
+      name: item.name,
+      display: item.display_name,
+      type: item.type,
+      lat: item.lat,
+      lon: item.lon
+    })).filter(loc => loc.name);
+
+    res.json(parsedLocations);
+  } catch (error) {
+    console.error('Nominatim Proxy Error:', error.message);
+    res.json([]);
+  }
+});
+
+// Big Data Analytics: Lead Quality Scoring Algorithm
+function calculateLeadScore(vendor) {
+  let score = 0;
+  
+  // Base Data
+  if (vendor.phone) score += 30;
+  if (vendor.address) score += 10;
+  
+  // Rich Data
+  if (vendor.website) score += 20;
+  
+  // Reputation
+  if (vendor.rating && parseFloat(vendor.rating) > 4.2) score += 15;
+  if (vendor.reviews && parseInt(vendor.reviews.replace(/,/g, '')) > 50) score += 5;
+  
+  // Deep Scraped Data
+  if (vendor.email) score += 10;
+  if (vendor.instagram) score += 5;
+  if (vendor.facebook) score += 5;
+
+  return Math.min(score, 100);
+}
+
+function determineTier(score) {
+  if (score >= 80) return 'Premium';
+  if (score >= 50) return 'Standard';
+  return 'Basic';
+}
+
+// API: Get all scraped vendors
+app.get('/api/vendors', async (req, res) => {
+  try {
+    const data = await StagingLead.find().sort({ scrapedAt: -1 }).lean();
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Update a vendor (verify/edit)
+app.put('/api/vendors/:id', async (req, res) => {
+  try {
+    const updated = await StagingLead.findOneAndUpdate(
+      { id: req.params.id }, 
+      { ...req.body, verified: true }, 
+      { new: true }
+    );
+    if (updated) res.json({ success: true, vendor: updated });
+    else res.status(404).json({ error: 'Vendor not found' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Delete a vendor
+app.delete('/api/vendors/:id', async (req, res) => {
+  try {
+    await StagingLead.deleteOne({ id: req.params.id });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Clear all unverified vendors from queue
+app.post('/api/vendors/clear-unverified', async (req, res) => {
+  try {
+    await StagingLead.deleteMany({ verified: false, pushed: false });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Get all employees (Telecallers)
+app.get('/api/employees', (req, res) => {
+  const employees = getEmployees().filter(e => e.role === 'employee');
+  res.json(employees);
+});
+
+// API: Create an Employee
+app.post('/api/employees', (req, res) => {
+  const employees = getEmployees();
+  const newEmp = { ...req.body, id: 'emp_' + Date.now(), role: 'employee' };
+  employees.push(newEmp);
+  writeEmployees(employees);
+  res.json({ success: true, employee: newEmp });
+});
+
+// API: Update an Employee
+app.put('/api/employees/:id', (req, res) => {
+  const employees = getEmployees();
+  const index = employees.findIndex(e => e.id === req.params.id);
+  if (index > -1) {
+    employees[index] = { ...employees[index], ...req.body };
+    writeEmployees(employees);
+    res.json({ success: true, employee: employees[index] });
+  } else {
+    res.status(404).json({ error: 'Not found' });
+  }
+});
+
+// API: Delete an Employee
+app.delete('/api/employees/:id', (req, res) => {
+  const employees = getEmployees();
+  const newEmployees = employees.filter(e => e.id !== req.params.id);
+  writeEmployees(newEmployees);
+  res.json({ success: true });
+});
+
+// API: Upload to Cloudinary
+app.post('/api/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    const result = await cloudinary.uploader.upload(req.file.path, {
+      folder: 'gomandap_avatars',
+    });
+    fs.unlinkSync(req.file.path); // Clean up local file
+    res.json({ success: true, url: result.secure_url });
+  } catch (error) {
+    res.status(500).json({ error: 'Upload failed', details: error.message });
+  }
+});
+
+// API: Batch assign leads
+app.post('/api/vendors/assign', async (req, res) => {
+  try {
+    const { vendorIds, employeeId } = req.body;
+    if (!vendorIds || !employeeId) return res.status(400).json({ error: 'Missing data' });
+    
+    await StagingLead.updateMany(
+      { id: { $in: vendorIds } },
+      { $set: { assignedTo: employeeId, verified: true } } // Implicitly verify when assigning
+    );
+    res.json({ success: true, count: vendorIds.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Telecaller update CRM status
+app.put('/api/vendors/:id/crm', async (req, res) => {
+  try {
+    const { crmStatus, crmNotes } = req.body;
+    const updated = await StagingLead.findOneAndUpdate(
+      { id: req.params.id },
+      { $set: { crmStatus, crmNotes } },
+      { new: true }
+    );
+    res.json({ success: true, vendor: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// API: Push verified vendors to CRM Lead Pipeline
+app.post('/api/vendors/push', async (req, res) => {
+  try {
+    const verifiedVendors = await StagingLead.find({ verified: true, pushed: false }).lean();
+    
+    if (verifiedVendors.length === 0) {
+      return res.status(400).json({ error: 'No verified unpushed vendors found.' });
+    }
+
+    const response = await axios.post('http://localhost:5000/api/leads/bulk', {
+      leads: verifiedVendors
+    });
+    
+    if (response.data.success) {
+      await StagingLead.updateMany(
+        { id: { $in: verifiedVendors.map(v => v.id) } },
+        { $set: { pushed: true, pushedAt: new Date() } }
+      );
+      res.json({ success: true, pushed: verifiedVendors.length, message: response.data.message });
+    } else {
+      res.status(500).json({ error: 'Failed to push to CRM' });
+    }
+  } catch (error) {
+    console.error('Error pushing to CRM:', error);
+    res.status(500).json({ error: 'Failed to push to CRM' });
+  }
+});
+
+// API: Manual Scrape (Legacy)
+app.post('/api/scrape', (req, res) => {
+  const { category, district, mandal, engine } = req.body;
+  if (!category || !district) return res.status(400).json({ error: 'Category and district required' });
+
+  const queryLocation = mandal ? `${mandal}, ${district}` : district;
+
+  res.json({ success: true, message: `Started scraping ${category} in ${queryLocation} using ${engine}` });
+
+  if (engine === 'justdial') scrapeJustDial(category, queryLocation).catch(console.error);
+  else if (engine === 'weddingbazaar') scrapeWeddingBazaar(category, queryLocation).catch(console.error);
+  else if (engine === 'weddingwire') scrapeWeddingWire(category, queryLocation).catch(console.error);
+  else if (engine === 'mandap') scrapeMandap(category, queryLocation).catch(console.error);
+  else if (engine === 'google') scrapeGooglePlaces(buildScrapeQuery(category, queryLocation), category, queryLocation).catch(console.error);
+  else if (engine === 'ola') scrapeGooglePlaces(buildScrapeQuery(category, queryLocation), category, queryLocation).catch(console.error); // Fallback to Google if Ola not ready
+  else console.log("Engine not implemented.");
+});
+
+// API: Omni-Search Scrape (Advanced NLP)
+app.post('/api/scrape/omni', async (req, res) => {
+  const { query, engine = 'google', enabledEngines = ['maps', 'instagram', 'facebook', 'youtube', 'pinterest', 'linkedin'] } = req.body;
+  if (!query) return res.status(400).json({ error: 'Search query required' });
+
+  // Reset abort signal
+  globalAbortSignal = false;
+
+  // Extract category and location using split points
+  const splitKeywords = [' in ', ' at ', ' near ', ' around ', ' for '];
+  let rawCategory = query;
+  let rawLocation = '';
+  
+  for (const keyword of splitKeywords) {
+    const lowerQuery = query.toLowerCase();
+    if (lowerQuery.includes(keyword)) {
+      const idx = lowerQuery.indexOf(keyword);
+      rawCategory = query.substring(0, idx).trim();
+      rawLocation = query.substring(idx + keyword.length).trim();
+      break;
+    }
+  }
+
+  // --- Deep Misspelling Correction & AI Synonym Engine ---
+  const synonymDictionary = {
+    "Venues": ["Banquet Halls", "Function Halls", "Kalyana Mandapam", "Convention Centers", "Marriage Halls", "Party Halls", "Resorts for Wedding"],
+    "Photographers": ["Wedding Photographers", "Candid Photographers", "Videographers", "Pre-wedding Shoot", "Drone Photography", "Photo Studios"],
+    "Decorators": ["Wedding Decorators", "Event Planners", "Tent House", "Floral Decorators", "Stage Decorators"],
+    "Makeup Artists": ["Bridal Makeup", "Bridal Parlour", "Beauticians", "Hair Stylists for Wedding", "Wedding Makeup Artists"],
+    "Bridal Wear": ["Wedding Sarees", "Bridal Lehengas", "Bridal Boutiques", "Wedding Dresses"],
+    "Groom Wear": ["Men's Wedding Wear", "Sherwanis", "Tailors for Men Wedding"],
+    "Caterers": ["Wedding Caterers", "Food Caterers", "Veg Caterers", "Non-Veg Caterers"],
+    "Mehendi Artists": ["Bridal Mehendi", "Henna Artists"],
+    "Choreographers": ["Wedding Sangeet Choreographers", "Dance Classes for Wedding"],
+    "Pandits": ["Wedding Priests", "Purohits for Marriage", "Telugu Pandits"],
+    "Invitations": ["Wedding Card Printers", "Digital Invitations", "Wedding Invites"],
+    "Favors": ["Wedding Return Gifts", "Wedding Favors"],
+    "Planners": ["Wedding Planners", "Event Organizers", "Destination Wedding Planners"],
+    "Transport": ["Wedding Car Rentals", "Buses for Wedding Guests"],
+    "Jewellery": ["Wedding Jewellery", "Bridal Ornaments", "Gold Shops", "Diamond Merchants"],
+    "Mechanics": ["Car Mechanics", "Bike Mechanics"]
+  };
+  const standardCategories = Object.keys(synonymDictionary);
+  
+  // Build a reverse lookup to map "banquet halls" -> "Venues"
+  let reverseDictionary = [];
+  for (const [root, syns] of Object.entries(synonymDictionary)) {
+    reverseDictionary.push({ term: root, root });
+    syns.forEach(s => reverseDictionary.push({ term: s, root }));
+  }
+  
+  let matchedCategory = rawCategory;
+  if (rawCategory) {
+    const categoryFuse = new Fuse(reverseDictionary, { keys: ['term'], includeScore: true, threshold: 0.4 });
+    const result = categoryFuse.search(rawCategory);
+    if (result.length > 0) {
+      console.log(`[NLP Engine] Auto-corrected Category: "${rawCategory}" -> "${result[0].item.root}" (Score: ${result[0].score})`);
+      matchedCategory = result[0].item.root;
+    }
+  }
+
+  let queryLocation = rawLocation;
+  if (rawLocation) {
+    // Flatten regions to build a dictionary of known towns
+    const regions = getRegions();
+    const allLocations = [];
+    Object.keys(regions).forEach(dist => {
+      allLocations.push(dist);
+      regions[dist].forEach(m => allLocations.push(m));
+    });
+    
+    const locationFuse = new Fuse(allLocations, { includeScore: true, threshold: 0.3 });
+    const locResult = locationFuse.search(rawLocation);
+    if (locResult.length > 0) {
+      console.log(`[NLP Engine] Auto-corrected Location: "${rawLocation}" -> "${locResult[0].item}" (Score: ${locResult[0].score})`);
+      queryLocation = locResult[0].item;
+    }
+  }
+
+  const correctedQuery = `${matchedCategory} in ${queryLocation}`;
+
+  // --- AI Synonym Expansion ---
+  let synonymsToQueue = [];
+  if (synonymDictionary[matchedCategory]) {
+    // Exact match in our hardcoded Indian wedding dictionary
+    synonymsToQueue = synonymDictionary[matchedCategory].filter(s => s.toLowerCase() !== rawCategory.toLowerCase());
+  } else {
+    // Dynamic NLP Fallback: It's an unknown category (like "Ice cream vendors")
+    // Fetch semantic meaning from Datamuse NLP API
+    try {
+      addLog(`[AI Engine] Unknown category '${matchedCategory}'. Fetching dynamic semantics from NLP API...`);
+      const mlResponse = await axios.get(`https://api.datamuse.com/words?ml=${encodeURIComponent(matchedCategory)}&max=5`);
+      if (mlResponse.data && mlResponse.data.length > 0) {
+        synonymsToQueue = mlResponse.data.map(d => d.word);
+        addLog(`[AI Engine] NLP API returned semantic matches: ${synonymsToQueue.join(', ')}`);
+      }
+    } catch (err) {
+      console.error("[AI Engine] Failed to fetch dynamic synonyms:", err.message);
+    }
+  }
+
+  // --- Queue logic for AI Validation ---
+  let aiKeywords = [matchedCategory];
+  if (synonymDictionary[matchedCategory]) {
+    aiKeywords = [...aiKeywords, ...synonymDictionary[matchedCategory]];
+  } else {
+    aiKeywords = [...aiKeywords, ...synonymsToQueue];
+  }
+
+  // Queue synonyms into the background batch processing system
+  if (synonymsToQueue.length > 0) {
+    addLog(`[AI Engine] Expanding search... Queueing ${synonymsToQueue.length} synonyms for ${matchedCategory} into background tasks.`);
+    for (const syn of synonymsToQueue) {
+      batchQueue.push({ 
+        category: syn, 
+        mandal: queryLocation, 
+        district: 'Unknown', 
+        engine, 
+        isSynonym: true, 
+        parentCategory: matchedCategory,
+        aiKeywords, // Attach for HTML validation
+        enabledEngines
+      });
+    }
+    batchProgress.total += synonymsToQueue.length;
+    batchProgress.isActive = true;
+
+    if (!isBatchRunning) {
+      runBatchQueue();
+    }
+  }
+
+  // --- Opt-In Radius Expansion (Using internal regions) ---
+  const numericRadius = parseInt(req.body.radius) || 0;
+  
+  if (numericRadius > 0) {
+    console.log(`[Radius Expansion] Radius set to ${numericRadius}km. Expanding search around ${queryLocation}...`);
+    const regions = getRegions();
+    let parentDistrict = null;
+    let nearbyTowns = [queryLocation]; // Always include the target
+
+    // Find the district this location belongs to
+    for (const dist in regions) {
+      if (dist.toLowerCase() === queryLocation.toLowerCase() || regions[dist].some(m => m.toLowerCase() === queryLocation.toLowerCase())) {
+        parentDistrict = dist;
+        break;
+      }
+    }
+
+    if (parentDistrict) {
+      // Add a subset of towns from this district to simulate radius coverage
+      // 10km ~ 2 towns, 50km ~ 10 towns, 100km ~ all towns
+      const maxTownsToAdd = Math.ceil(numericRadius / 5);
+      const allMandals = regions[parentDistrict];
+      const additional = allMandals.filter(m => m.toLowerCase() !== queryLocation.toLowerCase()).slice(0, maxTownsToAdd);
+      nearbyTowns = [...nearbyTowns, ...additional];
+      console.log(`[Radius Expansion] Discovered ${nearbyTowns.length} nearby locations:`, nearbyTowns);
+    }
+
+    // Queue them up in the batch system
+    for (const town of nearbyTowns) {
+      batchQueue.push({ category: matchedCategory, mandal: town, district: parentDistrict || 'Unknown', engine });
+    }
+    batchProgress.total = batchQueue.length;
+    batchProgress.isActive = true;
+
+    if (!isBatchRunning) {
+      runBatchQueue();
+    }
+
+    return res.json({ 
+      success: true, 
+      parsed: { category: matchedCategory, queryLocation, correctedQuery },
+      message: `Radius expansion active. Queued ${nearbyTowns.length} locations.`
+    });
+  }
+
+  // STANDARD SINGLE SCRAPE (Radius === 0)
+  res.json({ 
+    success: true, 
+    parsed: { category: matchedCategory, queryLocation, correctedQuery },
+    message: `Scraping exactly: ${query} using ${engine}`
+  });
+
+  // Schedule background task
+  const jobKey = matchedCategory; 
+  if (!activeCronJobs[jobKey]) {
+    console.log(`[CRON] Registering recurring background scrape for: ${jobKey} in ${queryLocation}`);
+    
+    const intervalMs = 10 * 60 * 1000; // default 10 min
+    const timer = setInterval(() => {
+      console.log(`[CRON] Executing scheduled background scrape for: ${jobKey}`);
+      if (engine === 'google' || engine === 'ola') {
+        scrapeGooglePlaces(correctedQuery, matchedCategory, queryLocation).catch(console.error);
+      }
+    }, intervalMs);
+
+    activeCronJobs[jobKey] = {
+      interval: intervalMs,
+      timer,
+      status: 'running',
+      location: queryLocation
+    };
+  }
+
+  // Execute directly right now
+  if (engine === 'justdial') scrapeJustDial(matchedCategory, queryLocation).catch(console.error);
+  else if (engine === 'weddingbazaar') scrapeWeddingBazaar(matchedCategory, queryLocation).catch(console.error);
+  else if (engine === 'weddingwire') scrapeWeddingWire(matchedCategory, queryLocation).catch(console.error);
+  else if (engine === 'mandap') scrapeMandap(matchedCategory, queryLocation).catch(console.error);
+  else if (engine === 'google' || engine === 'ola') {
+    // Use the EXACT string they typed for the initial direct scrape
+    if (enabledEngines.includes('maps')) scrapeGooglePlaces(query, matchedCategory, queryLocation).catch(console.error);
+    if (enabledEngines.includes('instagram')) scrapeGoogleDork('instagram.com', query, matchedCategory, queryLocation).catch(console.error);
+    if (enabledEngines.includes('facebook')) scrapeGoogleDork('facebook.com', query, matchedCategory, queryLocation).catch(console.error);
+    if (enabledEngines.includes('pinterest')) scrapeGoogleDork('pinterest.com', query, matchedCategory, queryLocation).catch(console.error);
+    if (enabledEngines.includes('youtube')) scrapeGoogleDork('youtube.com', query, matchedCategory, queryLocation).catch(console.error);
+    if (enabledEngines.includes('linkedin')) scrapeGoogleDork('linkedin.com', query, matchedCategory, queryLocation).catch(console.error);
+  }
+});
+
+// API: Batch Auto-Pilot Scrape
+app.post('/api/scrape/batch', (req, res) => {
+  const { district, category: targetCategory, mandal: targetMandal, engine, enabledEngines = ['maps', 'instagram', 'facebook', 'youtube', 'pinterest', 'linkedin'] } = req.body;
+  if (!district || !engine) return res.status(400).json({ error: 'District and engine required' });
+
+  // Reset abort signal
+  globalAbortSignal = false;
+
+  const regions = getRegions();
+  let mandals = regions[district] || [];
+
+  // If a specific mandal is requested, only run for that mandal
+  if (targetMandal && targetMandal !== 'All Mandals') {
+    mandals = [targetMandal];
+  } else if (!mandals || mandals.length === 0) {
+    return res.status(400).json({ error: `No mandals found for district ${district}. Please update regions.json.` });
+  }
+
+  const categoriesToRun = (targetCategory && targetCategory !== 'All Categories') 
+    ? [targetCategory] 
+    : CATEGORIES;
+
+  // Clear existing queue and start new
+  batchQueue = [];
+  
+  for (const category of categoriesToRun) {
+    for (const mandal of mandals) {
+      batchQueue.push({ category, mandal, district, engine, enabledEngines });
+    }
+  }
+
+  batchProgress = {
+    total: batchQueue.length,
+    completed: 0,
+    currentTask: 'Initializing...',
+    isActive: true
+  };
+
+  res.json({ success: true, message: `Auto-pilot started for ${batchQueue.length} tasks in ${district}` });
+
+  if (!isBatchRunning) {
+    runBatchQueue();
+  }
+});
+
+// API: Stop Batch Scrape
+app.post('/api/scrape/batch/stop', (req, res) => {
+  batchQueue = [];
+  batchProgress.currentTask = 'Stopped manually';
+  batchProgress.isActive = false;
+  isBatchRunning = false;
+  res.json({ success: true, message: 'Auto-pilot queue cleared and stopped.' });
+});
+
+// API: Get Batch Status
+app.get('/api/scrape/batch/status', (req, res) => {
+  res.json(batchProgress);
+});
+
+// API: TrueCaller Scrape
+app.post('/api/scrape/truecaller', async (req, res) => {
+  const { query, category, location } = req.body;
+  if (!query) return res.status(400).json({ error: 'Query required' });
+
+  globalAbortSignal = false;
+  res.json({ success: true, message: `Starting TrueCaller scrape for: ${query}` });
+
+  scrapeTrueCaller(query, category || 'Business', location || 'India').catch(err => {
+    addLog(`[TrueCaller API] Error: ${err.message}`);
+  });
+});
+
+// API: Firebase Scrape
+app.post('/api/scrape/firebase', async (req, res) => {
+  const { query, category, location } = req.body;
+  if (!query) return res.status(400).json({ error: 'Query required' });
+
+  globalAbortSignal = false;
+  res.json({ success: true, message: `Starting Firebase scrape for: ${query}` });
+
+  scrapeFirebase(query, category || 'Business', location || 'India').catch(err => {
+    addLog(`[Firebase API] Error: ${err.message}`);
+  });
+});
+
+// API: Enhanced Social Media Scrape (Instagram, YouTube, Facebook with better extraction)
+app.post('/api/scrape/social', async (req, res) => {
+  const { platform, query, category = 'Business', location = 'India' } = req.body;
+  
+  const platforms = {
+    instagram: 'instagram.com',
+    facebook: 'facebook.com',
+    youtube: 'youtube.com',
+    tiktok: 'tiktok.com',
+    linkedin: 'linkedin.com'
+  };
+
+  if (!platform || !platforms[platform]) {
+    return res.status(400).json({ error: 'Valid platform required: instagram, facebook, youtube, tiktok, linkedin' });
+  }
+
+  if (!query) return res.status(400).json({ error: 'Query required' });
+
+  globalAbortSignal = false;
+  res.json({ success: true, message: `Starting ${platform} scrape for: ${query}` });
+
+  // Fire off the scrape without blocking
+  scrapeGoogleDork(platforms[platform], query, category, location).catch(err => {
+    addLog(`[Social API] ${platform} error: ${err && err.message ? err.message : String(err)}`);
+    if (err && err.stack) addLog(`[Social API] stack: ${err.stack.split('\n').slice(0,6).join(' | ')}`);
+    console.error('[Social API] Full error:', err);
+  });
+});
+
+// Batch Runner
+async function runBatchQueue() {
+  isBatchRunning = true;
+
+  while (batchQueue.length > 0) {
+    const firstTask = batchQueue[0];
+    const isGoogle = firstTask && firstTask.engine === 'google';
+    
+    // Run competitor bots sequentially (concurrency = 1) to avoid Akamai/Cloudflare IP bans
+    const concurrencyLimit = isGoogle ? 3 : 1;
+    const batchSlice = batchQueue.splice(0, concurrencyLimit);
+    
+    const promises = batchSlice.map(async (task) => {
+      const queryLocation = `${task.mandal}, ${task.district}`;
+      batchProgress.currentTask = `Scraping ${task.category} in ${queryLocation}`;
+      
+      try {
+        if (task.engine === 'justdial') {
+          await scrapeJustDial(task.category, queryLocation);
+        } else if (task.engine === 'weddingbazaar') {
+          await scrapeWeddingBazaar(task.category, queryLocation);
+        } else if (task.engine === 'weddingwire') {
+          await scrapeWeddingWire(task.category, queryLocation);
+        } else if (task.engine === 'mandap') {
+          await scrapeMandap(task.category, queryLocation);
+        } else if (task.engine === 'google') {
+          const exactTaskQuery = `${task.category} in ${queryLocation}`;
+          const dbCategory = task.isSynonym ? task.parentCategory : task.category;
+          const engines = task.enabledEngines || ['maps', 'instagram', 'facebook', 'youtube', 'pinterest', 'linkedin'];
+          
+          if (engines.includes('maps')) await scrapeGooglePlaces(exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+          if (engines.includes('instagram')) await scrapeGoogleDork('instagram.com', exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+          if (engines.includes('facebook')) await scrapeGoogleDork('facebook.com', exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+          if (engines.includes('pinterest')) await scrapeGoogleDork('pinterest.com', exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+          if (engines.includes('youtube')) await scrapeGoogleDork('youtube.com', exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+          if (engines.includes('linkedin')) await scrapeGoogleDork('linkedin.com', exactTaskQuery, dbCategory, queryLocation, task.aiKeywords);
+        }
+      } catch (err) {
+        console.error(`Batch Task Failed: ${task.category} in ${queryLocation}`, err);
+      } finally {
+        batchProgress.completed++;
+      }
+    });
+
+    await Promise.all(promises);
+    
+    // Add a longer cool-down delay for competitor bots (8s) compared to Google (2s)
+    const delayMs = isGoogle ? 2000 : 8000;
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
+
+  isBatchRunning = false;
+  batchProgress.isActive = false;
+  batchProgress.currentTask = 'Completed';
+}
+
+// ========================================================
+// ADVANCED ANTI-DETECTION: Centralized Stealth Browser Factory
+// Wires: Stealth Plugin + Proxy Rotation + Random UA + Indian Locale/TZ
+// ========================================================
+const STEALTH_USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.0.0',
+];
+
+async function launchStealthBrowser(useProxy = true, browserType = 'chromium') {
+  const engine = browserEngines && browserEngines[browserType] ? browserEngines[browserType] : browserEngines.chromium;
+  if (!engine) throw new Error('Playwright not available on this server.');
+
+  const userAgent = STEALTH_USER_AGENTS[Math.floor(Math.random() * STEALTH_USER_AGENTS.length)];
+  const fakeIP = getRandomIP();
+
+  // Pick a working proxy from the list (if available)
+  let proxyConfig = undefined;
+  let selectedProxy = null;
+  if (useProxy && proxyList.length > 0 && Math.random() > 0.3) { // 70% chance to try proxy
+    const rawProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+    try {
+      new URL(rawProxy); // Validate URL
+      proxyConfig = { server: rawProxy };
+      selectedProxy = rawProxy;
+    } catch(e) {}
+  }
+
+  const launchArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-http2',
+    '--disable-blink-features=AutomationControlled', // Hides Headless flag
+    '--disable-infobars',
+    `--user-agent=${userAgent}`,
+  ];
+
+  try {
+    const browser = await engine.launch({
+      headless: true,
+      args: launchArgs,
+      ...(proxyConfig ? { proxy: proxyConfig } : {})
+    });
+    if (selectedProxy) addLog(`[Browser] Using proxy: ${selectedProxy.substring(0, 30)}...`);
+    return { browser, userAgent, fakeIP };
+  } catch (launchErr) {
+    // If proxy launch fails, retry without proxy
+    if (proxyConfig && selectedProxy) {
+      addLog(`[Browser] Proxy connection failed, retrying without proxy...`);
+      const browser = await engine.launch({
+        headless: true,
+        args: launchArgs
+      });
+      return { browser, userAgent, fakeIP };
+    }
+    throw launchErr;
+  }
+}
+
+// Global Browser Instance for Ultra-Fast Maps Scraping
+let globalBrowser = null;
+let browserLaunchAttempts = 0;
+const MAX_BROWSER_LAUNCH_ATTEMPTS = 3;
+
+async function getBrowser() {
+  try {
+    if (!globalBrowser || !globalBrowser.isConnected()) {
+      if (browserLaunchAttempts >= MAX_BROWSER_LAUNCH_ATTEMPTS) {
+        console.warn('[Browser] Max launch attempts reached. Returning null.');
+        return null;
+      }
+      
+      browserLaunchAttempts++;
+      console.log(`[Browser] Attempting to launch (attempt ${browserLaunchAttempts}/${MAX_BROWSER_LAUNCH_ATTEMPTS})`);
+      
+      try {
+        const { browser } = await launchStealthBrowser(false); // Maps uses direct for speed
+        globalBrowser = browser;
+        browserLaunchAttempts = 0; // Reset on success
+        console.log('[Browser] Successfully launched');
+      } catch (launchError) {
+        console.error('[Browser] Launch failed:', launchError.message);
+        globalBrowser = null;
+        throw launchError;
+      }
+    }
+    return globalBrowser;
+  } catch (error) {
+    console.error('[Browser] Error in getBrowser:', error.message);
+    return null;
+  }
+}
+
+async function scrapeWebsiteForSocials(browser, url, vendorName) {
+  if (!url || !url.startsWith('http')) return { email: '', instagram: '', facebook: '', phone: '', instagramFollowers: '', facebookFollowers: '' };
+  
+  try {
+    addLog(`[Deep Scrape] Investigating website for ${vendorName || 'vendor'}...`);
+    const response = await axios.get(url, { 
+      timeout: 8000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5'
+      }
+    });
+
+    const html = response.data;
+    const $ = cheerio.load(html);
+    
+    const emailMatch = html.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}/g) || [];
+    const validEmails = [...new Set(emailMatch)].filter(e => 
+      !e.endsWith('.png') && !e.endsWith('.jpg') && !e.endsWith('.jpeg') && !e.endsWith('.webp') && !e.endsWith('.gif') && !e.includes('wixpress') && !e.includes('sentry')
+    );
+
+    const phoneMatch = html.match(/(?:\+91|0)?[ -]?(?:\d{5}[ -]?\d{5}|\d{3}[ -]?\d{3}[ -]?\d{4}|\d{4}[ -]?\d{4})/g) || [];
+    const validPhones = [...new Set(phoneMatch)].filter(p => p.replace(/\D/g, '').length >= 10);
+
+    let instagram = '';
+    let facebook = '';
+
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      if (!href) return;
+      if (href.includes('instagram.com/') && !instagram) instagram = href;
+      if (href.includes('facebook.com/') && !facebook && !href.includes('sharer')) facebook = href;
+    });
+
+    let instagramFollowers = '';
+    let facebookFollowers = '';
+
+    if (instagram) {
+      try {
+        const igRes = await axiosWithProxy(instagram, { timeout: 4000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' } }, 2);
+        const igHtml = igRes && igRes.data ? igRes.data : igRes;
+        const igMeta = cheerio.load(igHtml)('meta[property="og:description"]').attr('content');
+        if (igMeta) {
+          const match = igMeta.match(/([\d.,]+[KkMm]?)\s+Followers/i);
+          if (match) {
+            instagramFollowers = match[1];
+            addLog(`[Deep Scrape] Found Instagram for ${vendorName || 'vendor'}: ${instagramFollowers} Followers`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (facebook) {
+      try {
+        // Prefer mbasic Facebook for lightweight HTML
+        let fbUrl = facebook;
+        try { const _u = new URL(fbUrl); fbUrl = `https://mbasic.facebook.com${_u.pathname}${_u.search || ''}`; } catch(e) {}
+        const fbRes = await axiosWithProxy(fbUrl, { timeout: 5000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' } }, 2);
+        const fbHtml = fbRes && fbRes.data ? fbRes.data : fbRes;
+        const fbMeta = cheerio.load(fbHtml)('meta[property="og:description"]').attr('content');
+        if (fbMeta) {
+          const match = fbMeta.match(/([\d.,]+[KkMm]?)\s+(?:likes|followers)/i);
+          if (match) {
+            facebookFollowers = match[1];
+            addLog(`[Deep Scrape] Found Facebook for ${vendorName || 'vendor'}: ${facebookFollowers}`);
+          }
+        }
+      } catch (e) {}
+    }
+
+    return {
+      email: validEmails.length > 0 ? validEmails[0] : '',
+      phone: validPhones.length > 0 ? validPhones[0] : '',
+      instagram,
+      facebook,
+      instagramFollowers,
+      facebookFollowers
+    };
+  } catch (err) {
+    console.log(`[Cheerio Deep Scrape] Failed or timed out for ${url}`);
+    return { email: '', instagram: '', facebook: '', phone: '', instagramFollowers: '', facebookFollowers: '' };
+  }
+}
+
+async function scrapeGoogleDork(platformDomain, exactQuery, category, location, aiKeywords = []) {
+  if (!browserEngines || !browserEngines.chromium) {
+    addLog('[Dork Engine] Playwright Chromium not available. Skipping Google Dork.');
+    return;
+  }
+
+  let browser, context, page;
+
+  try {
+    const platformName = platformDomain.split('.')[0];
+    const query = `${exactQuery} ${platformName}`;
+    addLog(`[Dork Engine] 🕵️ Stealth search: "${query}"`);
+    
+    // Launch with full stealth + proxy rotation
+    let launchResult;
+    try {
+      launchResult = await launchStealthBrowser(true);
+    } catch (launchError) {
+      addLog(`[Dork Engine] Failed to launch browser: ${launchError.message}`);
+      return;
+    }
+    
+    const { browser: stealthBrowser, userAgent, fakeIP } = launchResult;
+    browser = stealthBrowser;
+    if (!browser) {
+      addLog(`[Dork Engine] Browser instance is null`);
+      return;
+    }
+    
+    activeBrowsers.push(browser);
+    
+    context = await browser.newContext({
+      userAgent,
+      locale: 'en-IN',
+      timezoneId: 'Asia/Kolkata',
+      viewport: { width: 1366, height: 768 },
+      extraHTTPHeaders: {
+        'X-Forwarded-For': fakeIP,
+        'X-Real-IP': fakeIP,
+        'Accept-Language': 'en-IN,en;q=0.9,hi;q=0.8'
+      }
+    });
+    
+    // Block images/fonts to speed up and reduce fingerprint
+    await context.route('**/*', route => {
+      const rt = route.request().resourceType();
+      if (['image','media','font','stylesheet'].includes(rt)) route.abort();
+      else route.continue();
+    });
+    page = await context.newPage();
+
+    let totalInserted = 0;
+
+    for (let start = 0; start <= 20; start += 10) { // 3 pages
+      if (globalAbortSignal) throw new Error('Master Stop Aborted');
+      
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&start=${start}&hl=en`;
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        await page.waitForTimeout(1500); // Let JS render fully
+      } catch (navError) {
+        const errMsg = navError.message || '';
+        // Timeouts and connection failures are not fatal - just skip that page
+        if (errMsg.includes('net::ERR_TIMED_OUT') || errMsg.includes('net::ERR_CONNECTION') || errMsg.includes('net::ERR_TUNNEL')) {
+          addLog(`[Dork Engine] Page ${start/10 + 1} skipped (${errMsg.split(':')[2] || 'timeout'})`);
+          continue; // Try next page
+        }
+        addLog(`[Dork Engine] Navigation failed on page ${start/10 + 1}: ${errMsg}`);
+        // Continue to next page instead of failing completely
+        if (start >= 20) {
+          addLog(`[Dork Engine] All pages failed for "${query}". Trying alternate method...`);
+          break;
+        }
+        continue;
+      }
+
+      // === ENHANCED EXTRACTION FOR INSTAGRAM/YOUTUBE ===
+      let extracted = [];
+      try {
+        extracted = await page.evaluate((opts) => {
+          const domain = opts.domain;
+          const platformName = opts.platformName;
+          const results = [];
+          const seenUrls = new Set();
+
+          // Helper: Extract domain-specific URLs (handles Google redirect wrappers and common redirectors)
+          function getPlatformUrl(href) {
+            if (!href) return null;
+
+            try {
+              // If Google redirect pattern (/url?q=...), extract q
+              const gq = href.match(/[?&]q=([^&]+)/);
+              if (gq && gq[1] && decodeURIComponent(gq[1]).includes(domain)) return decodeURIComponent(gq[1]).split('&')[0].split('?')[0];
+
+              // Facebook/Instagram often use l.facebook.com or l.instagram.com wrappers with 'u' or 'url' params
+              const lfb = href.match(/[?&](?:u|url)=([^&]+)/);
+              if (lfb && lfb[1] && decodeURIComponent(lfb[1]).includes(domain)) return decodeURIComponent(lfb[1]).split('&')[0];
+
+              // Direct link to platform (remove tracking params)
+              if (href.includes(domain)) {
+                // Remove common tracking params
+                return href.replace(/([?&])utm_[^=&]+=[^&]*/g, '').replace(/&+$/,'').replace(/\?$/,'');
+              }
+            } catch(e) {
+              // Fallback regex for malformed URLs
+              const re = new RegExp('https?://(?:www\\.)?' + domain.replace(/\\./g,'\\\\.') + '[^\\s"<>]*','i');
+              const match = href.match(re);
+              if (match) return match[0];
+            }
+            return null;
+          }
+
+        // METHOD 1: Direct anchor tags with platform links
+        document.querySelectorAll('a[href]').forEach(a => {
+          const platformUrl = getPlatformUrl(a.href);
+          if (!platformUrl || seenUrls.has(platformUrl)) return;
+          
+          // Platform-specific filters
+          if (domain === 'instagram.com' && /\/(reel|explore|p|stories)\//.test(platformUrl)) return; // Skip Reels/Explore
+          if (domain === 'youtube.com' && platformUrl.includes('/c/')) return; // Focus on @username not /c/
+          
+          seenUrls.add(platformUrl);
+          
+          // Find parent result container
+          let container = a.parentElement;
+          for (let i = 0; i < 15; i++) {
+            if (!container) break;
+            const cls = container.className || '';
+            if (cls.includes('g') || container.hasAttribute('data-hveid')) break;
+            container = container.parentElement;
+          }
+
+          const heading = container ? container.querySelector('h3, h2, [role="heading"]') : null;
+          const name = heading ? heading.textContent.trim() : '';
+
+          // Extract text snippet
+          const snippetEl = container ? container.querySelector('.VwiC3b, .s3v9rd, .IsZvec, span.aCOpRe') : null;
+          const snippet = snippetEl ? snippetEl.textContent : (container ? container.textContent.substring(0, 300) : '');
+
+          // Extract followers/likes from snippet
+          const followerMatch = snippet.match(/([\d.,]+[KkMm]?)\s*\+?\s*(?:followers?|likes?|subscribers?|views?)/i);
+          const followers = followerMatch ? followerMatch[1] : '';
+
+          if (platformUrl && name) {
+            results.push({ 
+              profileUrl: platformUrl, 
+              name: name.replace(/ - .*$/i, '').trim(),
+              followers,
+              source: 'google_search'
+            });
+          }
+        });
+
+        // METHOD 2: Extract from cite elements (Google displays URLs as green text)
+        document.querySelectorAll('cite').forEach(cite => {
+          const text = cite.textContent.trim();
+          if (!text.includes(domain.split('.')[0])) return;
+          
+          // Parse cite text like "www.instagram.com › username"
+          const parts = text.split('›');
+          const urlPart = parts[0].trim();
+          const usernamePart = parts[1] ? parts[1].trim() : '';
+          
+          if (usernamePart) {
+            const guessedUrl = `https://www.${domain.replace(/^www\./, '')}/${usernamePart.replace(/\s+/g, '')}`;
+            if (!seenUrls.has(guessedUrl)) {
+              seenUrls.add(guessedUrl);
+              
+              let container = cite.parentElement;
+              for (let i = 0; i < 10; i++) { container = container && container.parentElement; }
+              const h = container && container.querySelector('h3');
+              
+              if (h) {
+                results.push({
+                  profileUrl: guessedUrl,
+                  name: h.textContent.trim().replace(/ - .*$/i, ''),
+                  followers: '',
+                  source: 'cite_extraction'
+                });
+              }
+            }
+          }
+        });
+
+        return results.slice(0, 50); // Limit results
+        }, { domain: platformDomain, platformName });
+      } catch (evalErr) {
+        addLog(`[Dork Engine] Extraction error on page ${start/10 + 1}: ${evalErr.message}`);
+        extracted = [];  // Fallback to empty if extraction fails
+      }
+
+      addLog(`[Dork Engine] Page ${start/10 + 1}: Found ${extracted.length} ${platformName} profiles`);
+
+      for (const item of extracted) {
+        if (!item.profileUrl || globalAbortSignal) continue;
+        
+        const cleanName = (item.name || 'Unknown Vendor')
+          .replace(/\s*[\|·\-–]\s*(Facebook|Instagram|YouTube|Pinterest|LinkedIn).*$/i, '')
+          .replace(/\s*-\s*(Home|Official|Profile|Page|Videos).*$/i, '')
+          .trim() || 'Unknown Vendor';
+
+        try {
+          const existing = await StagingLead.findOne({ 
+            $or: [
+              { instagram: item.profileUrl }, 
+              { facebook: item.profileUrl },
+              { youtube: item.profileUrl },
+              { pinterest: item.profileUrl },
+              { linkedin: item.profileUrl },
+              { name: cleanName }
+            ] 
+          });
+          
+          if (!existing) {
+            const source = item.source === 'cite_extraction' ? `${platformName} (Direct)` : platformName;
+            const platformField = platformDomain.includes('instagram') ? 'instagram' : 
+                                 platformDomain.includes('youtube') ? 'youtube' :
+                                 platformDomain.includes('facebook') ? 'facebook' :
+                                 platformDomain.includes('pinterest') ? 'pinterest' : 'linkedin';
+
+            // Normalize some platform URLs for more reliable deep-scraping later
+            try {
+              if (platformField === 'facebook' && item.profileUrl) {
+                // Convert to mbasic (lightweight mobile) endpoint to improve HTML availability
+                try {
+                  const _u = new URL(item.profileUrl);
+                  const fbPath = _u.pathname + (_u.search || '');
+                  item.profileUrl = `https://mbasic.facebook.com${fbPath}`;
+                } catch (e) {}
+              }
+              if (platformField === 'instagram' && item.profileUrl) {
+                // Prefer the www.instagram.com/<username>/ format (remove tracking)
+                item.profileUrl = item.profileUrl.replace(/\?.*$/, '').replace(/utm_.*$/,'');
+              }
+            } catch(e) {}
+
+            const newLead = new StagingLead({
+              id: `dork_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: cleanName,
+              category: category,
+              city: location,
+              scrapedAt: new Date(),
+              verified: false,
+              pushed: false,
+              qualityScore: item.followers ? 25 : 15,
+              [platformField]: item.profileUrl,
+              [platformField === 'instagram' ? 'instagramFollowers' : platformField === 'youtube' ? 'youtube' : platformField === 'facebook' ? 'facebookFollowers' : null]: item.followers || '',
+              source: source
+            });
+            
+            await newLead.save();
+            addLog(`[Dork Engine] ✓ ${platformName}: "${cleanName}"${item.followers ? ` (${item.followers})` : ''}`);
+            totalInserted++;
+          }
+        } catch (saveErr) {
+          console.error('[Dork Engine] Save error:', saveErr.message);
+        }
+      }
+    }
+
+    addLog(`[Dork Engine] Complete: ${platformName} inserted ${totalInserted} profiles for "${exactQuery}"`);
+  } catch (error) {
+    addLog(`[Dork Engine] Failed to scrape ${platformDomain}: ${error.message}`);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    try { if (context) await context.close(); } catch(e) {}
+    try { if (browser) await browser.close(); } catch(e) {}
+  }
+}
+
+
+// ===== TRUECALLER SCRAPER: Extract phone numbers and contacts =====
+async function scrapeTrueCaller(query, category, location) {
+  if (!browserEngines || !browserEngines.chromium) {
+    addLog('[TrueCaller] Playwright Chromium not available. Skipping TrueCaller scrape.');
+    return;
+  }
+
+  let browser, context, page;
+  try {
+    addLog(`[TrueCaller] Starting TrueCaller scrape for: "${query}"`);
+    
+    const { browser: stealthBrowser } = await launchStealthBrowser(true);
+    browser = stealthBrowser;
+    if (!browser) return;
+    activeBrowsers.push(browser);
+
+    context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 }
+    });
+    page = await context.newPage();
+
+    // TrueCaller API: Search for business by query
+    const searchUrl = `https://www.truecaller.com/search?q=${encodeURIComponent(query)}`;
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(2000);
+
+    const results = await page.evaluate(() => {
+      const vendors = [];
+      const items = document.querySelectorAll('[data-testid="search-result"], .search-result-card, [class*="result-item"]');
+      
+      items.forEach((item, idx) => {
+        if (vendors.length >= 30) return; // Limit to 30 results
+        
+        const nameEl = item.querySelector('[class*="name"], h3, h2, .business-name');
+        const name = nameEl ? nameEl.textContent.trim() : null;
+        if (!name) return;
+
+        const phoneEl = item.querySelector('[class*="phone"], [data-testid*="phone"], a[href^="tel:"]');
+        const phone = phoneEl ? (phoneEl.href ? phoneEl.href.replace('tel:', '') : phoneEl.textContent.trim()) : '';
+
+        const locationEl = item.querySelector('[class*="location"], [class*="address"], .city');
+        const address = locationEl ? locationEl.textContent.trim() : '';
+
+        vendors.push({ name, phone, address });
+      });
+      return vendors;
+    });
+
+    addLog(`[TrueCaller] Found ${results.length} results`);
+    let inserted = 0;
+
+    for (const vendor of results) {
+      if (!vendor.name) continue;
+      const existing = await StagingLead.findOne({ name: vendor.name, city: location });
+      if (!existing && vendor.phone) {
+        const created = await StagingLead.create({
+          id: `truecaller_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+          name: vendor.name,
+          category: category,
+          city: location,
+          address: vendor.address || '',
+          phone: vendor.phone,
+          source: 'TrueCaller',
+          verified: false,
+          pushed: false,
+          qualityScore: 40 // TrueCaller entries get moderate score
+        });
+        try { emitVendorEvent(created, 'inserted'); } catch (e) {}
+        inserted++;
+      }
+    }
+    addLog(`[TrueCaller] Inserted ${inserted} new vendors from TrueCaller`);
+
+    // Fallback: if Playwright returned nothing or low count, try a lightweight HTTP search (DuckDuckGo) and parse site:truecaller.com
+    if (inserted === 0 || results.length < 3) {
+      try {
+        addLog('[TrueCaller] Falling back to HTTP search for TrueCaller results');
+        const dd = await axiosWithProxy(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query + ' site:truecaller.com')}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        }, 2);
+
+        const $ = cheerio.load(dd.data || dd);
+        const links = [];
+        $('a').each((i, a) => {
+          const href = $(a).attr('href') || '';
+          if (href.includes('truecaller.com') && !links.includes(href)) links.push(href);
+        });
+
+        for (const l of links.slice(0, 20)) {
+          try {
+            const pageRes = await axiosWithProxy(l, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, 2);
+            const $$ = cheerio.load(pageRes.data || pageRes);
+            const name = $$('[class*="name"], h1, h2').first().text().trim();
+            const phone = $$('a[href^="tel:"]').first().attr('href') ? $$('a[href^="tel:"]').first().attr('href').replace('tel:','') : ($$('[class*="phone"]').first().text().trim() || '');
+            if (name && phone) {
+              const exists = await StagingLead.findOne({ name, city: location });
+                if (!exists) {
+                const created = await StagingLead.create({
+                  id: `truecaller_fb_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                  name, phone, category, city: location, source: 'TrueCaller-Fallback', verified: false, pushed: false, qualityScore: 30
+                });
+                try { emitVendorEvent(created, 'inserted'); } catch (e) {}
+                inserted++;
+              }
+            }
+          } catch (e) { /* ignore individual link failures */ }
+        }
+
+        addLog(`[TrueCaller] Fallback inserted ${inserted} vendors`);
+      } catch (fbErr) {
+        addLog(`[TrueCaller] Fallback search failed: ${fbErr.message}`);
+      }
+    }
+  } catch (error) {
+    addLog(`[TrueCaller] Scrape error: ${error.message}`);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+// ===== FIREBASE SCRAPER: Extract from Firebase-hosted business directories =====
+async function scrapeFirebase(query, category, location) {
+  if (!browserEngines || !browserEngines.chromium) {
+    addLog('[Firebase] Playwright Chromium not available. Skipping Firebase scrape.');
+    return;
+  }
+
+  let browser, context, page;
+  try {
+    addLog(`[Firebase] Starting Firebase-hosted content scrape for: "${query}"`);
+
+    const { browser: stealthBrowser } = await launchStealthBrowser(true);
+    browser = stealthBrowser;
+    if (!browser) return;
+    activeBrowsers.push(browser);
+
+    context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 }
+    });
+    page = await context.newPage();
+
+    // Search for Firebase-hosted apps with the query
+    const searchUrl = `https://www.google.com/search?q=site:firebaseapp.com "${query}" ${location}`;
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(1500);
+
+    const firebaseApps = await page.evaluate(() => {
+      const apps = [];
+      document.querySelectorAll('a[href*="firebaseapp.com"]').forEach(link => {
+        const url = link.href;
+        if (!apps.find(a => a.url === url)) {
+          apps.push({ url, title: link.textContent.trim() });
+        }
+      });
+      return apps.slice(0, 5); // Get top 5 Firebase apps
+    });
+
+    addLog(`[Firebase] Found ${firebaseApps.length} Firebase applications`);
+    
+    let inserted = 0;
+    for (const app of firebaseApps) {
+      try {
+        await page.goto(app.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await page.waitForTimeout(1000);
+
+        const listings = await page.evaluate(() => {
+          const items = [];
+          // Try common Firebase listing selectors
+          document.querySelectorAll('[class*="listing"], [class*="business"], [class*="vendor"], .item').forEach(el => {
+            const name = el.querySelector('h1, h2, h3, .name, [class*="title"]')?.textContent.trim();
+            const phone = el.querySelector('a[href^="tel:"], [class*="phone"]')?.textContent.trim();
+            const contact = el.querySelector('.contact, [class*="email"], [class*="address"]')?.textContent.trim();
+            if (name) items.push({ name, phone, contact });
+          });
+          return items.slice(0, 10);
+        });
+
+        for (const item of listings) {
+          if (!item.name) continue;
+          const existing = await StagingLead.findOne({ name: item.name, city: location });
+          if (!existing) {
+            const created = await StagingLead.create({
+              id: `firebase_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              name: item.name,
+              category: category,
+              city: location,
+              address: item.contact || '',
+              phone: item.phone || '',
+              source: 'Firebase',
+              verified: false,
+              pushed: false,
+              qualityScore: 20
+            });
+            try { emitVendorEvent(created, 'inserted'); } catch (e) {}
+            inserted++;
+          }
+        }
+      } catch (e) {
+        // ignore app-specific errors
+      }
+    }
+
+    addLog(`[Firebase] Inserted ${inserted} new vendors from Firebase sources`);
+  } catch (error) {
+    addLog(`[Firebase] Scrape error: ${error.message}`);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+
+async function scrapeGooglePlaces(exactQuery, category, location, aiKeywords = []) {
+  addLog(`Starting Google Maps browser scrape for ${exactQuery} (AI Validation Keywords: ${aiKeywords.length})`);
+
+  // If Playwright not available (production/Render), skip browser scraping
+  if (!browserEngines || !browserEngines.chromium) {
+    console.warn('[scrapeGooglePlaces] Playwright Chromium not available. Skipping browser scrape.');
+    return [];
+  }
+  
+  const browser = await getBrowser();
+  if (!browser) {
+    console.warn('[scrapeGooglePlaces] Browser not available. Skipping.');
+    return [];
+  }
+
+  let context = null;
+  let page = null;
+
+  try {
+    context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 }
+    });
+    page = await context.newPage();
+
+    // Abort image, font, media, and stylesheets to speed up scraping instantly
+    await page.route('**/*', (route) => {
+      const resourceType = route.request().resourceType();
+      if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+        route.abort();
+      } else {
+        route.continue();
+      }
+    });
+
+    const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(exactQuery)}`;
+    addLog(`[System] Navigating to Google Maps search: ${searchUrl}`);
+    // Wait for networkidle instead of domcontentloaded for faster extraction
+    await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
+
+    const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
+    if (await consentBtn.count() > 0) {
+      await consentBtn.first().click();
+      await page.waitForTimeout(1000);
+    }
+
+    try {
+      await Promise.race([
+        page.waitForSelector('div[role="feed"]', { timeout: 10000 }),
+        page.waitForSelector('[data-item-id="address"]', { timeout: 10000 })
+      ]);
+    } catch (e) {
+      addLog("Could not find feed or place details within timeout");
+    }
+
+    let scrapedResults = [];
+
+    // Case A: Redirected directly to a single business details page
+    if (await page.locator('[data-item-id="address"]').count() > 0 && await page.locator('div[role="feed"]').count() === 0) {
+      addLog("Redirected directly to a single business page.");
+      const nameEl = page.locator('h1.DUwDvf');
+      const name = await nameEl.count() > 0 ? await nameEl.innerText() : 'Google Maps Listing';
+      
+      let address = '';
+      const addressEl = page.locator('[data-item-id="address"]');
+      if (await addressEl.count() > 0) {
+        const rawAddress = await addressEl.getAttribute('aria-label');
+        address = rawAddress ? rawAddress.replace(/^Address:\s*/i, '') : '';
+      }
+
+      let phone = '';
+      const phoneEl = page.locator('[data-item-id^="phone:tel:"]');
+      if (await phoneEl.count() > 0) {
+        const rawPhone = await phoneEl.getAttribute('aria-label');
+        phone = rawPhone ? rawPhone.replace(/^Phone:\s*/i, '') : '';
+      }
+
+      let rating = null;
+      const ratingEl = page.locator('div.F7nice').first();
+      if (await ratingEl.count() > 0) {
+        const text = await ratingEl.innerText();
+        const match = text.match(/^([0-9.]+)/);
+        if (match) rating = parseFloat(match[1]);
+      }
+
+      scrapedResults.push({
+        name, address, phone, rating,
+        mapsLink: page.url(),
+        id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7)
+      });
+    } else {
+      // Case B: Search results list is loaded
+      const scrollable = page.locator('div[role="feed"]');
+      if (await scrollable.count() > 0) {
+        addLog("Scrolling through search results feed... (Fast Mode)");
+        
+        // Dynamic Fast Scroll - stop early to hit minimum 60
+        for(let i=0; i<30; i++) {
+          if (globalAbortSignal) throw new Error('Master Stop Aborted');
+          await scrollable.evaluate(node => node.scrollBy(0, 5000));
+          await page.waitForTimeout(400); // 400ms is ultra fast
+          const currentCount = await page.locator('a.hfpxzc').count();
+          if (currentCount >= 65) {
+            addLog(`Reached ${currentCount} cards quickly, stopping scroll.`);
+            break;
+          }
+        }
+
+        const cards = page.locator('a.hfpxzc');
+        const count = await cards.count();
+        addLog(`Found ${count} total business cards. Extracting URLs...`);
+
+        // Phase 1: Rapid Extraction of HREFs
+        const vendorLinks = [];
+        for (let i = 0; i < count; i++) {
+          const card = cards.nth(i);
+          const name = await card.getAttribute('aria-label');
+          const mapsLink = await card.getAttribute('href');
+          if (name && mapsLink) {
+            vendorLinks.push({ name, mapsLink });
+          }
+        }
+
+        addLog(`Extracted ${vendorLinks.length} raw links. Beginning concurrent Deep Extraction (Hardware Accelerated)...`);
+
+        // Phase 2: Concurrent Multi-Tab Execution (Lower batch size to prevent CPU choking and timeouts)
+        const CONCURRENCY_LIMIT = 5;
+        for (let i = 0; i < vendorLinks.length; i += CONCURRENCY_LIMIT) {
+          if (globalAbortSignal) throw new Error('Master Stop Aborted');
+          
+          const batch = vendorLinks.slice(i, i + CONCURRENCY_LIMIT);
+          addLog(`Processing concurrent batch ${i/CONCURRENCY_LIMIT + 1} of ${Math.ceil(vendorLinks.length/CONCURRENCY_LIMIT)}...`);
+          
+          const batchPromises = batch.map(async (vendor) => {
+            let newPage;
+            try {
+              newPage = await context.newPage();
+              // Disable heavy resources on the new tab as well
+              await newPage.route('**/*', (route) => {
+                const rt = route.request().resourceType();
+                if (['image', 'media', 'font', 'stylesheet'].includes(rt)) {
+                  route.abort();
+                } else {
+                  route.continue();
+                }
+              });
+
+              // Navigate directly to the Maps detail view
+              await newPage.goto(vendor.mapsLink, { waitUntil: 'domcontentloaded', timeout: 25000 });
+
+              let address = '';
+              const addressEl = newPage.locator('[data-item-id="address"]');
+              if (await addressEl.count() > 0) {
+                const rawAddress = await addressEl.getAttribute('aria-label');
+                address = rawAddress ? rawAddress.replace(/^Address:\s*/i, '') : '';
+              }
+
+              let phone = '';
+              const phoneEl = newPage.locator('[data-item-id^="phone:tel:"]');
+              if (await phoneEl.count() > 0) {
+                const rawPhone = await phoneEl.getAttribute('aria-label');
+                phone = rawPhone ? rawPhone.replace(/^Phone:\s*/i, '') : '';
+              }
+
+              let rating = null;
+              const ratingEl = newPage.locator('div.F7nice').first();
+              if (await ratingEl.count() > 0) {
+                const text = await ratingEl.innerText();
+                const match = text.match(/^([0-9.]+)/);
+                if (match) rating = parseFloat(match[1]);
+              }
+
+              // Advanced Extraction: Website & Operating Hours
+              let websiteUrl = '';
+              const websiteEl = newPage.locator('a[data-item-id="authority"]');
+              if (await websiteEl.count() > 0) {
+                websiteUrl = await websiteEl.getAttribute('href');
+              }
+
+              let operatingHours = '';
+              const hoursEl = newPage.locator('[aria-label*="hours"]').first();
+              if (await hoursEl.count() > 0) {
+                operatingHours = await hoursEl.getAttribute('aria-label') || await hoursEl.innerText();
+              }
+
+              // Advanced Extraction: Top Reviews Sentiment
+              const topReviews = [];
+              const reviewEls = newPage.locator('.OA1nbd');
+              const reviewCount = await reviewEls.count();
+              for (let j = 0; j < Math.min(reviewCount, 3); j++) {
+                topReviews.push(await reviewEls.nth(j).innerText());
+              }
+
+              // Parallel Website Deep Enrichment
+              let enrichedData = { email: '', instagram: '', facebook: '', phone: '', instagramFollowers: '', facebookFollowers: '' };
+              if (websiteUrl) {
+                enrichedData = await scrapeWebsiteForSocials(browser, websiteUrl);
+              }
+
+              const finalPhone = (phone && !phone.includes('Requires')) ? phone : (enrichedData.phone || phone);
+
+              // AI HTML Verification: Scan innerText for semantic matches
+              let pageText = '';
+              try {
+                pageText = await newPage.innerText('body', { timeout: 2000 }).catch(()=>'');
+              } catch(e) {}
+              
+              let aiVerified = false;
+              let matchedKeywords = [];
+              if (aiKeywords && aiKeywords.length > 0 && pageText) {
+                const lowerText = pageText.toLowerCase();
+                matchedKeywords = aiKeywords.filter(kw => lowerText.includes(kw.toLowerCase()));
+                if (matchedKeywords.length > 0) {
+                  aiVerified = true;
+                  addLog(`[AI HTML Parser] Verified '${vendor.name}' - Found keywords: [${matchedKeywords.join(', ')}]`);
+                }
+              }
+
+              return {
+                name: vendor.name,
+                address,
+                phone: finalPhone,
+                rating,
+                mapsLink: vendor.mapsLink,
+                website: websiteUrl,
+                operatingHours: operatingHours.substring(0, 150),
+                topReviews,
+                email: enrichedData.email,
+                instagram: enrichedData.instagram,
+                facebook: enrichedData.facebook,
+                instagramFollowers: enrichedData.instagramFollowers,
+                facebookFollowers: enrichedData.facebookFollowers,
+                aiVerified,
+                matchedKeywords,
+                id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7)
+              };
+
+
+            } catch (err) {
+              addLog(`Error in concurrent extraction for ${vendor.name}: ${err.message}`);
+              return null;
+            } finally {
+              if (newPage) await newPage.close();
+            }
+          });
+
+          // Wait for the entire batch to finish concurrently
+          const batchResults = await Promise.all(batchPromises);
+          
+          // STREAMING INSERTION TO DB
+          const validResults = batchResults.filter(res => res !== null);
+          let insertedInBatch = 0;
+
+          for (const place of validResults) {
+            if (!place.name) continue;
+
+            const pincodeMatch = place.address ? place.address.match(/\b\d{6}\b/) : null;
+            const pincode = pincodeMatch ? pincodeMatch[0] : '';
+
+            // Filter out Mumbai/Maharashtra results
+            const isMumbaiOrMH = place.address && (
+              place.address.toLowerCase().includes('mumbai') || 
+              place.address.toLowerCase().includes('maharashtra') || 
+              pincode.startsWith('4')
+            );
+            if (isMumbaiOrMH) continue;
+
+            let parsedRating = null;
+            if (place.rating && place.rating !== '-') {
+              parsedRating = parseFloat(place.rating);
+              if (isNaN(parsedRating)) parsedRating = null;
+            }
+
+            const existing = await StagingLead.findOne({
+              $or: [
+                { mapsLink: place.mapsLink },
+                { name: place.name }
+              ]
+            });
+
+            if (!existing) {
+              const leadScore = calculateLeadScore(place);
+              const newLead = new StagingLead({
+                id: place.id,
+                name: place.name,
+                category: category,
+                city: location || 'Global',
+                address: place.address || '',
+                pincode: pincode,
+                phone: place.phone || 'Requires Manual Lookup',
+                rating: parsedRating,
+                mapsLink: place.mapsLink || '',
+                source: 'Google Maps Engine',
+                verified: false,
+                aiVerified: place.aiVerified,
+                matchedKeywords: place.matchedKeywords,
+                email: place.email || '',
+                instagram: place.instagram || '',
+                instagramFollowers: place.instagramFollowers || '',
+                facebook: place.facebook || '',
+                facebookFollowers: place.facebookFollowers || '',
+                website: place.website || '',
+                qualityScore: leadScore,
+                tier: determineTier(leadScore),
+                operatingHours: place.operatingHours || '',
+                topReviews: place.topReviews || []
+              });
+              const savedLead = await newLead.save();
+              try { emitVendorEvent(savedLead, 'inserted'); } catch (e) {}
+              insertedInBatch++;
+            } else {
+              if (!existing.pincode && place.address) {
+                const pMatch = place.address.match(/\b\d{6}\b/);
+                if (pMatch) existing.pincode = pMatch[0];
+              }
+              if (!existing.rating && parsedRating) existing.rating = parsedRating;
+              if ((!existing.phone || existing.phone.includes('Obfuscated') || existing.phone.includes('Requires')) && place.phone) {
+                existing.phone = place.phone;
+              }
+              await existing.save();
+              try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+            }
+          }
+          
+          scrapedResults.push(...validResults);
+          addLog(`Streamed ${insertedInBatch} new vendors to DB from this batch. (Total extracted so far: ${scrapedResults.length})`);
+        }
+      }
+    }
+
+    addLog(`Google Maps Scraping complete. Found ${scrapedResults.length} vendors total.`);
+  } catch (error) {
+    addLog(`Google Maps Scraper error: ${error.message}`);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    if (context) await context.close();
+    if (browser) await browser.close();
+  }
+}
+
+async function scrapeJustDial(category, location) {
+  addLog(`Starting JustDial scrape for ${category} in ${location}`);
+  const searchUrl = `https://www.justdial.com/${location.split(',')[0].trim()}/${category.replace(/ /g, '-')}`;
+  
+  addLog(`Navigating to: ${searchUrl}`);
+  // Use the same stealth browser factory to create a Chromium instance (Playwright)
+  let browser = null;
+  let context = null;
+  let page = null;
+
+  try {
+    const launched = await launchStealthBrowser(false);
+    browser = launched.browser;
+    activeBrowsers.push(browser);
+
+    context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0',
+      viewport: { width: 1280, height: 800 }
+    });
+    page = await context.newPage();
+
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(5000);
+
+    const finalUrl = page.url().toLowerCase();
+    const mandalSegment = location.split(',')[0].trim().toLowerCase().replace(/ /g, '-');
+    const districtSegment = location.includes(',') ? location.split(',')[1].trim().toLowerCase().replace(/ /g, '-') : '';
+    
+    const isMandalMatched = finalUrl.includes(mandalSegment);
+    const isDistrictMatched = districtSegment && finalUrl.includes(districtSegment);
+
+    if (!isMandalMatched && !isDistrictMatched) {
+      addLog(`[Warning] JustDial redirected to an unrelated city page. Skipping.`);
+      return;
+    }
+
+    let html = await page.content();
+    if (html.includes('<body></body>') || html.length < 500) {
+      throw new Error("JustDial persistently blocked this request (IP Rate Limited). Try again later.");
+    }
+
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await page.waitForTimeout(1000);
+    }
+    
+    const results = await page.$$eval('.resultbox', nodes => {
+      return nodes.map(node => {
+        const nameEl = node.querySelector('.resultbox_title_anchor, .resultbox_title, h2');
+        const name = nameEl ? nameEl.innerText.trim() : null;
+        const addressEl = node.querySelector('.resultbox_address, address');
+        const address = addressEl ? addressEl.innerText.trim() : null;
+        const ratingEl = node.querySelector('.resultbox_totalrate');
+        const rating = ratingEl ? ratingEl.innerText.trim() : null;
+        const phoneEl = node.querySelector('.callNowAnchor, .callbutton');
+        const phone = phoneEl ? phoneEl.innerText.trim() : 'Requires Manual Lookup';
+        return { name, address, rating, phone };
+      }).filter(v => v.name);
+    });
+
+    addLog(`Found ${results.length} raw results from JustDial`);
+    let newCount = 0;
+    
+    for (const v of results) {
+      const existing = await StagingLead.findOne({ name: v.name, city: location });
+      if (!existing) {
+        let parsedRating = null;
+        if (v.rating && v.rating !== '-') {
+          parsedRating = parseFloat(v.rating);
+          if (isNaN(parsedRating)) parsedRating = null;
+        }
+        const pincodeMatch = v.address ? v.address.match(/\b\d{6}\b/) : null;
+        const created = await StagingLead.create({
+          id: Date.now().toString() + Math.random().toString(36).substring(7),
+          name: v.name,
+          category: category,
+          city: location,
+          address: v.address || `Located in ${location}`,
+          pincode: pincodeMatch ? pincodeMatch[0] : '',
+          phone: v.phone || 'Requires Manual Lookup',
+          rating: parsedRating,
+          source: 'JustDial'
+        });
+        try { emitVendorEvent(created, 'inserted'); } catch (e) {}
+        newCount++;
+      }
+    }
+    addLog(`Scraping complete. Inserted ${newCount} new vendors into staging.`);
+  } catch (error) {
+    addLog(`JustDial Scraper error: ${error.message}`);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    try { if (context) await context.close(); } catch(e){}
+    try { if (browser) await browser.close(); } catch(e){}
+  }
+}
+
+async function genericPlaywrightScrape(engineName, searchUrl, category, location, evaluateFn) {
+  addLog(`Starting ${engineName} scrape for ${category} in ${location}`);
+  const query = `${category} in ${location}`;
+
+  // If Playwright not available (production/Render), skip browser scraping
+  if (!browserEngines || !browserEngines.chromium) {
+    addLog('[Warning] Playwright Chromium not available on this server.');
+    return;
+  }
+
+  let browser;
+  let context;
+  try {
+    const launched = await launchStealthBrowser(false);
+    browser = launched.browser;
+    activeBrowsers.push(browser);
+    
+    context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 800 }
+    });
+    const page = await context.newPage();
+
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForTimeout(6000);
+
+    for (let i = 0; i < 6; i++) {
+      await page.evaluate(() => window.scrollBy(0, window.innerHeight));
+      await page.waitForTimeout(1500);
+    }
+    
+    const results = await page.evaluate(evaluateFn);
+
+    console.log(`Found ${results.length} raw results from ${engineName}`);
+    let newCount = 0;
+    
+    for (const v of results) {
+      const existing = await StagingLead.findOne({ name: v.name, city: location });
+      if (!existing) {
+        let parsedRating = null;
+        if (v.rating && v.rating !== '-') {
+          parsedRating = parseFloat(v.rating);
+          if (isNaN(parsedRating)) parsedRating = null;
+        }
+        const pincodeMatch = v.address ? v.address.match(/\b\d{6}\b/) : null;
+        const created = await StagingLead.create({
+          id: Date.now().toString() + Math.random().toString(36).substring(7),
+          name: v.name,
+          category: category,
+          city: location,
+          address: v.address || `Located in ${location}`,
+          pincode: pincodeMatch ? pincodeMatch[0] : '',
+          phone: 'Requires Manual Lookup / Login',
+          rating: parsedRating,
+          mapsLink: v.profileLink || '',
+          source: engineName
+        });
+        try { emitVendorEvent(created, 'inserted'); } catch (e) {}
+        newCount++;
+      }
+    }
+    console.log(`${engineName} Scraping complete. Inserted ${newCount} new vendors.`);
+  } catch (error) {
+    console.error(`${engineName} Scraper error:`, error.message);
+  } finally {
+    activeBrowsers = activeBrowsers.filter(b => b !== browser);
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+async function scrapeWeddingBazaar(category, location) {
+  const city = location.split(',')[0].trim().toLowerCase().replace(/ /g, '-');
+  const catParam = category.toLowerCase().replace(/ /g, '-');
+  const url = `https://www.weddingbazaar.com/${catParam}-in-${city}`;
+  
+  await genericPlaywrightScrape('Wedding Bazaar', url, category, location, () => {
+    return Array.from(document.querySelectorAll('.vendor-card, .listing-card, article')).map(node => {
+      const nameEl = node.querySelector('h2, h3, .vendor-name');
+      const name = nameEl ? nameEl.innerText.trim() : null;
+      const addrEl = node.querySelector('.vendor-location, .locality');
+      const address = addrEl ? addrEl.innerText.trim() : '';
+      const ratingEl = node.querySelector('.rating, .vendor-rating');
+      const rating = ratingEl ? ratingEl.innerText.trim() : null;
+      const linkEl = node.querySelector('a');
+      const profileLink = linkEl ? linkEl.href : '';
+      return { name, address, rating, profileLink };
+    }).filter(v => v.name);
+  });
+}
+
+async function scrapeWeddingWire(category, location) {
+  const city = location.split(',')[0].trim().toLowerCase().replace(/ /g, '-');
+  // WeddingWire primarily groups everything under wedding-venues or wedding-vendors
+  const url = `https://www.weddingwire.in/wedding-vendors/${city}`;
+  
+  await genericPlaywrightScrape('WeddingWire', url, category, location, () => {
+    return Array.from(document.querySelectorAll('.vendorTile, .storefront-list-item, .directory-item')).map(node => {
+      const nameEl = node.querySelector('.vendorTile__title, .storefront-title, h2, h3');
+      const name = nameEl ? nameEl.innerText.trim() : null;
+      const addrEl = node.querySelector('.vendorTile__location, .storefront-location');
+      const address = addrEl ? addrEl.innerText.trim() : '';
+      const ratingEl = node.querySelector('.rating__count, .reviews-count');
+      const rating = ratingEl ? ratingEl.innerText.trim() : null;
+      const linkEl = node.querySelector('a');
+      const profileLink = linkEl ? linkEl.href : '';
+      return { name, address, rating, profileLink };
+    }).filter(v => v.name);
+  });
+}
+
+async function scrapeMandap(category, location) {
+  const city = location.split(',')[0].trim().toLowerCase().replace(/ /g, '-');
+  const url = `https://www.mandap.com/wedding-venues/${city}`;
+  
+  await genericPlaywrightScrape('Mandap.com', url, category, location, () => {
+    return Array.from(document.querySelectorAll('.venue-card, .mandap-card, .listing-card')).map(node => {
+      const nameEl = node.querySelector('.venue-name, h2, h3');
+      const name = nameEl ? nameEl.innerText.trim() : null;
+      const addrEl = node.querySelector('.venue-location, p');
+      const address = addrEl ? addrEl.innerText.trim() : '';
+      const ratingEl = node.querySelector('.rating');
+      const rating = ratingEl ? ratingEl.innerText.trim() : null;
+      const linkEl = node.querySelector('a');
+      const profileLink = linkEl ? linkEl.href : '';
+      return { name, address, rating, profileLink };
+    }).filter(v => v.name);
+  });
+}
+
+// API: Get Active Cron Jobs
+app.get('/api/scrape/jobs', (req, res) => {
+  const jobs = Object.keys(activeCronJobs).map(cat => ({
+    category: cat,
+    interval: activeCronJobs[cat].interval,
+    status: activeCronJobs[cat].status,
+    location: activeCronJobs[cat].location
+  }));
+  res.json(jobs);
+});
+
+// API: Update Cron Job
+app.post('/api/scrape/jobs/update', (req, res) => {
+  const { category, action, intervalMs } = req.body;
+  const job = activeCronJobs[category];
+  
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+
+  if (action === 'stop') {
+    clearInterval(job.timer);
+    job.status = 'stopped';
+  } else if (action === 'start') {
+    if (job.status === 'stopped') {
+      const ms = intervalMs || job.interval;
+      job.interval = ms;
+      job.status = 'running';
+      job.timer = setInterval(() => {
+        scrapeGooglePlaces(buildScrapeQuery(category, job.location), category, job.location).catch(console.error);
+      }, ms);
+    }
+  } else if (action === 'update_interval') {
+    clearInterval(job.timer);
+    job.interval = intervalMs;
+    job.status = 'running';
+    job.timer = setInterval(() => {
+        scrapeGooglePlaces(buildScrapeQuery(category, job.location), category, job.location).catch(console.error);
+    }, intervalMs);
+  }
+
+  res.json({ success: true, message: `Job for ${category} updated.` });
+});
+
+// API: Bulk CSV Upload Ingestion
+app.post('/api/scrape/upload', (req, res) => {
+  const { tasks } = req.body; // Array of { category, location }
+  if (!tasks || !Array.isArray(tasks)) return res.status(400).json({ error: 'Invalid tasks array' });
+
+  for (const task of tasks) {
+    // Treat location as mandal for batch queue
+    batchQueue.push({ category: task.category, mandal: task.location, district: 'Bulk Upload', engine: 'google' });
+  }
+
+  batchProgress = {
+    total: batchQueue.length,
+    completed: 0,
+    currentTask: 'Processing Bulk Upload...',
+    isActive: true
+  };
+
+  if (!isBatchRunning) {
+    runBatchQueue();
+  }
+
+  res.json({ success: true, message: `Successfully queued ${tasks.length} bulk tasks.` });
+});
+
+// API: Stop All Cron Jobs & Batches (Master Stop)
+app.post('/api/scrape/jobs/stop-all', async (req, res) => {
+  // Fire global abort signal
+  globalAbortSignal = true;
+
+  // HARD KILL: Forcefully close all active Playwright browsers instantly
+  addLog(`[SYSTEM] Hard-killing ${activeBrowsers.length} active headless browsers...`);
+  for (const b of activeBrowsers) {
+    try { await b.close(); } catch(e){}
+  }
+  activeBrowsers = [];
+
+  // Stop all active cron jobs
+  for (const key of Object.keys(activeCronJobs)) {
+    clearInterval(activeCronJobs[key].timer);
+    activeCronJobs[key].status = 'stopped';
+  }
+
+  // Stop batch queue
+  batchQueue = [];
+  batchProgress.currentTask = 'Stopped manually by Master Stop';
+  batchProgress.isActive = false;
+  isBatchRunning = false;
+
+  addLog(`[SYSTEM] MASTER STOP EXECUTED. All scrapers aborting...`);
+  res.json({ success: true, message: 'All active scrapers aborted.' });
+});
+
+app.listen(PORT, () => {
+  console.log(`Scraper backend running on http://localhost:${PORT}`);
+});

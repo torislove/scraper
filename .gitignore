@@ -1,0 +1,40 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+web_modules/
+
+# Local databases and scraped data
+data/
+server/data/
+db/
+server/db/
+*.json.bak
+scraped_vendors.json
+out_of_bounds.json
+activity_logs.json
+locations_memory.json
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+server/.env
+client/.env
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+error_crash.log
+
+# Build files
+dist/
+build/
+.cache/
+
+# OS files
+.DS_Store
+Thumbs.db
