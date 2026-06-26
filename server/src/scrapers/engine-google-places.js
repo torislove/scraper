@@ -343,46 +343,81 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       const nameEl = page.locator('h1.DUwDvf');
       const name = await nameEl.count() > 0 ? await nameEl.innerText() : 'Google Maps Listing';
       
-      let address = '';
-      const addressEl = page.locator('[data-item-id="address"]');
-      if (await addressEl.count() > 0) {
-        const rawAddress = await addressEl.getAttribute('aria-label');
-        address = rawAddress ? rawAddress.replace(/^Address:\s*/i, '') : '';
-      }
+      const extractedData = await page.evaluate(() => {
+        let extPhone = '';
+        let extAddress = '';
+        let extWebsite = '';
+        let extRating = null;
+        let extImages = [];
 
-      let phone = '';
-      const phoneEl = page.locator('[data-item-id^="phone:tel:"]');
-      if (await phoneEl.count() > 0) {
-        const rawPhone = await phoneEl.getAttribute('aria-label');
-        phone = rawPhone ? rawPhone.replace(/^Phone:\s*/i, '') : '';
-      }
-
-      let rating = null;
-      const ratingEl = page.locator('div.F7nice').first();
-      if (await ratingEl.count() > 0) {
-        const text = await ratingEl.innerText();
-        const match = text.match(/^([0-9.]+)/);
-        if (match) rating = parseFloat(match[1]);
-      }
-
-      let allImages = [];
-      try {
-        const imgLocators = await page.locator('button[aria-label^="Photo of"] img, img[src*="googleusercontent.com/p/"]').all().catch(()=>[]);
-        for (let j = 0; j < Math.min(imgLocators.length, 10); j++) {
-          const src = await imgLocators[j].getAttribute('src', { timeout: 500 }).catch(()=>null);
-          if (src) allImages.push(src);
+        // Address
+        const addrEl = document.querySelector('[data-item-id="address"]');
+        if (addrEl) {
+          const rawAddr = addrEl.getAttribute('aria-label');
+          extAddress = rawAddr ? rawAddr.replace(/^Address:\s*/i, '').trim() : '';
         }
-      } catch (e) {}
-      
+        if (!extAddress) {
+          const addrFallback = document.querySelector('button[aria-label^="Address:"]');
+          if (addrFallback) extAddress = addrFallback.getAttribute('aria-label').replace(/^Address:\s*/i, '').trim();
+        }
+
+        // Phone
+        const phoneEls = document.querySelectorAll('button[data-item-id^="phone:tel:"], button[data-tooltip*="phone"], button[aria-label^="Phone:"], button[aria-label^="phone:"]');
+        for (const el of phoneEls) {
+          const dataId = el.getAttribute('data-item-id');
+          if (dataId && dataId.startsWith('phone:tel:')) {
+            extPhone = dataId.replace('phone:tel:', '').trim();
+            break;
+          }
+          const ariaLabel = el.getAttribute('aria-label');
+          if (!extPhone && ariaLabel) {
+            extPhone = ariaLabel.replace(/^Phone:\s*/i, '').trim();
+          }
+          if (!extPhone) {
+            const text = el.innerText;
+            if (text && text.match(/[\d\s\-\+()]{8,15}/)) {
+              extPhone = text.trim();
+            }
+          }
+        }
+
+        // Rating
+        const ratingEl = document.querySelector('div.F7nice');
+        if (ratingEl) {
+          const match = ratingEl.innerText.match(/^([0-9.]+)/);
+          if (match) extRating = parseFloat(match[1]);
+        }
+
+        // Website
+        const websiteEls = document.querySelectorAll('a[data-item-id="authority"], a[aria-label^="Website"], a[href^="http"]');
+        for (const el of websiteEls) {
+          const href = el.getAttribute('href');
+          if (href && !href.includes('google.com') && !href.includes('gstatic.com')) {
+            extWebsite = href;
+            break;
+          }
+        }
+
+        // Images
+        const nodes = document.querySelectorAll('button[aria-label^="Photo of"] img, img[src*="googleusercontent.com/p/"]');
+        nodes.forEach(n => {
+          let src = n.getAttribute('src');
+          if (src && !src.includes('Olteoc')) {
+            src = src.replace(/=[ws]\d+-h\d+-k-no/i, '=s1024');
+            extImages.push(src);
+          }
+        });
+        extImages = [...new Set(extImages)].slice(0, 15);
+
+        return { extPhone, extAddress, extWebsite, extRating, extImages };
+      });
+
+      let address = extractedData.extAddress;
+      let phone = extractedData.extPhone;
+      let rating = extractedData.extRating;
+      let website = extractedData.extWebsite;
+      let allImages = extractedData.extImages;
       const avatar = allImages.length > 0 ? allImages[0] : '';
-
-      let website = '';
-      try {
-        const websiteEl = page.locator('a[data-item-id="authority"]');
-        if (await websiteEl.count() > 0) {
-          website = await websiteEl.getAttribute('href', { timeout: 3000 }) || '';
-        }
-      } catch (e) {}
 
       let enrichedData = { email: '', instagram: '', facebook: '', instagramFollowers: '', facebookFollowers: '', images: [] };
       if (website) {
@@ -581,63 +616,70 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             // Ultra-fast phone detection without arbitrary waits
             await page.waitForSelector('button[data-item-id^="phone:tel:"], button[data-tooltip="Copy phone number"]', { timeout: 1000 }).catch(()=>{});
 
-            const addressEl = page.locator('[data-item-id="address"]').first();
-            try {
-              if (await addressEl.count() > 0) {
-                const rawAddress = await addressEl.getAttribute('aria-label', { timeout: 1000 });
-                address = rawAddress ? rawAddress.replace(/^Address:\s*/i, '') : '';
-              }
-            } catch (err) {}
+            // Use evaluate for highly robust data extraction
+            const extractedData = await page.evaluate(() => {
+              let extPhone = '';
+              let extAddress = '';
+              let extWebsite = '';
+              let extRating = null;
 
-            // Fix: Check for all possible phone selectors and extract the exact tel: link if available
-            const phoneEls = await page.locator('button[data-item-id^="phone:tel:"], button[data-tooltip*="phone"], button[aria-label^="Phone:"], button[aria-label^="phone:"]').all();
-            
-            try {
-              if (phoneEls.length > 0) {
-                // Try to find one with data-item-id="phone:tel:..."
-                for (const el of phoneEls) {
-                  const dataId = await el.getAttribute('data-item-id', { timeout: 1000 }).catch(() => null);
-                  if (dataId && dataId.startsWith('phone:tel:')) {
-                    phone = dataId.replace('phone:tel:', '').trim();
-                    break;
+              // Address Extraction
+              const addrEl = document.querySelector('[data-item-id="address"]');
+              if (addrEl) {
+                const rawAddr = addrEl.getAttribute('aria-label');
+                extAddress = rawAddr ? rawAddr.replace(/^Address:\s*/i, '').trim() : '';
+              }
+              if (!extAddress) {
+                const addrFallback = document.querySelector('button[aria-label^="Address:"]');
+                if (addrFallback) extAddress = addrFallback.getAttribute('aria-label').replace(/^Address:\s*/i, '').trim();
+              }
+
+              // Phone Extraction
+              const phoneEls = document.querySelectorAll('button[data-item-id^="phone:tel:"], button[data-tooltip*="phone"], button[aria-label^="Phone:"], button[aria-label^="phone:"]');
+              for (const el of phoneEls) {
+                const dataId = el.getAttribute('data-item-id');
+                if (dataId && dataId.startsWith('phone:tel:')) {
+                  extPhone = dataId.replace('phone:tel:', '').trim();
+                  break;
+                }
+                const ariaLabel = el.getAttribute('aria-label');
+                if (!extPhone && ariaLabel) {
+                  extPhone = ariaLabel.replace(/^Phone:\s*/i, '').trim();
+                }
+                if (!extPhone) {
+                  const text = el.innerText;
+                  if (text && text.match(/[\d\s\-\+()]{8,15}/)) {
+                    extPhone = text.trim();
                   }
                 }
-                
-                // Fallback to aria-label
-                if (!phone) {
-                  const rawPhone = await phoneEls[0].getAttribute('aria-label', { timeout: 1000 }).catch(() => null);
-                  phone = rawPhone ? rawPhone.replace(/^Phone:\s*/i, '').trim() : '';
+              }
+
+              // Rating Extraction
+              const ratingEl = document.querySelector('div.F7nice');
+              if (ratingEl) {
+                const match = ratingEl.innerText.match(/^([0-9.]+)/);
+                if (match) extRating = parseFloat(match[1]);
+              }
+
+              // Website Extraction
+              const websiteEls = document.querySelectorAll('a[data-item-id="authority"], a[aria-label^="Website"], a[href^="http"]');
+              for (const el of websiteEls) {
+                const href = el.getAttribute('href');
+                if (href && !href.includes('google.com') && !href.includes('gstatic.com')) {
+                  extWebsite = href;
+                  break;
                 }
-
-                // Fallback to innerText
-                if (!phone) {
-                  const rawText = await phoneEls[0].innerText({ timeout: 1000 }).catch(() => null);
-                  if (rawText && rawText.match(/\d{4}/)) {
-                    phone = rawText.trim();
-                  }
-                }
-
-                if (phone) addLog(`[Extracted] Phone for ${name}: ${phone}`);
               }
-            } catch (err) {
-               addLog(`[Warning] Phone extraction error for ${name}: ${err.message}`);
-            }
 
-            const ratingEl = page.locator('div.F7nice').first();
-            try {
-              if (await ratingEl.count() > 0) {
-                const text = await ratingEl.innerText({ timeout: 1000 });
-                const match = text.match(/^([0-9.]+)/);
-                if (match) rating = parseFloat(match[1]);
-              }
-            } catch (err) {}
+              return { extPhone, extAddress, extWebsite, extRating };
+            });
 
-            const websiteEl = page.locator('a[data-item-id="authority"]');
-            try {
-              if (await websiteEl.count() > 0) {
-                websiteUrl = await websiteEl.getAttribute('href', { timeout: 1000 });
-              }
-            } catch (err) {}
+            address = extractedData.extAddress;
+            phone = extractedData.extPhone;
+            rating = extractedData.extRating;
+            websiteUrl = extractedData.extWebsite;
+
+            if (phone) addLog(`[Extracted] Phone for ${name}: ${phone}`);
 
             const hoursEl = page.locator('[aria-label*="hours"]').first();
             try {
@@ -646,21 +688,52 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               }
             } catch (err) {}
 
-            let allImages = [];
-            try {
-              const imgLocators = await page.locator('button[aria-label^="Photo of"] img, img[src*="googleusercontent.com/p/"]').all().catch(()=>[]);
-              for (let j = 0; j < Math.min(imgLocators.length, 10); j++) {
-                const src = await imgLocators[j].getAttribute('src', { timeout: 500 }).catch(()=>null);
-                if (src) allImages.push(src);
-              }
-            } catch (e) {}
-      const avatar = allImages.length > 0 ? allImages[0] : '';
+            // Extract high quality images robustly
+            let allImages = await page.evaluate(() => {
+              const imgs = [];
+              const nodes = document.querySelectorAll('button[aria-label^="Photo of"] img, img[src*="googleusercontent.com/p/"]');
+              nodes.forEach(n => {
+                let src = n.getAttribute('src');
+                if (src && !src.includes('Olteoc')) {
+                  // Upgrade resolution to 1024px for hacker-like ultra details
+                  src = src.replace(/=[ws]\d+-h\d+-k-no/i, '=s1024');
+                  imgs.push(src);
+                }
+              });
+              // Filter out duplicate or low quality placeholders
+              return [...new Set(imgs)].slice(0, 15);
+            }).catch(() => []);
+
+            const avatar = allImages.length > 0 ? allImages[0] : '';
 
             // Fire-and-Forget Background Enrichment (No Blocking!)
             let enrichedData = { email: '', instagram: '', facebook: '', phone: '', instagramFollowers: '', facebookFollowers: '', images: [] };
              if (websiteUrl) {
                 // We run this in the background so the map extraction never pauses
-                scrapeWebsiteForSocials(browser, websiteUrl, name).then(data => {
+                scrapeWebsiteForSocials(browser, websiteUrl, name).then(async data => {
+                   // NLP Deep Enrichment using Python Script
+                   const { exec } = require('child_process');
+                   const path = require('path');
+                   const scriptPath = path.join(__dirname, 'deep_enrichment.py');
+                   
+                   await new Promise((resolve) => {
+                       exec(`python3 "${scriptPath}" --url "${websiteUrl}"`, (err, stdout) => {
+                           if (!err && stdout) {
+                               try {
+                                   const lines = stdout.split('\\n');
+                                   for (const line of lines) {
+                                       if (line.includes('"type": "enrichment_result"')) {
+                                           const parsed = JSON.parse(line).data;
+                                           if (parsed.emails && parsed.emails.length > 0) data.email = parsed.emails[0];
+                                           if (parsed.phones && parsed.phones.length > 0) data.phone = parsed.phones[0];
+                                       }
+                                   }
+                               } catch (e) {}
+                           }
+                           resolve();
+                       });
+                   });
+
                    const currentVendors = dbAdapter.getVendors();
                    const vIdx = currentVendors.findIndex(v => v.name === name);
                    if (vIdx !== -1) {
@@ -674,12 +747,36 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                         existing.images = [...new Set([...(existing.images || []), ...data.images])];
                         updated = true;
                       }
-                      if (updated) {
+
+                      // STRICT EMPTY FILTER: Delete if no phone AND no email
+                      const hasPhone = existing.phone && !existing.phone.includes('Requires');
+                      const hasEmail = existing.email && existing.email.trim() !== '';
+                      if (!hasPhone && !hasEmail) {
+                          addLog(`[Strict Filter] Dropping '${existing.name}' after enrichment due to no contact info.`);
+                          dbAdapter.deleteVendor(userId || existing.userId, existing.id);
+                          try { emitVendorEvent(existing, 'deleted'); } catch(e){}
+                      } else if (updated) {
                         dbAdapter.saveVendor(userId || existing.userId, existing);
                         try { emitVendorEvent(existing, 'updated'); } catch(e){}
                       }
                    }
                 }).catch(()=>{});
+             } else {
+                // If NO website, we must still apply the strict filter!
+                setTimeout(() => {
+                   const currentVendors = dbAdapter.getVendors();
+                   const vIdx = currentVendors.findIndex(v => v.name === name);
+                   if (vIdx !== -1) {
+                      let existing = currentVendors[vIdx];
+                      const hasPhone = existing.phone && !existing.phone.includes('Requires');
+                      const hasEmail = existing.email && existing.email.trim() !== '';
+                      if (!hasPhone && !hasEmail) {
+                          addLog(`[Strict Filter] Dropping '${existing.name}' because it has no website and no contact info.`);
+                          dbAdapter.deleteVendor(userId || existing.userId, existing.id);
+                          try { emitVendorEvent(existing, 'deleted'); } catch(e){}
+                      }
+                   }
+                }, 2000);
              }
 
             const coords = extractCoords(mapsLink);

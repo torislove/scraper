@@ -5,7 +5,11 @@
     const chromium = playwrightExtra.chromium;
     chromium.use && chromium.use(stealth);
     console.log('Playwright module loaded, attempting to launch Chromium...');
-    const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const browser = await chromium.launch({ 
+      headless: true, 
+      executablePath: '/home/manoj/Desktop/scraper/server/chrome/linux-150.0.7871.24/chrome-linux64/chrome',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'] 
+    });
     console.log('Chromium launched successfully:', !!browser);
     const context = await browser.newContext();
     const page = await context.newPage();

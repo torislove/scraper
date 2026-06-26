@@ -22,8 +22,7 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Configs
 const localDb = require('./src/config/localDb');
-const connectDB = require('./src/config/database');
-connectDB();
+
 
 // Routes
 const authRoutes = require('./src/routes/auth');

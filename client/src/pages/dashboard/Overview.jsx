@@ -5,13 +5,14 @@ import {
   MessageCircle, Globe, Database, Briefcase, Image, Clock,
   Trash2, X, Activity, ChevronDown, Check, XCircle, Download,
   FolderOpen, Filter, Send, Settings, TrendingUp, Zap, Target, Map,
-  Users, Phone, Star, Wifi, WifiOff, BarChart3, UserCheck
+  Users, Phone, Star, Wifi, WifiOff, BarChart3, UserCheck, Mail, CheckCircle2
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useScraper } from '../../context/ScraperContext';
-
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 // ── City coords lookup for Indian cities (for worker map pins) ──
 const CITY_COORDS = {
   'guntur': [16.3067, 80.4365], 'hyderabad': [17.385, 78.4867],
@@ -48,6 +49,7 @@ const WORKER_COLORS = ['#7c3aed', '#2563eb', '#16a34a', '#ea580c', '#db2777', '#
 export default function OverviewPage() {
   const {
     vendors,
+    handleVerify, handleDelete,
     loading, logs, sseStatus, logLevel, setLogLevel,
     omniQuery, setOmniQuery, searchRadius, setSearchRadius,
     strategy, setStrategy,
@@ -71,16 +73,11 @@ export default function OverviewPage() {
   } = useScraper();
 
   const [showLog, setShowLog] = useState(true);
+  const [selectedVendor, setSelectedVendor] = useState(null);
 
   const PLATFORMS = [
-    { id: 'maps', label: 'Maps & Location', icon: <MapPin size={14} />, desc: 'Google Maps & local directories' },
-    { id: 'instagram', label: 'Instagram', icon: <Camera size={14} />, desc: 'Business profiles & contacts' },
-    { id: 'google-web', label: 'Universal Web Search', icon: <Globe size={14} />, desc: 'Global organic web scraper' },
-    { id: 'justdial', label: 'Justdial', icon: <Globe size={14} />, desc: 'India\'s top business directory' },
-    { id: 'facebook', label: 'Facebook', icon: <Briefcase size={14} />, desc: 'Manual Login FB Scraper' },
-    { id: 'indiamart', label: 'IndiaMart', icon: <Globe size={14} />, desc: 'Manual Login B2B Directory' },
-    { id: 'linkedin', label: 'LinkedIn', icon: <Briefcase size={14} />, desc: 'Professional & B2B leads' },
-    { id: 'firebase', label: 'Cloud Sync', icon: <Database size={14} />, desc: 'Sync with live database' },
+    { id: 'maps', label: 'Google Maps & Places', icon: <MapPin size={14} />, desc: 'Google Maps business scraper' },
+    { id: 'google-web', label: 'Google Search Leads', icon: <Globe size={14} />, desc: 'Google search organic leads scraper' },
   ];
 
   const totalLeads = vendors?.length || 0;
@@ -181,75 +178,11 @@ export default function OverviewPage() {
             <p className="text-xs text-gray-500 font-semibold mt-0.5">Deploy little scraping bots globally to extract verified business contacts!</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {loading && (
-            <button onClick={handleMasterStop} className="cartoon-btn cartoon-btn-red px-5 py-2.5 text-xs">
-              <XCircle size={14} className="inline mr-1" /> Stop All Minions
-            </button>
-          )}
-          <button onClick={pushToProd} disabled={verifiedCount === 0}
-            className={`cartoon-btn px-5 py-2.5 text-xs ${verifiedCount > 0 ? 'cartoon-btn-yellow text-black' : 'opacity-40 cursor-not-allowed bg-gray-200'}`}>
-            <Send size={14} className="inline mr-1" /> Push to Live Loot {verifiedCount > 0 && <span className="bg-red-500 text-white font-black text-[9px] border-2 border-black rounded-full px-2 py-0.5 ml-1">{verifiedCount}</span>}
-          </button>
-        </div>
       </div>
 
       <div className="max-w-6xl mx-auto space-y-6">
         
-        {/* ── ACTIVITY LOG (Admin Board) ── */}
-        <div className="cartoon-card overflow-hidden bg-white">
-          <button onClick={() => setShowLog(!showLog)}
-            className="w-full px-6 py-4 flex items-center justify-between transition-colors hover:bg-gray-50 border-b-4 border-black">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-3.5 h-3.5 rounded-full border-2 border-black ${
-                  sseStatus === 'open' ? 'bg-green-500 animate-pulse' : sseStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'
-                }`} />
-                <Activity size={16} className="text-black" />
-                <span className="font-black text-sm text-black">Minion Activity Logboard</span>
-              </div>
-              <span className="bg-black text-white text-[9px] font-black uppercase border border-black rounded-lg px-2 py-0.5">Admin Only</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <select value={logLevel} onChange={e => setLogLevel(e.target.value)}
-                onClick={e => e.stopPropagation()}
-                className="cartoon-input text-xs w-28 py-1.5 px-2 bg-white">
-                <option value="ALL">All Levels</option>
-                <option value="INFO">Info</option>
-                <option value="WARN">Warn</option>
-                <option value="ERROR">Error</option>
-                <option value="DEBUG">Debug</option>
-              </select>
-              <ChevronDown size={16} className={`text-black transition-transform ${showLog ? 'rotate-180' : ''}`} />
-            </div>
-          </button>
 
-          <AnimatePresence>
-            {showLog && (
-              <motion.div initial={{ height: 0 }} animate={{ height: 200 }} exit={{ height: 0 }}
-                className="overflow-hidden">
-                <div ref={terminalRef} className="h-48 overflow-y-auto p-4 font-mono text-xs leading-loose bg-black text-green-400">
-                  {logs?.length === 0
-                    ? <span className="text-gray-500">No signals from minions yet. Launch a search to deploy them!</span>
-                    : [...(logs || [])].filter(l => !logLevel || logLevel === 'ALL' || l.includes(`[${logLevel}]`)).slice(-100).reverse().map((log, i) => {
-                        const isError = log.includes('[ERROR]');
-                        const isWarn = log.includes('[WARN]');
-                        const isInfo = log.includes('[INFO]');
-                        return (
-                          <div key={i} className={`break-words py-0.5 ${
-                            isError ? 'text-red-400' : isWarn ? 'text-yellow-300' : isInfo ? 'text-green-300' : 'text-gray-400'
-                          }`}>
-                            <span className="mr-2 text-gray-600">[{new Date().toLocaleTimeString('en-US', { hour12: false })}]</span>
-                            {log}
-                          </div>
-                        );
-                      })
-                  }
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
 
         {/* ── STATS ROW ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -291,11 +224,15 @@ export default function OverviewPage() {
             <Search size={20} className="text-red-500" /> Choose Scraping Target & Target City
           </h2>
           <p className="text-xs text-gray-500 font-semibold mb-6">
-            Type what category you are looking for and in which city anywhere in the world! E.g. "Dentists" in "Paris" or "Gyms" in "Mumbai". The system will automatically spin up multiple virtual worker minions.
+            type what category you are looking for and in which city anywhere in the world! e.g. "dentists" in "paris" or "gyms" in "mumbai". the system will automatically spin up multiple virtual worker minions.
           </p>
 
-          <form onSubmit={(e) => { e.preventDefault(); startScrape(e); }}
-            className="flex flex-col md:flex-row items-stretch gap-4 mb-6">
+          <motion.form 
+            animate={{ scale: activeInput ? 1.02 : 1, boxShadow: activeInput ? '8px 8px 0px #000' : 'none' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            onSubmit={(e) => { e.preventDefault(); startScrape(e); }}
+            className="flex flex-col md:flex-row items-stretch gap-4 mb-6 relative z-20 bg-white p-2 rounded-xl border-2 border-transparent focus-within:border-red-500 transition-colors"
+          >
             
             <div className="relative flex-grow flex-1 flex items-center cartoon-input px-4 py-3 bg-white">
               <Search size={18} className="text-gray-500" />
@@ -371,110 +308,70 @@ export default function OverviewPage() {
               )}
             </div>
 
-            <button 
-              type="submit" 
-              disabled={loading || !categoryQuery || !locationQuery}
-              className={`cartoon-btn px-8 py-3 flex items-center justify-center gap-2 text-sm uppercase ${
-                (loading || !categoryQuery || !locationQuery) ? 'opacity-40 cursor-not-allowed bg-gray-200 text-gray-500 shadow-none' : 'cartoon-btn-red text-white'
-              }`}
-            >
-              {loading ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
-              <span>{loading ? 'Deploying...' : 'Deploy Minions'}</span>
-            </button>
-          </form>
-
-          {/* Scraping Scope & Advanced Radius Settings */}
-          <div className="border-4 border-black rounded-2xl p-4 bg-[#f8fafc] grid grid-cols-1 md:grid-cols-2 gap-6 shadow-[3px_3px_0px_#000] mb-6">
-            {/* Strategy Selector */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-black uppercase text-black flex items-center gap-1.5">
-                🗺️ Scraping Scope / Strategy
-              </label>
-              <div className="grid grid-cols-2 gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setStrategy('broad')}
-                  className={`px-3 py-2.5 text-xs font-black uppercase rounded-xl border-2 border-black transition-all ${
-                    strategy === 'broad' 
-                      ? 'bg-[#fbbf24] text-black shadow-[2px_2px_0px_#000] translate-x-[-2px] translate-y-[-2px]' 
-                      : 'bg-white text-gray-700 hover:bg-slate-50'
+            <div className="flex gap-2 w-full md:w-auto">
+              {loading ? (
+                <button 
+                  type="button" 
+                  onClick={handleMasterStop}
+                  className="cartoon-btn px-6 py-3 flex-1 md:flex-none flex items-center justify-center gap-2 text-sm uppercase bg-red-600 text-white hover:bg-red-700 transition-all shadow-[4px_4px_0px_#7f1d1d] active:shadow-[0px_0px_0px_#7f1d1d] active:translate-y-1 animate-pulse"
+                >
+                  <Square size={16} fill="currentColor" />
+                  <span className="font-black tracking-widest">ABORT MISSION</span>
+                </button>
+              ) : (
+                <button 
+                  type="submit" 
+                  disabled={!categoryQuery || !locationQuery}
+                  className={`cartoon-btn flex-1 md:flex-none px-8 py-3 flex items-center justify-center gap-2 text-sm uppercase ${
+                    (!categoryQuery || !locationQuery) ? 'opacity-40 cursor-not-allowed bg-gray-200 text-gray-500 shadow-none' : 'cartoon-btn-red text-white'
                   }`}
                 >
-                  🎯 Target City Only (Ultra-Fast)
+                  <Play size={16} fill="currentColor" />
+                  <span className="font-black">Deploy Minions</span>
                 </button>
-                <button
+              )}
+
+              {!loading && (
+                <button 
                   type="button"
-                  onClick={() => setStrategy('mandal')}
-                  className={`px-3 py-2.5 text-xs font-black uppercase rounded-xl border-2 border-black transition-all ${
-                    strategy === 'mandal' 
-                      ? 'bg-[#fbbf24] text-black shadow-[2px_2px_0px_#000] translate-x-[-2px] translate-y-[-2px]' 
-                      : 'bg-white text-gray-700 hover:bg-slate-50'
-                  }`}
+                  onClick={() => {
+                    setCategoryQuery('');
+                    setLocationQuery('');
+                  }}
+                  className="cartoon-btn px-4 py-3 flex items-center justify-center gap-2 text-sm uppercase bg-white text-gray-700 border-2 border-black hover:bg-gray-100 transition-all shadow-[4px_4px_0px_#000]"
+                  title="Clear & Next Search"
                 >
-                  🗺️ Full District Sweep
+                  <RefreshCw size={16} />
+                  <span className="font-black hidden md:inline">Next Search</span>
                 </button>
-              </div>
-              <span className="text-[10px] text-gray-400 font-bold mt-1">
-                {strategy === 'broad' 
-                  ? '🎯 Highly targeted city coordinates grid. Scrapes up to 10-12 listings in seconds.' 
-                  : '🗺️ Sweeps all mandals/municipalities within the entire district (exhaustive, slower).'}
-              </span>
+              )}
             </div>
-
-            {/* Radius Selector */}
-            <div className="flex flex-col justify-center gap-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-black uppercase text-black">
-                  📏 Search Radius: <span className="text-red-500 font-extrabold">{searchRadius || 10} km</span>
-                </label>
-              </div>
-              <input
-                type="range"
-                min="5"
-                max="50"
-                step="5"
-                disabled={strategy !== 'broad'}
-                value={searchRadius || 10}
-                onChange={(e) => setSearchRadius(parseInt(e.target.value))}
-                className="w-full accent-red-500 h-2 bg-slate-200 border-2 border-black rounded-lg appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed mt-2"
-              />
-              <span className="text-[10px] text-gray-400 font-bold mt-1">
-                {strategy !== 'broad' 
-                  ? '⚠️ Only applicable to Target City strategy' 
-                  : 'Controls how wide the coordinate grid spreads around the city'}
-              </span>
-            </div>
-          </div>
-
-          {/* Platforms Checkboxes */}
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Minion Tools & Platforms</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {PLATFORMS.map(platform => {
-                const isEnabled = enabledEngines?.includes(platform.id);
-                return (
-                  <div key={platform.id} 
-                    onClick={() => setEnabledEngines(prev => prev?.includes(platform.id) ? prev.filter(e => e !== platform.id) : [...(prev || []), platform.id])}
-                    className={`cartoon-card p-3 flex items-center justify-between cursor-pointer transition-all ${
-                      isEnabled ? 'bg-amber-100 border-red-500 shadow-[2px_2px_0px_#000]' : 'bg-white hover:bg-amber-50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="text-black shrink-0">{platform.icon}</div>
-                      <span className="text-[11px] font-black text-black">{platform.label}</span>
-                    </div>
-                    <input 
-                      type="checkbox" 
-                      checked={isEnabled} 
-                      onChange={() => {}}
-                      className="w-3.5 h-3.5 accent-red-500 cursor-pointer pointer-events-none" 
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          </motion.form>
         </div>
+
+        {/* ── LIVE MINION FEED (LOGS) ── */}
+        <AnimatePresence>
+          {logs && logs.length > 0 && showLog && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="cartoon-card bg-black p-4 overflow-hidden shadow-[4px_4px_0px_#f87171]">
+              <div className="flex items-center justify-between mb-3 border-b border-gray-800 pb-2">
+                <h3 className="font-display font-black text-green-400 text-sm flex items-center gap-2">
+                  <Activity size={14} className="animate-pulse" /> Live Minion Feed 
+                </h3>
+                <button onClick={() => setShowLog(false)} className="text-gray-500 hover:text-white transition-colors">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="h-32 overflow-y-auto custom-scrollbar font-mono text-[10px] space-y-1.5 pr-2 flex flex-col-reverse">
+                {logs.slice().reverse().map((log, i) => (
+                  <div key={i} className={`flex items-start gap-2 ${log.type === 'error' ? 'text-red-400' : log.type === 'success' ? 'text-green-400' : 'text-gray-300'}`}>
+                    <span className="text-gray-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                    <span>{log.message}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── WORKER DEPLOYMENT VISUALIZER OR MAPS ── */}
         <div className="cartoon-card overflow-hidden bg-white">
@@ -661,9 +558,12 @@ export default function OverviewPage() {
         <div className="cartoon-card p-6 bg-white">
           <div className="flex items-center justify-between mb-4 border-b-2 border-black pb-3">
             <h2 className="font-display font-black text-lg text-black">Scraped Minion Loot</h2>
-            <span className="bg-red-500 text-white font-black text-xs border-2 border-black px-3 py-1 rounded-full shadow-[2px_2px_0px_#000]">
-              Showing {Math.min(totalLeads, displayedCount)} / {totalLeads} Leads
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="bg-red-500 text-white font-black text-xs border-2 border-black px-3 py-1 rounded-full shadow-[2px_2px_0px_#000]">
+                Showing {Math.min(totalLeads, displayedCount)} / {totalLeads} Leads
+              </span>
+              <AnimatedExcelExport vendors={vendors || []} />
+            </div>
           </div>
 
           {vendors.length === 0 ? (
@@ -673,23 +573,58 @@ export default function OverviewPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              <div className="max-h-[320px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                {vendors.slice(0, displayedCount).map((lead, idx) => (
-                  <div key={idx} className="cartoon-card p-3.5 bg-white hover:bg-amber-50 flex items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-black text-black truncate">{lead.name}</h4>
-                      <p className="text-[10px] font-semibold text-gray-500 mt-0.5 truncate">{lead.category} · {lead.location}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {lead.phone ? (
-                        <span className="text-[9px] font-black border-2 border-black bg-green-100 text-green-800 px-2 py-0.5 rounded-full uppercase">Phone ✓</span>
-                      ) : (
-                        <span className="text-[9px] font-black border-2 border-black bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full uppercase">No Phone</span>
-                      )}
-                      <span className="text-[9px] font-black border-2 border-black bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full uppercase">Minion Loot</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="max-h-[400px] overflow-x-auto overflow-y-auto border-2 border-black rounded-xl custom-scrollbar shadow-[3px_3px_0px_#000] bg-white">
+                <table className="w-full min-w-[900px] text-left border-collapse whitespace-nowrap">
+                  <thead className="bg-amber-100 sticky top-0 z-10 border-b-2 border-black">
+                    <tr>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black border-r-2 border-black tracking-wider">Business Name</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black border-r-2 border-black tracking-wider">Category</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black border-r-2 border-black tracking-wider">Phone</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black border-r-2 border-black tracking-wider">Email</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black border-r-2 border-black tracking-wider">City/Loc</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase text-black tracking-wider">Socials</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y-2 divide-black">
+                    {vendors.slice(0, displayedCount).map((lead, idx) => (
+                      <tr key={idx} 
+                        onClick={() => setSelectedVendor(lead)}
+                        className="hover:bg-amber-50 cursor-pointer transition-colors bg-white group"
+                      >
+                        <td className="px-4 py-3 border-r-2 border-black text-xs font-black text-black flex items-center gap-3">
+                          <img src={lead.avatar || lead.images?.[0] || `https://ui-avatars.com/api/?name=${encodeURIComponent(lead.name || 'V')}&background=ede9fe&color=7c3aed`} 
+                               alt={lead.name} 
+                               className="w-8 h-8 rounded-lg border-2 border-black object-cover flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate group-hover:text-amber-600 transition-colors">{lead.name}</p>
+                            {lead.rating && (
+                              <span className="text-[9px] font-bold text-amber-600 flex items-center gap-0.5 mt-0.5">
+                                <Star size={8} fill="currentColor" /> {lead.rating}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 border-r-2 border-black text-xs font-semibold text-gray-700">
+                          <span className="bg-gray-100 border-2 border-black px-1.5 py-0.5 rounded text-[9px] uppercase font-black text-black">{lead.category}</span>
+                        </td>
+                        <td className="px-4 py-3 border-r-2 border-black text-xs font-black text-green-700">
+                          {lead.phone ? lead.phone : <span className="text-gray-300 font-normal">N/A</span>}
+                        </td>
+                        <td className="px-4 py-3 border-r-2 border-black text-xs font-black text-blue-700">
+                          {lead.email ? lead.email : <span className="text-gray-300 font-normal">N/A</span>}
+                        </td>
+                        <td className="px-4 py-3 border-r-2 border-black text-xs font-bold text-gray-700">
+                          {lead.city || lead.location || 'Unknown'}
+                        </td>
+                        <td className="px-4 py-3 text-xs flex items-center gap-2">
+                          {lead.website && <Globe size={13} className="text-gray-500 hover:text-amber-600" />}
+                          {lead.instagram && <span className="text-pink-600 font-black text-[9px] border-2 border-black px-1.5 py-0.5 rounded bg-pink-100 shadow-[1px_1px_0px_#000]">IG</span>}
+                          {lead.facebook && <span className="text-blue-600 font-black text-[9px] border-2 border-black px-1.5 py-0.5 rounded bg-blue-100 shadow-[1px_1px_0px_#000]">FB</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
 
               {/* Load Next 50 Minions button */}
@@ -710,7 +645,222 @@ export default function OverviewPage() {
         </div>
 
       </div>
+
+      {/* ── VENDOR DETAIL PANEL ── */}
+      <AnimatePresence>
+        {selectedVendor && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)' }} onClick={() => setSelectedVendor(null)}>
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              className="glass-card max-w-lg w-full shadow-2xl overflow-hidden rounded-3xl" style={{ background: 'rgba(6,8,18,0.98)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              
+              <div className="p-6 flex items-start justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-black text-2xl" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.3), rgba(109,40,217,0.2))', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
+                    {selectedVendor.name?.[0] || '?'}
+                  </div>
+                  <div>
+                    <h3 className="font-black text-white text-lg leading-tight">{selectedVendor.name}</h3>
+                    <p className="text-sm font-semibold mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{selectedVendor.category} · {selectedVendor.city || selectedVendor.location || 'India'}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedVendor(null)} className="p-2 rounded-xl transition-all hover:bg-white/5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                {/* Images Carousel */}
+                {selectedVendor.images && selectedVendor.images.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-gray-400">Extracted Photos</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar snap-x">
+                      {selectedVendor.images.map((img, idx) => (
+                        <img key={idx} src={img} alt={`Business ${idx}`} className="w-28 h-20 rounded-xl object-cover flex-shrink-0 snap-start border border-white/10 shadow-md" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <ContactRow icon={<TrendingUp size={15} />} label="Lead Score" value={`${selectedVendor.qualityScore || 50}%`} color="green" />
+                    <ContactRow icon={<Database size={15} />} label="Quality Tier" value={selectedVendor.tier || 'Standard'} color="violet" />
+                  </div>
+
+                  {selectedVendor.phone && <ContactRow icon={<Phone size={15} />} label="Direct Phone" value={selectedVendor.phone} color="green" />}
+                  {selectedVendor.email && <ContactRow icon={<Mail size={15} />} label="Email Address" value={selectedVendor.email} color="blue" />}
+                  {selectedVendor.website && <ContactRow icon={<Globe size={15} />} label="Website" value={selectedVendor.website} color="indigo" />}
+                  
+                  {(selectedVendor.instagramFollowers || selectedVendor.facebookFollowers) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedVendor.instagram && <ContactRow icon={<Camera size={15} />} label="IG Followers" value={selectedVendor.instagramFollowers || 'Connected'} color="pink" />}
+                      {selectedVendor.facebook && <ContactRow icon={<Users size={15} />} label="FB Followers" value={selectedVendor.facebookFollowers || 'Connected'} color="blue" />}
+                    </div>
+                  )}
+
+                  {selectedVendor.googleMapsLink && (
+                    <a href={selectedVendor.googleMapsLink} target="_blank" rel="noreferrer" className="block hover:scale-[1.01] transition-transform">
+                      <ContactRow icon={<Map size={15} />} label="Google Maps Link" value="Click to view on Map" color="amber" />
+                    </a>
+                  )}
+
+                  {selectedVendor.address && <ContactRow icon={<MapPin size={15} />} label="Exact Address" value={selectedVendor.address} color="gray" />}
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <ContactRow icon={<Database size={15} />} label="Source" value={selectedVendor.source || 'Google Maps Engine'} color="gray" />
+                    <ContactRow icon={<RefreshCw size={15} />} label="Scraped Date" value={selectedVendor.scrapedAt ? new Date(selectedVendor.scrapedAt).toLocaleDateString() : 'N/A'} color="gray" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedVendor.pincode && <ContactRow icon={<MapPin size={15} />} label="Postal Pincode" value={selectedVendor.pincode} color="gray" />}
+                    {(selectedVendor.latitude && selectedVendor.longitude) && (
+                      <ContactRow icon={<MapPin size={15} />} label="Coordinates" value={`${Number(selectedVendor.latitude).toFixed(4)}, ${Number(selectedVendor.longitude).toFixed(4)}`} color="gray" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-6 pb-6 flex gap-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '1.5rem' }}>
+                <button onClick={() => { handleVerify(selectedVendor.id, !selectedVendor.verified); setSelectedVendor(null); }}
+                  className="flex-1 px-4 py-3 rounded-xl text-sm font-bold text-white bg-violet-600 hover:bg-violet-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20">
+                  <CheckCircle2 size={15} /> {selectedVendor.verified ? 'Unverify Lead' : 'Verify Lead'}
+                </button>
+                <button onClick={() => { handleDelete(selectedVendor.id); setSelectedVendor(null); }}
+                  className="px-4 py-3 rounded-xl text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-500/20">
+                  <Trash2 size={15} /> Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
+function ContactRow({ icon, label, value, color }) {
+  const colorMap = {
+    green: { bg: 'rgba(16,185,129,0.1)', text: '#34d399', border: 'rgba(16,185,129,0.2)' },
+    blue: { bg: 'rgba(59,130,246,0.1)', text: '#60a5fa', border: 'rgba(59,130,246,0.2)' },
+    pink: { bg: 'rgba(236,72,153,0.1)', text: '#f472b6', border: 'rgba(236,72,153,0.2)' },
+    indigo: { bg: 'rgba(99,102,241,0.1)', text: '#818cf8', border: 'rgba(99,102,241,0.2)' },
+    amber: { bg: 'rgba(245,158,11,0.1)', text: '#fbbf24', border: 'rgba(245,158,11,0.2)' },
+    violet: { bg: 'rgba(139,92,246,0.1)', text: '#a78bfa', border: 'rgba(139,92,246,0.2)' },
+    gray: { bg: 'rgba(255,255,255,0.05)', text: 'rgba(255,255,255,0.7)', border: 'rgba(255,255,255,0.1)' },
+  };
+  const theme = colorMap[color] || colorMap.gray;
+  return (
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl border transition-all hover:bg-white/[0.08]" style={{ background: theme.bg, color: theme.text, borderColor: theme.border }}>
+      {icon}
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] font-black uppercase tracking-wider opacity-60">{label}</p>
+        <p className="text-sm font-semibold truncate text-white">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function AnimatedExcelExport({ vendors }) {
+  const [exportState, setExportState] = useState('idle');
+
+  const handleExport = async () => {
+    if (vendors.length === 0) return;
+    setExportState('processing');
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Leads CRM', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+      sheet.columns = [
+        { header: 'Business Name', key: 'name', width: 35 },
+        { header: 'Category', key: 'category', width: 20 },
+        { header: 'City', key: 'city', width: 20 },
+        { header: 'Phone', key: 'phone', width: 25 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Address', key: 'address', width: 45 },
+        { header: 'Rating', key: 'rating', width: 10 },
+        { header: 'Website', key: 'website', width: 35 },
+        { header: 'Instagram', key: 'instagram', width: 35 },
+        { header: 'Facebook', key: 'facebook', width: 35 },
+        { header: 'Maps Link', key: 'maps', width: 40 },
+        { header: 'Quality Score', key: 'score', width: 15 },
+        { header: 'Lead Status', key: 'status', width: 15 }
+      ];
+
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF6D28D9' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 30;
+
+      vendors.forEach((v, index) => {
+        const row = sheet.addRow({
+          name: v.name,
+          category: v.category,
+          city: v.city,
+          phone: v.phone && !v.phone.includes('Requires') ? v.phone : '',
+          email: v.email || '',
+          address: v.address || '',
+          rating: v.rating || '',
+          website: v.website || '',
+          instagram: v.instagram || '',
+          facebook: v.facebook || '',
+          maps: v.mapsLink || '',
+          score: v.qualityScore || '',
+          status: v.crmStatus || 'New'
+        });
+
+        if (index % 2 !== 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9FAFB' } };
+        }
+        row.alignment = { vertical: 'middle', wrapText: true };
+      });
+
+      sheet.eachRow((row) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
+          };
+        });
+      });
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `Premium_Leads_CRM_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+      setExportState('success');
+      setTimeout(() => setExportState('idle'), 3000);
+    } catch (e) {
+      console.error(e);
+      setExportState('idle');
+    }
+  };
+
+  return (
+    <button onClick={handleExport} disabled={exportState === 'processing'}
+      className="relative flex items-center justify-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold text-white overflow-hidden transition-all shadow-[2px_2px_0px_#000] border-2 border-black"
+      style={{ background: exportState === 'success' ? '#10b981' : '#7c3aed' }}>
+      <AnimatePresence mode="wait">
+        {exportState === 'idle' && (
+          <motion.div key="idle" initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="flex items-center gap-2">
+            <Download size={13} /> Export Excel
+          </motion.div>
+        )}
+        {exportState === 'processing' && (
+          <motion.div key="processing" initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="flex items-center gap-2">
+            <RefreshCw size={13} className="animate-spin" /> Formatting...
+          </motion.div>
+        )}
+        {exportState === 'success' && (
+          <motion.div key="success" initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="flex items-center gap-2">
+            <CheckCircle2 size={13} /> Downloaded!
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+}

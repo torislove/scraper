@@ -7,17 +7,11 @@ import PricingPage from './pages/PricingPage';
 import ScraperDashboard from './ScraperDashboard';
 import LoginPage from './pages/Login';
 
-// Dashboard sub-pages (loaded by ScraperDashboard via DashboardLayout <Outlet />)
+// Dashboard sub-pages
 import OverviewPage from './pages/dashboard/Overview';
 import LeadsPage from './pages/dashboard/Leads';
 import AutomationsPage from './pages/dashboard/Automations';
-import SettingsPage from './pages/dashboard/Settings';
-import UsersPage from './pages/dashboard/Users';
-import OutOfBoundsPage from './pages/dashboard/OutOfBounds';
-import Marketplace from './pages/Marketplace';
-import Terms from './pages/Terms';
-import Privacy from './pages/Privacy';
-import PhoneScraper from './pages/products/PhoneScraper';
+
 
 export default function App() {
   const [user, setUser] = useState(() => {
@@ -44,14 +38,7 @@ export default function App() {
         }}
       />
       <Routes>
-        {/* Public pages */}
         <Route path="/" element={<LandingPage />} />
-        <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/marketplace" element={<Marketplace />} />
-
-        <Route path="/products/phone-scraper" element={<PhoneScraper />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/privacy" element={<Privacy />} />
         <Route path="/login" element={user ? <Navigate to="/app/overview" replace /> : <LoginPage onLogin={setUser} />} />
 
         {/* Protected dashboard — ScraperDashboard wraps DashboardLayout which renders <Outlet /> */}
@@ -62,11 +49,7 @@ export default function App() {
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
           <Route path="leads" element={<LeadsPage />} />
-          <Route path="marketplace" element={<Marketplace />} />
-          <Route path="out-of-bounds" element={<OutOfBoundsPage />} />
           <Route path="automations" element={<AutomationsPage />} />
-          {user?.role === 'admin' && <Route path="users" element={<UsersPage />} />}
-          {user?.role === 'admin' && <Route path="settings" element={<SettingsPage />} />}
           <Route path="*" element={<Navigate to="overview" replace />} />
         </Route>
 

@@ -144,14 +144,8 @@ export default function DashboardLayout({ user }) {
   const isAdmin = user?.role === 'admin';
 
   const navItems = [
-    { to: '/app/overview',    icon: <LayoutDashboard size={18} />, label: 'Minion Scraper 🇮🇳',    desc: 'Deploy workers to get leads' },
-    { to: '/app/leads',       icon: <Database size={18} />,        label: 'My Loot',   desc: 'Your scraped loot' },
-    { to: '/app/marketplace', icon: <ShoppingBag size={18} />,     label: 'Leads Shop 🛒',    desc: 'Shop curated lead lists' },
-    ...(isAdmin ? [
-      { to: '/app/automations', icon: <Zap size={18} />,             label: 'Workflows',      desc: 'Automatic scraping' },
-      { to: '/app/users',     icon: <Users size={18} />,           label: 'Marketplace Users',  desc: 'Manage buyers' },
-      { to: '/app/settings',  icon: <Settings size={18} />,        label: 'Settings H.Q.',         desc: 'Ad control tower' },
-    ] : []),
+    { to: '/app/overview', icon: <Search size={18} />, label: 'Search Dashboard', desc: 'Find and extract leads' },
+    { to: '/app/leads',    icon: <Database size={18} />, label: 'Leads Pipeline', desc: 'View extracted data in real-time' },
   ];
 
 

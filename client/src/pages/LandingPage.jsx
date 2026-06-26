@@ -368,6 +368,59 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── ADMIN PANEL EXPLANATION ── */}
+      <section className="max-w-6xl mx-auto px-6 py-16">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          className="cartoon-card p-10 bg-[#bfdbfe] text-center"
+        >
+          <div className="w-20 h-20 mx-auto bg-white border-4 border-black rounded-full flex items-center justify-center text-4xl mb-6 shadow-[4px_4px_0px_#000] animate-bounce">
+            ⚙️
+          </div>
+          <h2 className="font-display text-3xl sm:text-5xl font-black text-black uppercase mb-4">
+            Under The Hood: The Admin Panel
+          </h2>
+          <p className="text-sm font-semibold text-gray-800 leading-relaxed max-w-3xl mx-auto mb-8">
+            How does our system extract 100s of emails and phones in seconds without crashing? 
+            Our advanced **Admin Panel** acts as the brain of the operation. It automatically spins up 
+            multiple **Chromium Linux instances** in the background, assigns virtual proxy identities to them, 
+            and intelligently deep-crawls business websites. It’s fully RAM-optimized, meaning it never throttles your server.
+            You just type your query into the Search Bar, and the Admin Panel handles the heavy lifting of parsing DOMs, finding regex patterns, and delivering the Minion Loot!
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left max-w-4xl mx-auto">
+            <motion.div whileHover={{ scale: 1.05 }} className="bg-white border-2 border-black rounded-xl p-6 shadow-[3px_3px_0px_#000]">
+              <span className="text-2xl mb-2 block">🧠</span>
+              <h4 className="font-black text-black uppercase text-sm mb-2">Intelligent Auto-Complete</h4>
+              <p className="text-xs text-gray-600 font-semibold">The Search Bar dynamically predicts global locations and categories, instantly filtering through millions of permutations.</p>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.05 }} className="bg-white border-2 border-black rounded-xl p-6 shadow-[3px_3px_0px_#000]">
+              <span className="text-2xl mb-2 block">🦾</span>
+              <h4 className="font-black text-black uppercase text-sm mb-2">Automated Fallbacks</h4>
+              <p className="text-xs text-gray-600 font-semibold">If a phone number isn't on the Maps listing, the engine automatically background-crawls their official website to find it.</p>
+            </motion.div>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ── CONTACT US / CUSTOM BUILDS ── */}
+      <section className="max-w-4xl mx-auto px-6 py-12">
+        <motion.div 
+          whileHover={{ rotate: -1 }}
+          className="cartoon-card p-8 bg-[#fecaca] border-4 border-black text-center"
+        >
+          <h2 className="font-display font-black text-3xl text-black uppercase mb-4">Need Custom Scraping Solutions?</h2>
+          <p className="text-sm font-semibold text-gray-800 mb-6">
+            Do you need an advanced enterprise plan? Need us to build custom scraping modules for Yelp, Zillow, or Real Estate platforms? 
+            Our engineers can hook up a custom backend pipeline for your specific business needs!
+          </p>
+          <a href="mailto:admin@indiascraper.com" className="inline-flex items-center gap-2 cartoon-btn cartoon-btn-yellow px-8 py-4 text-sm font-black uppercase text-black">
+            <Mail size={20} /> Contact Us Today
+          </a>
+        </motion.div>
+      </section>
+
       {/* ── THE 30-DAY TICKET STUB GIVEAWAY ── */}
       <section id="trial" className="max-w-4xl mx-auto px-6 py-8">
         <motion.div 

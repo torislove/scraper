@@ -57,8 +57,6 @@ async function launchStealthBrowser(useProxy = true, executablePath = null, isHe
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
-    '--no-zygote',
-    '--single-process',
     '--disable-extensions',
     '--disable-background-networking',
     '--disable-default-apps',
@@ -82,6 +80,7 @@ async function launchStealthBrowser(useProxy = true, executablePath = null, isHe
     launchOptions.executablePath = executablePath;
   } else {
     const possiblePaths = [
+      '/home/manoj/Desktop/scraper/server/chrome/linux-150.0.7871.24/chrome-linux64/chrome',
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -133,7 +132,24 @@ async function launchBraveBrowser(useProxy = true, executablePath = null, isHead
 }
 
 async function launchFirefoxBrowser(useProxy = false) {
-  throw new Error('Firefox not available. Reverting to Puppeteer Chromium Native Intelligence.');
+  const { firefox } = require('playwright');
+  let proxyConfig = undefined;
+  if (useProxy) {
+    const proxyList = getProxyList();
+    if (proxyList.length > 0) {
+      const rawProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
+      try {
+        new URL(rawProxy);
+        proxyConfig = { server: rawProxy };
+      } catch(e) {}
+    }
+  }
+
+  const browser = await firefox.launch({
+    headless: true,
+    ...(proxyConfig ? { proxy: proxyConfig } : {})
+  });
+  return { browser, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0', fakeIP: '', isPersistent: false };
 }
 
 let globalBrowser = null;
@@ -144,12 +160,16 @@ async function getBrowser(isLowResource = false) {
     if (!globalLowResourceBrowser || !globalLowResourceBrowser.isConnected()) {
       const { browser } = await launchStealthBrowser(false, null, true, true); 
       globalLowResourceBrowser = browser;
+      globalLowResourceBrowser.originalClose = browser.close;
+      globalLowResourceBrowser.close = async () => {}; 
     }
     return globalLowResourceBrowser;
   } else {
     if (!globalBrowser || !globalBrowser.isConnected()) {
       const { browser } = await launchStealthBrowser(false, null, true, false); 
       globalBrowser = browser;
+      globalBrowser.originalClose = browser.close;
+      globalBrowser.close = async () => {}; 
     }
     return globalBrowser;
   }

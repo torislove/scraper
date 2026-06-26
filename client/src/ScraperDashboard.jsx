@@ -403,9 +403,9 @@ function ScraperDashboard({ user, onLogout }) {
   const [sseStatus, setSseStatus] = useState('disconnected'); // disconnected | connecting | open | error
   const [logLevel, setLogLevel] = useState('ALL'); // ALL | INFO | WARN | ERROR | DEBUG
   const eventSourceRef = useRef(null);
-  const [searchRadius, setSearchRadius] = useState(10);
+  const [searchRadius, setSearchRadius] = useState(15);
   const [strategy, setStrategy] = useState('broad');
-  const [enabledEngines, setEnabledEngines] = useState(['maps', 'instagram', 'facebook', 'youtube', 'pinterest', 'linkedin']);
+  const [enabledEngines, setEnabledEngines] = useState(['maps', 'google-web']);
   
   const [activeJobs, setActiveJobs] = useState([]);
   const [selectedJobCategory, setSelectedJobCategory] = useState(null);
@@ -1091,6 +1091,7 @@ function ScraperDashboard({ user, onLogout }) {
   const cities = ['All', ...new Set(displayedVendors.map(v => v.city).filter(Boolean))];
   const filteredVendors = displayedVendors.filter(v =>
     (selectedCity === 'All' || v.city === selectedCity) &&
+    (!selectedFolder || v.sessionId === selectedFolder) &&
     (v.name?.toLowerCase().includes(searchFilter.toLowerCase()) ||
      v.category?.toLowerCase().includes(searchFilter.toLowerCase()) ||
      v.city?.toLowerCase().includes(searchFilter.toLowerCase()) ||

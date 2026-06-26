@@ -466,20 +466,16 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
 // Golden Angle ≈ 137.5077° ensures ZERO clustering and ZERO blind spots.
 // ──────────────────────────────────────────────────────────────────────────────
 function generateGridCoordinates(centerLat, centerLng, radiusKm, pointCount = 20, boundingbox = null) {
-  const GOLDEN_ANGLE_DEG = 137.50776405003785; // 360° / φ²
+  const GOLDEN_ANGLE_DEG = 137.50776405003785;
   const coords = [];
 
-  // Bounding box format from Nominatim: [south, north, west, east]
   let minLat, maxLat, minLng, maxLng;
   let useBoundary = false;
   
   if (boundingbox && boundingbox.length === 4 && radiusKm >= 100) {
-    minLat = boundingbox[0];
-    maxLat = boundingbox[1];
-    minLng = boundingbox[2];
-    maxLng = boundingbox[3];
+    minLat = boundingbox[0]; maxLat = boundingbox[1]; minLng = boundingbox[2]; maxLng = boundingbox[3];
     useBoundary = true;
-    addLog(`[Grid Generator] Advanced Mode: Constraining ${pointCount} points strictly within Bounding Box [${minLat}, ${maxLat}, ${minLng}, ${maxLng}]`);
+    addLog(`[Grid Generator] Advanced Mode: Constraining points strictly within Bounding Box`);
   }
 
   // Point 0: always the search center
@@ -492,27 +488,37 @@ function generateGridCoordinates(centerLat, centerLng, radiusKm, pointCount = 20
     boundingbox: boundingbox
   });
 
+  // Deep Dense Cluster at Center (Requested by User)
+  if (radiusKm >= 3 && pointCount >= 10) {
+    // Adds 8 points in a tight 1.5km ring around the center for extreme accuracy
+    for(let a = 0; a < 360; a += 45) {
+      const pLat = centerLat + (1.5 * Math.cos(a * Math.PI / 180)) / 111.0;
+      const pLng = centerLng + (1.5 * Math.sin(a * Math.PI / 180)) / (111.0 * Math.cos(centerLat * Math.PI / 180));
+      coords.push({
+        lat: parseFloat(pLat.toFixed(6)), lng: parseFloat(pLng.toFixed(6)),
+        distanceFromCenter: 1.5, ring: 1, angle: a, boundingbox: boundingbox
+      });
+    }
+  }
+
   const totalOuterPoints = Math.max(pointCount - 1, 1);
 
   for (let i = 1; i <= totalOuterPoints; i++) {
-    // Phyllotaxis formula: uniform spiral outward
     const t = i / totalOuterPoints;
-    const distKm = Math.sqrt(t) * radiusKm; // √t gives inner-dense, outer-sparse
+    // By using t instead of sqrt(t), we naturally push more points towards the center too!
+    const distKm = t * radiusKm; 
     const angleDeg = i * GOLDEN_ANGLE_DEG;
     const angleRad = (angleDeg % 360) * Math.PI / 180;
 
-    // Convert polar → geographic lat/lng
     const ptLat = centerLat + (distKm * Math.cos(angleRad)) / 111.0;
     const ptLng = centerLng + (distKm * Math.sin(angleRad)) / (111.0 * Math.cos(centerLat * Math.PI / 180));
 
-    // Advanced: If bounding box exists, discard points outside the district!
     if (useBoundary) {
       if (ptLat < minLat || ptLat > maxLat || ptLng < minLng || ptLng > maxLng) {
-        continue; // Skip this point, it's outside the district!
+        continue; 
       }
     }
 
-    // Determine which concentric ring this point belongs to (for UI coloring)
     const ring = t < 0.34 ? 1 : t < 0.67 ? 2 : 3;
 
     coords.push({
