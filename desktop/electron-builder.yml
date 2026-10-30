@@ -1,0 +1,70 @@
+appId: in.scraper.desktop
+productName: Scraper
+copyright: Copyright © 2026 scraper.co.in
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - src/**/*
+  - renderer/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/node_modules/**/{test,__tests__,tests,example,examples}/**"
+
+# The engine and the built SPA ship as plain files outside the asar archive so
+# they can be spawned and served like a normal Node project.
+extraResources:
+  - from: ../server
+    to: server
+    filter:
+      - "**/*"
+      - "!data/**"
+      - "!db/user_sessions/**"
+      - "!downloads/**"
+      - "!node_modules/.cache/**"
+      - "!**/*.log"
+      - "!error_crash.log"
+      - "!**/.playwright/**"
+  - from: ../client/dist-desktop
+    to: client-dist
+    filter:
+      - "**/*"
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+compression: maximum
+removePackageScripts: true
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # electron-builder converts the 512px PNG into a multi-resolution .ico
+  icon: build/icon.png
+  artifactName: ${productName}-Setup-${version}.${ext}
+  requestedExecutionLevel: asInvoker
+  legalTrademarks: scraper.co.in
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Scraper
+  uninstallDisplayName: Scraper (Lead Intelligence)
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+
+publish:
+  provider: github
+  owner: torislove
+  repo: scraper
+  releaseType: release

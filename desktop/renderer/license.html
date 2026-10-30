@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <title>Scraper — Subscription</title>
+  <style>
+    :root {
+      --bg: #050b16;
+      --panel: #081120;
+      --card: #0b1728;
+      --line: rgba(74, 106, 158, 0.22);
+      --line-strong: rgba(37, 99, 235, 0.42);
+      --text: #e6edf7;
+      --muted: #8496b0;
+      --dim: #5c6f8c;
+      --blue: #2563eb;
+      --cyan: #22d3ee;
+      --danger: #fb7185;
+      --ok: #34d399;
+      --mono: ui-monospace, "JetBrains Mono", Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+    .shell { display: grid; grid-template-columns: 396px 1fr; height: 100vh; }
+
+    /* ---------- brand ---------- */
+    .brand {
+      position: relative;
+      padding: 34px 34px 28px;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(720px 420px at 8% -10%, rgba(37, 99, 235, 0.34), transparent 62%),
+        radial-gradient(560px 380px at 105% 108%, rgba(34, 211, 238, 0.16), transparent 60%),
+        linear-gradient(165deg, #071120 0%, #050b16 60%);
+      border-right: 1px solid var(--line);
+      overflow: hidden;
+    }
+    .brand::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(120, 160, 220, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(120, 160, 220, 0.05) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(120% 90% at 20% 0%, #000 20%, transparent 78%);
+      pointer-events: none;
+    }
+    .brand-top { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+    .mark {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: grid; place-items: center;
+      background: linear-gradient(150deg, #1d4ed8, #0e7490);
+      box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 12px 30px rgba(2, 6, 23, 0.6);
+    }
+    .wordmark { display: flex; flex-direction: column; line-height: 1.1; }
+    .wordmark b { font-size: 15px; letter-spacing: 0.26em; font-weight: 700; }
+    .wordmark span { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.32em; color: var(--dim); margin-top: 4px; }
+
+    .brand-copy { margin-top: 46px; position: relative; z-index: 1; }
+    .brand-copy h1 {
+      font-size: 26px; line-height: 1.28; margin: 0 0 14px;
+      letter-spacing: -0.015em; font-weight: 650;
+    }
+    .brand-copy h1 em { font-style: normal; color: var(--cyan); }
+    .brand-copy p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+
+    .points { list-style: none; padding: 0; margin: 30px 0 0; display: grid; gap: 12px; position: relative; z-index: 1; }
+    .points li { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; color: #b9c8dd; }
+    .points li::before {
+      content: ""; flex: none; width: 6px; height: 6px; margin-top: 6px; border-radius: 2px;
+      background: var(--cyan); box-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
+    }
+    .brand-foot {
+      margin-top: auto; position: relative; z-index: 1;
+      font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; color: var(--dim);
+      text-transform: uppercase;
+    }
+
+    /* ---------- panel ---------- */
+    .panel {
+      padding: 34px 40px 26px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(180deg, #060d1a, #050b16 60%);
+    }
+    .panel::-webkit-scrollbar { width: 9px; }
+    .panel::-webkit-scrollbar-thumb { background: rgba(90, 120, 170, 0.28); border-radius: 9px; }
+
+    .trial-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 16px; border-radius: 12px;
+      border: 1px solid var(--line);
+      background: rgba(12, 24, 42, 0.7);
+      margin-bottom: 24px;
+    }
+    .trial-card.is-active { border-color: rgba(34, 211, 238, 0.32); background: rgba(8, 47, 73, 0.35); }
+    .trial-card.is-warning { border-color: rgba(251, 191, 36, 0.34); background: rgba(69, 45, 9, 0.3); }
+    .trial-card.is-expired { border-color: rgba(251, 113, 133, 0.4); background: rgba(76, 5, 25, 0.3); }
+    .trial-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+    .trial-card.is-active .trial-dot { background: var(--ok); box-shadow: 0 0 12px rgba(52, 211, 153, 0.75); }
+    .trial-card.is-warning .trial-dot { background: #fbbf24; box-shadow: 0 0 12px rgba(251, 191, 36, 0.6); }
+    .trial-card.is-expired .trial-dot { background: var(--danger); box-shadow: 0 0 12px rgba(251, 113, 133, 0.6); }
+    .trial-text b { display: block; font-size: 12.5px; letter-spacing: 0.01em; }
+    .trial-text span { font-size: 11.5px; color: var(--muted); }
+    .trial-cta { margin-left: auto; }
+
+    h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.01em; font-weight: 650; }
+    .lede { margin: 0 0 22px; color: var(--muted); font-size: 12.5px; }
+
+    label { display: block; font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin-bottom: 14px; }
+    input {
+      width: 100%; margin-top: 7px; height: 42px; padding: 0 13px;
+      background: #0a1424; color: var(--text);
+      border: 1px solid var(--line); border-radius: 10px;
+      font-family: var(--mono); font-size: 13px; letter-spacing: 0.06em;
+      outline: none; transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    input::placeholder { color: #44546e; letter-spacing: 0.04em; }
+    input:focus { border-color: var(--line-strong); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16); }
+
+    button { font-family: inherit; cursor: pointer; border-radius: 10px; border: 1px solid transparent; }
+    .primary {
+      width: 100%; height: 44px; margin-top: 4px;
+      background: linear-gradient(180deg, #2f6bf0, #1d4ed8);
+      color: #fff; font-size: 13px; font-weight: 650; letter-spacing: 0.02em;
+      box-shadow: 0 10px 26px rgba(29, 78, 216, 0.34);
+      transition: transform 0.12s ease, filter 0.16s ease;
+    }
+    .primary:hover { filter: brightness(1.07); }
+    .primary:active { transform: translateY(1px); }
+    .primary[disabled] { opacity: 0.6; cursor: default; filter: none; }
+
+    .divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--dim); font-size: 10px; font-family: var(--mono); letter-spacing: 0.2em; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+    .ghost {
+      width: 100%; height: 40px;
+      background: transparent; border-color: var(--line); color: #b9c8dd;
+      font-size: 12.5px; font-weight: 600;
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+    .ghost:hover { border-color: var(--line-strong); background: rgba(37, 99, 235, 0.08); }
+
+    .error {
+      margin-top: 14px; padding: 11px 13px; border-radius: 10px;
+      border: 1px solid rgba(251, 113, 133, 0.36); background: rgba(76, 5, 25, 0.42);
+      color: #fecdd3; font-size: 12px; line-height: 1.5;
+    }
+    .error.is-ok { border-color: rgba(52, 211, 153, 0.36); background: rgba(6, 56, 40, 0.42); color: #bbf7d0; }
+
+    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 26px; }
+    .plan {
+      padding: 13px 13px 12px; border-radius: 12px;
+      border: 1px solid var(--line); background: rgba(11, 23, 40, 0.72);
+      text-align: left; transition: border-color 0.16s ease, transform 0.16s ease;
+    }
+    .plan:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+    .plan b { display: block; font-size: 12px; letter-spacing: 0.02em; }
+    .plan .price { font-size: 17px; font-weight: 700; margin-top: 4px; letter-spacing: -0.01em; }
+    .plan .price small { font-size: 10px; font-weight: 500; color: var(--dim); }
+    .plan .blurb { font-size: 10.5px; color: var(--muted); line-height: 1.4; margin-top: 6px; }
+
+    .foot { margin-top: auto; padding-top: 22px; font-size: 11px; color: var(--dim); }
+    .foot a { color: #93c5fd; text-decoration: none; }
+    .foot a:hover { text-decoration: underline; }
+    .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.32); border-top-color: #fff; display: inline-block; vertical-align: -2px; margin-right: 8px; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="brand">
+      <div class="brand-top">
+        <div class="mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" stroke="#e0f2fe" stroke-width="1.7" stroke-linejoin="round"/>
+            <circle cx="12" cy="10" r="2.6" stroke="#a5f3fc" stroke-width="1.7"/>
+          </svg>
+        </div>
+        <div class="wordmark"><b>SCRAPER</b><span>LEAD INTELLIGENCE</span></div>
+      </div>
+
+      <div class="brand-copy">
+        <h1>Verified mobile numbers for <em>every</em> Indian vendor category.</h1>
+        <p>One workspace: discovery, deep profiles, saved folders, map and CRM — running entirely on this PC.</p>
+      </div>
+
+      <ul class="points">
+        <li>Multi-engine discovery with category fidelity</li>
+        <li>52-field vendor profiles and phone validation</li>
+        <li>Saved search folders, live map, built-in CRM</li>
+      </ul>
+
+      <div class="brand-foot" id="version">SCRAPER DESKTOP</div>
+    </aside>
+
+    <main class="panel">
+      <div id="status" class="trial-card">
+        <span class="trial-dot"></span>
+        <div class="trial-text"><b>Checking licence…</b><span></span></div>
+      </div>
+
+      <h2 id="title">Activate your workspace</h2>
+      <p class="lede" id="lede">Enter the licence key from your purchase email to unlock all features.</p>
+
+      <form id="form" autocomplete="off">
+        <label for="key">Licence key
+          <input id="key" name="key" spellcheck="false" placeholder="SCRA-XXXX-XXXX-XXXX" autocomplete="off" />
+        </label>
+        <label for="email">Email (optional)
+          <input id="email" name="email" type="email" placeholder="you@agency.com" autocomplete="off" />
+        </label>
+        <button id="activate" class="primary" type="submit">Activate licence</button>
+      </form>
+
+      <div class="divider">OR</div>
+
+      <button id="import" class="ghost" type="button">Import licence file…</button>
+
+      <div id="message" class="error" hidden></div>
+
+      <div class="plans" id="plans"></div>
+
+      <div class="foot">
+        Need help? <a href="mailto:support@scraper.co.in" id="support">support@scraper.co.in</a>
+        &nbsp;·&nbsp; <a href="#" id="pricing">View plans</a>
+      </div>
+    </main>
+  </div>
+
+  <script src="license.js"></script>
+</body>
+</html>

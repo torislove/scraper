@@ -1,0 +1,67 @@
+name: release-desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: "Publish as draft release"
+        required: false
+        default: "false"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install client dependencies
+        run: npm install --prefix client --no-audit --no-fund
+
+      - name: Build web bundle (desktop flavour, no landing page)
+        run: npm run build:desktop --prefix client
+        env:
+          VITE_OLA_MAPS_API_KEY: ${{ secrets.OLA_MAPS_API_KEY }}
+
+      - name: Install engine dependencies
+        run: npm install --prefix server --omit=dev --no-audit --no-fund
+
+      - name: Install desktop dependencies
+        run: npm install --prefix desktop --no-audit --no-fund
+
+      - name: Publish installer to GitHub Releases
+        run: npm run release --prefix desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: enables online activation. Leave unset for offline builds.
+          SCRAPER_LICENSE_API: ${{ vars.SCRAPER_LICENSE_API }}
+          SCRAPER_CHECKOUT_URL: ${{ vars.SCRAPER_CHECKOUT_URL }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-windows
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "scraper-co-in"
+  },
+  "targets": {
+    "scraper-co-in": {
+      "hosting": {
+        "client": [
+          "scraper-co-in-app"
+        ],
+        "admin": [
+          "scraper-co-in-admin"
+        ]
+      }
+    }
+  }
+}

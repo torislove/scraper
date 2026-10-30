@@ -1,0 +1,42 @@
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Client install
+        run: npm install --prefix client --no-audit --no-fund
+
+      - name: Client build
+        run: npm run build --prefix client
+
+      - name: Server install
+        run: npm install --prefix server --omit=dev --no-audit --no-fund
+
+      - name: Server syntax check
+        run: |
+          node --check server/index.js
+          node --check server/src/scrapers/browserFactory.js
+          node --check server/src/middleware/licenseGate.js
+          node --check server/src/config/paths.js
+
+      - name: Desktop syntax check
+        run: |
+          node --check desktop/src/main.js
+          node --check desktop/src/preload.js
+          node --check desktop/src/license/index.js
+          node --check desktop/src/license/token.js
+          node --check desktop/license-server/index.js

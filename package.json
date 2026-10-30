@@ -1,0 +1,17 @@
+{
+  "name": "gomandap-scraper",
+  "version": "1.0.0",
+  "description": "Gomandap Scraper orchestrator",
+  "scripts": {
+    "start": "node dev.js",
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm run dev",
+    "dev": "node dev.js",
+    "build": "cd client && npm run build",
+    "bild": "npm run build",
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install"
+  },
+  "dependencies": {
+    "fuse.js": "^7.4.2"
+  }
+}

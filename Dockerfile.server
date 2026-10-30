@@ -1,0 +1,50 @@
+# Manoj's Scraper.co.in Autonomous Cloud Server
+FROM node:20-bullseye-slim
+
+# Install system dependencies required for Chromium / Playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    gnupg \
+    ca-certificates \
+    procps \
+    libnss3 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy root gazetteer data
+COPY data/ ./data/
+
+# Copy server package definitions
+COPY server/package*.json ./server/
+
+WORKDIR /app/server
+RUN npm ci --only=production
+
+# Install Playwright browser binary
+RUN npx playwright install chromium
+
+# Copy server source code
+COPY server/ ./
+
+ENV PORT=8080
+ENV NODE_ENV=production
+ENV PLAYWRIGHT_CONCURRENCY=5
+
+EXPOSE 8080
+
+CMD ["node", "index.js"]

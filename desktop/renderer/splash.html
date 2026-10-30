@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+  <title>Scraper</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      display: flex; align-items: center; justify-content: center;
+      background:
+        radial-gradient(520px 340px at 20% 0%, rgba(37, 99, 235, 0.34), transparent 62%),
+        radial-gradient(420px 300px at 100% 100%, rgba(34, 211, 238, 0.16), transparent 60%),
+        #050b16;
+      color: #e6edf7;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    .wrap { width: 100%; padding: 0 40px; text-align: center; }
+    .mark {
+      width: 54px; height: 54px; margin: 0 auto 18px; border-radius: 16px;
+      display: grid; place-items: center;
+      background: linear-gradient(150deg, #1d4ed8, #0e7490);
+      box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 18px 44px rgba(2, 6, 23, 0.7);
+      animation: float 3.2s ease-in-out infinite;
+    }
+    @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+    h1 { font-size: 15px; letter-spacing: 0.34em; margin: 0 0 6px; font-weight: 700; }
+    .sub { font-family: ui-monospace, Consolas, monospace; font-size: 8.5px; letter-spacing: 0.3em; color: #5c6f8c; text-transform: uppercase; }
+    .bar { position: relative; height: 3px; width: 190px; margin: 30px auto 14px; background: rgba(120, 160, 220, 0.14); border-radius: 3px; overflow: hidden; }
+    .bar::after {
+      content: ""; position: absolute; inset: 0; width: 45%;
+      background: linear-gradient(90deg, transparent, #22d3ee, #3b82f6, transparent);
+      animation: slide 1.25s ease-in-out infinite;
+    }
+    @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+    .status { font-size: 11.5px; color: #8496b0; min-height: 16px; transition: opacity 0.2s ease; }
+    .hint { margin-top: 22px; font-family: ui-monospace, Consolas, monospace; font-size: 8.5px; letter-spacing: 0.18em; color: #3f4d63; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="mark">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+        <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" stroke="#e0f2fe" stroke-width="1.7" stroke-linejoin="round"/>
+        <circle cx="12" cy="10" r="2.6" stroke="#a5f3fc" stroke-width="1.7"/>
+      </svg>
+    </div>
+    <h1>SCRAPER</h1>
+    <div class="sub">Lead intelligence</div>
+    <div class="bar"></div>
+    <div class="status" id="status">Preparing your workspace…</div>
+    <div class="hint" id="hint">this can take a few seconds on first launch</div>
+  </div>
+  <script>
+    window.setStatus = function (text) {
+      var node = document.getElementById('status');
+      if (node) node.textContent = text;
+      if (text && /ready|opening/i.test(text)) {
+        var hint = document.getElementById('hint');
+        if (hint) hint.textContent = 'almost there';
+      }
+    };
+  </script>
+</body>
+</html>
