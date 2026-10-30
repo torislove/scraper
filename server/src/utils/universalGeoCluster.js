@@ -245,6 +245,18 @@ function getUniversalCategoryVectors(category, cleanLoc) {
   if (!cat) cat = 'Business';
   const lowerCat = cat.toLowerCase();
 
+  // 0. Album Printing / Color Labs / Photobook Makers / Digital Press
+  if (lowerCat.includes('album') || lowerCat.includes('color lab') || lowerCat.includes('colour lab') || lowerCat.includes('photobook') || lowerCat.includes('photo book') || lowerCat.includes('karizma') || lowerCat.includes('canvera') || (lowerCat.includes('print') && (lowerCat.includes('photo') || lowerCat.includes('wedding')))) {
+    return [
+      { zoneName: `${cleanLoc} Wedding Album Printing Labs`, queryText: `Wedding Album Printing Lab in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Digital Color Labs`, queryText: `Digital Color Lab in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Photo Book Printing Press`, queryText: `Photo Book Printing in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Album Manufacturers`, queryText: `Wedding Album Manufacturers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Karizma Album Printers`, queryText: `Karizma Album Printing in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Photo Printing Labs`, queryText: `Photo Printing Lab in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
   // 1. Photography / Videography
   if (lowerCat.includes('photo') || lowerCat.includes('camera') || lowerCat.includes('shoot') || lowerCat.includes('video')) {
     return [

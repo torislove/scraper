@@ -13,6 +13,7 @@ import {
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
+import ScreenMascotCompanion from './ScreenMascotCompanion';
 import SuggestInput from './SuggestInput';
 import EngineStatusBoard from './EngineStatusBoard';
 import LearningCenter from './LearningCenter';
@@ -1784,8 +1785,8 @@ export default function MasterCommandCenter() {
   const [isMerging, setIsMerging] = useState(false);
 
   const [form, setForm] = useState({
-    category: 'Plumbers',
-    location: 'Vijayawada',
+    category: '',
+    location: '',
     strategy: 'broad',
     targetLeads: 100,
     serp: true,
@@ -1803,9 +1804,7 @@ export default function MasterCommandCenter() {
   // The default flow is one free-text query. Category, engines, zones and
   // post-run deep extraction are resolved server-side by the category router.
   const [runMode, setRunMode] = useState('auto');
-  const [autoQuery, setAutoQuery] = useState(
-    routerLocation.state?.query || 'Plumbers in Vijayawada'
-  );
+  const [autoQuery, setAutoQuery] = useState(routerLocation.state?.query || '');
   const [activeZone, setActiveZone] = useState(null);
   const [gridZones, setGridZones] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -2683,9 +2682,8 @@ export default function MasterCommandCenter() {
       }
       setVendors(session.leads);
       setSessionFilter(runCard.id);
-      if (session.category) updateForm('category', session.category);
-      if (session.location) updateForm('location', session.location);
-      if (session.category && session.location) setAutoQuery(`${session.category} in ${session.location}`);
+      // Browsing a folder must not rewrite the search bar. The next search is
+      // independent, so the operator's current wording stays untouched.
       setActiveTab('cockpit');
       setFolderView(null);
       toast.success(`Loaded ${session.leads.length} leads from "${runCard.name || runCard.id}" into Cockpit!`);
@@ -3395,12 +3393,32 @@ export default function MasterCommandCenter() {
                         />
                       </div>
                       <div className="v2-master-field">
-                        <label>District, Mandal or State</label>
+                        <label>City, District, Mandal or State</label>
                         <SuggestInput
                           kind="place"
                           id="master-sweep-place"
                           value={masterSweepForm.name}
-                          onChange={value => setMasterSweepForm(prev => ({ ...prev, name: value }))}
+                          onChange={value => {
+                            const suffix = String(value).match(/\s+(district|mandal|mandals|tehsil|taluk|city|town|village|state)$/i);
+                            const scopeBySuffix = {
+                              district: 'district',
+                              mandal: 'mandal',
+                              mandals: 'mandal',
+                              tehsil: 'mandal',
+                              taluk: 'mandal',
+                              city: 'city',
+                              town: 'city',
+                              village: 'city',
+                              state: 'state'
+                            };
+                            setMasterSweepForm(prev => ({
+                              ...prev,
+                              name: value,
+                              scope: suffix ? scopeBySuffix[suffix[1].toLowerCase()] || prev.scope : prev.scope
+                            }));
+                            // Typing a new place invalidates the previous pick.
+                            setMasterSweepTarget(null);
+                          }}
                           onSelect={item => {
                             if (!item || item.literal) {
                               setMasterSweepTarget(null);
@@ -3415,7 +3433,7 @@ export default function MasterCommandCenter() {
                               subtitle: item.subtitle || ''
                             });
                           }}
-                          placeholder="e.g. Guntur District, Tenali Mandal, Andhra Pradesh"
+                          placeholder="Type Guntur to choose city, district or mandal"
                         />
                       </div>
                       <div className="v2-master-field">
@@ -3807,6 +3825,13 @@ export default function MasterCommandCenter() {
           isMerging={isMerging}
         />
       )}
+
+      {/* Living 3D Screen Mascot Companion ("Diggy") */}
+      <ScreenMascotCompanion
+        scraping={scanning}
+        activeZone={activeZone?.name || activeZone?.zoneName || ''}
+        leadsFound={vendors.length}
+      />
     </div>
   );
 }

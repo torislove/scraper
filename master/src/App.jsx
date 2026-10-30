@@ -11,7 +11,6 @@ import './v2/v2.css';
 const LandingV2 = lazy(() => import('./v2/LandingV2'));
 const CommandCenter = lazy(() => import('./v2/CommandCenter'));
 const MasterCommandCenter = lazy(() => import('./v2/MasterCommandCenter'));
-const MasterClients = lazy(() => import('./v2/MasterClients'));
 
 function PageLoader() {
   return (
@@ -69,7 +68,6 @@ export default function App() {
           <Route path="/" element={<MasterCommandCenter />} />
           <Route path="/master" element={<MasterCommandCenter />} />
           <Route path="/command" element={<MasterCommandCenter />} />
-          <Route path="/clients" element={<MasterClients />} />
           <Route path="/landing" element={<LandingV2 />} />
 
           <Route path="/pricing" element={<PricingPage />} />

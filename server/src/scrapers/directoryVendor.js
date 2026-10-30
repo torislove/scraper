@@ -12,7 +12,6 @@
 
 const crypto = require('crypto');
 const dbAdapter = require('../config/dbAdapter');
-const phoneUtils = require('../utils/phoneUtils');
 
 const INDIAN_STATES = new Set([
   'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa',
@@ -257,7 +256,7 @@ function nameFromProfileUrl(url) {
     if (slugPart && slugPart.length > 2) {
       return slugPart.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim();
     }
-  } catch (e) {}
+  } catch (e) { }
   return '';
 }
 
@@ -299,7 +298,6 @@ function buildDirectoryVendor(input = {}) {
     profileUrl = '',
     mapsUrl = '',
     website = '',
-    phone = '',
     phones = [],
     email = '',
     socials = {},
@@ -325,13 +323,7 @@ function buildDirectoryVendor(input = {}) {
   const cleanLocality = cleanText(locality || cleanCity, 160);
   const cleanAddress = cleanText(address, 800);
   const cleanPincode = cleanText(pincode, 10) || extractPincode(cleanAddress);
-  const inputPhones = [
-    ...(Array.isArray(phones) ? phones : []),
-    phone
-  ].filter(Boolean);
-  const phoneList = inputPhones
-    .map(p => typeof p === 'string' ? phoneUtils.normalizePhone(p) : p)
-    .filter(p => p && p.isValid !== false && p.e164);
+  const phoneList = Array.isArray(phones) ? phones.filter(p => p && p.isValid !== false && p.e164) : [];
   const bestPhone = phoneList.find(p => p.isMobile) || phoneList[0] || null;
   const imageList = uniqueStrings(images, 30);
   const now = new Date().toISOString();
@@ -478,11 +470,11 @@ function mergeDirectoryVendor(existing, incoming, sessionId) {
 
     if (key === 'phone') {
       const existingPhone = merged.phone;
-      const existingIsMobile = phoneUtils.isIndianMobile(existingPhone);
+      const existingIsMobile = existingPhone && /^[6-9]\d{9}$/.test(String(existingPhone).replace(/\D/g, '').slice(-10));
       const incomingPhone = value;
-      const incomingIsMobile = phoneUtils.isIndianMobile(incomingPhone);
+      const incomingIsMobile = incomingPhone && /^[6-9]\d{9}$/.test(String(incomingPhone).replace(/\D/g, '').slice(-10));
 
-      if (incomingIsMobile && !existingIsMobile) {
+      if (incomingIsMobile) {
         merged.phone = incomingPhone;
       } else if (existingIsMobile) {
         // Keep existing mobile immutable!
@@ -533,7 +525,7 @@ function mergeDirectoryVendor(existing, incoming, sessionId) {
 
 function sameVendor(existing, incoming) {
   if (incoming.profileSourceUrl && existing.profileSourceUrl &&
-      incoming.profileSourceUrl.toLowerCase() === existing.profileSourceUrl.toLowerCase()) return true;
+    incoming.profileSourceUrl.toLowerCase() === existing.profileSourceUrl.toLowerCase()) return true;
 
   const incomingPhone = (incoming.phones || []).find(p => p && p.e164)?.e164 || incoming.phone;
   const existingPhones = new Set([

@@ -9,6 +9,10 @@ import {
   LineChart, MapPin, Phone, Play, Plus, Search, Sparkles, Store, Target,
   TrendingUp, Users, X
 } from 'lucide-react';
+import Mascot from './Mascot';
+import Mascot3D from './Mascot3D';
+import LiveAnimationTheater from './LiveAnimationTheater';
+import ScreenMascotCompanion from './ScreenMascotCompanion';
 import './landing.css';
 
 /* ================================================================== */
@@ -717,6 +721,14 @@ export default function LandingV2() {
                 actually rings, and usually has WhatsApp.
               </motion.p>
 
+              <div className="lp-mascot-hero-greeting" style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '20px 0 16px' }}>
+                <Mascot mode="idle" size={68} bubbleText="Hi! I'm Diggy. Ready to harvest leads across India!" />
+                <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                  <b style={{ color: '#00f0ff', display: 'block', fontSize: 13.5 }}>MEET DIGGY · THE LEAD HARVESTER SCOUT</b>
+                  Digs into 619,287 Indian villages, mandals &amp; cities to unearth verified WhatsApp leads.
+                </div>
+              </div>
+
               <motion.div
                 className="lp-cta"
                 initial={reduce ? false : { opacity: 0, y: 20 }}
@@ -1022,6 +1034,13 @@ export default function LandingV2() {
                 ))}
               </div>
             </Reveal>
+          </div>
+        </section>
+
+        {/* ------------------------------------------- live mission theater */}
+        <section className="lp-section" id="simulator">
+          <div className="lp-wrap">
+            <LiveAnimationTheater onDeployClick={go} />
           </div>
         </section>
 
@@ -1347,6 +1366,13 @@ export default function LandingV2() {
           <span className="lp-footer-note">Made in India</span>
         </div>
       </footer>
+
+      {/* Living 3D Screen Mascot Companion ("Diggy") */}
+      <ScreenMascotCompanion
+        scraping={false}
+        activeZone="India Wide"
+        leadsFound={1000}
+      />
     </div>
   );
 }

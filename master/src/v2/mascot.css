@@ -1,0 +1,339 @@
+/* ========================================================================== */
+/* Diggy the Lead Miner / Harvester Scout CSS Animations (Master)             */
+/* High-Performance GPU-accelerated Keyframe Animation System                */
+/* ========================================================================== */
+
+.diggy-mascot-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.4));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.diggy-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* SPEECH BUBBLE */
+.diggy-speech-bubble {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(0, 240, 255, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.25);
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 4px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  animation: diggy-bubble-pop 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.diggy-bubble-tail {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: rgba(15, 23, 42, 0.95);
+  border-right: 1px solid rgba(0, 240, 255, 0.4);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.4);
+}
+
+@keyframes diggy-bubble-pop {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.9); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* COMMON EYE & REACTOR */
+.diggy-eye {
+  animation: diggy-blink 4s infinite;
+  transform-origin: center;
+}
+
+@keyframes diggy-blink {
+  0%, 46%, 50%, 96%, 100% { transform: scaleY(1); }
+  48%, 98% { transform: scaleY(0.1); }
+}
+
+.diggy-antenna-beacon {
+  animation: beacon-blink 1.2s infinite alternate;
+}
+
+@keyframes beacon-blink {
+  0% { fill: #10b981; filter: drop-shadow(0 0 2px #10b981); }
+  100% { fill: #00f0ff; filter: drop-shadow(0 0 8px #00f0ff); }
+}
+
+.diggy-reactor-pulse {
+  animation: reactor-pulse 1.8s infinite alternate ease-in-out;
+}
+
+@keyframes reactor-pulse {
+  0% { transform: scale(0.85); fill: #059669; }
+  100% { transform: scale(1.15); fill: #10b981; filter: drop-shadow(0 0 6px #10b981); }
+}
+
+.diggy-visor-beam {
+  animation: beam-sweep 2.5s infinite linear;
+}
+
+@keyframes beam-sweep {
+  0% { stroke-dashoffset: 0; opacity: 0.3; }
+  50% { opacity: 0.9; }
+  100% { stroke-dashoffset: 28; opacity: 0.3; }
+}
+
+/* IDLE */
+.mode-idle .diggy-body-group {
+  animation: diggy-float 3s infinite ease-in-out;
+}
+
+.mode-idle .diggy-ground-shadow {
+  animation: shadow-breathe 3s infinite ease-in-out;
+  transform-origin: 100px 182px;
+}
+
+.mode-idle .diggy-thrusters .flame {
+  animation: flame-flicker 0.4s infinite alternate ease-in-out;
+}
+
+.mode-idle .diggy-ground-cracks,
+.mode-idle .spark {
+  display: none;
+}
+
+@keyframes diggy-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-7px); }
+}
+
+@keyframes shadow-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.25; }
+  50% { transform: scale(0.82); opacity: 0.12; }
+}
+
+@keyframes flame-flicker {
+  0% { transform: scaleY(0.8); opacity: 0.6; }
+  100% { transform: scaleY(1.2); opacity: 0.95; }
+}
+
+/* SPRINT */
+.mode-sprint {
+  transform: skewX(-8deg) scale(0.95);
+}
+
+.mode-sprint .diggy-body-group {
+  animation: sprint-bob 0.35s infinite alternate ease-in-out;
+}
+
+.mode-sprint .leg-left {
+  transform-origin: 83px 132px;
+  animation: run-leg-l 0.35s infinite alternate ease-in-out;
+}
+
+.mode-sprint .leg-right {
+  transform-origin: 117px 132px;
+  animation: run-leg-r 0.35s infinite alternate ease-in-out;
+}
+
+.mode-sprint .diggy-thrusters .flame {
+  animation: flame-thrust 0.2s infinite alternate;
+  transform-origin: 61px 125px;
+}
+
+.mode-sprint .diggy-ground-cracks,
+.mode-sprint .spark {
+  display: none;
+}
+
+@keyframes sprint-bob {
+  0% { transform: translateY(-2px) rotate(4deg); }
+  100% { transform: translateY(3px) rotate(8deg); }
+}
+
+@keyframes run-leg-l {
+  0% { transform: rotate(-25deg); }
+  100% { transform: rotate(30deg); }
+}
+
+@keyframes run-leg-r {
+  0% { transform: rotate(30deg); }
+  100% { transform: rotate(-25deg); }
+}
+
+@keyframes flame-thrust {
+  0% { transform: scale(1, 1.4); opacity: 0.8; }
+  100% { transform: scale(1.25, 2.2); opacity: 1; filter: drop-shadow(0 0 10px #38bdf8); }
+}
+
+/* DIG */
+.mode-dig .diggy-body-group {
+  animation: dig-strike-body 0.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mode-dig .arm-right {
+  transform-origin: 140px 92px;
+  animation: pickaxe-swing 0.8s infinite cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mode-dig .diggy-ground-cracks {
+  animation: crack-pulse 0.8s infinite;
+  transform-origin: 100px 182px;
+}
+
+.mode-dig .spark-1 {
+  animation: spark-fly-1 0.8s infinite cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+.mode-dig .spark-2 {
+  animation: spark-fly-2 0.8s infinite cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+.mode-dig .spark-3 {
+  animation: spark-fly-3 0.8s infinite cubic-bezier(0.1, 0.9, 0.2, 1);
+}
+
+@keyframes pickaxe-swing {
+  0% { transform: rotate(-45deg); }
+  35% { transform: rotate(-75deg); }
+  55% { transform: rotate(38deg); }
+  70% { transform: rotate(30deg); }
+  100% { transform: rotate(-45deg); }
+}
+
+@keyframes dig-strike-body {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-4px); }
+  55% { transform: translateY(6px); }
+  70% { transform: translateY(3px); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes crack-pulse {
+  0%, 45% { opacity: 0.2; transform: scale(0.9); }
+  55% { opacity: 1; transform: scale(1.15); filter: drop-shadow(0 0 8px #f59e0b); }
+  100% { opacity: 0.3; transform: scale(1); }
+}
+
+@keyframes spark-fly-1 {
+  0%, 50% { opacity: 0; transform: translate(0, 0); }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-22px, -35px) scale(1.4); }
+}
+
+@keyframes spark-fly-2 {
+  0%, 50% { opacity: 0; transform: translate(0, 0); }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(26px, -42px) scale(1.5); }
+}
+
+@keyframes spark-fly-3 {
+  0%, 50% { opacity: 0; transform: translate(0, 0); }
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(6px, -50px) scale(1.8); }
+}
+
+/* CELEBRATE */
+.mode-celebrate .diggy-body-group {
+  animation: celebrate-jump 1.2s infinite cubic-bezier(0.17, 0.89, 0.32, 1.28);
+}
+
+.mode-celebrate .diggy-found-card {
+  animation: card-glow 1.2s infinite alternate;
+  transform-origin: 100px 31px;
+}
+
+@keyframes celebrate-jump {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-16px) rotate(-3deg); }
+  60% { transform: translateY(-12px) rotate(3deg); }
+}
+
+@keyframes card-glow {
+  0% { transform: scale(0.96); filter: drop-shadow(0 0 6px #f59e0b); }
+  100% { transform: scale(1.08); filter: drop-shadow(0 0 16px #fbbf24); }
+}
+
+/* MAP MARKER */
+.diggy-map-pin {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.diggy-map-pulse-ring {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #00f0ff;
+  box-shadow: 0 0 14px #00f0ff;
+  animation: map-ring-expand 1.6s infinite ease-out;
+}
+
+.diggy-map-pulse-ring.r2 {
+  animation-delay: 0.8s;
+  border-color: #10b981;
+}
+
+@keyframes map-ring-expand {
+  0% { transform: scale(0.3); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.diggy-map-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 2px solid #00f0ff;
+  border-radius: 50%;
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.6), inset 0 0 8px rgba(0, 240, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.diggy-mini-svg {
+  width: 32px;
+  height: 32px;
+}
+
+.mini-pickaxe {
+  transform-origin: 120px 40px;
+  animation: pickaxe-swing 0.8s infinite;
+}
+
+.diggy-map-badge {
+  position: absolute;
+  bottom: -16px;
+  background: #0f172a;
+  color: #fef08a;
+  border: 1px solid #f59e0b;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  z-index: 3;
+}

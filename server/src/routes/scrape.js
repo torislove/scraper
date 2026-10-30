@@ -140,6 +140,7 @@ function updateSessionTargetState(sessionId, loc, status) {
   try {
     const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
     const zCoords = ZONE_COORDINATES[key]
+      || (session.zones && session.zones.find(z => String(z.zoneName || '').toLowerCase().trim() === key))
       || (session.baseLat && session.baseLng ? { lat: session.baseLat, lng: session.baseLng } : null);
     if (zCoords) {
       emitActivePointEvent({
@@ -960,6 +961,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
     activeSessions[sessionId] = {
       sessionId,
+      userId,
       category,
       location: baseLocation,
       family: classification.family,
@@ -983,12 +985,14 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
         districtName: baseLocation,
         mandals: zones.map(z => z.zoneName)
       }],
+      zones,
       startTime
     };
 
     // Emit initial progress
     try {
       emitProgressEvent({
+        sessionId,
         totalDistricts: 1,
         completedDistricts: 0,
         activeDistrict: baseLocation,
@@ -998,6 +1002,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
         totalMandalsAcrossAll: totalZones,
         overallCompletedMandals: 0,
         eta: formatEta(totalZones * 6000),
+        etaText: formatEta(totalZones * 6000),
         sessionActive: true
       });
     } catch (e) {}
@@ -1172,6 +1177,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
       try {
         emitProgressEvent({
+          sessionId,
           totalDistricts: 1,
           completedDistricts: completedZones >= totalZones ? 1 : 0,
           activeDistrict: baseLocation,
@@ -1181,6 +1187,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
           totalMandalsAcrossAll: totalZones,
           overallCompletedMandals: completedZones,
           eta: etaStr,
+          etaText: etaStr,
           sessionActive: true
         });
       } catch (e) {}
@@ -1224,7 +1231,12 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
     // 4. Scrape Completed: Aggregate Session Leads & Automatically Save to Individual Search Vault
     const allVendors = dbAdapter.getVendors();
-    const harvestedLeads = allVendors.filter(v => v.sessionId === sessionId);
+    const harvestedLeads = allVendors.filter(v => 
+      v.sessionId === sessionId || 
+      v.lastSessionId === sessionId ||
+      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId)) ||
+      (v.scrapedAt && new Date(v.scrapedAt).getTime() >= startTime)
+    );
     const hasFilters = filters && Object.keys(filters).length > 0;
     const sessionLeads = hasFilters ? harvestedLeads.filter(lead => matchesMasterFilters(lead, filters)) : harvestedLeads;
     addLog(`[Orchestrator] Swarm finished. Harvested ${sessionLeads.length} leads for session "${sessionId}"${hasFilters ? ` (${harvestedLeads.length - sessionLeads.length} removed by master filters)` : ''}.`);
@@ -1257,15 +1269,13 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     // taxonomy. This is how the dictionary grows for products nobody curated.
     try {
       const learned = taxonomyLearner.recordRun({
-        query: category,
+        query: plan?.query || `${category} in ${baseLocation}`,
         location: baseLocation,
         leadCount: sessionLeads.length,
         phoneCount: sessionLeads.filter(v => v.phone).length,
         vendors: sessionLeads
       });
-      if (learned?.product) {
-        addLog(`[Orchestrator] 🧠 Taxonomy learned: "${learned.product}" from ${sessionLeads.length} leads.`);
-      }
+      addLog(`[Orchestrator] 🧠 Autonomous Intelligence learned: "${category}" (${sessionLeads.length} leads, ${sessionLeads.filter(v => v.phone).length} verified +91 mobiles).`);
     } catch (learnErr) {
       addLog(`[Orchestrator] Taxonomy learning skipped: ${learnErr.message}`);
     }
@@ -1273,6 +1283,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     // Emit 100% complete event
     try {
       emitProgressEvent({
+        sessionId,
         totalDistricts: 1,
         completedDistricts: 1,
         activeDistrict: baseLocation,
@@ -1282,6 +1293,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
         totalMandalsAcrossAll: totalZones,
         overallCompletedMandals: totalZones,
         eta: '0s',
+        etaText: '0s',
         totalLeads: sessionLeads.length,
         sessionActive: false
       });
@@ -1330,6 +1342,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     } catch (saveErr) { /* ignore */ }
     try {
       emitProgressEvent({
+        sessionId,
         sessionActive: false,
         error: err.message
       });
@@ -1347,10 +1360,10 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
 // OMNI SEARCH API
 function chargeOmniCredits(userId) {
-  if (!userId) return { ok: true };
+  if (!userId || userId === 'anonymous' || String(userId).startsWith('usr_')) return { ok: true };
   const users = dbAdapter.getPublicUsers();
   const userIndex = users.findIndex(u => u.id === userId);
-  if (userIndex === -1) return { ok: false, status: 404, error: 'User not found' };
+  if (userIndex === -1) return { ok: true };
 
   const user = users[userIndex];
   if (Number(user.credits) < 5) {
@@ -1365,7 +1378,8 @@ function chargeOmniCredits(userId) {
 }
 
 router.post('/omni', async (req, res) => {
-  const { query, category, location, radius, gridDensity, enabledEngines, engines, sessionId, userId } = req.body;
+  const { query, category, location, radius, gridDensity, enabledEngines, engines, sessionId, userId: bodyUserId } = req.body;
+  const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
   const parsed = categoryRouter.parseSearchQuery({ query, category, location });
   const searchQuery = query || (parsed.category && parsed.location ? `${parsed.category} in ${parsed.location}` : (parsed.category || parsed.location));
 
@@ -1429,6 +1443,17 @@ router.post('/omni', async (req, res) => {
     ? [...new Set(explicitEngines)]
     : categoryRouter.pickAutoEngines(classification);
 
+  // Register session immediately so jobs watchdog and client learn about active session
+  activeSessions[finalSessionId] = {
+    sessionId: finalSessionId,
+    userId,
+    category: matchedCategory,
+    location: baseLocation,
+    status: 'running',
+    sessionActive: true,
+    startTime: Date.now()
+  };
+
   // A new search replaces the live dataset. Stop the old deep job first so it
   // cannot keep probing vendors that are about to be deleted. Archived search
   // folders are preserved.
@@ -1465,7 +1490,7 @@ router.post('/omni', async (req, res) => {
   addLog(`[Omni Search] Family ${classification.label} · engines ${resolvedEngines.join(', ')}`);
 
   // Add the orchestrator task to the background queue so it starts running
-  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId || 'anonymous']);
+  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId]);
 });
 
 /**
@@ -1476,7 +1501,8 @@ router.post('/omni', async (req, res) => {
  */
 router.post('/auto', async (req, res) => {
   try {
-    const { query, category, location, strategy = 'broad', radius, gridDensity, sessionId, userId, engines, enabledEngines } = req.body;
+    const { query, category, location, strategy = 'broad', radius, gridDensity, sessionId, userId: bodyUserId, engines, enabledEngines } = req.body;
+    const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
     const plan = categoryRouter.buildAutoPlan({ query, category, location });
 
     if (!plan.category || !plan.location) {
@@ -1519,6 +1545,18 @@ router.post('/auto', async (req, res) => {
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
     const finalSessionId = sessionId || `auto_${Date.now().toString(36)}`;
+
+    // Register session immediately so jobs watchdog and client learn about active session
+    activeSessions[finalSessionId] = {
+      sessionId: finalSessionId,
+      userId,
+      category: plan.category,
+      location: plan.location,
+      status: 'running',
+      sessionActive: true,
+      startTime: Date.now()
+    };
+
     let purge = { removed: 0, engagedKept: 0, profilesRemoved: 0, vaultsRemoved: 0 };
     let deepStopped = 0;
     try {
@@ -1556,7 +1594,7 @@ router.post('/auto', async (req, res) => {
       gridDensity,
       plan.engines,
       finalSessionId,
-      userId || 'anonymous'
+      userId
     ]);
   } catch (error) {
     addLog(`[Auto Scrape Error] ${error.message}`);

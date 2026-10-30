@@ -4,6 +4,9 @@ import {
   MapPin, Phone, Search, Sliders, SlidersHorizontal, Sparkles, Square, Target, Wand2, X, Zap,
   Compass, ShieldCheck
 } from 'lucide-react';
+import Mascot from './Mascot';
+import Mascot3D from './Mascot3D';
+import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch } from './api';
 import { cx } from './ui';
 
@@ -268,6 +271,15 @@ export default function SearchConsole({
     if (parsedLocation && parsedLocation !== location) onLocationChange?.(parsedLocation);
   }, [parsedCategory, parsedLocation]);
 
+  // Dynamic Animated Favicon State Sync
+  useEffect(() => {
+    if (running) {
+      setDynamicFaviconState('scraping');
+    } else {
+      setDynamicFaviconState('idle');
+    }
+  }, [running]);
+
   // Live countdown timer for estimated harvest time
   useEffect(() => {
     if (!running) {
@@ -400,6 +412,22 @@ export default function SearchConsole({
     });
   }, [running, canDeploy, busy, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
 
+  // Listen for Diggy mascot recommendation clicks
+  useEffect(() => {
+    const handleMascotSearch = (e) => {
+      const q = e?.detail?.query;
+      if (q) {
+        onChange?.(q);
+        inputRef.current?.focus();
+        setTimeout(() => {
+          submit(q);
+        }, 400);
+      }
+    };
+    window.addEventListener('leadharvest:search', handleMascotSearch);
+    return () => window.removeEventListener('leadharvest:search', handleMascotSearch);
+  }, [onChange, submit]);
+
   return (
     <section ref={wrapRef} className={cx('v2-console', 'is-unified', (running || compact) && 'is-compact')}>
       <div className="v2-console-aura" aria-hidden="true" />
@@ -408,6 +436,11 @@ export default function SearchConsole({
       {/* Top Header Strip */}
       <div className="v2-console-head">
         <div className="v2-console-live">
+          <Mascot3D
+            mode={running ? 'dig' : 'idle'}
+            size={38}
+            className="v2-console-head-mascot"
+          />
           <i />
           <span>AUTONOMOUS MULTI-VECTOR INTELLIGENCE CORE</span>
           <b>619,287 VILLAGES & MANDALS INDEXED</b>
@@ -526,7 +559,10 @@ export default function SearchConsole({
             className="v2-console-input"
             value={draft}
             onChange={event => handleQuery(event.target.value)}
-            onFocus={() => setOpen(true)}
+            onFocus={() => {
+              setOpen(true);
+              window.dispatchEvent(new CustomEvent('leadharvest:search-focus'));
+            }}
             onKeyDown={onKeyDown}
             placeholder="Type anything (e.g. urgent wedding photographers near benz circle vijayawada under 5km with phone)..."
             autoComplete="off"
@@ -547,7 +583,7 @@ export default function SearchConsole({
           )}
           <button
             type="button"
-            className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy')}
+            className={cx('v2-console-go', 'v2-btn-deploy-3d', running && 'is-stop', busy && 'is-busy')}
             onClick={submit}
             disabled={busy || (!running && !canDeploy)}
           >
@@ -683,11 +719,11 @@ export default function SearchConsole({
       {running && (
         <div className="v2-swarm-live-hud">
           <div className="v2-swarm-live-left">
+            <Mascot mode="sprint" size={50} className="v2-hud-mascot" />
             <span className="v2-swarm-pulse-ring" />
-            <Activity size={15} className="v2-text-cyan v2-spin" />
             <div className="v2-swarm-live-info">
               <span className="v2-swarm-live-title">
-                INTELLIGENCE SWARM ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} CONSTITUENT RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
+                DIGGY INTELLIGENCE SWARM ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} CONSTITUENT RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
               </span>
               <div className="v2-swarm-live-meta">
                 <span>📍 {parsedLocation || location || 'Target Locality'} ({radius}km radius per zone)</span>

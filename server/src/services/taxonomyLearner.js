@@ -392,6 +392,44 @@ function reset() {
   saveSoon();
 }
 
+function seedUniversal() {
+  load();
+  const SEEDS = [
+    { key: 'wedding album printing lab', name: 'Wedding Album Printing Lab', expansions: ['Digital Color Lab', 'Wedding Album Manufacturers', 'Photo Book Printing', 'Karizma Album Printers'] },
+    { key: 'water purifier repair and ro service', name: 'Water Purifier & RO Repair', expansions: ['RO Water Purifier Dealers', 'Aquaguard Service', 'Water Purifier Repair', 'Water Treatment Plants'] },
+    { key: 'car detailing and ceramic coating', name: 'Car Detailing & Ceramic Coating', expansions: ['Car Wash', 'Ceramic Detailing', 'Car Polish', 'Teflon Coating', 'Foam Wash'] },
+    { key: 'borewell drilling contractors', name: 'Borewell Drilling Contractors', expansions: ['Borewell Drillers', 'Submersible Pump Dealers', 'Bore Well Contractors'] },
+    { key: 'steel and aluminium fabrication', name: 'Steel & Aluminium Fabrication', expansions: ['Fabrication Works', 'Iron Grill Gates', 'Shed Fabrication', 'Welding Works'] },
+    { key: 'modular kitchen and interior designers', name: 'Modular Kitchen & Interior Designers', expansions: ['Home Interiors', 'False Ceiling Contractors', 'Modular Kitchen Dealers', 'Wardrobe Works'] },
+    { key: 'solar panel and inverter dealers', name: 'Solar Panel & Inverter Dealers', expansions: ['Rooftop Solar Installers', 'Inverter Battery Dealers', 'Solar Power Systems', 'UPS Dealers'] },
+    { key: 'ac repair and refrigerator service', name: 'AC Repair & Refrigerator Service', expansions: ['AC Installation', 'Air Conditioner Service', 'Gas Refilling', 'Cooling Appliance Repair'] },
+    { key: 'plumbers and sanitary contractors', name: 'Plumbers & Sanitary Contractors', expansions: ['Plumbing Contractors', 'Bathroom Fittings Repair', 'Water Tank Cleaners', 'Pipeline Repair'] },
+    { key: 'electricians and wiring contractors', name: 'Electricians & Wiring Contractors', expansions: ['Electrical Contractors', 'House Wiring', 'Switch Panel Repair', 'Motor Rewinding'] },
+    { key: 'chartered accountants and gst consultants', name: 'Chartered Accountants & GST Consultants', expansions: ['CA Firms', 'Tax Consultants', 'GST Filing Services', 'Accounting & Bookkeeping'] },
+    { key: 'dental clinics and dentists', name: 'Dental Clinics & Dentists', expansions: ['Dental Hospitals', 'Root Canal Specialists', 'Orthodontists', 'Dental Implants'] },
+    { key: 'packers and movers', name: 'Packers And Movers', expansions: ['Household Shifting', 'Office Relocation', 'Movers and Packers', 'Transport Services'] },
+    { key: 'pest control services', name: 'Pest Control Services', expansions: ['Termite Treatment', 'Bedbug Control', 'Fumigation Services', 'Cockroach Pest Control'] },
+    { key: 'wedding catering services', name: 'Wedding Catering Services', expansions: ['Outdoor Caterers', 'Veg & Non-Veg Caterers', 'Buffet Catering', 'Sweet Shops & Caterers'] }
+  ];
+
+  for (const item of SEEDS) {
+    bump(store.services, item.key, {
+      name: item.name,
+      expansions: item.expansions,
+      count: Math.max(3, Number(store.services[item.key]?.count || 0))
+    });
+    bump(store.categories, item.key, {
+      name: item.name,
+      expansions: item.expansions,
+      count: Math.max(3, Number(store.categories[item.key]?.count || 0))
+    });
+  }
+
+  store.updatedAt = new Date().toISOString();
+  saveSoon();
+  return { seeded: SEEDS.length, totalServices: Object.keys(store.services).length };
+}
+
 /**
  * Full learned catalogue for the master GUI. Everything here came from real
  * finished runs — it is a transcript of what the scraper learned, not a
@@ -443,5 +481,6 @@ module.exports = {
   getSummary,
   getCatalog,
   reset,
+  seedUniversal,
   learnedFile: LEARNED_FILE
 };

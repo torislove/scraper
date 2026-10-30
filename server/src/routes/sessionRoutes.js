@@ -476,11 +476,25 @@ router.get(['/list', '/list/:userId'], (req, res) => {
         }
       }
     } else {
-      // Client view: Restricted ONLY to this specific client's directory. No master access, no other clients!
+      // Client view: Access client session folders (own user ID, anonymous, and guest/client runs).
+      // STRICT RULE: Master territorial sweeps are filtered out and inaccessible.
       const userId = req.headers['x-user-id'] || req.params.userId || 'anonymous';
-      const userDir = getUserDir(userId);
+      const userDirs = [getUserDir(userId)];
+      if (userId !== 'anonymous') {
+        userDirs.push(getUserDir('anonymous'));
+      }
+      if (fs.existsSync(SESSIONS_DIR)) {
+        const subdirs = fs.readdirSync(SESSIONS_DIR).filter(f => {
+          try { return f !== 'master' && fs.statSync(path.join(SESSIONS_DIR, f)).isDirectory(); } catch (e) { return false; }
+        });
+        subdirs.forEach(sd => {
+          const dir = path.join(SESSIONS_DIR, sd);
+          if (!userDirs.includes(dir)) userDirs.push(dir);
+        });
+      }
 
-      if (fs.existsSync(userDir)) {
+      for (const userDir of userDirs) {
+        if (!fs.existsSync(userDir)) continue;
         const files = fs.readdirSync(userDir).filter(f => f.endsWith('.json'));
 
         for (const file of files) {
@@ -490,7 +504,7 @@ router.get(['/list', '/list/:userId'], (req, res) => {
             if (!data || !data.id) continue;
 
             // Never leak Master Sweeps to standard client!
-            const isMasterSweep = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/.test(data.id));
+            const isMasterSweep = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/i.test(data.id));
             if (isMasterSweep) continue;
 
             if (!sessionMap.has(data.id)) {
@@ -529,7 +543,7 @@ router.get(['/list', '/list/:userId'], (req, res) => {
                 notes: folderNotes,
                 dealValueTotal,
                 isMasterSweep: false,
-                userId,
+                userId: data.userId || userId,
                 category: cleanCat,
                 location: cleanLoc,
                 timestamp: data.timestamp || new Date().toISOString(),
@@ -812,8 +826,21 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
         subdirs.forEach(sd => candidateDirs.push(path.join(SESSIONS_DIR, sd)));
       }
     } else {
-      // Standard client: STRICTLY restricted to their own user directory
+      // Standard client: Checks own directory, anonymous directory, and client subdirectories.
+      // Master sweeps are strictly blocked below if detected.
       candidateDirs = [getUserDir(userId)];
+      if (userId !== 'anonymous') {
+        candidateDirs.push(getUserDir('anonymous'));
+      }
+      if (fs.existsSync(SESSIONS_DIR)) {
+        const subdirs = fs.readdirSync(SESSIONS_DIR).filter(f => {
+          try { return f !== 'master' && fs.statSync(path.join(SESSIONS_DIR, f)).isDirectory(); } catch (e) { return false; }
+        });
+        subdirs.forEach(sd => {
+          const dir = path.join(SESSIONS_DIR, sd);
+          if (!candidateDirs.includes(dir)) candidateDirs.push(dir);
+        });
+      }
     }
 
     for (const dir of candidateDirs) {

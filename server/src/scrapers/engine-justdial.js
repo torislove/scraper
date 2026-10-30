@@ -81,6 +81,18 @@ function isGenericRowName(value) {
 // Category fan-out. Each variant is resolved to its own JustDial ncatid, so a
 // single city query can cover related marketplace categories without guessing.
 const VARIANT_RULES = [
+  { test: /album|color lab|colour lab|photo book|photobook|karizma|canvera/i, variants: ['Photo Album Manufacturers', 'Digital Color Laboratories', 'Wedding Album Printers', 'Photo Book Printing Services', 'Digital Photo Printing Services', 'Offset Printers'] },
+  { test: /print|flex|offset|screen print|dtp|banner|visiting card|brochure/i, variants: ['Printing Services', 'Offset Printers', 'Digital Printers', 'Flex Printing Services', 'Printing Press', 'Screen Printers'] },
+  { test: /solar|inverter|battery|ups/i, variants: ['Solar Panel Dealers', 'Inverter Dealers', 'Battery Dealers', 'Solar Power System Dealers', 'UPS Dealers'] },
+  { test: /cctv|surveillance|security camera|biometric/i, variants: ['CCTV Dealers', 'Security System Dealers', 'CCTV Installation Services', 'Biometric Attendance System Dealers'] },
+  { test: /water purifier|ro repair|aquaguard|water filter/i, variants: ['Water Purifier Dealers', 'Water Purifier Repair & Services', 'RO Water Purifier Dealers', 'Water Treatment Plant Manufacturers'] },
+  { test: /interior|modular kitchen|false ceiling|wardrobe/i, variants: ['Interior Designers', 'Modular Kitchen Dealers', 'False Ceiling Contractors', 'Interior Decorators'] },
+  { test: /fabricat|welder|grill|gate|shed|steel fabricat/i, variants: ['Fabrication Contractors', 'Steel Fabricators', 'Aluminium Fabricators', 'Iron Grill Fabricators'] },
+  { test: /borewell|drilling|submersible/i, variants: ['Borewell Drilling Contractors', 'Submersible Pump Dealers', 'Borewell Contractors'] },
+  { test: /car wash|car detailing|car polish|ceramic coat/i, variants: ['Car Washing Services', 'Car Detailing Services', 'Car Polishers', 'Automobile Cleaning Services'] },
+  { test: /astrolog|pandit|purohit|jyotish|pooja|vastu/i, variants: ['Astrologers', 'Pandits For Pooja', 'Vastu Shastra Consultants', 'Purohits'] },
+  { test: /ca\b|chartered accountant|tax consultant|gst/i, variants: ['Chartered Accountants', 'Tax Consultants', 'GST Consultants', 'Accounting & Bookkeeping Services'] },
+  { test: /travel|cab|car rental|taxi|tour/i, variants: ['Car Rental', 'Taxi Services', 'Tour Operators', 'Travel Agents', 'Bus Services'] },
   { test: /plumb/i, variants: ['Plumbers', 'Plumber Contractors', 'Plumbing Contractors', 'Water Tank Cleaning Services', 'Borewell Contractors'] },
   { test: /electric/i, variants: ['Electricians', 'Electrical Contractors', 'Electrical Repair Services', 'AC Repair Services', 'Electrical Installation Services'] },
   { test: /carpent|woodwork/i, variants: ['Carpenters', 'Carpentry Services', 'Furniture Manufacturers', 'Modular Kitchen Dealers'] },

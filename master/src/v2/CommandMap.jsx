@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -96,17 +96,20 @@ function LiveFocus({ activePoint, scanning }) {
   const map = useMap();
 
   useEffect(() => {
-    if (!scanning || !activePoint) return;
-    const targetZoom = Math.max(map.getZoom(), 12);
-    map.flyTo(activePoint, targetZoom, { animate: true, duration: 1.4 });
-  }, [activePoint?.[0], activePoint?.[1], scanning, map]);
+    if (!scanning || !activePoint || !map) return;
+    try {
+      const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 12;
+      const targetZoom = Math.max(currentZoom || 12, 12);
+      map.flyTo(activePoint, targetZoom, { animate: true, duration: 1.4 });
+    } catch (e) {}
+  }, [activePoint, scanning, map]);
 
   return null;
 }
 
 function InitialFit({ points }) {
   const map = useMap();
-  const fitted = React.useRef(false);
+  const fitted = useRef(false);
 
   useEffect(() => {
     if (fitted.current || !points.length) return;
@@ -156,6 +159,8 @@ export default function CommandMap({
     if (lat < 6 || lat > 38 || lng < 68 || lng > 98) return null;
     return [lat, lng];
   }, [activeZone]);
+
+  const scanIcon = useMemo(() => scanTargetIcon(), []);
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -257,7 +262,7 @@ export default function CommandMap({
         {activePoint && scanning && (
           <Marker
             position={activePoint}
-            icon={scanTargetIcon()}
+            icon={scanIcon}
             interactive={false}
             zIndexOffset={1200}
           />

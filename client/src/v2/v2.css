@@ -3261,6 +3261,77 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   flex: none;
 }
 
+/* ------------------------------ live run strip ------------------------------ */
+.v2-live-run-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  margin: 6px 12px 10px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.16), rgba(16, 185, 129, 0.12));
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 0 12px rgba(6, 182, 212, 0.1);
+}
+.v2-live-run-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #06b6d4;
+  box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7);
+  animation: v2-swarm-pulse 1.5s infinite;
+  flex-shrink: 0;
+}
+.v2-live-run-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 260px;
+  font-size: 11px;
+}
+.v2-live-run-badge {
+  font-family: var(--v2-mono);
+  font-size: 9px;
+  font-weight: 800;
+  color: #22d3ee;
+  letter-spacing: 0.08em;
+  background: rgba(6, 182, 212, 0.2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.v2-live-run-info b {
+  color: #f8fafc;
+  font-weight: 700;
+}
+.v2-live-zone-chip {
+  font-size: 10px;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.15);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.v2-live-run-metrics {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.v2-live-metric-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--v2-muted);
+}
+.v2-live-metric-item b {
+  color: #f8fafc;
+  font-family: var(--v2-mono);
+}
+
 /* ------------------------------ help steps ------------------------------- */
 .v2-help-steps { display: flex; flex-direction: column; gap: 9px; margin: 2px 0 12px; }
 
@@ -5997,14 +6068,61 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 /* Wide-Area Block Notice & Subzone Picker (Client individual city/mandal restriction) */
 .v2-widearea-block-box {
   margin-top: 10px;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(239, 68, 68, 0.08));
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(239, 68, 68, 0.08));
+  border: 1px solid rgba(245, 158, 11, 0.4);
   display: flex;
   flex-direction: column;
   gap: 10px;
   animation: v2-fade-in 0.25s ease-out;
+}
+.v2-widearea-flex {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.v2-widearea-mascot {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 14px rgba(245, 158, 11, 0.45));
+}
+.v2-widearea-block-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-console-head-mascot {
+  margin-right: 8px;
+  filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.45));
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.v2-console-head-mascot:hover {
+  transform: scale(1.18) rotate(-4deg);
+}
+.v2-hud-mascot {
+  margin-right: 12px;
+  filter: drop-shadow(0 0 14px rgba(0, 240, 255, 0.5));
+}
+.v2-btn-deploy-3d {
+  position: relative;
+  box-shadow: 0 4px 0 #047857, 0 8px 24px rgba(16, 185, 129, 0.4) !important;
+  transition: all 0.1s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.v2-btn-deploy-3d:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #047857, 0 12px 28px rgba(16, 185, 129, 0.5) !important;
+}
+.v2-btn-deploy-3d:active {
+  transform: translateY(3px) !important;
+  box-shadow: 0 1px 0 #047857, 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+}
+.v2-btn-deploy-3d.is-blocked {
+  box-shadow: 0 4px 0 #78350f, 0 8px 24px rgba(245, 158, 11, 0.3) !important;
+}
+.v2-btn-deploy-3d.is-blocked:active {
+  transform: translateY(3px) !important;
+  box-shadow: 0 1px 0 #78350f, 0 4px 12px rgba(245, 158, 11, 0.2) !important;
 }
 .v2-widearea-block-head {
   display: flex;

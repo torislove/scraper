@@ -1,19 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
+import toast from 'react-hot-toast';
 import {
-  Activity, ArrowRight, Check, ChevronDown, ChevronUp, Clock, Cpu, Globe, Layers, Loader2,
+  Activity, AlertTriangle, ArrowRight, Check, ChevronDown, ChevronUp, Clock, Cpu, Globe, Layers, Loader2,
   MapPin, Phone, Search, Sliders, SlidersHorizontal, Sparkles, Square, Target, Wand2, X, Zap,
   Compass, ShieldCheck
 } from 'lucide-react';
+import Mascot from './Mascot';
+import Mascot3D from './Mascot3D';
+import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch } from './api';
 import { cx } from './ui';
 
 const EXAMPLES = [
-  'Plumbers in Vijayawada Rural',
-  'Urgent wedding photographers near Benz Circle Vijayawada with phone',
-  'Water tanker suppliers in Mangalagiri with contact numbers',
-  'Electricians in Maruthi Nagar Tenali',
-  'AC repair technicians in Guntur under 5km',
-  'PVC pipe distributors in Auto Nagar Vijayawada'
+  'Wedding Album Printing in Guntur',
+  'Water Purifier Repair in Benz Circle Vijayawada',
+  'Car Detailing & Ceramic Coating in Hyderabad',
+  'Urgent wedding photographers near Benz Circle with phone',
+  'AC repair technicians in Tenali under 5km',
+  'Steel fabrication & iron grills in Auto Nagar'
 ];
 
 const TARGETS = [100, 250, 500, 1000];
@@ -170,9 +174,7 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                     onClick={() => onPick(item)}
                   >
                     <span className="v2-suggest-mark">
-                      {item.type === 'category' ? <Sparkles size={13} />
-                        : item.type === 'literal' ? <Search size={13} />
-                          : <MapPin size={13} />}
+                      {item.type === 'category' ? <Sparkles size={13} /> : <MapPin size={13} />}
                     </span>
                     <span className="v2-suggest-copy">
                       <div className="v2-suggest-top-line">
@@ -188,17 +190,14 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                           </span>
                         )}
                       </div>
-                      {(item.type === 'category' || item.type === 'literal') && item.subtitle && (
+                      {item.type === 'category' && item.subtitle && (
                         <small>{item.subtitle}</small>
                       )}
                       {item.type === 'location' && (item.display || item.district) && (
                         <small>{item.display || `${item.mandal ? `${item.mandal}, ` : ''}${item.district}`}</small>
                       )}
                     </span>
-                    {item.learned && <span className="v2-suggest-fix">LEARNED</span>}
-                    {!item.learned && (item.type === 'category' || item.type === 'literal') && item.detail && (
-                      <span className="v2-suggest-fix">{item.detail}</span>
-                    )}
+                    {item.type === 'category' && item.detail && <span className="v2-suggest-fix">{item.detail}</span>}
                     <ArrowRight size={11} className="v2-suggest-arrow" />
                   </button>
                 );
@@ -226,7 +225,10 @@ export default function SearchConsole({
   busy = false,
   running = false,
   compact = false,
-  onResolve
+  onResolve,
+  onMasterSweep,
+  progress = null,
+  eta = ''
 }) {
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
@@ -272,6 +274,15 @@ export default function SearchConsole({
     if (parsedLocation && parsedLocation !== location) onLocationChange?.(parsedLocation);
   }, [parsedCategory, parsedLocation]);
 
+  // Dynamic Animated Favicon State Sync
+  useEffect(() => {
+    if (running) {
+      setDynamicFaviconState('scraping');
+    } else {
+      setDynamicFaviconState('idle');
+    }
+  }, [running]);
+
   // Live countdown timer for estimated harvest time
   useEffect(() => {
     if (!running) {
@@ -286,51 +297,19 @@ export default function SearchConsole({
 
   const groups = useMemo(() => {
     const list = response?.suggestions || [];
-    const categories = list.filter(item => item.type === 'category');
-    const literal = draft.trim().length >= 2
-      ? [{
-          type: 'literal',
-          value: draft.trim(),
-          label: `Search “${draft.trim()}” literally`,
-          subtitle: 'Send these exact words to every engine',
-          detail: 'LITERAL',
-          family: 'generic',
-          familyLabel: 'Any wording'
-        }]
-      : [];
     return [
-      {
-        title: 'BRANDS & MODELS',
-        icon: Target,
-        items: categories.filter(item => item.group === 'brand')
-      },
-      {
-        title: 'PRODUCTS & SUPPLIERS',
-        icon: Layers,
-        items: categories.filter(item => item.group === 'product' && !item.learned)
-      },
-      {
-        title: 'LEARNED FROM RUNS',
-        icon: Sparkles,
-        items: categories.filter(item => item.learned)
-      },
       {
         title: 'SERVICES & SPECIALTIES',
         icon: Sparkles,
-        items: categories.filter(item => item.group === 'service' || (!item.group && !item.learned))
+        items: list.filter(item => item.type === 'category')
       },
       {
         title: 'CITIES, MANDALS & WARDS',
         icon: MapPin,
         items: list.filter(item => item.type === 'location')
-      },
-      {
-        title: 'ANY WORDING',
-        icon: Search,
-        items: literal
       }
     ];
-  }, [response, draft]);
+  }, [response]);
 
   const visible = useMemo(() => groups.flatMap(group => group.items), [groups]);
 
@@ -347,10 +326,18 @@ export default function SearchConsole({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const parentTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(parentTimerRef.current), []);
+
   const handleQuery = useCallback(text => {
     setDraft(text);
-    onChange?.(text);
     setOpen(true);
+    clearTimeout(parentTimerRef.current);
+    parentTimerRef.current = setTimeout(() => {
+      startTransition(() => {
+        onChange?.(text);
+      });
+    }, 60);
   }, [onChange]);
 
   const toggleVector = useCallback(vectorId => {
@@ -376,13 +363,7 @@ export default function SearchConsole({
 
   const choose = useCallback(item => {
     if (!item) return;
-    if (item.type === 'literal') {
-      const loc = parsedLocation || location;
-      const updated = loc ? `${item.value} in ${loc}` : item.value;
-      setDraft(updated);
-      onChange?.(updated);
-      onCategoryChange?.(item.value);
-    } else if (item.type === 'category') {
+    if (item.type === 'category') {
       const loc = parsedLocation || location;
       const updated = loc ? `${item.value} in ${loc}` : item.value;
       setDraft(updated);
@@ -423,22 +404,23 @@ export default function SearchConsole({
     }
   }, [open, visible, active, choose]);
 
-  const isWideAreaBlocked = locClassification?.type === 'district' || locClassification?.type === 'state';
+  const isWideAreaBlocked = !onMasterSweep && (locClassification?.type === 'district' || locClassification?.type === 'state');
   const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3) && !isWideAreaBlocked;
 
-  const submit = useCallback(() => {
+  const submit = useCallback((overrideQuery = null) => {
     if (running) {
       onStop?.();
       return;
     }
+    const currentDraft = typeof overrideQuery === 'string' ? overrideQuery : draft;
     if (isWideAreaBlocked) {
-      toast.error(`One place at a time, please. District and state-wide lists (${locClassification?.name || ''}) are a custom service - email support@scraper.co.in. Pick a city, town or village below.`);
+      toast.error(`Client searches are restricted to individual cities and mandals. District and state-wide sweeps (${locClassification?.name || ''}) require Master Command Center. Choose an individual city or mandal below!`);
       return;
     }
-    if (!canDeploy || busy) return;
+    if ((!canDeploy && !overrideQuery) || busy) return;
     setOpen(false);
     onDeploy?.({
-      query: draft,
+      query: currentDraft,
       category: parsedCategory,
       location: parsedLocation,
       radius,
@@ -447,114 +429,355 @@ export default function SearchConsole({
     });
   }, [running, canDeploy, busy, isWideAreaBlocked, locClassification, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
 
-  return (
-    <section ref={wrapRef} className={cx('v2-console', 'is-unified', (running || compact) && 'is-compact')}>
-      <div className="v2-console-aura" aria-hidden="true" />
-      <div className="v2-console-scan" aria-hidden="true" />
+  // Listen for companion mascot searches ("Diggy intelligent relative search")
+  useEffect(() => {
+    const handleMascotSearch = (e) => {
+      const q = e?.detail?.query;
+      if (q) {
+        setDraft(q);
+        onChange?.(q);
+        inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        inputRef.current?.focus();
+        setTimeout(() => {
+          submit(q);
+        }, 400);
+      }
+    };
+    window.addEventListener('leadharvest:search', handleMascotSearch);
+    return () => window.removeEventListener('leadharvest:search', handleMascotSearch);
+  }, [onChange, submit]);
 
-      {/* Top Header Strip */}
-      <div className="v2-console-head">
-        <div className="v2-console-live">
-          <i />
-          <span>AUTONOMOUS MULTI-VECTOR INTELLIGENCE CORE</span>
-          <b>619,287 VILLAGES & MANDALS INDEXED</b>
-        </div>
-        <div className="v2-console-head-actions">
-          <button
-            type="button"
-            className={cx('v2-engine-toggle-pill', showPrecisionDrawer && 'is-open')}
-            onClick={() => setShowPrecisionDrawer(prev => !prev)}
-            title="Configure Precision Radius, Vectors & Target Speed"
-          >
-            <SlidersHorizontal size={12} />
-            <span>Precision & Tuning: <b>{radius}km Radius · {selectedEngines.includes('auto') ? 'Auto AI' : `${selectedEngines.length} Vectors`}</b></span>
-            {showPrecisionDrawer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-        </div>
+return (
+  <section ref={wrapRef} className={cx('v2-console', 'is-unified', (running || compact) && 'is-compact')}>
+    <div className="v2-console-aura" aria-hidden="true" />
+    <div className="v2-console-scan" aria-hidden="true" />
+
+    {/* Top Header Strip */}
+    <div className="v2-console-head">
+      <div className="v2-console-live">
+        <Mascot
+          mode={running ? 'sprint' : isWideAreaBlocked ? 'dig' : 'idle'}
+          size={36}
+          className="v2-console-head-mascot"
+        />
+        <i />
+        <span>AUTONOMOUS MULTI-VECTOR INTELLIGENCE CORE</span>
+        <b>619,287 VILLAGES & MANDALS INDEXED</b>
       </div>
+      <div className="v2-console-head-actions">
+        <button
+          type="button"
+          className={cx('v2-engine-toggle-pill', showPrecisionDrawer && 'is-open')}
+          onClick={() => setShowPrecisionDrawer(prev => !prev)}
+          title="Configure Precision Radius, Vectors & Target Speed"
+        >
+          <SlidersHorizontal size={12} />
+          <span>Precision & Tuning: <b>{radius}km Radius · {selectedEngines.includes('auto') ? 'Auto AI' : `${selectedEngines.length} Vectors`}</b></span>
+          {showPrecisionDrawer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
+      </div>
+    </div>
 
-      {/* Expandable Precision Matrix Drawer */}
-      {showPrecisionDrawer && (
-        <div className="v2-engine-drawer">
-          <div className="v2-engine-drawer-header">
-            <span className="v2-drawer-title"><Cpu size={13} /> PROPRIETARY MULTI-VECTOR INTELLIGENCE GRID</span>
-            <div className="v2-speed-presets">
-              {SPEED_PRESETS.map(preset => (
+    {/* Expandable Precision Matrix Drawer */}
+    {showPrecisionDrawer && (
+      <div className="v2-engine-drawer">
+        <div className="v2-engine-drawer-header">
+          <span className="v2-drawer-title"><Cpu size={13} /> PROPRIETARY MULTI-VECTOR INTELLIGENCE GRID</span>
+          <div className="v2-speed-presets">
+            {SPEED_PRESETS.map(preset => (
+              <button
+                type="button"
+                key={preset.id}
+                className={cx('v2-speed-preset-btn', activePreset === preset.id && 'is-active')}
+                onClick={() => applyPreset(preset)}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Proprietary Vector Cards (Zero 3rd-Party Names) */}
+        <div className="v2-engine-cards-grid">
+          {PROPRIETARY_VECTORS.map(vector => {
+            const active = selectedEngines.includes('auto') || selectedEngines.includes(vector.id);
+            return (
+              <button
+                type="button"
+                key={vector.id}
+                className={cx('v2-engine-card', active && 'is-selected', `theme-${vector.color}`)}
+                onClick={() => toggleVector(vector.id)}
+              >
+                <div className="v2-engine-card-top">
+                  <span className="v2-engine-badge">{vector.badge}</span>
+                  <span className={cx('v2-engine-checkbox', active && 'is-checked')}>
+                    {active && <Check size={11} />}
+                  </span>
+                </div>
+                <b className="v2-engine-name">{vector.name}</b>
+                <small className="v2-engine-desc">{vector.desc}</small>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tuning Sliders: Radius Sweep + Target Leads */}
+        <div className="v2-tuning-bar">
+          <div className="v2-tuning-control">
+            <span className="v2-tuning-label">
+              <Compass size={12} /> SWEEP RADIUS PER CONSTITUENT POINT: <b>{radius} KM</b>
+            </span>
+            <div className="v2-radius-slider-wrap">
+              <input
+                type="range"
+                min="1"
+                max="25"
+                step="1"
+                value={radius}
+                onChange={e => setRadius(Number(e.target.value))}
+                className="v2-radius-slider"
+              />
+              <div className="v2-radius-ticks">
+                <span>1 km (Hyperlocal)</span>
+                <span className="is-mid">5 km (Benchmark)</span>
+                <span>15 km (Suburbs)</span>
+                <span>25 km (District)</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="v2-tuning-control">
+            <span className="v2-tuning-label">
+              <Target size={12} /> TARGET LEADS HARVEST:
+            </span>
+            <div className="v2-adv-chips">
+              {TARGETS.map(t => (
                 <button
                   type="button"
-                  key={preset.id}
-                  className={cx('v2-speed-preset-btn', activePreset === preset.id && 'is-active')}
-                  onClick={() => applyPreset(preset)}
+                  key={t}
+                  className={cx('v2-adv-chip', Number(targetLeads) === t && 'is-on')}
+                  onClick={() => onTargetChange?.(t)}
                 >
-                  {preset.name}
+                  {Number(targetLeads) === t && <Check size={10} />}
+                  {t}
                 </button>
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    )}
 
-          {/* Proprietary Vector Cards (Zero 3rd-Party Names) */}
-          <div className="v2-engine-cards-grid">
-            {PROPRIETARY_VECTORS.map(vector => {
-              const active = selectedEngines.includes('auto') || selectedEngines.includes(vector.id);
-              return (
-                <button
-                  type="button"
-                  key={vector.id}
-                  className={cx('v2-engine-card', active && 'is-selected', `theme-${vector.color}`)}
-                  onClick={() => toggleVector(vector.id)}
-                >
-                  <div className="v2-engine-card-top">
-                    <span className="v2-engine-badge">{vector.badge}</span>
-                    <span className={cx('v2-engine-checkbox', active && 'is-checked')}>
-                      {active && <Check size={11} />}
-                    </span>
-                  </div>
-                  <b className="v2-engine-name">{vector.name}</b>
-                  <small className="v2-engine-desc">{vector.desc}</small>
-                </button>
-              );
-            })}
+    {/* The Unified Omnibox Field */}
+    <div className="v2-console-field">
+      <div className={cx('v2-console-bar', open && visible.length > 0 && 'is-open', parsed && 'is-ready')}>
+        <span className="v2-console-glyph"><Search size={20} /></span>
+        <input
+          ref={inputRef}
+          id="cmd-console-query"
+          className="v2-console-input"
+          value={draft}
+          onChange={event => handleQuery(event.target.value)}
+          onFocus={() => {
+            setOpen(true);
+            window.dispatchEvent(new CustomEvent('leadharvest:search-focus'));
+          }}
+          onKeyDown={onKeyDown}
+          placeholder="Type anything (e.g. urgent wedding photographers near benz circle vijayawada under 5km with phone)..."
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck="false"
+        />
+        {loading && <Loader2 size={16} className="v2-spin v2-console-loading" />}
+        {!loading && draft && (
+          <button
+            type="button"
+            className="v2-console-clear"
+            onClick={() => { handleQuery(''); inputRef.current?.focus(); }}
+            aria-label="Clear query"
+          >
+            <X size={14} />
+          </button>
+        )}
+        <button
+          type="button"
+          className={cx(
+            'v2-console-go',
+            'v2-btn-deploy-3d',
+            running && 'is-stop',
+            busy && 'is-busy',
+            isWideAreaBlocked && 'is-blocked'
+          )}
+          onClick={submit}
+          disabled={busy || (!running && !canDeploy)}
+          title={isWideAreaBlocked ? 'Wide-area sweeps require Master Command Center. Please pick an individual city or mandal.' : undefined}
+        >
+          <span className="v2-btn-shimmer" />
+          {busy
+            ? <Loader2 size={16} className="v2-spin" />
+            : running
+              ? <Square size={14} />
+              : isWideAreaBlocked
+                ? <AlertTriangle size={15} />
+                : <Zap size={16} />}
+          <span>{busy ? 'STARTING...' : running ? 'STOP SWARM' : isWideAreaBlocked ? 'SELECT CITY / MANDAL' : 'DEPLOY INTELLIGENCE SWARM'}</span>
+        </button>
+      </div>
+
+      {/* Suggestion Dropdown */}
+      {open && visible.length > 0 && (
+        <div className="v2-suggest" role="listbox">
+          <SuggestionList
+            groups={groups}
+            active={active}
+            onPick={choose}
+            onHover={setActive}
+          />
+          <footer className="v2-suggest-foot">
+            <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+            <span><kbd>↵</kbd> select</span>
+            <span><kbd>esc</kbd> close</span>
+            {loading && <span className="v2-suggest-loading"><Loader2 size={10} className="v2-spin" /> searching index</span>}
+          </footer>
+        </div>
+      )}
+    </div>
+
+    {/* Autocorrect Intelligence Pill */}
+    {autocorrectItem && (
+      <div className="v2-autocorrect-banner">
+        <Sparkles size={13} className="v2-text-cyan" />
+        <span>Intelligent Auto-Correction:</span>
+        <button type="button" className="v2-autocorrect-pill" onClick={() => choose(autocorrectItem)}>
+          <span>Did you mean <b>{autocorrectItem.label}</b>?</span>
+          <Check size={11} />
+        </button>
+      </div>
+    )}
+
+    {/* Live Semantic Parsing Intent HUD (Real-Time Feedback) */}
+    <div className="v2-intent-hud">
+      <div className="v2-hud-chips">
+        <div className={cx('v2-hud-chip chip-category', parsedCategory && 'is-locked')}>
+          <Sparkles size={11} className="v2-text-cyan" />
+          <span>Service:</span>
+          <b>{parsedCategory || 'Type what you need...'}</b>
+        </div>
+
+        <div className={cx('v2-hud-chip chip-location', parsedLocation && 'is-locked')}>
+          <MapPin size={11} className="v2-text-lime" />
+          <span>Locality:</span>
+          <b>{parsedLocation || 'Type location...'}</b>
+          {parsedZones > 1 && <span className="v2-hud-badge">{parsedZones} ZONES</span>}
+        </div>
+
+        <div className="v2-hud-chip chip-radius">
+          <Compass size={11} className="v2-text-amber" />
+          <span>Sweep:</span>
+          <b>{radius} km Radius</b>
+        </div>
+
+        <div className="v2-hud-chip chip-vectors">
+          <Cpu size={11} className="v2-text-violet" />
+          <span>Vectors:</span>
+          <b>{selectedEngines.includes('auto') ? 'Autonomous Swarm' : `${selectedEngines.length} Active`}</b>
+        </div>
+
+        {parsed?.modifiers?.phoneOnly && (
+          <div className="v2-hud-chip chip-filter">
+            <Phone size={10} className="v2-text-lime" />
+            <b>Verified Mobiles Only</b>
           </div>
+        )}
 
-          {/* Tuning Sliders: Radius Sweep + Target Leads */}
-          <div className="v2-tuning-bar">
-            <div className="v2-tuning-control">
-              <span className="v2-tuning-label">
-                <Compass size={12} /> SWEEP RADIUS PER CONSTITUENT POINT: <b>{radius} KM</b>
-              </span>
-              <div className="v2-radius-slider-wrap">
-                <input
-                  type="range"
-                  min="1"
-                  max="25"
-                  step="1"
-                  value={radius}
-                  onChange={e => setRadius(Number(e.target.value))}
-                  className="v2-radius-slider"
-                />
-                <div className="v2-radius-ticks">
-                  <span>1 km (Hyperlocal)</span>
-                  <span className="is-mid">5 km (Benchmark)</span>
-                  <span>15 km (Suburbs)</span>
-                  <span>25 km (District)</span>
-                </div>
+        {parsed?.modifiers?.urgent && (
+          <div className="v2-hud-chip chip-filter is-urgent">
+            <Zap size={10} className="v2-text-amber" />
+            <b>24/7 Emergency Priority</b>
+          </div>
+        )}
+
+        {parsed?.modifiers?.isB2B && (
+          <div className="v2-hud-chip chip-filter is-b2b">
+            <ShieldCheck size={10} className="v2-text-cyan" />
+            <b>B2B & Wholesale Mode</b>
+          </div>
+        )}
+
+        {locClassification && (
+          <div className={cx('v2-hud-chip chip-geo-intel', 'type-' + locClassification.type)}>
+            <span className="v2-geo-badge-tag">{locClassification.badge || '🗺️ GEO'}</span>
+            <span>Hierarchy:</span>
+            <b>{locClassification.name}</b>
+            <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
+            {onMasterSweep && (locClassification.type === 'district' || locClassification.type === 'state' || locClassification.type === 'mandal') && (
+              <button
+                type="button"
+                className="v2-hud-sweep-btn"
+                onClick={() => onMasterSweep({
+                  category: parsedCategory || category,
+                  name: locClassification.name,
+                  scope: locClassification.type,
+                  engines: selectedEngines
+                })}
+                title={'Launch full ' + locClassification.type + ' master sweep'}
+              >
+                <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Mandal'}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="v2-hud-chip chip-time">
+          <Clock size={11} className="v2-text-amber" />
+          <span>Est. Scrape:</span>
+          <b>{estimatedTimeText}</b>
+        </div>
+
+        <div className="v2-hud-chip chip-forecast">
+          <span className="v2-pulse-dot" />
+          <span>Yield Forecast:</span>
+          <b className="v2-text-lime">{expectedLeads}</b>
+        </div>
+      </div>
+    </div>
+
+      {/* Client Restriction Alert: Suggest Individual Cities & Mandals */}
+      {isWideAreaBlocked && (
+        <div className="v2-widearea-block-box">
+          <div className="v2-widearea-flex">
+            <Mascot
+              mode="dig"
+              size={54}
+              className="v2-widearea-mascot"
+              bubbleText={`I scout single cities! Pick one below ⬇`}
+            />
+            <div className="v2-widearea-block-body">
+              <div className="v2-widearea-block-head">
+                <AlertTriangle size={15} className="v2-text-amber" />
+                <span>
+                  <b>Client search is restricted to individual cities and mandals only.</b>{' '}
+                  District &amp; state-wide sweeps require Master Command Center. Choose an individual city or mandal in {locClassification?.name}:
+                </span>
               </div>
-            </div>
-
-            <div className="v2-tuning-control">
-              <span className="v2-tuning-label">
-                <Target size={12} /> TARGET LEADS HARVEST:
-              </span>
-              <div className="v2-adv-chips">
-                {TARGETS.map(t => (
+              <div className="v2-widearea-subzones-pills">
+                {(locClassification?.subzones || []).slice(0, 12).map(sz => (
                   <button
                     type="button"
-                    key={t}
-                    className={cx('v2-adv-chip', Number(targetLeads) === t && 'is-on')}
-                    onClick={() => onTargetChange?.(t)}
+                    key={typeof sz === 'string' ? sz : sz.name}
+                    className="v2-subzone-pill"
+                    onClick={() => {
+                      const szName = typeof sz === 'string' ? sz : sz.name;
+                      const cat = parsedCategory || category || 'Businesses';
+                      const updated = `${cat} in ${szName}`;
+                      setDraft(updated);
+                      onChange?.(updated);
+                      onLocationChange?.(szName);
+                    }}
                   >
-                    {Number(targetLeads) === t && <Check size={10} />}
-                    {t}
+                    <MapPin size={11} />
+                    <span>{typeof sz === 'string' ? sz : sz.name}</span>
                   </button>
                 ))}
               </div>
@@ -563,236 +786,53 @@ export default function SearchConsole({
         </div>
       )}
 
-      {/* The Unified Omnibox Field */}
-      <div className="v2-console-field">
-        <div className={cx('v2-console-bar', open && visible.length > 0 && 'is-open', parsed && 'is-ready')}>
-          <span className="v2-console-glyph"><Search size={20} /></span>
-          <input
-            ref={inputRef}
-            id="cmd-console-query"
-            className="v2-console-input"
-            value={draft}
-            onChange={event => handleQuery(event.target.value)}
-            onFocus={() => setOpen(true)}
-            onKeyDown={onKeyDown}
-            placeholder="Type anything (e.g. urgent wedding photographers near benz circle vijayawada under 5km with phone)..."
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-          />
-          {loading && <Loader2 size={16} className="v2-spin v2-console-loading" />}
-          {!loading && draft && (
-            <button
-              type="button"
-              className="v2-console-clear"
-              onClick={() => { handleQuery(''); inputRef.current?.focus(); }}
-              aria-label="Clear query"
-            >
-              <X size={14} />
-            </button>
-          )}
+    {/* Live Swarm Harvesting HUD & ETA (Active when running) */}
+    {running && (
+      <div className="v2-swarm-live-hud">
+        <div className="v2-swarm-live-left">
+          <Mascot mode="sprint" size={50} className="v2-hud-mascot" />
+          <span className="v2-swarm-pulse-ring" />
+          <div className="v2-swarm-live-info">
+            <span className="v2-swarm-live-title">
+              DIGGY INTELLIGENCE SWARM ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} CONSTITUENT RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
+            </span>
+            <div className="v2-swarm-live-meta">
+              <span>📍 {parsedLocation || location || 'Target Locality'} ({radius}km radius per zone)</span>
+              <span>•</span>
+              <span>⚡ Real-Time Streaming Ingestion</span>
+            </div>
+          </div>
+        </div>
+        <div className="v2-swarm-live-right">
+          <div className="v2-swarm-eta-chip">
+            <Clock size={12} className="v2-text-amber" />
+            <span>EST. HARVEST TIME:</span>
+            <b>{eta || (progress?.eta ? `${progress.eta}` : `~${etaRemaining}s remaining`)}</b>
+          </div>
+          <div className="v2-swarm-throughput-chip">
+            <Zap size={12} className="v2-text-lime" />
+            <b>~18–24 leads/sec</b>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Quick Example Pills */}
+    {!running && (
+      <div className="v2-console-examples">
+        <span>POPULAR PROMPTS</span>
+        {EXAMPLES.map(example => (
           <button
             type="button"
-            className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy', isWideAreaBlocked && 'is-blocked')}
-            onClick={submit}
-            disabled={busy || (!running && !canDeploy)}
-            title={isWideAreaBlocked ? 'District and state lists are a custom service. Please pick a city, town or village.' : undefined}
+            key={example}
+            className={cx(draft === example && 'is-active')}
+            onClick={() => { handleQuery(example); inputRef.current?.focus(); }}
           >
-            <span className="v2-btn-shimmer" />
-            {busy
-              ? <Loader2 size={16} className="v2-spin" />
-              : running
-                ? <Square size={14} />
-                : isWideAreaBlocked
-                  ? <AlertTriangle size={15} />
-                  : <Zap size={16} />}
-            <span>{busy ? 'STARTING...' : running ? 'STOP SWARM' : isWideAreaBlocked ? 'SELECT CITY / MANDAL' : 'DEPLOY INTELLIGENCE SWARM'}</span>
+            {example}
           </button>
-        </div>
-
-        {/* Suggestion Dropdown */}
-        {open && visible.length > 0 && (
-          <div className="v2-suggest" role="listbox">
-            <SuggestionList
-              groups={groups}
-              active={active}
-              onPick={choose}
-              onHover={setActive}
-            />
-            <footer className="v2-suggest-foot">
-              <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-              <span><kbd>↵</kbd> select</span>
-              <span><kbd>esc</kbd> close</span>
-              {loading && <span className="v2-suggest-loading"><Loader2 size={10} className="v2-spin" /> searching index</span>}
-            </footer>
-          </div>
-        )}
+        ))}
       </div>
-
-      {/* Autocorrect Intelligence Pill */}
-      {autocorrectItem && (
-        <div className="v2-autocorrect-banner">
-          <Sparkles size={13} className="v2-text-cyan" />
-          <span>Intelligent Auto-Correction:</span>
-          <button type="button" className="v2-autocorrect-pill" onClick={() => choose(autocorrectItem)}>
-            <span>Did you mean <b>{autocorrectItem.label}</b>?</span>
-            <Check size={11} />
-          </button>
-        </div>
-      )}
-
-      {/* Live Semantic Parsing Intent HUD (Real-Time Feedback) */}
-      <div className="v2-intent-hud">
-        <div className="v2-hud-chips">
-          <div className={cx('v2-hud-chip chip-category', parsedCategory && 'is-locked')}>
-            <Sparkles size={11} className="v2-text-cyan" />
-            <span>Service:</span>
-            <b>{parsedCategory || 'Type what you need...'}</b>
-          </div>
-
-          <div className={cx('v2-hud-chip chip-location', parsedLocation && 'is-locked')}>
-            <MapPin size={11} className="v2-text-lime" />
-            <span>Locality:</span>
-            <b>{parsedLocation || 'Type location...'}</b>
-            {parsedZones > 1 && <span className="v2-hud-badge">{parsedZones} ZONES</span>}
-          </div>
-
-          <div className="v2-hud-chip chip-radius">
-            <Compass size={11} className="v2-text-amber" />
-            <span>Sweep:</span>
-            <b>{radius} km Radius</b>
-          </div>
-
-          <div className="v2-hud-chip chip-vectors">
-            <Cpu size={11} className="v2-text-violet" />
-            <span>Vectors:</span>
-            <b>{selectedEngines.includes('auto') ? 'Autonomous Swarm' : `${selectedEngines.length} Active`}</b>
-          </div>
-
-          {parsed?.modifiers?.phoneOnly && (
-            <div className="v2-hud-chip chip-filter">
-              <Phone size={10} className="v2-text-lime" />
-              <b>Verified Mobiles Only</b>
-            </div>
-          )}
-
-          {parsed?.modifiers?.urgent && (
-            <div className="v2-hud-chip chip-filter is-urgent">
-              <Zap size={10} className="v2-text-amber" />
-              <b>24/7 Emergency Priority</b>
-            </div>
-          )}
-
-          {parsed?.modifiers?.isB2B && (
-            <div className="v2-hud-chip chip-filter is-b2b">
-              <ShieldCheck size={10} className="v2-text-cyan" />
-              <b>B2B & Wholesale Mode</b>
-            </div>
-          )}
-
-          {locClassification && (
-            <div className={cx('v2-hud-chip chip-geo-intel', 'type-' + locClassification.type)}>
-              <span className="v2-geo-badge-tag">{locClassification.badge || '🗺️ GEO'}</span>
-              <span>Hierarchy:</span>
-              <b>{locClassification.name}</b>
-              <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
-            </div>
-          )}
-
-          <div className="v2-hud-chip chip-time">
-            <Clock size={11} className="v2-text-amber" />
-            <span>Est. Scrape:</span>
-            <b>{estimatedTimeText}</b>
-          </div>
-
-          <div className="v2-hud-chip chip-forecast">
-            <span className="v2-pulse-dot" />
-            <span>Yield Forecast:</span>
-            <b className="v2-text-lime">{expectedLeads}</b>
-          </div>
-        </div>
-      </div>
-
-      {/* Client Restriction Alert: Suggest Individual Cities & Mandals */}
-      {isWideAreaBlocked && (
-        <div className="v2-widearea-block-box">
-          <div className="v2-widearea-block-head">
-            <AlertTriangle size={15} className="v2-text-amber" />
-            <span>
-              <b>One place at a time — that is how we keep the list clean.</b>{' '}
-              A district or state list is a custom run: email support@scraper.co.in. Meanwhile, pick a city, town or village in {locClassification?.name}:
-            </span>
-          </div>
-          {Array.isArray(locClassification?.subZones) && locClassification.subZones.length > 0 && (
-            <div className="v2-widearea-pills">
-              {locClassification.subZones.slice(0, 12).map(subZone => (
-                <button
-                  key={subZone}
-                  type="button"
-                  className="v2-widearea-pill"
-                  onClick={() => {
-                    const cat = parsedCategory || 'Businesses';
-                    const newQuery = `${cat} in ${subZone}`;
-                    setDraft(newQuery);
-                    onChange?.(newQuery);
-                  }}
-                >
-                  📍 {subZone}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Live Swarm Harvesting HUD & ETA (Active when running) */}
-      {running && (
-        <div className="v2-swarm-live-hud">
-          <div className="v2-swarm-live-left">
-            <span className="v2-swarm-pulse-ring" />
-            <Activity size={15} className="v2-text-cyan v2-spin" />
-            <div className="v2-swarm-live-info">
-              <span className="v2-swarm-live-title">
-                INTELLIGENCE SWARM ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} CONSTITUENT RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
-              </span>
-              <div className="v2-swarm-live-meta">
-                <span>📍 {parsedLocation || location || 'Target Locality'} ({radius}km radius per zone)</span>
-                <span>•</span>
-                <span>⚡ Real-Time Streaming Ingestion</span>
-              </div>
-            </div>
-          </div>
-          <div className="v2-swarm-live-right">
-            <div className="v2-swarm-eta-chip">
-              <Clock size={12} className="v2-text-amber" />
-              <span>EST. HARVEST TIME:</span>
-              <b>~{etaRemaining}s remaining</b>
-            </div>
-            <div className="v2-swarm-throughput-chip">
-              <Zap size={12} className="v2-text-lime" />
-              <b>~18–24 leads/sec</b>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Example Pills */}
-      {!running && (
-        <div className="v2-console-examples">
-          <span>POPULAR PROMPTS</span>
-          {EXAMPLES.map(example => (
-            <button
-              type="button"
-              key={example}
-              className={cx(draft === example && 'is-active')}
-              onClick={() => { handleQuery(example); inputRef.current?.focus(); }}
-            >
-              {example}
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
-  );
+    )}
+  </section>
+);
 }

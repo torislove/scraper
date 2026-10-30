@@ -171,7 +171,10 @@ const FAMILY_KEYWORDS = {
     ['agency', 4], ['software', 4], ['it service', 5], ['web design', 5],
     ['digital marketing', 6], ['advertising', 5], ['insurance', 5],
     ['financial', 4], ['loan', 4], ['photographer', 5], ['videograph', 5],
-    ['printing', 4], ['translation', 5], ['recruitment', 5], ['hr service', 5],
+    ['album printing', 10], ['wedding album', 9], ['color lab', 9], ['colour lab', 9],
+    ['photo printing', 9], ['printing press', 8], ['offset printing', 8], ['digital printing', 8],
+    ['album maker', 9], ['album manufacturer', 9], ['photobook', 8], ['karizma', 8],
+    ['printing', 6], ['translation', 5], ['recruitment', 5], ['hr service', 5],
     ['event photographer', 6], ['drone', 4]
   ],
   industrial: [
@@ -288,12 +291,15 @@ function classifyCategory(category) {
 
   // Product and brand searches need the B2B supplier index. A shop that sells
   // GPUs is usually listed as "computer hardware dealer", and IndiaMART is the
-  // only engine that indexes those dealers city-wide. Never add it to wedding
-  // venue families, where it returns irrelevant banquet suppliers.
+  // only engine that indexes those dealers city-wide.
+  // Album printing, color labs, digital press, and book manufacturing
+  // are commercial B2B supplier services. They MUST run on IndiaMART even if the word
+  // "wedding" is present in the query (e.g. "wedding album printing").
+  const isPrintingOrAlbum = /\b(album|printing|print|color lab|colour lab|press|photobook|karizma|canvera|offset|flex)\b/i.test(raw);
   const intent = brandIntel.detect(raw);
   const engines = [...definition.engines];
   const cityEngines = [...definition.cityEngines];
-  if ((intent.brand || intent.product || intent.genericProduct) && bestFamily !== 'wedding') {
+  if ((intent.brand || intent.product || intent.genericProduct || isPrintingOrAlbum) && (bestFamily !== 'wedding' || isPrintingOrAlbum)) {
     if (!engines.includes('indiamart')) engines.push('indiamart');
     if (!cityEngines.includes('indiamart')) cityEngines.push('indiamart');
   }
@@ -331,7 +337,8 @@ function pickAutoEngines(classification, options = {}) {
   // searches may use those directories.
   try {
     const fidelity = require('./categoryFidelity');
-    if (info.family === 'wedding' && !fidelity.isVenueCategory(info.category)) {
+    const isPrintingOrAlbum = /\b(album|printing|print|color lab|colour lab|press|photobook|karizma|canvera|offset|flex)\b/i.test(info.category);
+    if ((info.family === 'wedding' && !fidelity.isVenueCategory(info.category)) || isPrintingOrAlbum) {
       engines = engines.filter(engine => !['mandap', 'weddingbazaar', 'weddingwire'].includes(engine));
     }
   } catch (e) {

@@ -1,0 +1,440 @@
+/* ========================================================================== */
+/* Screen Mascot Companion CSS — Living, Walking & Flying Character           */
+/* GPU-Accelerated 60FPS Realistic Keyframe Animation Engine                  */
+/* ========================================================================== */
+
+.diggy-screen-companion-layer {
+  position: fixed;
+  bottom: 18px;
+  z-index: 999999;
+  pointer-events: auto;
+  transform: translateX(-50%);
+  transition: left 0.05s linear;
+  will-change: left, transform;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+}
+
+/* --- THE CHARACTER SPRITE CONTAINER --- */
+.diggy-companion-sprite {
+  position: relative;
+  cursor: pointer;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.65));
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.diggy-companion-sprite:hover {
+  transform: scale(1.12);
+}
+
+.diggy-companion-sprite:active {
+  transform: scale(0.94) translateY(4px);
+}
+
+/* Direction flipping */
+.diggy-companion-sprite.dir-left {
+  transform: scaleX(-1);
+}
+.diggy-companion-sprite.dir-left:hover {
+  transform: scaleX(-1) scale(1.12);
+}
+
+/* --- REALISTIC NATURAL WALKING ANIMATION --- */
+.state-walking .diggy-body-group {
+  animation: real-walk-torso 0.6s infinite ease-in-out alternate;
+}
+
+.state-walking .leg-left {
+  transform-origin: 83px 132px;
+  animation: real-walk-leg-l 0.6s infinite ease-in-out;
+}
+
+.state-walking .leg-right {
+  transform-origin: 117px 132px;
+  animation: real-walk-leg-r 0.6s infinite ease-in-out;
+}
+
+.state-walking .arm-left {
+  transform-origin: 60px 85px;
+  animation: real-walk-arm-l 0.6s infinite ease-in-out;
+}
+
+.state-walking .arm-right {
+  transform-origin: 140px 85px;
+  animation: real-walk-arm-r 0.6s infinite ease-in-out;
+}
+
+@keyframes real-walk-torso {
+  0% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-3.5px) rotate(1deg); }
+  100% { transform: translateY(0) rotate(-1deg); }
+}
+
+@keyframes real-walk-leg-l {
+  0% { transform: rotate(-28deg); }
+  50% { transform: rotate(24deg) translateY(-2px); }
+  100% { transform: rotate(-28deg); }
+}
+
+@keyframes real-walk-leg-r {
+  0% { transform: rotate(24deg) translateY(-2px); }
+  50% { transform: rotate(-28deg); }
+  100% { transform: rotate(24deg) translateY(-2px); }
+}
+
+@keyframes real-walk-arm-l {
+  0% { transform: rotate(25deg); }
+  50% { transform: rotate(-25deg); }
+  100% { transform: rotate(25deg); }
+}
+
+@keyframes real-walk-arm-r {
+  0% { transform: rotate(-20deg); }
+  50% { transform: rotate(25deg); }
+  100% { transform: rotate(-20deg); }
+}
+
+/* Ground dust particles behind walking boots */
+.diggy-patrol-ground-dust {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 10px;
+  pointer-events: none;
+}
+
+.dust-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.4);
+}
+
+.dust-particle.p1 {
+  width: 5px; height: 5px; left: 10px;
+  animation: dust-puff 0.6s infinite;
+}
+.dust-particle.p2 {
+  width: 7px; height: 7px; left: 26px;
+  animation: dust-puff 0.6s infinite 0.2s;
+}
+.dust-particle.p3 {
+  width: 4px; height: 4px; left: 44px;
+  animation: dust-puff 0.6s infinite 0.4s;
+}
+
+@keyframes dust-puff {
+  0% { opacity: 0; transform: scale(0.3) translateY(0); }
+  50% { opacity: 0.8; }
+  100% { opacity: 0; transform: scale(1.6) translateY(-8px); }
+}
+
+/* --- ROBOT BREAKDANCE / VICTORY WIGGLE --- */
+.state-dance .diggy-body-group {
+  animation: robot-breakdance 0.7s infinite alternate cubic-bezier(0.17, 0.89, 0.32, 1.28);
+}
+
+.state-dance .arm-left {
+  transform-origin: 60px 85px;
+  animation: dance-wave-l 0.5s infinite alternate;
+}
+
+.state-dance .arm-right {
+  transform-origin: 140px 85px;
+  animation: dance-wave-r 0.5s infinite alternate 0.2s;
+}
+
+@keyframes robot-breakdance {
+  0% { transform: rotate(-8deg) translateY(-8px) scale(1.05); }
+  50% { transform: rotate(0deg) translateY(2px) scale(0.96); }
+  100% { transform: rotate(8deg) translateY(-8px) scale(1.05); }
+}
+
+@keyframes dance-wave-l {
+  0% { transform: rotate(-60deg); }
+  100% { transform: rotate(40deg); }
+}
+
+@keyframes dance-wave-r {
+  0% { transform: rotate(50deg); }
+  100% { transform: rotate(-70deg); }
+}
+
+/* --- FUNNY STUMBLE / TRIP OVER A WIRE --- */
+.state-trip .diggy-body-group {
+  animation: trip-fall 2.2s ease-in-out forwards;
+}
+
+@keyframes trip-fall {
+  0% { transform: rotate(0); }
+  15% { transform: rotate(35deg) translateY(10px); } /* Trip */
+  35% { transform: rotate(45deg) translateY(14px); } /* Faceplant */
+  55% { transform: rotate(15deg) translateY(6px); } /* Getting up */
+  75% { transform: rotate(-10deg) translateY(-2px); } /* Dusting off */
+  100% { transform: rotate(0) translateY(0); }
+}
+
+/* --- CORNER PEEK --- */
+.state-peek {
+  animation: corner-peek 2.5s ease-in-out;
+}
+
+@keyframes corner-peek {
+  0%, 100% { transform: translateY(0); }
+  30%, 70% { transform: translateY(24px) scale(0.9); }
+}
+
+/* --- COMIC SPEECH / SCREAM BUBBLE (ANCHORED CLEANLY ABOVE CHARACTER) --- */
+.diggy-bubble-anchor {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  width: max-content;
+  max-width: 360px;
+  transition: top 0.3s ease, bottom 0.3s ease;
+}
+
+.diggy-bubble-anchor.is-inverted {
+  bottom: auto;
+  top: calc(100% + 14px);
+}
+
+.diggy-companion-bubble {
+  position: relative;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1.5px solid #00f0ff;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 240, 255, 0.4);
+  border-radius: 16px;
+  padding: 10px 14px;
+  max-width: 340px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  backdrop-filter: blur(14px);
+  pointer-events: auto;
+}
+
+.diggy-companion-bubble.bubble-scream {
+  border-color: #f59e0b;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 24px rgba(245, 158, 11, 0.45);
+  animation: scream-shake 0.4s infinite alternate;
+}
+
+@keyframes scream-shake {
+  0% { transform: rotate(-1.5deg) scale(1); }
+  100% { transform: rotate(1.5deg) scale(1.03); }
+}
+
+.bubble-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.35;
+}
+
+.bubble-main-msg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bubble-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.bubble-action-chip {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
+  border: 1px solid #00f0ff;
+  color: #38bdf8;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.bubble-action-chip:hover {
+  background: #00f0ff;
+  color: #0a0d14;
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 4px 14px rgba(0, 240, 255, 0.5);
+}
+
+.bubble-action-chip:active {
+  transform: translateY(1px) scale(0.96);
+}
+
+.scream-flame {
+  font-size: 14px;
+}
+
+.bubble-close-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: color 0.15s ease;
+}
+
+.bubble-close-btn:hover {
+  color: #f8fafc;
+}
+
+.bubble-tail-arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 10px;
+  height: 10px;
+  background: rgba(15, 23, 42, 0.96);
+  border-right: 1.5px solid #00f0ff;
+  border-bottom: 1.5px solid #00f0ff;
+}
+
+.is-inverted .bubble-tail-arrow {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1.5px solid #00f0ff;
+  border-top: 1.5px solid #00f0ff;
+}
+
+.bubble-scream .bubble-tail-arrow {
+  border-color: #f59e0b;
+}
+
+/* --- ACTION STATUS TAG --- */
+.diggy-action-tag {
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.tag-scraping {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #b45309, #d97706);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+  animation: tag-flash 0.8s infinite alternate;
+}
+
+@keyframes tag-flash {
+  0% { transform: scale(0.95); opacity: 0.85; }
+  100% { transform: scale(1.05); opacity: 1; filter: drop-shadow(0 0 8px #f59e0b); }
+}
+
+.tag-dancing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.tag-patrol {
+  background: rgba(15, 23, 42, 0.85);
+  color: #38bdf8;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  font-size: 8px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.diggy-minimize-btn {
+  position: absolute;
+  top: 10px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.diggy-screen-companion-layer:hover .diggy-minimize-btn {
+  opacity: 1;
+}
+
+/* Minimized Floating Pill */
+.diggy-minimized-pill {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1.5px solid #00f0ff;
+  box-shadow: 0 4px 20px rgba(0, 240, 255, 0.25);
+  border-radius: 999px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e2e8f0;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.diggy-minimized-pill:hover {
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+  box-shadow: 0 6px 24px rgba(0, 240, 255, 0.4);
+}
+
+.mini-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+

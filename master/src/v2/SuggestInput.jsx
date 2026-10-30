@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowRight, Building2, Globe2, Loader2, MapPin, Search, Sparkles, Tag, Wand2
+  ArrowRight, Building2, Globe2, Loader2, MapPin, Package, Search, Sparkles, Tag, Wand2
 } from 'lucide-react';
-import { suggestSearch, suggestLocations } from './api';
+import { suggestSearch } from './api';
 import { cx } from './ui';
 
 /**
@@ -44,22 +44,6 @@ const SCOPE_BY_TYPE = {
   village: 'city'
 };
 
-function placeItem(item, index) {
-  const type = String(item.type || '').toLowerCase();
-  const name = item.name || item.display || item.value || '';
-  return {
-    key: `place-${type}-${name}-${index}`,
-    type: 'place',
-    placeType: type,
-    value: name,
-    label: name,
-    subtitle: item.display || [item.mandal, item.district, item.state].filter(Boolean).join(' · '),
-    detail: PLACE_TYPE_LABEL[type] || 'PLACE',
-    scope: SCOPE_BY_TYPE[type] || 'district',
-    raw: item
-  };
-}
-
 export default function SuggestInput({
   value = '',
   onChange,
@@ -72,6 +56,7 @@ export default function SuggestInput({
   disabled = false
 }) {
   const [items, setItems] = useState([]);
+  const [hint, setHint] = useState(null);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [active, setActive] = useState(-1);
@@ -92,6 +77,7 @@ export default function SuggestInput({
   useEffect(() => {
     if (query.length < 1) {
       setItems([]);
+      setHint(null);
       setOpen(false);
       setLoading(false);
       return undefined;
@@ -104,9 +90,23 @@ export default function SuggestInput({
       setLoading(true);
       try {
         if (kind === 'place') {
-          const list = await suggestLocations(query, 10);
+          const data = await suggestSearch({ q: query, limit: 10 });
           if (requestRef.current !== requestId) return;
-          setItems((Array.isArray(list) ? list : []).map(placeItem));
+          const places = (data?.suggestions || [])
+            .filter(item => item.type === 'location')
+            .map((item, index) => ({
+              key: `place-${item.level}-${item.value}-${index}`,
+              type: 'place',
+              placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
+              value: item.value,
+              label: item.label || item.value,
+              subtitle: item.subtitle || item.display || '',
+              detail: String(item.detail || '').toUpperCase(),
+              scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
+              raw: item
+            }));
+          setItems(places);
+          setHint(data?.disambiguation || null);
         } else {
           const data = await suggestSearch({ q: query, limit: 8 });
           if (requestRef.current !== requestId) return;
@@ -123,12 +123,14 @@ export default function SuggestInput({
               raw: item
             }));
           setItems(cats);
+          setHint(null);
         }
         setActive(-1);
         setOpen(true);
       } catch (error) {
         if (requestRef.current === requestId) {
           setItems([]);
+          setHint(null);
           setOpen(false);
         }
       } finally {
@@ -230,6 +232,12 @@ export default function SuggestInput({
 
       {open && query.length > 0 && (
         <div className="v2-suggest v2-suggest-advanced" role="listbox">
+          {hint?.question ? (
+            <div className="v2-suggest-ask">
+              <b>{hint.question}</b>
+              <span>Pick the exact level — city, district, mandal or village. The sweep size changes with it.</span>
+            </div>
+          ) : null}
           <div className="v2-suggest-groups">
             <div className="v2-suggest-grid">
               {groups.map(group => {

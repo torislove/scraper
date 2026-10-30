@@ -65,6 +65,47 @@ function closeSplash() {
   splashWindow = null;
 }
 
+/**
+ * A renderer that fails to load used to leave the window fully black with no
+ * explanation. Show the reason instead, so a failed boot is diagnosable.
+ */
+function rendererErrorPage({ title, detail, url }) {
+  const body = `
+    <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#050b16;color:#dbe7f3;font-family:Segoe UI,system-ui,sans-serif">
+      <div style="max-width:620px;padding:32px">
+        <div style="font-size:11px;letter-spacing:2px;color:#67e8f9;text-transform:uppercase">scraper.co.in</div>
+        <h1 style="font-size:22px;margin:10px 0 12px">${escapeHtml(title)}</h1>
+        <p style="color:#93a7ba;font-size:13px;line-height:1.6;margin:0 0 18px">${escapeHtml(detail)}</p>
+        ${url ? `<div style="font-size:11px;color:#6f8698;word-break:break-all;border:1px solid #16293c;border-radius:8px;padding:10px 12px;margin-bottom:18px">${escapeHtml(url)}</div>` : ''}
+        <p style="color:#93a7ba;font-size:12px;line-height:1.7;margin:0">
+          Engine → Restart retries. If this repeats, open the logs folder and send
+          <b>main.log</b> plus the newest engine log to support@scraper.co.in.
+        </p>
+      </div>
+    </body>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><head><meta charset="utf-8"><title>Scraper</title></head>${body}</html>`)}`;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function showRendererFailure(detail, url) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const page = rendererErrorPage({
+    title: 'The workspace could not load',
+    detail,
+    url
+  });
+  closeSplash();
+  mainWindow.loadURL(page).catch(() => {});
+  if (!mainWindow.isVisible()) mainWindow.show();
+}
+
 /* ------------------------------------------------------------------ */
 /* Engine                                                              */
 /* ------------------------------------------------------------------ */
@@ -179,11 +220,64 @@ function createMainWindow(baseUrl) {
   // The Windows build has no marketing site: it opens straight into the workspace.
   mainWindow.loadURL(`${baseUrl}/command`);
 
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    // -3 is ABORTED, which happens on every intentional navigation.
+    if (errorCode === -3) return;
+    log.error('[renderer] failed to load', { errorCode, errorDescription, validatedURL });
+    showRendererFailure(
+      `The engine answered, but the page did not load (${errorCode}: ${errorDescription || 'unknown'}).`,
+      validatedURL
+    );
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    log.error('[renderer] process gone', details);
+    showRendererFailure(
+      `The page process stopped (${details?.reason || 'unknown'}).`,
+      `${baseUrl}/command`
+    );
+  });
+
+  mainWindow.webContents.on('unresponsive', () => {
+    log.warn('[renderer] unresponsive');
+  });
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    closeSplash();
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
+  });
+
+  // Every renderer console error goes to main.log, so a silent blank screen
+  // leaves a trace even when DevTools is closed.
+  mainWindow.webContents.on('console-message', (...args) => {
+    try {
+      const event = args[0];
+      const level = typeof event === 'object' && event ? event.level : args[1];
+      const message = typeof event === 'object' && event ? event.message : args[2];
+      const severity = typeof level === 'number' ? level : String(level || '');
+      if (severity === 3 || severity === 2 || severity === 'error' || severity === 'warning') {
+        log.warn('[renderer console]', severity, message);
+      }
+    } catch (err) {
+      /* logging must never break startup */
+    }
+  });
+
   mainWindow.once('ready-to-show', () => {
     closeSplash();
     mainWindow.show();
     if (process.env.ELECTRON_DEV) mainWindow.webContents.openDevTools({ mode: 'detach' });
   });
+
+  // Safety net: if ready-to-show never fires, reveal the window anyway so the
+  // user sees the error page instead of an invisible black frame.
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      closeSplash();
+      mainWindow.show();
+    }
+  }, 25000).unref?.();
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);

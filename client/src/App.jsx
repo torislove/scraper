@@ -40,9 +40,73 @@ function PageLoader() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('App Uncaught Error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#0a0d14',
+          color: '#f8fafc',
+          padding: '24px',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          <div style={{
+            maxWidth: '520px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '16px',
+            padding: '28px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f87171', marginBottom: '8px' }}>
+              Workspace Encountered a Problem
+            </h2>
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '20px', lineHeight: 1.5 }}>
+              {this.state.error?.message || 'An unexpected rendering error occurred.'}
+            </p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              style={{
+                background: 'linear-gradient(135deg, #0284c7, #00f0ff)',
+                color: '#0a0d14',
+                fontWeight: 700,
+                fontSize: '12px',
+                border: 'none',
+                padding: '10px 24px',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              Reload Workspace
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <>
+    <ErrorBoundary>
       <Toaster
         position="top-right"
         toastOptions={{
@@ -79,6 +143,6 @@ export default function App() {
           <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
         </Routes>
       </Suspense>
-    </>
+    </ErrorBoundary>
   );
 }

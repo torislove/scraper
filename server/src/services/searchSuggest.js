@@ -15,6 +15,29 @@ const brandIntel = require('./brandIntel');
 const { normalizePrepositionTypos } = require('../utils/queryParser');
 
 const PREPOSITION_SPLIT = /^(.*?)\s+(?:in|near|around|within|at|across)\s+(.+)$/i;
+const PLACE_SUFFIX = /^(.*?)\s+(district|mandal|mandals|tehsil|taluk|circle|block|city|town|village|state)$/i;
+const SUFFIX_LEVEL = {
+  district: 'district',
+  mandal: 'mandal',
+  mandals: 'mandal',
+  tehsil: 'mandal',
+  taluk: 'mandal',
+  circle: 'mandal',
+  block: 'mandal',
+  city: 'city',
+  town: 'town',
+  village: 'village',
+  state: 'state'
+};
+const LEVEL_RANK = { city: 0, town: 1, district: 2, mandal: 3, state: 4, village: 5 };
+const LEVEL_LABEL = {
+  city: 'City',
+  town: 'Town',
+  district: 'District',
+  mandal: 'Mandal',
+  state: 'State',
+  village: 'Village'
+};
 const LOCATION_LEVELS = {
   city: 'city',
   town: 'town',
@@ -271,6 +294,32 @@ function detectFragments(query) {
   }
 
   const words = text.split(/\s+/).filter(Boolean);
+
+  // "Guntur District", "Tenali Mandal", "Guntur City" — the suffix decides the
+  // level even when the name exists at several levels.
+  if (PLACE_SUFFIX.test(text) && findPlaceVariants(text, 3).length) {
+    return {
+      categoryFragment: '',
+      locationFragment: text,
+      splitBy: 'place-with-type',
+      locationCorrectedFrom: ''
+    };
+  }
+
+  // An exact place name wins over a fuzzy category match. This is what makes
+  // "Vijayawada", "Tenali" and "Nellore" places instead of categories.
+  const directPlaces = findLocations(text, 6);
+  const exactPlace = directPlaces.find(place => norm(place.value) === norm(text));
+  const exactCategory = categoryRouter.suggestCategories(text, 1).some(match => match.score >= 990);
+  if (exactPlace && !exactCategory) {
+    return {
+      categoryFragment: '',
+      locationFragment: exactPlace.value,
+      splitBy: 'standalone-location',
+      locationCorrectedFrom: ''
+    };
+  }
+
   for (let take = Math.min(4, words.length - 1); take >= 1; take--) {
     const suffix = words.slice(-take).join(' ');
     if (suffix.length < 3) continue;
@@ -288,15 +337,15 @@ function detectFragments(query) {
     }
   }
 
-  // Standalone location detection: if the query itself is a known place or city (e.g. "Tenali", "Vijayawada Rural", "Hyderabad")
-  const directPlaces = findLocations(text, 3);
-  if (directPlaces.length > 0) {
-    const isCat = categoryRouter.suggestCategories(text, 1).some(c => c.score >= 800);
+  // Fallback standalone detection for prefix typing ("vijaya", "guntu").
+  const prefixPlaces = findLocations(text, 3);
+  if (prefixPlaces.length > 0) {
+    const isCat = categoryRouter.suggestCategories(text, 1).some(c => c.score >= 950);
     if (!isCat) {
       return {
         categoryFragment: '',
-        locationFragment: directPlaces[0].value || text,
-        locationCorrectedFrom: directPlaces[0].corrected ? text : '',
+        locationFragment: prefixPlaces[0].value || text,
+        locationCorrectedFrom: prefixPlaces[0].corrected ? text : '',
         splitBy: 'standalone-location'
       };
     }
@@ -376,6 +425,119 @@ function filterRelevantCategories(matches, fragment, intent) {
 }
 
 /**
+ * Every level that shares a name, so "guntur" can ask "city or district?".
+ * Direct O(1) map lookups, no fuzzy scan: this is the fast path that runs on
+ * every place keystroke.
+ */
+function findPlaceVariants(text, limit = 6) {
+  const raw = clean(text);
+  if (raw.length < 3) return [];
+  const suffixMatch = raw.match(PLACE_SUFFIX);
+  const suffix = suffixMatch ? suffixMatch[2].toLowerCase() : '';
+  const base = clean(suffixMatch ? suffixMatch[1] : raw);
+  const key = norm(base);
+  if (!key) return [];
+
+  const only = suffix ? SUFFIX_LEVEL[suffix] : '';
+  const out = [];
+  const push = variant => {
+    if (!variant) return;
+    if (only && variant.level !== only) return;
+    const duplicate = out.some(item => item.level === variant.level
+      && norm(item.value) === norm(variant.value)
+      && norm(item.state) === norm(variant.state));
+    if (!duplicate) out.push(variant);
+  };
+
+  let geo;
+  try {
+    geo = getGeo();
+  } catch (error) {
+    return [];
+  }
+
+  const state = geo.statesMap && geo.statesMap.get(key);
+  if (state) {
+    push({
+      value: state.state,
+      label: state.state,
+      display: `${state.state}, India`,
+      level: 'state',
+      scope: 'state',
+      detail: 'State',
+      state: state.state,
+      district: '',
+      mandal: '',
+      lat: null,
+      lng: null,
+      corrected: false,
+      explicit: true
+    });
+  }
+
+  const district = geo.districtsMap && geo.districtsMap.get(key);
+  if (district) {
+    push({
+      value: `${district.district} District`,
+      label: `${district.district} District`,
+      display: `${district.district} District, ${district.state}`,
+      level: 'district',
+      scope: 'district',
+      detail: 'District',
+      state: district.state,
+      district: district.district,
+      mandal: '',
+      lat: null,
+      lng: null,
+      corrected: false,
+      explicit: true
+    });
+  }
+
+  const mandals = (geo.subDistrictsMap && geo.subDistrictsMap.get(key)) || [];
+  mandals.slice(0, 2).forEach(mandal => {
+    push({
+      value: `${mandal.subDistrict} Mandal`,
+      label: `${mandal.subDistrict} Mandal`,
+      display: `${mandal.subDistrict} Mandal, ${mandal.district}, ${mandal.state}`,
+      level: 'mandal',
+      scope: 'mandal',
+      detail: 'Mandal',
+      state: mandal.state,
+      district: mandal.district,
+      mandal: mandal.subDistrict,
+      lat: null,
+      lng: null,
+      corrected: false,
+      explicit: true
+    });
+  });
+
+  for (const item of findLocations(base, 10)) {
+    if (norm(item.value) !== key) continue;
+    push({
+      value: item.value,
+      label: item.value,
+      display: item.display,
+      level: item.level,
+      scope: item.level === 'village' ? 'city' : item.level,
+      detail: LEVEL_LABEL[item.level] || 'Place',
+      state: item.state || '',
+      district: item.district || '',
+      mandal: item.mandal || '',
+      lat: item.lat,
+      lng: item.lng,
+      corrected: false,
+      explicit: true
+    });
+  }
+
+  return out
+    .sort((a, b) => (LEVEL_RANK[a.level] ?? 9) - (LEVEL_RANK[b.level] ?? 9))
+    .slice(0, limit);
+}
+
+/**
  * @param {object} options
  * @param {string} options.q          full free-text query
  * @param {string} options.category   explicit category fragment (advanced form)
@@ -411,7 +573,11 @@ function suggest(options = {}) {
     categoryFragment,
     intent
   );
-  let locationMatches = findBestPlace(locationFragment, limit);
+  // Named places: return every level that shares the name (city, district,
+  // mandal, state), which is what drives the "Guntur city or Guntur district?"
+  // chooser. Prefix typing falls back to the fuzzy place search.
+  const placeVariants = locationFragment ? findPlaceVariants(locationFragment, limit) : [];
+  let locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit);
   const correctedLocation = locationMatches[0]?.corrected ? locationMatches[0] : null;
   if (correctedLocation) locationCorrectedFrom = correctedLocation.correctedFrom || locationFragment;
   else if (!locationMatches.length && locationFragment) {
@@ -484,8 +650,9 @@ function formatVectorDetail(engines) {
         match.district && norm(match.district) !== norm(match.value) ? `District: ${match.district}` : (match.district ? `District: ${match.district}` : ''),
         match.state
       ].filter(Boolean).join(' • '),
-      detail: match.level === 'village' ? 'Village' : match.level === 'mandal' ? 'Mandal' : match.level === 'district' ? 'District' : match.level === 'state' ? 'State' : 'City',
+      detail: LEVEL_LABEL[match.level] || 'City',
       level: match.level,
+      scope: match.scope || (match.level === 'village' ? 'city' : match.level),
       lat: match.lat,
       lng: match.lng,
       corrected: index === 0
@@ -512,6 +679,23 @@ function formatVectorDetail(engines) {
     },
     category: bestCategory,
     location: bestLocation,
+    disambiguation: (() => {
+      const levels = [...new Set(locationMatches.map(match => match.level).filter(Boolean))];
+      if (placeVariants.length < 2 || levels.length < 2) return null;
+      const baseName = clean(locationFragment).replace(PLACE_SUFFIX, '$1').trim();
+      return {
+        name: baseName,
+        question: `Which ${titleCase(baseName)}?`,
+        levels,
+        options: placeVariants.map(variant => ({
+          value: variant.value,
+          level: variant.level,
+          detail: variant.detail,
+          state: variant.state || '',
+          district: variant.district || ''
+        }))
+      };
+    })(),
     suggestions,
     counts: {
       categories: categoryMatches.length,

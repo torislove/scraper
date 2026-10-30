@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown,
+  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown, Clock, Compass,
   ChevronLeft, ChevronRight, CircleDot, Copy, Crosshair, Database, Download,
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
@@ -12,6 +12,7 @@ import {
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
+import ScreenMascotCompanion from './ScreenMascotCompanion';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
@@ -25,12 +26,12 @@ import {
 } from './ui';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
-import NotificationBell from './NotificationBell';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 const SORTS = [
   ['newest', 'Newest first'],
   ['rating', 'Highest rating'],
+  ['reviews', 'Most reviews'],
   ['quality', 'Best profile'],
   ['name', 'Name A–Z']
 ];
@@ -368,6 +369,7 @@ function FolderView({
 }) {
   const session = view?.session;
   const leads = Array.isArray(session?.leads) ? session.leads : [];
+  const isMasterSweep = Boolean(session?.isMasterSweep || view?.run?.isMasterSweep || /master_/i.test(session?.id || '') || /sweep/i.test(session?.location || ''));
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedLocality, setSelectedLocality] = useState('all');
@@ -452,8 +454,8 @@ function FolderView({
   };
 
   const copyAllMobiles = () => {
-    const targetLeads = selectedIds.size > 0 
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`)) 
+    const targetLeads = selectedIds.size > 0
+      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
       : phoneLeads;
     const rawPhones = targetLeads.map(l => {
       const p = getDisplayPhone(l);
@@ -473,8 +475,8 @@ function FolderView({
   };
 
   const downloadPhoneListTxt = () => {
-    const targetLeads = selectedIds.size > 0 
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`)) 
+    const targetLeads = selectedIds.size > 0
+      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
       : phoneLeads;
     const rawPhones = targetLeads.map(l => {
       const p = getDisplayPhone(l);
@@ -500,8 +502,8 @@ function FolderView({
   };
 
   const downloadVcfContacts = () => {
-    const targetLeads = selectedIds.size > 0 
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`)) 
+    const targetLeads = selectedIds.size > 0
+      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
       : phoneLeads;
     if (!targetLeads.length) {
       toast.error('No leads with phone numbers to export.');
@@ -515,7 +517,7 @@ function FolderView({
       const cleanName = (l.name || 'Business Contact').replace(/[;,\n]/g, ' ');
       return `BEGIN:VCARD\nVERSION:3.0\nFN:${cleanName}\nORG:${cleanName}\nTEL;TYPE=CELL,VOICE:${phoneNum}\nNOTE:${l.category || ''} - ${[l.area, l.city].filter(Boolean).join(', ')}\nEND:VCARD`;
     }).filter(Boolean).join('\n');
-    
+
     const blob = new Blob([cards], { type: 'text/vcard;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -529,7 +531,7 @@ function FolderView({
   };
 
   const exportSelectedCsv = () => {
-    const rows = selectedIds.size > 0 
+    const rows = selectedIds.size > 0
       ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
       : filtered;
     if (!rows.length) {
@@ -668,7 +670,7 @@ function FolderView({
           </div>
         </div>
 
-        {/* Quick actions ribbon — every option at the user's fingertips */}
+        {/* Master Actions Ribbon — ALL OPTIONS at user's fingertips */}
         <div className="v2-folder-actions-ribbon">
           <div className="v2-ribbon-group">
             <span className="v2-ribbon-label">OUTREACH &amp; EXPORT:</span>
@@ -833,7 +835,7 @@ function FolderView({
         {/* Locality Quick Chips Strip (if multiple localities found) */}
         {localityStats.length > 1 && (
           <div className="v2-folder-locality-strip">
-            <span className="v2-locality-strip-title">AREAS:</span>
+            <span className="v2-locality-strip-title">{isMasterSweep ? '🗺️ MANDALS & ZONES (' + localityStats.length + ' COVERED):' : 'AREAS:'}</span>
             <button
               type="button"
               className={cx('v2-loc-chip', selectedLocality === 'all' && 'is-active')}
@@ -927,7 +929,7 @@ function FolderView({
                         <small className="v2-tc-cat">
                           {[lead.area, lead.city || lead.village].filter(Boolean).join(', ') || 'Local'}
                           {lead.rating != null && (
-                            <span className="v2-tc-star">★ {Number(lead.rating).toFixed(1)}</span>
+                            <span className="v2-tc-star">★ {Number(lead.rating).toFixed(1)} {lead.reviewsCount ? `(${formatNumber(lead.reviewsCount)})` : ''}</span>
                           )}
                         </small>
                       </div>
@@ -1678,7 +1680,7 @@ function MergeModal({ folders, onClose, onMerge, isMerging }) {
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Consolidated Outreach Vault"
+              placeholder="e.g. Master Consolidated Outreach Vault"
               required
             />
           </label>
@@ -1756,8 +1758,8 @@ export default function CommandCenter() {
   const [isMerging, setIsMerging] = useState(false);
 
   const [form, setForm] = useState({
-    category: 'Plumbers',
-    location: 'Vijayawada',
+    category: '',
+    location: '',
     strategy: 'broad',
     targetLeads: 100,
     serp: true,
@@ -1776,7 +1778,7 @@ export default function CommandCenter() {
   // post-run deep extraction are resolved server-side by the category router.
   const [runMode, setRunMode] = useState('auto');
   const [autoQuery, setAutoQuery] = useState(
-    routerLocation.state?.query || 'Plumbers in Vijayawada'
+    routerLocation.state?.query || ''
   );
   const [activeZone, setActiveZone] = useState(null);
   const [gridZones, setGridZones] = useState([]);
@@ -2133,9 +2135,12 @@ export default function CommandCenter() {
   // Progress completion and watchdog: never leave a run stuck in "running".
   useEffect(() => {
     if (run?.status === 'running' && progress && progress.sessionActive === false) {
-      finishRun(progress.error ? 'error' : 'complete');
+      // Guard: strictly ensure progress event belongs to current run and run has been active >= 3 seconds
+      if ((!progress.sessionId || progress.sessionId === run.id) && (Date.now() - (run.startedAt || 0) > 3000)) {
+        finishRun(progress.error ? 'error' : 'complete');
+      }
     }
-  }, [progress, run?.status, finishRun]);
+  }, [progress, run?.status, run?.id, run?.startedAt, finishRun]);
 
   useEffect(() => {
     if (run?.status !== 'running') return undefined;
@@ -2151,13 +2156,13 @@ export default function CommandCenter() {
         const matching = list.find(job => job.id === run.id || job.sessionId === run.id);
         if (matching?.status === 'completed') {
           finishRun('complete');
-        } else if (!matching && Date.now() - lastEventRef.current > 32000) {
+        } else if (!matching && (Date.now() - (run.startedAt || 0) > 60000) && (Date.now() - lastEventRef.current > 90000)) {
           finishRun('complete');
         }
       } catch (error) { /* ignore */ }
     }, 5000);
     return () => clearInterval(id);
-  }, [run?.status, run?.id, finishRun]);
+  }, [run?.status, run?.id, run?.startedAt, finishRun]);
 
   // Deep job polling.
   useEffect(() => {
@@ -2581,7 +2586,36 @@ export default function CommandCenter() {
     if (!runCard?.id || folderLoading) return;
     setFolderLoading(runCard.id);
     try {
-      const session = await getSessionVault(runCard.id);
+      let session = null;
+      try {
+        session = await getSessionVault(runCard.id);
+      } catch (err) {
+        console.warn('Backend getSessionVault error:', err);
+      }
+
+      // Client-side fallback: resolve leads from in-memory vendors if backend lookup failed
+      if (!session && Array.isArray(vendors) && vendors.length > 0) {
+        const matchingLeads = vendors.filter(v =>
+          v.sessionId === runCard.id ||
+          v.lastSessionId === runCard.id ||
+          (Array.isArray(runCard.vendorIds) && runCard.vendorIds.includes(v.id))
+        );
+        if (matchingLeads.length > 0) {
+          session = {
+            id: runCard.id,
+            name: runCard.name || runCard.category || 'Search Folder',
+            category: runCard.category || matchingLeads[0]?.category || 'Business Search',
+            location: runCard.location || matchingLeads[0]?.location || 'India',
+            timestamp: runCard.timestamp || new Date().toISOString(),
+            leads: matchingLeads,
+            leadCount: matchingLeads.length,
+            phoneCount: matchingLeads.filter(l => l.phone).length,
+            verifiedCount: matchingLeads.filter(l => l.verified).length,
+            metadata: { status: 'completed' }
+          };
+        }
+      }
+
       if (!session) {
         toast.error('This folder is empty or was removed.');
         return;
@@ -2676,7 +2710,13 @@ export default function CommandCenter() {
     });
 
     list = [...list].sort((a, b) => {
-      if (filters.sort === 'rating') return (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      if (filters.sort === 'rating') {
+        const rA = Number(a.rating) || 0;
+        const rB = Number(b.rating) || 0;
+        if (rB !== rA) return rB - rA;
+        return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
+      }
+      if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
       if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
       if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
@@ -2741,6 +2781,8 @@ export default function CommandCenter() {
       if (session.dealValueTotal != null && Number(session.dealValueTotal) > 0) {
         existing.dealValueTotal = Number(session.dealValueTotal);
       }
+      existing.isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
+      existing.masterScope = session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null);
       existing.status = session.metadata?.status || existing.status;
       map.set(session.id, existing);
     }
@@ -2800,10 +2842,24 @@ export default function CommandCenter() {
     : runTotal ? Math.round((runDone / runTotal) * 100) : 0;
 
   const mapCenter = useMemo(() => {
-    const lat = Number(estimate?.location?.lat);
-    const lng = Number(estimate?.location?.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return [lat, lng];
-    const coords = filteredVendors
+    // 1. If actively scanning an area, center map directly on active zone coordinate
+    if (activeZone?.lat && activeZone?.lng && Number.isFinite(Number(activeZone.lat))) {
+      return [Number(activeZone.lat), Number(activeZone.lng)];
+    }
+    // 2. If radar grid zones are loaded for this search, focus on first/center zone
+    if (gridZones.length > 0 && gridZones[0]?.lat && gridZones[0]?.lng) {
+      return [Number(gridZones[0].lat), Number(gridZones[0].lng)];
+    }
+    // 3. If estimator resolved coordinates for this target city/mandal
+    const estLat = Number(estimate?.location?.lat);
+    const estLng = Number(estimate?.location?.lng);
+    if (Number.isFinite(estLat) && Number.isFinite(estLng) && estLat && estLng) {
+      return [estLat, estLng];
+    }
+    // 4. If current run has vendor leads
+    const runLeads = run?.id ? filteredVendors.filter(v => v.sessionId === run.id || v.lastSessionId === run.id) : [];
+    const targetVendors = runLeads.length > 0 ? runLeads : filteredVendors;
+    const coords = targetVendors
       .map(vendor => [Number(vendor.latitude), Number(vendor.longitude)])
       .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && a >= 6 && a <= 38 && b >= 68 && b <= 98);
     if (!coords.length) return [22.5937, 79.9629];
@@ -2811,9 +2867,9 @@ export default function CommandCenter() {
       coords.reduce((sum, pair) => sum + pair[0], 0) / coords.length,
       coords.reduce((sum, pair) => sum + pair[1], 0) / coords.length
     ];
-  }, [estimate, filteredVendors]);
+  }, [activeZone, gridZones, estimate, run?.id, filteredVendors]);
 
-  const mapZoom = estimate?.location?.lat ? 10 : 5;
+  const mapZoom = (activeZone?.lat || gridZones.length > 0 || estimate?.location?.lat) ? 12 : 5;
   const mapZones = useMemo(() => {
     if (gridZones.length) return gridZones;
     return (estimate?.zones?.preview || []).map(zone => ({ ...zone, zoneName: zone.zoneName || zone.name }));
@@ -2856,7 +2912,6 @@ export default function CommandCenter() {
           </StatusPill>
           <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · India</span>
 
-          <NotificationBell />
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
             <button
@@ -3037,6 +3092,8 @@ export default function CommandCenter() {
             running={run?.status === 'running'}
             compact={activeTab === 'cockpit'}
             onResolve={setScanPlan}
+            progress={progress}
+            eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
           />
 
           <section className="v2-cmd-stats">
@@ -3045,6 +3102,32 @@ export default function CommandCenter() {
             <MetricCard label="COMPLETE PROFILES" value={formatNumber(stats.deep)} sub={`${stats.avg}% avg profile quality`} icon={Zap} tone="violet" />
             <MetricCard label="SAVED FOLDERS" value={formatNumber(effectiveRuns.length)} sub={`${formatNumber(estimate?.zones?.count || 0)} areas in this search`} icon={FolderArchive} tone="amber" />
           </section>
+
+          {run?.status === 'running' && (
+            <div className="v2-live-run-strip">
+              <div className="v2-live-run-pulse" />
+              <div className="v2-live-run-info">
+                <span className="v2-live-run-badge">SWARM HARVESTING ACTIVE</span>
+                <b>{run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}</b>
+                {progress?.activeMandal && <span className="v2-live-zone-chip">📍 {progress.activeMandal}</span>}
+              </div>
+              <div className="v2-live-run-metrics">
+                <div className="v2-live-metric-item">
+                  <Users size={13} className="v2-text-lime" />
+                  <span>LEADS:</span>
+                  <b>{formatNumber(runLeadCount)}</b>
+                </div>
+                <div className="v2-live-metric-item">
+                  <Clock size={13} className="v2-text-amber" />
+                  <span>EST. TIME:</span>
+                  <b>{progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : 'Calculating…')}</b>
+                </div>
+                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun} title="Safely stop swarm and save collected leads">
+                  <Square size={11} /> Stop
+                </button>
+              </div>
+            </div>
+          )}
 
           {currentDeep && ['queued', 'running', 'stopping'].includes(currentDeep.status) && (
             <div className="v2-deep-banner">
@@ -3623,6 +3706,13 @@ export default function CommandCenter() {
           isMerging={isMerging}
         />
       )}
+
+      {/* Living 3D Screen Mascot Companion ("Diggy") */}
+      <ScreenMascotCompanion
+        scraping={scanning}
+        activeZone={activeZone?.name || activeZone?.zoneName || ''}
+        leadsFound={vendors.length}
+      />
     </div>
   );
 }

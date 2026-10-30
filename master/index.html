@@ -15,6 +15,40 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var shown = false;
+        function show(title, detail) {
+          if (shown) return;
+          shown = true;
+          var panel = document.createElement('div');
+          panel.id = 'boot-error';
+          panel.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#050b16;color:#dbe7f3;font:13px/1.65 Segoe UI,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:32px';
+          panel.innerHTML = '<div style="max-width:640px">'
+            + '<div style="font-size:11px;letter-spacing:2px;color:#67e8f9">SCRAPER.CO.IN</div>'
+            + '<h1 style="font-size:20px;margin:10px 0 12px">' + title + '</h1>'
+            + '<p style="color:#93a7ba;margin:0 0 14px;white-space:pre-wrap">' + detail + '</p>'
+            + '<p style="color:#6f8698;margin:0">If this repeats, email support@scraper.co.in with this text.</p>'
+            + '</div>';
+          document.body.appendChild(panel);
+        }
+        window.addEventListener('error', function (event) {
+          var message = event && event.message ? event.message : 'Unknown script error';
+          var where = event && event.filename ? ' (' + event.filename + ':' + (event.lineno || 0) + ')' : '';
+          show('The app hit a script error', message + where);
+        });
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event && event.reason ? (event.reason.stack || event.reason.message || String(event.reason)) : 'Unknown promise rejection';
+          show('The app hit a startup error', String(reason).slice(0, 1400));
+        });
+        setTimeout(function () {
+          var root = document.getElementById('root');
+          if (root && !root.childElementCount && !shown) {
+            show('Still starting…', 'The interface has not rendered yet. The local engine can take 40–50 seconds on a cold start. If this stays blank, use Engine → Restart or reopen the app.');
+          }
+        }, 45000);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

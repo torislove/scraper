@@ -74,6 +74,20 @@ router.get('/taxonomy', (req, res) => {
 });
 
 /**
+ * POST /api/search/taxonomy/seed
+ * Seeds the autonomous learning store with high-yield universal Indian services.
+ */
+router.post('/taxonomy/seed', (req, res) => {
+  try {
+    const taxonomyLearner = require('../services/taxonomyLearner');
+    const result = taxonomyLearner.seedUniversal();
+    res.json({ ok: true, message: `Successfully seeded ${result.seeded} universal service categories.`, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/search/classify?q=...
  *
  * Dedicated standalone location classification endpoint for instant HUD badges.

@@ -36,6 +36,20 @@ function hasAny(text, words) {
 
 const ROLES = [
   {
+    id: 'album_printing',
+    label: 'Album Printing & Color Lab',
+    match: ['album printing', 'wedding album printing', 'album print', 'album lab', 'color lab', 'colour lab', 'digital color lab', 'digital album', 'photo album maker', 'album manufacturing', 'photo book printing', 'photobook', 'photo book', 'karizma album', 'canvera', 'album binding', 'photo printing lab', 'photo printing press', 'album maker', 'photo album'],
+    wants: ['album', 'color lab', 'colour lab', 'printing lab', 'print lab', 'digital lab', 'photo lab', 'album lab', 'photobook', 'photo book', 'karizma', 'canvera', 'press', 'offset', 'printing works', 'album maker', 'album manufacture', 'binding', 'lamination', 'digital press', 'print solution', 'photo print', 'photo printing', 'printing services', 'printing'],
+    avoids: ['photo studio', 'photography studio', 'wedding photographer', 'wedding photography', 'candid photography', 'candid photographer', 'cinematography', 'videography', 'video shoot', 'photoshoot', 'photo shoot', 'banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'caterer', 'catering', 'decorator', 'makeup']
+  },
+  {
+    id: 'printing',
+    label: 'Printing & Press',
+    match: ['printing', 'printing press', 'flex printing', 'offset printing', 'digital printing', 'screen printing', 'visiting card printing', 'banner printing', 'brochure printing', 'dtp works', 'pamphlet printing'],
+    wants: ['printing', 'printer', 'printers', 'press', 'offset', 'flex', 'banner', 'dtp', 'graphics', 'screen printing', 'digital printing', 'visiting card', 'brochure', 'lamination', 'binding'],
+    avoids: ['photo studio', 'wedding photographer', 'banquet', 'function hall', 'caterer', 'makeup']
+  },
+  {
     id: 'photographer',
     label: 'Photography',
     match: ['photograph', 'photographer', 'photography', 'photo studio', 'photo shoot', 'photoshoot', 'videograph', 'cinematograph', 'candid photography', 'drone photography', 'camera'],
@@ -146,6 +160,55 @@ const ROLES = [
     match: ['ac repair', 'air conditioning', 'ac service', 'hvac', 'refrigerator repair', 'fridge repair'],
     wants: ['ac repair', 'air conditioner', 'ac service', 'hvac', 'cooling', 'fridge', 'refrigerator', 'compressor', 'gas refilling'],
     avoids: ['plumber', 'sanitary', 'pipe', 'interior design', 'furniture', 'photo studio', 'wedding hall', 'catering']
+  },
+  {
+    id: 'waterpurifier',
+    label: 'Water Purifier & RO',
+    match: ['water purifier', 'ro service', 'ro repair', 'aquaguard', 'water filter', 'ro plant'],
+    wants: ['water purifier', 'ro ', 'aquaguard', 'water filter', 'membrane', 'purifier repair', 'mineral water'],
+    avoids: ['solar', 'battery', 'interior', 'photo studio', 'wedding', 'caterer', 'venue', 'dentist']
+  },
+  {
+    id: 'fabrication',
+    label: 'Fabrication & Welding',
+    match: ['fabrication', 'welder', 'welding', 'steel fabricator', 'iron grill', 'shed work', 'aluminium fabrication'],
+    wants: ['fabricat', 'welder', 'welding', 'grill', 'gate', 'shed', 'steel', 'iron', 'aluminium', 'railing'],
+    avoids: ['plumber', 'photo studio', 'wedding', 'caterer', 'venue', 'beauty', 'dentist', 'clinic']
+  },
+  {
+    id: 'borewell',
+    label: 'Borewell & Drilling',
+    match: ['borewell', 'drilling', 'bore well', 'submersible pump', 'borewell drilling'],
+    wants: ['borewell', 'bore well', 'drilling', 'submersible', 'rig', 'motor pump'],
+    avoids: ['tap repair', 'bathroom fitting', 'photo studio', 'wedding', 'caterer', 'interior']
+  },
+  {
+    id: 'cardetailing',
+    label: 'Car Detailing & Wash',
+    match: ['car wash', 'car detailing', 'ceramic coating', 'car polish', 'teflon coating', 'water wash'],
+    wants: ['car wash', 'detailing', 'ceramic', 'coating', 'polish', 'foam wash', 'spa', 'auto clean'],
+    avoids: ['spare parts', 'tyre shop', 'car dealer', 'photo studio', 'wedding', 'dentist']
+  },
+  {
+    id: 'pestcontrol',
+    label: 'Pest Control',
+    match: ['pest control', 'termite', 'fumigation', 'cockroach control', 'bedbug'],
+    wants: ['pest control', 'termite', 'pest', 'fumigation', 'disinfection', 'rodent'],
+    avoids: ['plumber', 'electrician', 'photo studio', 'wedding', 'caterer', 'venue']
+  },
+  {
+    id: 'packers',
+    label: 'Packers & Movers',
+    match: ['packer', 'mover', 'packers and movers', 'relocation', 'shifting service'],
+    wants: ['packers', 'movers', 'relocation', 'shifting', 'transport', 'cargo', 'household shifting'],
+    avoids: ['plumber', 'electrician', 'photo studio', 'wedding', 'caterer', 'venue']
+  },
+  {
+    id: 'dental',
+    label: 'Dental & Dentist',
+    match: ['dentist', 'dental', 'orthodont', 'teeth', 'root canal', 'dental clinic'],
+    wants: ['dental', 'dentist', 'teeth', 'tooth', 'orthodont', 'oral', 'implant', 'smile'],
+    avoids: ['plumber', 'electrician', 'photo studio', 'wedding', 'caterer', 'venue', 'car repair']
   }
 ];
 
