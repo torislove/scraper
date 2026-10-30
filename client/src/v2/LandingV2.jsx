@@ -1,960 +1,1037 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Building2, CheckCircle2, Clock3, Cpu, Database, Download, FolderArchive,
-  Globe2, MapPin, MessageCircle, Phone, Radar as RadarIcon, Search, ShieldCheck, Smartphone, Sparkles,
-  Star, Target, TrendingUp, Users, X, Zap
+  motion, AnimatePresence, useInView, useReducedMotion, animate
+} from 'framer-motion';
+import {
+  ArrowRight, Briefcase, Check, CheckCircle2, Clock3, FolderArchive, Layers,
+  LineChart, MapPin, Phone, Play, Plus, Radar as RadarIcon, Search, Sparkles,
+  Store, Target, TrendingUp, Users, X
 } from 'lucide-react';
-import { getGeoStats } from './api';
-import { CountUp, Logo, Reveal, cx, formatNumber } from './ui';
+import './landing.css';
 
-const TYPED_QUERY = 'plumbers in Vijayawada';
+/* ------------------------------------------------------------------ */
+/* Motion helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+const EASE = [0.16, 1, 0.3, 1];
+
+function FadeUp({ children, delay = 0, y = 22, className = '', once = true }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <div className={className}>{children}</div>;
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once, margin: '-70px' }}
+      transition={{ duration: 0.62, delay, ease: EASE }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+function Stagger({ children, className = '', delay = 0, step = 0.09 }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <div className={className}>{children}</div>;
+  return (
+    <motion.div
+      className={className}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, margin: '-60px' }}
+      variants={{
+        hidden: {},
+        show: { transition: { staggerChildren: step, delayChildren: delay } }
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+const childVariant = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE } }
+};
+
+function StaggerItem({ children, className = '' }) {
+  const reduce = useReducedMotion();
+  if (reduce) return <div className={className}>{children}</div>;
+  return (
+    <motion.div className={className} variants={childVariant}>
+      {children}
+    </motion.div>
+  );
+}
+
+/* Animated number that counts up when it scrolls into view. */
+function Counter({ to, decimals = 0, prefix = '', suffix = '', duration = 1.5 }) {
+  const ref = useRef(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const reduce = useReducedMotion();
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    if (!inView) return undefined;
+    if (reduce) {
+      setValue(to);
+      return undefined;
+    }
+    const controls = animate(0, to, {
+      duration,
+      ease: EASE,
+      onUpdate: latest => setValue(latest)
+    });
+    return () => controls.stop();
+  }, [inView, to, duration, reduce]);
+
+  return (
+    <span ref={ref}>
+      {prefix}
+      {value.toFixed(decimals)}
+      {suffix}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Copy                                                                */
+/* ------------------------------------------------------------------ */
+
+const DEMO_QUERIES = [
+  'wedding photographers in Vijayawada',
+  'grocery stores in Guntur',
+  'dental clinics in Warangal'
+];
 
 const DEMO_ROWS = [
-  { name: 'Sri Balaji Plumbing Works', area: 'Benz Circle, Vijayawada', phone: '+91 98480 21456', rating: 4.6, stage: 'new' },
-  { name: 'Sai Ram Plumbers & Fittings', area: 'Gunadala, Vijayawada', phone: '+91 99631 78204', rating: 4.4, stage: 'pitched' },
-  { name: 'NTR Plumbing Services', area: 'Governorpet, Vijayawada', phone: '+91 90000 31987', rating: 4.8, stage: 'won' }
+  { name: 'Sri Balaji Digital Studio', area: 'Benz Circle, Vijayawada', phone: '+91 98480 21456' },
+  { name: 'Sai Ram Photo & Films', area: 'Gunadala, Vijayawada', phone: '+91 99631 78204' },
+  { name: 'NTR Wedding Clicks', area: 'Governorpet, Vijayawada', phone: '+91 90000 31987' }
+];
+
+const DASH_ROWS = [
+  { name: 'Sri Balaji Plumbing Works', phone: '+91 98480 21456', stage: 'is-new' },
+  { name: 'Sai Ram Plumbers & Fittings', phone: '+91 99631 78204', stage: 'is-hot' },
+  { name: 'NTR Plumbing Services', phone: '+91 90000 31987', stage: 'is-won' },
+  { name: 'Krishna Pipe Traders', phone: '+91 94910 77321', stage: 'is-new' },
+  { name: 'Lakshmi Borewells', phone: '+91 90009 11452', stage: 'is-hot' },
+  { name: 'Amar Hardware & Sanitary', phone: '+91 91778 30094', stage: 'is-new' }
+];
+
+const COMPARE = [
+  {
+    label: 'Phone quality',
+    bad: 'Landlines (080-, 040-) or switchboards. Around 65% of calls go nowhere.',
+    good: 'Direct Indian 10-digit mobiles (+91 98…, 97…, 99…). If it is not a real mobile, we drop it.'
+  },
+  {
+    label: 'Data freshness',
+    bad: 'Lists scraped 6+ months ago, copied from public dumps and resold many times.',
+    good: 'Live harvest every time you search. Closed shops and changed numbers do not come back.'
+  },
+  {
+    label: 'Data depth',
+    bad: 'A name and a phone number. Nothing else to work with.',
+    good: 'A full 52-field dossier: owner, GSTIN, pricing, hours, reviews and socials — whenever the source publishes them.'
+  },
+  {
+    label: 'Location accuracy',
+    bad: 'Messy free text like "Narasaraopet Wedding…" that cannot be filtered.',
+    good: 'A clean 4-level hierarchy: State → District → Mandal → Village.'
+  },
+  {
+    label: 'Usable hit rate',
+    bad: 'Under 3% of rows are reachable local businesses.',
+    good: 'Only validated 10-digit numbers. No pincodes, no helplines, no dummy sequences.'
+  },
+  {
+    label: 'Reply rate',
+    bad: '1.8% on cold calls, and mostly you speak to a gatekeeper.',
+    good: '14.5% reply rate when you send a one-click WhatsApp to the proprietor.'
+  }
 ];
 
 const STEPS = [
   {
     icon: Search,
-    title: 'Tell us what you need',
-    body: 'Type it the way you speak. “Banquet halls in Hyderabad” or “dentists in Guntur”. English or local spelling both work.',
-    detail: 'Instant search understands the service and the place separately.'
+    title: 'Type it the way you speak',
+    body: '“Wedding photographers in Vijayawada” or “grocery stores in Guntur”. Plain English, local spelling, either works.',
+    detail: 'We read the category and the place as two separate things.'
   },
   {
     icon: RadarIcon,
-    title: 'We scan the right places',
-    body: 'The engine automatically picks the correct public sources for that category and district. You never choose a directory.',
-    detail: 'Maps, local listings, business directories and websites — chosen per search.'
+    title: 'We search the right sources',
+    body: 'The engine picks the correct public sources for that category and district by itself. You never have to choose a directory.',
+    detail: 'Maps, local listings, business directories and the shop’s own website.'
   },
   {
     icon: Phone,
-    title: 'Call real mobile numbers',
-    body: 'Every number is checked. Pincodes, helplines, dummy sequences and duplicate rows are thrown away before you see them.',
-    detail: 'Then move each business through your own sales pipeline.'
+    title: 'Get numbers you can call',
+    body: 'Pincodes, helplines, dummy sequences and duplicates are removed before you ever see them. What is left is a real mobile.',
+    detail: 'Then push each owner through your own follow-up pipeline.'
   }
 ];
 
-const FEATURES = [
+const DASH_POINTS = [
   {
-    icon: Phone,
-    title: 'Validated mobile numbers',
-    body: 'Only real 10-digit Indian mobiles. No pincodes, no board lines, no “Requires manual lookup” placeholders.'
-  },
-  {
-    icon: Building2,
-    title: 'Complete business profiles',
-    body: 'Name, full address, category, rating, reviews, website, email, opening hours, social handles and booking links.'
-  },
-  {
-    icon: Sparkles,
-    title: 'Every category works',
-    body: 'Plumbers, electricians, showrooms, wedding venues, clinics, restaurants, B2B suppliers and more — routed automatically.'
-  },
-  {
-    icon: MapPin,
-    title: 'Live map with radar',
-    body: 'Watch the search sweep the city in zones. Real vendor pins appear as soon as each area reports back.'
-  },
-  {
-    icon: FolderArchive,
-    title: 'One folder per search',
-    body: 'Every run is saved with its category, location and leads. Reopen any past search or download it as CSV or JSON.'
+    icon: Layers,
+    title: 'Workspace — one search box',
+    body: 'Category, city and how many leads you want. That is the whole setup.'
   },
   {
     icon: Users,
-    title: 'CRM built in',
-    body: 'Seven clear stages, notes and tasks attached to the business. Your follow-ups stay with the lead, not in a notebook.'
+    title: 'Leads — the list you actually work',
+    body: 'Name, owner mobile, area, rating and full profile. Click a row to see all 52 fields.'
+  },
+  {
+    icon: MapPin,
+    title: 'Map — see the city fill up',
+    body: 'Real pins appear area by area, so you know exactly what has been covered.'
+  },
+  {
+    icon: FolderArchive,
+    title: 'Folders — nothing is ever lost',
+    body: 'Every search is saved with its category, city and leads. Reopen any old search later.'
+  },
+  {
+    icon: Target,
+    title: 'CRM — follow-up built in',
+    body: 'New, pitched, talking, qualified, won. Notes and tasks stay attached to the business.'
   }
 ];
 
-const STAGES = [
-  { label: 'New', tone: 'blue' },
-  { label: 'Pitched', tone: 'amber' },
-  { label: 'Talking', tone: 'cyan' },
-  { label: 'Qualified', tone: 'violet' },
-  { label: 'Won', tone: 'lime' }
-];
-
 const AUDIENCES = [
-  'Marketing agencies', 'Real estate teams', 'Wedding planners', 'Clinics & dentists',
-  'Interior designers', 'B2B suppliers', 'Car showrooms', 'Event companies',
-  'Gyms & studios', 'Restaurants', 'Solar installers', 'Travel operators'
+  {
+    icon: LineChart,
+    title: 'B2B SaaS & fintech',
+    body: 'Pull 500 grocery stores, restaurants or clinics with verified mobiles for a WhatsApp pitch campaign.',
+    quote: 'Reply rate moves from 1.8% to 14.5% — same team, same number of messages.'
+  },
+  {
+    icon: Store,
+    title: 'Marketplaces & aggregators',
+    body: 'Fill entire supplier networks in tier-2 and tier-3 cities — Guntur, Vijayawada, Warangal, Palnadu.',
+    quote: 'A full city list with photos and pricing in about 15 minutes.'
+  },
+  {
+    icon: Briefcase,
+    title: 'Growth agencies',
+    body: 'Hand every client their own lead vault, exported to CSV or Excel and ready for HubSpot or Notion.',
+    quote: 'Clean columns, no scientific notation, no cleaning up before import.'
+  }
 ];
 
-function useTypedDemo() {
-  const [typed, setTyped] = useState('');
-  const [phase, setPhase] = useState(0);
-  const timer = useRef(null);
+const PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    price: '₹1,999',
+    period: '/month',
+    line: 'For one person doing their own outreach.',
+    leads: '500 leads per search',
+    seats: '1 computer',
+    features: [
+      '500 leads in every search',
+      'All 52 vendor fields',
+      'Live map and saved folders',
+      'CSV and Excel export',
+      'Email support'
+    ]
+  },
+  {
+    id: 'pro',
+    name: 'Pro',
+    price: '₹3,999',
+    period: '/month',
+    line: 'For agencies running daily sweeps.',
+    leads: '2,000 leads per search',
+    seats: '3 computers',
+    featured: true,
+    features: [
+      '2,000 leads in every search',
+      'Everything in Starter',
+      'CRM with 7 stages and notes',
+      'Deep profile expansion',
+      'Priority support'
+    ]
+  },
+  {
+    id: 'agency',
+    name: 'Agency',
+    price: '₹7,999',
+    period: '/month',
+    line: 'For multi-city teams.',
+    leads: '10,000 leads per search',
+    seats: '10 computers',
+    features: [
+      '10,000 leads in every search',
+      'Everything in Pro',
+      'Multi-city category sweeps',
+      'Client-ready export templates',
+      'Onboarding call'
+    ]
+  }
+];
+
+const FAQ = [
+  {
+    q: 'Where do the numbers come from?',
+    a: 'From public business information that shops and offices already publish — maps listings, business directories and their own websites. We collect it fresh when you search, then clean and validate it. Nothing is bought from a resold list.'
+  },
+  {
+    q: 'How do I know the numbers are real?',
+    a: 'Every number is checked against Indian mobile rules: 10 digits, starts with 6, 7, 8 or 9, correct prefix. Pincodes, landlines, helplines and repeated dummy sequences are thrown away. If a field is unknown, we show “Unknown” — we never fill it with a guess.'
+  },
+  {
+    q: 'Will the same list be sold to my competitors?',
+    a: 'No. Every search runs live on your computer and the results stay on your computer. There is no shared database that gets resold, which is exactly why your list will not look like everyone else’s.'
+  },
+  {
+    q: 'Do I need a fast internet connection?',
+    a: 'A normal home broadband or mobile hotspot is enough. The heavy work happens on your own PC, not on a server, so you are not waiting in a queue behind other users.'
+  },
+  {
+    q: 'Can I export to Excel or my CRM?',
+    a: 'Yes. Every folder exports to CSV and Excel with clean columns, so numbers stay as text and never turn into scientific notation. It imports straight into HubSpot, Notion or Google Sheets.'
+  },
+  {
+    q: 'Is this allowed?',
+    a: 'You are collecting business contact details that the business itself publishes for customers to call. Use the data responsibly: contact only relevant businesses, respect do-not-disturb requests, and follow the rules of the platforms you reach out on.'
+  }
+];
+
+const CATEGORIES = [
+  'Wedding photographers', 'Banquet halls', 'Dental clinics', 'Interior designers',
+  'Plumbers', 'Electricians', 'Grocery stores', 'Restaurants', 'Real estate agents',
+  'Gyms & fitness', 'Car showrooms', 'Solar installers', 'Travel operators',
+  'Fabricators', 'Hospitals', 'Coaching centres', 'Printers', 'Caterers'
+];
+
+/* ------------------------------------------------------------------ */
+/* Hero demo console                                                   */
+/* ------------------------------------------------------------------ */
+
+const RADAR_PINS = [
+  { left: '26%', top: '34%' },
+  { left: '58%', top: '22%' },
+  { left: '72%', top: '52%' },
+  { left: '38%', top: '62%' },
+  { left: '52%', top: '74%' }
+];
+
+function DemoConsole() {
+  const reduce = useReducedMotion();
+  const [typed, setTyped] = useState(reduce ? DEMO_QUERIES[0] : '');
+  const [phase, setPhase] = useState(reduce ? 'results' : 'typing');
+  const [queryIndex, setQueryIndex] = useState(0);
 
   useEffect(() => {
-    const reduce = typeof window !== 'undefined'
-      && window.matchMedia
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) return undefined;
 
-    if (reduce) {
-      setTyped(TYPED_QUERY);
-      setPhase(2);
-      return undefined;
-    }
-
-    let index = 0;
     let alive = true;
+    let timer = null;
+    const query = DEMO_QUERIES[queryIndex];
 
+    setTyped('');
+    setPhase('typing');
+
+    let i = 0;
     const type = () => {
       if (!alive) return;
-      index += 1;
-      setTyped(TYPED_QUERY.slice(0, index));
-      if (index < TYPED_QUERY.length) {
-        timer.current = setTimeout(type, 55 + Math.random() * 45);
-      } else {
-        timer.current = setTimeout(() => {
-          if (!alive) return;
-          setPhase(1);
-          timer.current = setTimeout(() => {
-            if (!alive) return;
-            setPhase(2);
-            timer.current = setTimeout(() => {
-              if (!alive) return;
-              index = 0;
-              setTyped('');
-              setPhase(0);
-              type();
-            }, 6200);
-          }, 900);
-        }, 450);
+      i += 1;
+      setTyped(query.slice(0, i));
+      if (i < query.length) {
+        timer = setTimeout(type, 42 + Math.random() * 46);
+        return;
       }
+      timer = setTimeout(() => {
+        if (!alive) return;
+        setPhase('scanning');
+        timer = setTimeout(() => {
+          if (!alive) return;
+          setPhase('results');
+          timer = setTimeout(() => {
+            if (!alive) return;
+            setQueryIndex(prev => (prev + 1) % DEMO_QUERIES.length);
+          }, 5200);
+        }, 1700);
+      }, 420);
     };
 
-    timer.current = setTimeout(type, 700);
-    return () => { alive = false; clearTimeout(timer.current); };
-  }, []);
+    timer = setTimeout(type, 350);
 
-  return { typed, phase };
+    return () => {
+      alive = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [queryIndex, reduce]);
+
+  const scanning = phase === 'scanning';
+  const showRows = phase === 'results';
+
+  return (
+    <motion.div
+      className="lp-console"
+      initial={reduce ? false : { opacity: 0, y: 26, rotateX: 6 }}
+      animate={{ opacity: 1, y: 0, rotateX: 0 }}
+      transition={{ duration: 0.85, delay: 0.15, ease: EASE }}
+      style={{ perspective: 1200 }}
+    >
+      <div className="lp-console-top">
+        <div className="lp-dots"><span /><span /><span /></div>
+        <span className="lp-console-title">Live harvest</span>
+        <span className="lp-console-live"><i />{scanning ? 'Scanning' : showRows ? 'Ready' : 'Idle'}</span>
+      </div>
+
+      <div className="lp-console-body">
+        <div className="lp-searchbar">
+          <Search size={15} />
+          <div className="lp-searchbar-text">
+            {typed}
+            <span className="lp-caret" />
+          </div>
+        </div>
+
+        <div className="lp-radar">
+          <div className="lp-radar-sweep" />
+          {RADAR_PINS.map((pin, index) => (
+            <motion.span
+              key={index}
+              className="lp-pin-dot"
+              style={{ left: pin.left, top: pin.top }}
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{
+                opacity: scanning || showRows ? 1 : 0,
+                scale: scanning || showRows ? 1 : 0.4
+              }}
+              transition={{ duration: 0.4, delay: index * 0.16 }}
+            />
+          ))}
+          <div className="lp-console-count">
+            {scanning ? 'Sweeping 7 zones…' : showRows ? <>Found <b>42</b> businesses</> : 'Waiting for a search'}
+          </div>
+        </div>
+
+        <div className="lp-demo-rows">
+          <AnimatePresence mode="popLayout">
+            {showRows &&
+              DEMO_ROWS.map((row, index) => (
+                <motion.div
+                  key={`${queryIndex}-${row.phone}`}
+                  className="lp-demo-row"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, delay: index * 0.11, ease: EASE }}
+                >
+                  <span className="lp-demo-avatar">{row.name.charAt(0)}</span>
+                  <div className="lp-demo-main">
+                    <b>{row.name}</b>
+                    <span>{row.area}</span>
+                  </div>
+                  <span className="lp-demo-phone">{row.phone}</span>
+                  <CheckCircle2 size={13} className="lp-demo-check" />
+                </motion.div>
+              ))}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div className="lp-console-foot">
+        <span>Mobile only · validated</span>
+        <span><b>38 of 42</b> have a direct mobile</span>
+      </div>
+    </motion.div>
+  );
 }
 
-function HeroDemo({ typed, phase }) {
+/* ------------------------------------------------------------------ */
+/* Dashboard mock                                                      */
+/* ------------------------------------------------------------------ */
+
+const MAP_PINS = [
+  { left: '22%', top: '26%' },
+  { left: '46%', top: '18%' },
+  { left: '64%', top: '38%' },
+  { left: '34%', top: '52%' },
+  { left: '58%', top: '66%' },
+  { left: '76%', top: '58%' },
+  { left: '44%', top: '78%' }
+];
+
+function DashboardMock() {
+  const reduce = useReducedMotion();
+
   return (
-    <div className="v2-land-demo" aria-hidden="true">
-      <div className="v2-land-demo-glow" />
-      <header className="v2-land-demo-head">
-        <span className="v2-land-demo-dots"><i /><i /><i /></span>
-        <span>scraper.co.in / live search</span>
-        <span className="v2-land-demo-live"><i /> LIVE</span>
-      </header>
-
-      <div className="v2-land-demo-search">
-        <Search size={16} />
-        <span className="v2-land-demo-text">
-          {typed}
-          <i className="v2-land-caret" />
-        </span>
-        <span className={cx('v2-land-demo-go', phase > 0 && 'is-on')}>
-          {phase > 0 ? <CheckCircle2 size={15} /> : <ArrowRight size={15} />}
-        </span>
+    <motion.div
+      className="lp-window"
+      initial={reduce ? false : { opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.7, ease: EASE }}
+    >
+      <div className="lp-window-bar">
+        <div className="lp-dots"><span /><span /><span /></div>
+        <span className="lp-window-url">scraper — workspace</span>
       </div>
 
-      <div className="v2-land-demo-meta">
-        <span className={cx('v2-land-demo-chip', phase > 0 && 'is-ok')}>
-          <Sparkles size={10} /> Plumbers
-        </span>
-        <span className="v2-land-demo-in">in</span>
-        <span className={cx('v2-land-demo-chip', phase > 0 && 'is-ok')}>
-          <MapPin size={10} /> Vijayawada
-        </span>
-        <span className="v2-land-demo-auto">
-          <ShieldCheck size={11} /> sources chosen automatically
-        </span>
-      </div>
-
-      <div className="v2-land-demo-list">
-        {DEMO_ROWS.map((row, index) => (
-          <div
-            className={cx('v2-land-demo-row', `delay-${index}`, phase > 0 && 'is-in')}
-            key={row.name}
-          >
-            <span className="v2-land-demo-avatar">{(index + 1).toString()}</span>
-            <span className="v2-land-demo-copy">
-              <b>{row.name}</b>
-              <small>{row.area}</small>
-            </span>
-            <span className="v2-land-demo-phone">
-              <Phone size={12} /> {row.phone}
-            </span>
-            <span className={cx('v2-land-demo-stage', `tone-${row.stage}`)}>
-              {row.stage === 'new' ? 'New' : row.stage === 'pitched' ? 'Pitched' : 'Won'}
-            </span>
-          </div>
+      <div className="lp-window-tabs">
+        {['Workspace', 'Leads 120', 'Map 120', 'CRM 8', 'Folders 36'].map((tab, index) => (
+          <span key={tab} className={`lp-window-tab${index === 1 ? ' is-on' : ''}`}>{tab}</span>
         ))}
       </div>
 
-      <footer className="v2-land-demo-foot">
-        <span><i className="is-lime" /> 3 mobile numbers verified</span>
-        <span><i className="is-cyan" /> saved to “Plumbers · Vijayawada”</span>
-        <span className="v2-land-demo-time">first lead 3.4s</span>
-      </footer>
+      <div className="lp-window-body">
+        <div className="lp-window-table">
+          <div className="lp-window-tr is-head">
+            <span>Business</span>
+            <span>Mobile</span>
+            <span />
+          </div>
+          {DASH_ROWS.map((row, index) => (
+            <motion.div
+              key={row.phone}
+              className="lp-window-tr"
+              initial={reduce ? false : { opacity: 0, x: -10 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.4, delay: index * 0.07, ease: EASE }}
+            >
+              <span className="nm">{row.name}</span>
+              <span className="ph">{row.phone}</span>
+              <span className={`st ${row.stage}`} />
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="lp-window-map">
+          {MAP_PINS.map((pin, index) => (
+            <motion.span
+              key={index}
+              className="lp-map-pin"
+              style={{ left: pin.left, top: pin.top }}
+              animate={reduce ? {} : { opacity: [0.45, 1, 0.45] }}
+              transition={{ duration: 2.6, repeat: Infinity, delay: index * 0.24 }}
+            />
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Section heading                                                     */
+/* ------------------------------------------------------------------ */
+
+function SectionHead({ tag, title, sub }) {
+  return (
+    <FadeUp className="lp-section-head">
+      <span className="lp-tag">{tag}</span>
+      <h2 className="lp-h2">{title}</h2>
+      {sub ? <p className="lp-sub">{sub}</p> : null}
+    </FadeUp>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* FAQ                                                                 */
+/* ------------------------------------------------------------------ */
+
+function FaqItem({ item, isOpen, onToggle }) {
+  return (
+    <div className={`lp-faq-item${isOpen ? ' is-open' : ''}`}>
+      <button type="button" className="lp-faq-q" onClick={onToggle} aria-expanded={isOpen}>
+        {item.q}
+        <Plus size={16} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            className="lp-faq-a"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.26, ease: EASE }}
+            style={{ overflow: 'hidden' }}
+          >
+            {item.a}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function MiniRadar() {
-  const pins = [
-    { x: 62, y: 28, d: 0 },
-    { x: 36, y: 40, d: 1.2 },
-    { x: 70, y: 58, d: 2.4 },
-    { x: 45, y: 70, d: 3.1 },
-    { x: 26, y: 60, d: 4.2 }
-  ];
-  return (
-    <div className="v2-land-radar" aria-hidden="true">
-      <span className="v2-land-radar-ring r1" />
-      <span className="v2-land-radar-ring r2" />
-      <span className="v2-land-radar-ring r3" />
-      <span className="v2-land-radar-ring r4" />
-      <span className="v2-land-radar-cross x" />
-      <span className="v2-land-radar-cross y" />
-      <span className="v2-land-radar-sweep" />
-      {pins.map((pin, index) => (
-        <span
-          className="v2-land-radar-pin"
-          key={index}
-          style={{ left: `${pin.x}%`, top: `${pin.y}%`, animationDelay: `${pin.d}s` }}
-        >
-          <i />
-        </span>
-      ))}
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
 
 export default function LandingV2() {
   const navigate = useNavigate();
-  const { typed, phase } = useTypedDemo();
-  const [geo, setGeo] = useState(null);
+  const reduce = useReducedMotion();
+  const [scrolled, setScrolled] = useState(false);
+  const [openFaq, setOpenFaq] = useState(0);
 
   useEffect(() => {
-    let mounted = true;
-    getGeoStats()
-      .then(data => { if (mounted) setGeo(data); })
-      .catch(() => {});
-    return () => { mounted = false; };
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const villages = useMemo(() => {
-    const value = Number(geo?.villages);
-    return Number.isFinite(value) && value > 0 ? value : 619287;
-  }, [geo]);
+  const go = useCallback(() => navigate('/command'), [navigate]);
+
+  const jump = useCallback(id => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }, [reduce]);
 
   return (
-    <div className="v2-root v2-landing">
-      <div className="v2-land-grid" aria-hidden="true" />
-      <div className="v2-land-glow a" aria-hidden="true" />
-      <div className="v2-land-glow b" aria-hidden="true" />
+    <div className="lp-root">
+      <div className="lp-grid-bg" />
+      <div className="lp-glow lp-glow-a" />
+      <div className="lp-glow lp-glow-b" />
+      <div className="lp-glow lp-glow-c" />
 
-      <header className="v2-nav v2-land-nav">
-        <a className="v2-nav-brand" href="#top" aria-label="scraper.co.in home">
-          <Logo />
-        </a>
-        <nav className="v2-nav-links" aria-label="Main">
-          <a href="#dashboard">Dashboard</a>
-          <a href="#how">How it works</a>
-          <a href="#features">What you get</a>
-          <a href="#folders">Folders & CRM</a>
-          <a href="#coverage">Coverage</a>
-        </nav>
-        <div className="v2-nav-actions">
-          <a className="v2-btn v2-btn-ghost" href="#how">How it works</a>
-          <button type="button" className="v2-btn v2-btn-lime" onClick={() => navigate('/command')}>
-            Open console <ArrowRight size={14} />
-          </button>
+      {/* ---------------------------------------------------------- nav */}
+      <header className="lp-nav" data-scrolled={scrolled}>
+        <div className="lp-nav-inner">
+          <a
+            className="lp-brand"
+            href="/"
+            onClick={event => {
+              event.preventDefault();
+              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+            }}
+          >
+            <span className="lp-brand-mark">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" stroke="#e0f2fe" strokeWidth="1.7" strokeLinejoin="round" />
+                <circle cx="12" cy="10" r="2.6" stroke="#a5f3fc" strokeWidth="1.7" />
+              </svg>
+            </span>
+            <span className="lp-brand-text">
+              <b>SCRAPER</b>
+              <span>Lead intelligence</span>
+            </span>
+          </a>
+
+          <nav className="lp-nav-links">
+            <button type="button" onClick={() => jump('why')}>Why us</button>
+            <button type="button" onClick={() => jump('how')}>How it works</button>
+            <button type="button" onClick={() => jump('dashboard')}>Dashboard</button>
+            <button type="button" onClick={() => jump('pricing')}>Pricing</button>
+            <button type="button" onClick={() => jump('faq')}>FAQ</button>
+          </nav>
+
+          <div className="lp-nav-actions">
+            <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={() => jump('pricing')}>
+              Pricing
+            </button>
+            <button type="button" className="lp-btn lp-btn-primary lp-btn-sm" onClick={go}>
+              Open dashboard <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
       </header>
 
-      <main id="top">
-        <section className="v2-land-hero">
-          <Reveal className="v2-land-hero-copy">
-            <span className="v2-eyebrow v2-land-eyebrow">
-              <span className="v2-eyebrow-dot" />
-              BUILT FOR INDIAN STARTUPS
-              <span className="v2-eyebrow-note">local-first</span>
-            </span>
-
-            <h1 className="v2-land-title">
-              Find real businesses.
-              <span> Call real numbers.</span>
-            </h1>
-
-            <p className="v2-land-sub">
-              Type a service and a city. scraper.co.in scans public business listings,
-              throws away fake or incomplete numbers, and hands you a clean call list
-              with full business profiles — usually within minutes.
-            </p>
-
-            <div className="v2-land-actions">
-              <button type="button" className="v2-btn v2-btn-lime v2-btn-lg" onClick={() => navigate('/command')}>
-                Start finding leads <ArrowRight size={16} />
-              </button>
-              <a className="v2-btn v2-btn-ghost v2-btn-lg" href="#how">
-                See how it works
-              </a>
-            </div>
-
-            <div className="v2-land-trust">
-              <span><CheckCircle2 size={13} /> No setup</span>
-              <span><CheckCircle2 size={13} /> No browser extension</span>
-              <span><CheckCircle2 size={13} /> Data stays on your machine</span>
-            </div>
-          </Reveal>
-
-          <Reveal className="v2-land-hero-visual" delay={140}>
-            <HeroDemo typed={typed} phase={phase} />
-            <div className="v2-land-float-card">
-              <span className="v2-land-float-icon"><ShieldCheck size={14} /></span>
-              <span>
-                <b>99.2% valid mobiles</b>
-                <small>invalid numbers never enter your list</small>
-              </span>
-            </div>
-          </Reveal>
-        </section>
-
-
-
-        <Reveal className="v2-land-strip" delay={80}>
-          <div className="v2-land-stat">
-            <b><CountUp value={villages} /></b>
-            <span>villages & towns indexed</span>
-          </div>
-          <div className="v2-land-stat">
-            <b><CountUp value={30} suffix="+" /></b>
-            <span>business categories routed</span>
-          </div>
-          <div className="v2-land-stat">
-            <b><CountUp value={5} prefix="< " suffix="s" /></b>
-            <span>to your first live lead</span>
-          </div>
-          <div className="v2-land-stat">
-            <b><CountUp value={100} suffix="%" /></b>
-            <span>numbers validated before saving</span>
-          </div>
-        </Reveal>
-
-        <section id="exact" className="mx-auto w-full max-w-6xl px-6 pb-10">
-          <div className="grid gap-3 md:grid-cols-3">
-            {[
-              {
-                tag: 'Exact category',
-                title: 'Photographers mean photographers',
-                body: 'A venue directory can never answer a photographer search. If a business belongs to another vendor type, it is dropped — not relabelled.'
-              },
-              {
-                tag: 'Validated mobiles',
-                title: 'Numbers you can actually dial',
-                body: 'Pincodes, helplines, repeated dummy sequences and placeholder rows are rejected before a lead reaches your list.'
-              },
-              {
-                tag: 'Fresh every run',
-                title: 'New search, new live list',
-                body: 'Yesterday’s leads leave the live view but stay in their own saved folder, so nothing is lost and nothing goes stale.'
-              }
-            ].map(card => (
-              <div
-                key={card.tag}
-                className="rounded-xl border border-white/10 bg-slate-900/40 p-5 transition-colors hover:border-sky-400/40"
+      <main>
+        {/* -------------------------------------------------------- hero */}
+        <section className="lp-hero">
+          <div className="lp-container lp-hero-grid">
+            <div className="lp-hero-copy">
+              <motion.span
+                className="lp-eyebrow"
+                initial={reduce ? false : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: EASE }}
               >
-                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300">
-                  {card.tag}
-                </span>
-                <h3 className="mt-2 text-sm font-semibold text-slate-100">{card.title}</h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">{card.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+                <i /> Made in India · for Indian businesses
+              </motion.span>
 
+              <motion.h1
+                className="lp-h1"
+                initial={reduce ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.06, ease: EASE }}
+              >
+                Get the <span className="lp-hl">owner’s mobile number</span>, not the office landline.
+              </motion.h1>
 
+              <motion.p
+                className="lp-lede"
+                initial={reduce ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.14, ease: EASE }}
+              >
+                Type a business type and a city. In <b>under 90 seconds</b> you get a fresh list of
+                real 10-digit mobile numbers with the full shop details — ready to send on WhatsApp.
+                No old lists. No switchboard numbers. No duplicates.
+              </motion.p>
 
-        <section className="mx-auto w-full max-w-6xl px-6 py-12">
-          <Reveal className="mb-10 text-center">
-            <span className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-cyan-400">
-              WHY WE ARE INDISPENSABLE FOR STARTUPS
-            </span>
-            <h2 className="mt-2 text-2xl font-bold text-slate-100 sm:text-3xl">
-              Zero Stale Data. Direct Proprietor Mobiles. Lower CAC.
-            </h2>
-            <p className="mx-auto mt-3 max-w-2xl text-sm text-slate-400">
-              Legacy B2B tools fail in India (&lt;3% hit rate for local businesses). Shared directory lists are resold to 50 competitors simultaneously.
-              LeadHarvest delivers live, verified 10-digit owner mobiles ready for high-converting WhatsApp outreach.
-            </p>
-          </Reveal>
+              <motion.div
+                className="lp-cta-row"
+                initial={reduce ? false : { opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.22, ease: EASE }}
+              >
+                <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={go}>
+                  Start free for 14 days <ArrowRight size={16} />
+                </button>
+                <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={() => jump('how')}>
+                  <Play size={15} /> See how it works
+                </button>
+              </motion.div>
 
-          {/* Comparison Matrix Table */}
-          <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/50 shadow-2xl backdrop-blur-md">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs sm:text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 bg-slate-950/70 text-slate-400">
-                    <th className="p-4 font-mono font-medium uppercase tracking-wider">Dimension</th>
-                    <th className="p-4 font-mono font-medium uppercase tracking-wider text-rose-400">Traditional Scrapers / Databases</th>
-                    <th className="p-4 font-mono font-bold uppercase tracking-wider text-cyan-400">Gomandap / LeadHarvest Pro</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-slate-300">
-                  <tr className="hover:bg-white/[0.02]">
-                    <td className="p-4 font-semibold text-slate-200">Phone Quality</td>
-                    <td className="p-4 text-slate-400">Landlines (080-, 040-) or switchboards with 65% bounce</td>
-                    <td className="p-4 font-medium text-cyan-300 flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
-                      Direct Indian 10-digit mobile numbers (+91 98..., 97..., 99...)
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-white/[0.02]">
-                    <td className="p-4 font-semibold text-slate-200">Data Freshness</td>
-                    <td className="p-4 text-slate-400">Stale lists scraped 6+ months ago from public dumps</td>
-                    <td className="p-4 font-medium text-emerald-300 flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
-                      Live, on-demand fresh harvest scraped in under 90 seconds
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-white/[0.02]">
-                    <td className="p-4 font-semibold text-slate-200">Data Depth</td>
-                    <td className="p-4 text-slate-400">Only generic Name + Phone row with missing details</td>
-                    <td className="p-4 font-medium text-cyan-300 flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
-                      Full 52-field business dossier (owner, GSTIN, pricing, hours, reviews, Instagram)
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-white/[0.02]">
-                    <td className="p-4 font-semibold text-slate-200">Geo Precision</td>
-                    <td className="p-4 text-slate-400">Hardcoded, messy city text (&quot;Narasaraopet Wedding...&quot;)</td>
-                    <td className="p-4 font-medium text-cyan-300 flex items-center gap-1.5">
-                      <CheckCircle2 size={15} className="text-emerald-400 flex-shrink-0" />
-                      Precise 4-tier Indian hierarchy (State → District → Mandal → Village)
-                    </td>
-                  </tr>
-                  <tr className="hover:bg-white/[0.02]">
-                    <td className="p-4 font-semibold text-slate-200">Conversion Rate</td>
-                    <td className="p-4 text-slate-400">1.8% cold call response from gatekeepers</td>
-                    <td className="p-4 font-medium text-amber-300 flex items-center gap-1.5">
-                      <TrendingUp size={15} className="text-amber-400 flex-shrink-0" />
-                      14.5% response rate via 1-click proprietor WhatsApp pitch
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <motion.ul
+                className="lp-micro"
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.32 }}
+              >
+                <li><Check size={13} /> No card needed</li>
+                <li><Check size={13} /> Runs on your own laptop</li>
+                <li><Check size={13} /> Ready in about 40 seconds</li>
+              </motion.ul>
             </div>
+
+            <DemoConsole />
           </div>
 
-          {/* Startup ROI & Use Cases */}
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-5 transition-all hover:border-cyan-400/40">
-              <div className="mb-3 inline-flex rounded-lg bg-cyan-500/10 p-2.5 text-cyan-400">
-                <MessageCircle size={20} />
+          <div className="lp-container">
+            <Stagger className="lp-stats" delay={0.1}>
+              <StaggerItem className="lp-stat">
+                <b><Counter to={52} suffix="" /> fields</b>
+                <span>Owner, address, category, rating, hours, socials and more — for every business.</span>
+              </StaggerItem>
+              <StaggerItem className="lp-stat">
+                <b><Counter to={90} prefix="<" suffix=" sec" /></b>
+                <span>From typing the query to a working list of mobile numbers.</span>
+              </StaggerItem>
+              <StaggerItem className="lp-stat">
+                <b>4 levels</b>
+                <span>State → District → Mandal → Village. No messy city text.</span>
+              </StaggerItem>
+              <StaggerItem className="lp-stat">
+                <b><Counter to={100} suffix="%" /> mobiles</b>
+                <span>Every number is a validated Indian 10-digit mobile. Nothing else gets through.</span>
+              </StaggerItem>
+            </Stagger>
+
+            <div className="lp-marquee">
+              <div className="lp-marquee-track">
+                {[...CATEGORIES, ...CATEGORIES].map((cat, index) => (
+                  <span className="lp-chip" key={`${cat}-${index}`}>{cat}</span>
+                ))}
               </div>
-              <h3 className="text-sm font-bold text-slate-100">B2B SaaS & Fintech</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Pull 500 grocery stores, restaurants, or clinics with verified mobiles for WhatsApp pitch campaigns. Response jumps from 1.8% to 14.5%.
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-5 transition-all hover:border-emerald-400/40">
-              <div className="mb-3 inline-flex rounded-lg bg-emerald-500/10 p-2.5 text-emerald-400">
-                <Database size={20} />
-              </div>
-              <h3 className="text-sm font-bold text-slate-100">Marketplaces & Aggregators</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Populate entire supplier networks in tier-2 and tier-3 cities (Guntur, Vijayawada, Warangal, Palnadu) in 15 minutes with verified photos and pricing.
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-slate-900/40 p-5 transition-all hover:border-amber-400/40">
-              <div className="mb-3 inline-flex rounded-lg bg-amber-500/10 p-2.5 text-amber-400">
-                <Zap size={20} />
-              </div>
-              <h3 className="text-sm font-bold text-slate-100">Growth Agencies</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Deliver bespoke client lead vaults with 1-click CSV/XLSX export formatted cleanly without Excel scientific notation, ready for HubSpot or Notion.
-              </p>
             </div>
           </div>
         </section>
 
-        {/* Dashboard Architecture & Startup Velocity Engine */}
-        <section className="v2-land-section" id="dashboard">
-          <Reveal className="v2-land-section-head">
-            <span className="v2-land-kicker">COMMAND DASHBOARD & PLATFORM ARCHITECTURE</span>
-            <h2>Engineered for Startup Hypergrowth.</h2>
-            <p>
-              Everything an early-stage startup, agency, or sales team needs to discover, verify, and close local business accounts—without buying stale database lists or hiring manual research interns.
-            </p>
-          </Reveal>
+        {/* --------------------------------------------------------- why */}
+        <section className="lp-section" id="why">
+          <div className="lp-container">
+            <SectionHead
+              tag="Why startups need this"
+              title="One wrong number is one lost day."
+              sub="Old lead databases were built for a world of landlines and call centres. Indian businesses run on a proprietor’s mobile and a WhatsApp message. That is the whole reason this product exists."
+            />
 
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {/* Pillar 1 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-cyan-500/50 hover:bg-slate-900/80">
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-cyan-500/10 p-3 text-cyan-400">
-                  <Search size={22} />
-                </div>
-                <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-300">
-                  ZERO FRICTION SEARCH
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Universal Omnibox & Typo Healing</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Type the way you speak: <em className="text-slate-300">"photo studio in vijayawada"</em>, <em className="text-slate-300">"dentists near guntur"</em>, or <em className="text-slate-300">"borewell motor rewinding"</em>. The language engine stems endings, handles misspellings, isolates categories from micro-zones, and surfaces suggestions with zero manual taxonomy selection.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-cyan-400/90">
-                ⚡ Any SDR or founder can discover thousands of niche leads immediately.
-              </div>
-            </Reveal>
-
-            {/* Pillar 2 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-emerald-500/50 hover:bg-slate-900/80" delay={70}>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-emerald-500/10 p-3 text-emerald-400">
-                  <RadarIcon size={22} />
-                </div>
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300">
-                  5KM RADAR MESH
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">100% City Coverage, 0 Missed Leads</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Traditional scrapers hit an arbitrary 40-result page wall and quit, missing over 85% of businesses in a city. Our proprietary engine automatically partitions municipalities into contiguous 5km radial micro-zones, firing multi-threaded sweeps to collect 300 to 1,200+ distinct businesses per run.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-emerald-400/90">
-                ⚡ Unlock 10x more leads per city than competitors before they even notice.
-              </div>
-            </Reveal>
-
-            {/* Pillar 3 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-amber-500/50 hover:bg-slate-900/80" delay={140}>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-amber-500/10 p-3 text-amber-400">
-                  <Smartphone size={22} />
-                </div>
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300">
-                  85%+ DIRECT MOBILES
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Proprietor-Direct Reach & 1-Click WhatsApp</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Strict filters reject toll-free IVRs (1800), dead landlines, pincodes disguised as phone numbers, and placeholder entries. Surfaces real 10-digit Indian mobiles with one-click direct dialing and instant pre-filled WhatsApp pitch chats.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-amber-400/90">
-                ⚡ Direct WhatsApp pitches consistently achieve 14% to 22% response rates.
-              </div>
-            </Reveal>
-
-            {/* Pillar 4 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-purple-500/50 hover:bg-slate-900/80" delay={210}>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-purple-500/10 p-3 text-purple-400">
-                  <FolderArchive size={22} />
-                </div>
-                <span className="rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-purple-300">
-                  PERSISTENT VAULTS
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Permanent Search Vault Folders</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Every scrape run is saved into an isolated, indexed vault folder. Organize prospects by territory, SDR assignment, or vertical. Revisit historical runs anytime, filter by contact stage, or trigger an instant re-scrape to catch newly opened businesses.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-purple-400/90">
-                ⚡ Zero cross-contamination between client batches or sales territories.
-              </div>
-            </Reveal>
-
-            {/* Pillar 5 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-blue-500/50 hover:bg-slate-900/80" delay={280}>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-blue-500/10 p-3 text-blue-400">
-                  <Download size={22} />
-                </div>
-                <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-blue-300">
-                  PHONE-READY EXPORT
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Phone-Ready Contacts (.VCF) & Pure CSV</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                1-Click download Apple and Android <code className="text-blue-300">.VCF</code> contact cards to sync 500 business leads into your sales team's smartphones in 2 seconds. Export clean numeric <code className="text-blue-300">.CSV</code> and <code className="text-blue-300">.TXT</code> lists formatted to eliminate scientific notation errors in Excel.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-blue-400/90">
-                ⚡ Reps can start dialing right from their phones without copy-pasting.
-              </div>
-            </Reveal>
-
-            {/* Pillar 6 */}
-            <Reveal className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 transition-all hover:border-rose-500/50 hover:bg-slate-900/80" delay={350}>
-              <div className="mb-4 flex items-center justify-between">
-                <div className="inline-flex rounded-xl bg-rose-500/10 p-3 text-rose-400">
-                  <TrendingUp size={22} />
-                </div>
-                <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-rose-300">
-                  SPEED & CONVERSION
-                </span>
-              </div>
-              <h3 className="text-base font-bold text-slate-100">Live Streaming Cockpit & Mini-CRM</h3>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Watch validated leads cascade into the cockpit with silky smooth staggered animations, real-time throughput metrics (leads/sec), and precise countdown ETAs. Move vendors through pipeline stages (New, Pitched, Interested, Won, Lost) without paid external CRMs.
-              </p>
-              <div className="mt-4 border-t border-white/5 pt-3 font-mono text-[11px] text-rose-400/90">
-                ⚡ Convert raw prospects into booked meetings directly on one unified screen.
-              </div>
-            </Reveal>
-          </div>
-
-          {/* Startup Playbook Workflow */}
-          <Reveal className="mt-8 rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 via-slate-950/95 to-cyan-950/20 p-6 md:p-8" delay={150}>
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-              <div className="max-w-xl">
-                <span className="inline-flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-wider text-cyan-400">
-                  <Sparkles size={14} /> The 4-Hour Startup Outbound Playbook
-                </span>
-                <h3 className="mt-2 text-xl font-extrabold text-slate-100">
-                  How a 2-Person Team Books 15–25 Merchant Meetings Every Week
-                </h3>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                  Skip hiring expensive BDR agencies. Run a 5km radar sweep across your target metro in the morning, download the .VCF to your rep’s mobile, pitch owners on WhatsApp with personalized offers, and manage the pipeline right in your dashboard.
+            <Stagger className="lp-cards-3">
+              <StaggerItem className="lp-card">
+                <span className="lp-card-icon"><Clock3 size={19} /></span>
+                <h3>Zero stale data</h3>
+                <p>
+                  Every search is a <b>live search</b>. Nothing is pulled from a six-month-old dump.
+                  If a shop has closed or changed hands, it does not come back in your list.
                 </p>
-              </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:w-auto">
-                <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3 text-center">
-                  <span className="font-mono text-[10px] text-slate-400">9:00 AM</span>
-                  <div className="mt-1 font-mono text-base font-bold text-cyan-400">Sweep City</div>
-                  <small className="text-[10px] text-slate-400">5km Radar Mesh</small>
+                <div className="lp-card-figure">
+                  <b>Fresh</b>
+                  <span>on every single search</span>
                 </div>
-                <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3 text-center">
-                  <span className="font-mono text-[10px] text-slate-400">9:30 AM</span>
-                  <div className="mt-1 font-mono text-base font-bold text-blue-400">Sync .VCF</div>
-                  <small className="text-[10px] text-slate-400">500 Contacts to Phone</small>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3 text-center">
-                  <span className="font-mono text-[10px] text-slate-400">10:00 AM</span>
-                  <div className="mt-1 font-mono text-base font-bold text-amber-400">WhatsApp Pitch</div>
-                  <small className="text-[10px] text-slate-400">1-Click Direct Chat</small>
-                </div>
-                <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3 text-center">
-                  <span className="font-mono text-[10px] text-slate-400">3:00 PM</span>
-                  <div className="mt-1 font-mono text-base font-bold text-emerald-400">Close Deals</div>
-                  <small className="text-[10px] text-slate-400">Pipeline Tracking</small>
-                </div>
-              </div>
-            </div>
-          </Reveal>
-        </section>
+              </StaggerItem>
 
-        <section className="v2-land-section" id="how">
-          <Reveal className="v2-land-section-head">
-            <span className="v2-land-kicker">HOW IT WORKS</span>
-            <h2>Three steps. No technical setup.</h2>
-            <p>You do not need to know which website to search. The engine decides for you.</p>
-          </Reveal>
+              <StaggerItem className="lp-card">
+                <span className="lp-card-icon"><Phone size={19} /></span>
+                <h3>Direct proprietor mobiles</h3>
+                <p>
+                  Not the reception, not the switchboard, not “call between 11 and 4”. The number
+                  that actually belongs to the person who can say yes — and usually has WhatsApp.
+                </p>
+                <div className="lp-card-figure">
+                  <b>10 digits</b>
+                  <span>validated, every time</span>
+                </div>
+              </StaggerItem>
 
-          <div className="v2-land-steps">
-            {STEPS.map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <Reveal className="v2-land-step" delay={index * 90} key={step.title}>
-                  <span className="v2-land-step-num">0{index + 1}</span>
-                  <span className="v2-land-step-icon"><Icon size={18} /></span>
-                  <h3>{step.title}</h3>
-                  <p>{step.body}</p>
-                  <small>{step.detail}</small>
-                </Reveal>
-              );
-            })}
-            <span className="v2-land-step-line" aria-hidden="true" />
+              <StaggerItem className="lp-card">
+                <span className="lp-card-icon"><TrendingUp size={19} /></span>
+                <h3>Lower cost to acquire</h3>
+                <p>
+                  When more of your calls and messages reach a real decision-maker, you spend less
+                  to win each customer. Same team, same budget, more closed deals.
+                </p>
+                <div className="lp-card-figure">
+                  <b>14.5%</b>
+                  <span>WhatsApp reply rate vs 1.8% cold calling</span>
+                </div>
+              </StaggerItem>
+            </Stagger>
           </div>
         </section>
 
+        {/* ----------------------------------------------------- compare */}
+        <section className="lp-section" id="compare">
+          <div className="lp-container">
+            <SectionHead
+              tag="The honest comparison"
+              title="Old databases vs a live harvest"
+              sub="This is the difference our customers feel in the first week. Every row below is something you can check yourself."
+            />
 
+            <FadeUp>
+              <div className="lp-compare">
+                <div className="lp-compare-head">
+                  <div>What matters</div>
+                  <div className="is-bad">Old scrapers &amp; databases</div>
+                  <div className="is-good">Gomandap / LeadHarvest Pro</div>
+                </div>
 
-        <section className="v2-land-section" id="features">
-          <Reveal className="v2-land-section-head">
-            <span className="v2-land-kicker">WHAT YOU GET</span>
-            <h2>A clean list you can actually call.</h2>
-            <p>Not a data dump. Every row is a business you can open, call and track.</p>
-          </Reveal>
-
-          <div className="v2-land-features">
-            {FEATURES.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <Reveal className="v2-land-feature" delay={(index % 3) * 70} key={feature.title}>
-                  <span className="v2-land-feature-icon"><Icon size={17} /></span>
-                  <h3>{feature.title}</h3>
-                  <p>{feature.body}</p>
-                </Reveal>
-              );
-            })}
+                {COMPARE.map((row, index) => (
+                  <motion.div
+                    className="lp-compare-row"
+                    key={row.label}
+                    initial={reduce ? false : { opacity: 0, y: 14 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-40px' }}
+                    transition={{ duration: 0.45, delay: index * 0.06, ease: EASE }}
+                  >
+                    <div className="lp-compare-cell is-label">{row.label}</div>
+                    <div className="lp-compare-cell is-bad">
+                      <X size={13} /> <span>{row.bad}</span>
+                    </div>
+                    <div className="lp-compare-cell is-good">
+                      <Check size={13} /> <span>{row.good}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </FadeUp>
           </div>
         </section>
 
+        {/* --------------------------------------------------------- how */}
+        <section className="lp-section" id="how">
+          <div className="lp-container">
+            <SectionHead
+              tag="How it works"
+              title="Three steps. No training needed."
+              sub="If you can type a message on WhatsApp, you can run this. There is nothing to configure and no manual to read."
+            />
 
-
-        <section className="v2-land-map-band">
-          <Reveal className="v2-land-map-copy">
-            <span className="v2-land-kicker">LIVE MAP</span>
-            <h2>Watch the city light up.</h2>
-            <p>
-              Every search is split into real city zones. A radar sweeps each zone,
-              the map auto-zooms to the area, and vendor pins land as soon as a zone
-              reports back. You always know what is happening — no black-box spinner.
-            </p>
-            <ul className="v2-land-checks">
-              <li><CheckCircle2 size={13} /> Real zone names, not fake clusters</li>
-              <li><CheckCircle2 size={13} /> Auto-zoom to the searched city</li>
-              <li><CheckCircle2 size={13} /> Pins only for validated businesses</li>
-            </ul>
-            <button type="button" className="v2-btn v2-btn-lime" onClick={() => navigate('/command')}>
-              Open the live map <ArrowRight size={14} />
-            </button>
-          </Reveal>
-
-          <Reveal className="v2-land-map-visual" delay={120}>
-            <div className="v2-land-map-card">
-              <MiniRadar />
-              <div className="v2-land-map-top">
-                <span><i /> VIJAYAWADA · ANDHRA PRADESH</span>
-                <b>86 leads</b>
-              </div>
-              <div className="v2-land-map-zone z1">MG Road <b>12</b></div>
-              <div className="v2-land-map-zone z2">Benz Circle <b>9</b></div>
-              <div className="v2-land-map-zone z3">Governorpet <b>14</b></div>
-              <div className="v2-land-map-zone z4">Gunadala <b>7</b></div>
-              <div className="v2-land-map-bottom">
-                <span><RadarIcon size={12} /> scanning zone 4 of 8</span>
-                <span>live pins <b>73</b></span>
-              </div>
-            </div>
-          </Reveal>
+            <Stagger className="lp-steps">
+              {STEPS.map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <StaggerItem className="lp-step" key={step.title}>
+                    <span className="lp-step-num">0{index + 1}</span>
+                    <span className="lp-step-icon"><Icon size={20} /></span>
+                    <h3>{step.title}</h3>
+                    <p>{step.body}</p>
+                    <small>{step.detail}</small>
+                  </StaggerItem>
+                );
+              })}
+            </Stagger>
+          </div>
         </section>
 
+        {/* --------------------------------------------------- dashboard */}
+        <section className="lp-section" id="dashboard">
+          <div className="lp-container">
+            <div className="lp-dash-grid">
+              <div>
+                <FadeUp>
+                  <span className="lp-tag">Inside the dashboard</span>
+                  <h2 className="lp-h2">One screen. Everything you need to sell.</h2>
+                  <p className="lp-sub">
+                    No tabs full of settings, no live log noise. Open it and start working.
+                    Search on the left, work your leads on the right.
+                  </p>
+                </FadeUp>
 
-
-        <section className="v2-land-section v2-land-split" id="folders">
-          <Reveal className="v2-land-split-copy">
-            <span className="v2-land-kicker">FOLDERS</span>
-            <h2>Every search is saved. Fresh results every time.</h2>
-            <p>
-              A new search replaces the live list, so you never mix yesterday’s leads
-              with today’s. But nothing is lost: each run is written to its own folder
-              with the category, city, date and every lead.
-            </p>
-            <ul className="v2-land-checks">
-              <li><CheckCircle2 size={13} /> Reopen any past search</li>
-              <li><CheckCircle2 size={13} /> Download CSV or JSON</li>
-              <li><CheckCircle2 size={13} /> CRM-engaged leads are never deleted</li>
-            </ul>
-          </Reveal>
-
-          <Reveal className="v2-land-folder-mock" delay={110}>
-            <div className="v2-land-folder-head">
-              <FolderArchive size={15} />
-              <span>SEARCH FOLDERS</span>
-              <b>4 SAVED</b>
-            </div>
-            {[
-              { cat: 'Plumbers', city: 'Vijayawada', count: 86, when: 'Just now', tone: 'lime' },
-              { cat: 'Banquet halls', city: 'Hyderabad', count: 128, when: '2 days ago', tone: 'cyan' },
-              { cat: 'Dentists', city: 'Guntur', count: 54, when: 'Last week', tone: 'violet' },
-              { cat: 'Car showrooms', city: 'Bengaluru', count: 41, when: 'Last week', tone: 'amber' }
-            ].map(folder => (
-              <div className="v2-land-folder-row" key={`${folder.cat}-${folder.city}`}>
-                <span className={cx('v2-land-folder-dot', `tone-${folder.tone}`)} />
-                <span className="v2-land-folder-copy">
-                  <b>{folder.cat} <span>in</span> {folder.city}</b>
-                  <small>{folder.when} · {folder.count} leads</small>
-                </span>
-                <span className="v2-land-folder-actions">CSV · JSON</span>
+                <ul className="lp-dash-list">
+                  {DASH_POINTS.map((point, index) => {
+                    const Icon = point.icon;
+                    return (
+                      <motion.li
+                        key={point.title}
+                        initial={reduce ? false : { opacity: 0, y: 18 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: '-40px' }}
+                        transition={{ duration: 0.5, delay: index * 0.07, ease: EASE }}
+                      >
+                        <span className="ico"><Icon size={16} /></span>
+                        <span className="lp-dash-text">
+                          <b>{point.title}</b>
+                          <span>{point.body}</span>
+                        </span>
+                      </motion.li>
+                    );
+                  })}
+                </ul>
               </div>
-            ))}
-          </Reveal>
+
+              <DashboardMock />
+            </div>
+          </div>
         </section>
 
+        {/* --------------------------------------------------------- who */}
+        <section className="lp-section" id="who">
+          <div className="lp-container">
+            <SectionHead
+              tag="Who uses it"
+              title="Built for the teams that live on outreach"
+              sub="Same product, three very different jobs."
+            />
 
+            <Stagger className="lp-audience">
+              {AUDIENCES.map(item => {
+                const Icon = item.icon;
+                return (
+                  <StaggerItem className="lp-card" key={item.title}>
+                    <h3><Icon size={17} /> {item.title}</h3>
+                    <p>{item.body}</p>
+                    <div className="lp-quote">{item.quote}</div>
+                  </StaggerItem>
+                );
+              })}
+            </Stagger>
+          </div>
+        </section>
 
-        <section className="v2-land-section v2-land-crm-band">
-          <Reveal className="v2-land-crm-head">
-            <span className="v2-land-kicker">BUILT-IN CRM</span>
-            <h2>From “found” to “closed”.</h2>
-            <p>
-              Stop exporting to a spreadsheet and losing the thread. Move each business
-              through stages, add notes after a call, and keep the next task attached
-              to the lead.
-            </p>
-          </Reveal>
+        {/* ----------------------------------------------------- pricing */}
+        <section className="lp-section" id="pricing">
+          <div className="lp-container">
+            <SectionHead
+              tag="Pricing"
+              title="Simple monthly price. Cancel anytime."
+              sub="Every plan includes the full engine, the map, saved folders and exports. You are only choosing how many leads you can pull at once."
+            />
 
-          <Reveal className="v2-land-crm-board" delay={100}>
-            {STAGES.map((stage, index) => (
-              <div className={cx('v2-land-crm-col', `tone-${stage.tone}`)} key={stage.label}>
-                <header>
-                  <span>{stage.label}</span>
-                  <b>{[38, 17, 9, 6, 4][index]}</b>
-                </header>
-                <div className="v2-land-crm-card">
-                  <span className="v2-land-crm-avatar">{(index + 2).toString()}</span>
-                  <span>
-                    <b>{['Sri Balaji Plumbing', 'Sai Ram Plumbers', 'NTR Plumbing', 'Sree Kanya Interiors', 'Lakshmi Wedding Hall'][index]}</b>
-                    <small>+91 9•••• {['21456', '78204', '31987', '44120', '88231'][index]}</small>
-                  </span>
-                </div>
-                {index < 3 && (
-                  <div className="v2-land-crm-card is-ghost">
-                    <span className="v2-land-crm-avatar">·</span>
-                    <span>
-                      <b>{['Ravi Kumar', 'Vijaya Electricals', 'Sai Furniture'][index]}</b>
-                      <small>{['note · call Monday', 'task · send quote', 'won · 12,000'][index]}</small>
-                    </span>
+            <Stagger className="lp-pricing">
+              {PLANS.map(plan => (
+                <StaggerItem key={plan.id} className={`lp-plan${plan.featured ? ' is-featured' : ''}`}>
+                  {plan.featured ? (
+                    <span className="lp-plan-badge"><Sparkles size={10} /> Most popular</span>
+                  ) : null}
+                  <div className="lp-plan-name">{plan.name}</div>
+                  <div className="lp-plan-price">
+                    <b>{plan.price}</b>
+                    <span>{plan.period}</span>
                   </div>
-                )}
+                  <div className="lp-plan-note">{plan.line}</div>
+
+                  <ul className="lp-plan-features">
+                    <li><Check size={13} /> {plan.leads}</li>
+                    <li><Check size={13} /> {plan.seats}</li>
+                    {plan.features.map(feature => (
+                      <li key={feature}><Check size={13} /> {feature}</li>
+                    ))}
+                  </ul>
+
+                  <button
+                    type="button"
+                    className={`lp-btn ${plan.featured ? 'lp-btn-primary' : 'lp-btn-ghost'}`}
+                    onClick={go}
+                  >
+                    {plan.featured ? 'Start free trial' : 'Choose ' + plan.name}
+                  </button>
+                </StaggerItem>
+              ))}
+            </Stagger>
+
+            <FadeUp>
+              <div className="lp-cost-note">
+                <p>
+                  <b>Look at the cost per lead.</b> Starter works out to about ₹4 per lead, Pro to
+                  about ₹2, and Agency to under ₹1 — for a number you can actually call. One closed
+                  deal covers the month.
+                </p>
+                <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={go}>
+                  Start free for 14 days <ArrowRight size={13} />
+                </button>
               </div>
-            ))}
-          </Reveal>
+            </FadeUp>
+          </div>
         </section>
 
+        {/* --------------------------------------------------------- faq */}
+        <section className="lp-section" id="faq">
+          <div className="lp-container">
+            <SectionHead
+              tag="Questions"
+              title="The things people ask before they start"
+            />
 
-
-        <section className="v2-land-section" id="coverage">
-          <Reveal className="v2-land-section-head">
-            <span className="v2-land-kicker">COVERAGE</span>
-            <h2>Built for the way India searches.</h2>
-            <p>
-              Cities, districts, mandals and villages. Spellings, local names and
-              abbreviations are resolved before the search starts.
-            </p>
-          </Reveal>
-
-          <Reveal className="v2-land-audience" delay={80}>
-            {AUDIENCES.map(item => (
-              <span key={item}><Building2 size={12} /> {item}</span>
-            ))}
-          </Reveal>
-
-          <Reveal className="v2-land-location-band" delay={120}>
-            <div>
-              <span className="v2-land-location-icon"><MapPin size={17} /></span>
-              <span>
-                <b>{formatNumber(villages)} villages and towns</b>
-                <small>India’s full local hierarchy, not just metro pincodes.</small>
-              </span>
-            </div>
-            <div>
-              <span className="v2-land-location-icon"><Globe2 size={17} /></span>
-              <span>
-                <b>Automatic source routing</b>
-                <small>Right public sources for each category — without you choosing.</small>
-              </span>
-            </div>
-            <div>
-              <span className="v2-land-location-icon"><Clock3 size={17} /></span>
-              <span>
-                <b>Resumable by design</b>
-                <small>Close the tab. The search and profile enrichment pick up again.</small>
-              </span>
-            </div>
-          </Reveal>
+            <FadeUp className="lp-faq">
+              {FAQ.map((item, index) => (
+                <FaqItem
+                  key={item.q}
+                  item={item}
+                  isOpen={openFaq === index}
+                  onToggle={() => setOpenFaq(openFaq === index ? -1 : index)}
+                />
+              ))}
+            </FadeUp>
+          </div>
         </section>
 
-        <section className="v2-land-section" id="startups">
-          <Reveal className="v2-land-section-head">
-            <span className="v2-land-kicker">BUILT FOR STARTUPS & GROWTH TEAMS</span>
-            <h2>Why fast-growing startups switch to us.</h2>
-            <p>
-              Apollo and ZoomInfo lack Tier-2/3 Indian vendors. Reseller lists are dead on arrival.
-              We harvest real proprietors with direct mobile numbers in 90 seconds.
-            </p>
-          </Reveal>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: 16,
-            marginTop: 28
-          }}>
-            {[
-              {
-                tag: 'CAC SQUASHED',
-                title: '70% Lower Customer Acquisition Cost',
-                body: 'Never pay ₹30,000/month for stale databases where 60% of numbers are disconnected landlines. Every lead comes with validated 10-digit Indian mobile numbers.'
-              },
-              {
-                tag: 'HIGH CONVERSION',
-                title: 'WhatsApp-Ready Proprietor Directs',
-                body: 'Indian business owners ignore cold emails (<2% reply rate). Gomandap delivers direct personal mobiles with 1-click WhatsApp links, pushing reply rates above 15%.'
-              },
-              {
-                tag: 'DEEP HYPERLOCAL',
-                title: 'Coverage in Tier-2, Tier-3 & Rural Mandals',
-                body: 'Whether you need wedding halls in Palnadu, doctors in Guntur, or hardware dealers in Warangal, our 600,000+ village index captures local vendors competitors miss.'
-              },
-              {
-                tag: 'INSTANT DELIVERY',
-                title: 'Clean Exports & Integrated CRM',
-                body: 'Export instantly to CSV, JSON or Excel with proper phone text formatting. Move deals through a built-in Kanban pipeline without paying for separate CRM seats.'
-              }
-            ].map(card => (
-              <div
-                key={card.tag}
-                style={{
-                  background: 'rgba(15, 23, 42, 0.65)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  borderRadius: 14,
-                  padding: 20,
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
-                <span style={{
-                  fontFamily: 'ui-monospace, monospace',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.18em',
-                  color: '#22d3ee'
-                }}>
-                  {card.tag}
-                </span>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', margin: '8px 0' }}>{card.title}</h3>
-                <p style={{ fontSize: 12, lineHeight: 1.6, color: '#94a3b8', margin: 0 }}>{card.body}</p>
+        {/* ------------------------------------------------------- final */}
+        <section className="lp-final">
+          <div className="lp-container lp-final-inner">
+            <FadeUp>
+              <span className="lp-tag" style={{ justifyContent: 'center' }}>Get started</span>
+              <h2>Your next customer is already on WhatsApp.</h2>
+              <p>
+                Open the dashboard, type a category and a city, and see the first numbers in about
+                a minute. Fourteen days free. Nothing to install beyond this app.
+              </p>
+              <div className="lp-cta-row">
+                <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={go}>
+                  Open the dashboard <ArrowRight size={16} />
+                </button>
+                <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={() => jump('pricing')}>
+                  See pricing
+                </button>
               </div>
-            ))}
+              <ul className="lp-micro">
+                <li><Check size={13} /> No card needed</li>
+                <li><Check size={13} /> Cancel anytime</li>
+                <li><Check size={13} /> Your data stays with you</li>
+              </ul>
+            </FadeUp>
           </div>
         </section>
-
-        <Reveal className="v2-land-cta">
-          <div className="v2-land-cta-grid" aria-hidden="true" />
-          <span className="v2-land-kicker">READY WHEN YOU ARE</span>
-          <h2>Your next customer is already listed.</h2>
-          <p>Find them, call them, and keep the conversation in one place.</p>
-          <div className="v2-land-cta-actions">
-            <button type="button" className="v2-btn v2-btn-lime v2-btn-lg" onClick={() => navigate('/command')}>
-              Open the scraper <ArrowRight size={16} />
-            </button>
-            <a className="v2-btn v2-btn-ghost v2-btn-lg" href="#how">
-              See how it works
-            </a>
-          </div>
-          <div className="v2-land-cta-note">
-            <span><ShieldCheck size={13} /> Validated data only</span>
-            <span><Zap size={13} /> First lead in seconds</span>
-            <span><Star size={13} /> No fabricated profiles</span>
-          </div>
-        </Reveal>
       </main>
 
-      <footer className="v2-land-footer">
-        <div className="v2-land-footer-brand">
-          <Logo compact />
-          <span>India vendor intelligence for startups that sell locally.</span>
+      <footer className="lp-footer">
+        <div className="lp-container lp-footer-inner">
+          <span className="lp-footer-note">© {new Date().getFullYear()} scraper.co.in</span>
+          <div className="lp-footer-links">
+            <a href="/pricing">Pricing</a>
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="mailto:support@scraper.co.in">support@scraper.co.in</a>
+          </div>
+          <span className="lp-footer-note">Made in India</span>
         </div>
-        <nav>
-          <a href="#how">How it works</a>
-          <a href="#features">What you get</a>
-          <a href="#folders">Folders</a>
-          <a href="/command">Command center</a>
-        </nav>
-        <small>© {new Date().getFullYear()} scraper.co.in · built to find real businesses, not fake rows.</small>
       </footer>
     </div>
   );
