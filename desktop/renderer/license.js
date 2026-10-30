@@ -29,7 +29,8 @@ function setMessage(text, tone = 'error') {
 function renderStatus(status) {
   if (!status) return;
 
-  const { state, daysLeft, plan, expiresAt, reason } = status;
+  const { state, plan, expiresAt, reason } = status;
+  const creditsLeft = Number(status.creditsLeft) || 0;
   const label = statusCard.querySelector('.trial-text b');
   const detail = statusCard.querySelector('.trial-text span');
 
@@ -39,27 +40,31 @@ function renderStatus(status) {
     statusCard.classList.add(state === 'grace' ? 'is-warning' : 'is-active');
     label.textContent = `Licensed${plan ? ` · ${String(plan).toUpperCase()}` : ''}`;
     detail.textContent = expiresAt
-      ? `${state === 'grace' ? 'Grace period ends' : 'Renews'} ${new Date(expiresAt).toLocaleDateString()}`
-      : 'This device is activated';
+      ? `${state === 'grace' ? 'Grace period ends' : 'Renews'} ${new Date(expiresAt).toLocaleDateString()}${creditsLeft ? ` · ${creditsLeft.toLocaleString('en-IN')} credits left` : ''}`
+      : 'This computer is activated';
     titleEl.textContent = "You're all set";
-    ledeEl.textContent = 'Your subscription is active. Close this window and start searching.';
+    ledeEl.textContent = 'Your subscription is active. Close this window and start finding businesses.';
     activateEl.textContent = 'Re-activate';
-  } else if (state === 'trial') {
-    statusCard.classList.add(daysLeft <= 3 ? 'is-warning' : 'is-active');
-    label.textContent = `Free trial · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`;
-    detail.textContent = 'Full access until the trial ends. No card required.';
-    titleEl.textContent = 'Activate your workspace';
-    ledeEl.textContent = 'Keep using Scraper after the trial by activating a licence.';
+  } else if (state === 'credits') {
+    statusCard.classList.add(creditsLeft <= 100 ? 'is-warning' : 'is-active');
+    label.textContent = `${creditsLeft.toLocaleString('en-IN')} free credits left`;
+    detail.textContent = 'One credit finds one business. Free credit is granted once per computer.';
+    titleEl.textContent = 'You still have free credits';
+    ledeEl.textContent =
+      'Close this window and keep working. Add a licence key only when your free credits run out.';
     activateEl.textContent = 'Activate licence';
   } else if (state === 'expired') {
     statusCard.classList.add('is-expired');
-    label.textContent = reason === 'device_mismatch' ? 'Licence bound to another PC' : 'Subscription expired';
+    label.textContent =
+      reason === 'device_mismatch'
+        ? 'Licence bound to another PC'
+        : 'Free credits finished';
     detail.textContent =
       reason === 'device_mismatch'
         ? 'Contact support to move this licence to this computer.'
-        : 'Renew to keep searching. Saved folders and CRM data are untouched.';
-    titleEl.textContent = 'Renew your access';
-    ledeEl.textContent = 'Enter a new licence key, or subscribe below.';
+        : 'Your 1,000 free credits are used. Saved folders, notes and exports are still yours.';
+    titleEl.textContent = 'Add a licence key to keep going';
+    ledeEl.textContent = 'Enter the key from your purchase email, or choose a plan below.';
     activateEl.textContent = 'Activate licence';
   } else {
     label.textContent = 'Activation required';
@@ -75,9 +80,11 @@ function renderPlans() {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'plan';
+    const credits = Number(plan.credits) || 0;
     button.innerHTML = `
       <b>${plan.name}</b>
       <div class="price">${plan.price}<small>${plan.period}</small></div>
+      ${credits ? `<div class="blurb"><strong>${credits.toLocaleString('en-IN')}</strong> leads / month</div>` : ''}
       <div class="blurb">${plan.blurb}</div>
     `;
     button.addEventListener('click', () => api.openPortal());
@@ -88,7 +95,7 @@ function renderPlans() {
 async function refresh() {
   const status = await api.status();
   renderStatus(status);
-  if (status && status.canUse && status.state !== 'trial') {
+  if (status && (status.state === 'active' || status.state === 'grace')) {
     setTimeout(() => window.close(), 1400);
   }
 }

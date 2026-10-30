@@ -66,6 +66,7 @@ export default function App() {
           {/* The Windows build has no marketing site: it opens the workspace. */}
           <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
           <Route path="/command" element={<CommandCenter />} />
+          <Route path="/master" element={<Navigate to="/command" replace />} />
 
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<Terms />} />

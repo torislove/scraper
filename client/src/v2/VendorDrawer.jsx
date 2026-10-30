@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertTriangle, CheckCircle2, CircleHelp, Clock3, ExternalLink, Globe2,
   Loader2, Mail, MapPin, MessageSquare, Phone, RefreshCw, Send, Star, X, Zap
@@ -54,7 +55,7 @@ function fieldProvenance(profile, field, path) {
 }
 
 function ChipList({ values }) {
-  return (
+  const drawerEl = (
     <span className="v2-chip-list">
       {values.map((item, index) => {
         const text = typeof item === 'string' ? item : (item?.name || item?.label || JSON.stringify(item));
@@ -67,7 +68,7 @@ function ChipList({ values }) {
 function LinkValue({ value, label }) {
   const url = safeUrl(value);
   if (!url) return <span>{String(value)}</span>;
-  return (
+  const drawerEl = (
     <a className="v2-link-value" href={url} target="_blank" rel="noreferrer">
       {label || String(value).replace(/^https?:\/\//i, '').replace(/\/$/, '')}
       <ExternalLink size={11} />
@@ -76,7 +77,7 @@ function LinkValue({ value, label }) {
 }
 
 function HoursTable({ rows }) {
-  return (
+  const drawerEl = (
     <div className="v2-hours-table">
       {rows.map((row, index) => (
         <div key={`${row.day}-${index}`}>
@@ -86,10 +87,11 @@ function HoursTable({ rows }) {
       ))}
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(drawerEl, document.body) : drawerEl;
 }
 
 function ReviewCards({ reviews }) {
-  return (
+  const drawerEl = (
     <div className="v2-review-list">
       {reviews.map((review, index) => (
         <article className="v2-review" key={`${review.author || 'review'}-${index}`}>
@@ -107,7 +109,7 @@ function ReviewCards({ reviews }) {
 }
 
 function FaqList({ faqs }) {
-  return (
+  const drawerEl = (
     <div className="v2-faq-list">
       {faqs.map((faq, index) => (
         <details key={`${faq.question}-${index}`}>
@@ -122,7 +124,7 @@ function FaqList({ faqs }) {
 function MediaGrid({ items }) {
   const urls = items.map(item => typeof item === 'string' ? item : item?.url).filter(Boolean).slice(0, 12);
   if (!urls.length) return <Unknown />;
-  return (
+  const drawerEl = (
     <div className="v2-media-grid">
       {urls.map((url, index) => (
         <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`}>
@@ -139,7 +141,7 @@ function renderValue(field, value) {
   }
 
   if (field.key === 'phone' && typeof value === 'string') {
-    return (
+    const drawerEl = (
       <span className="v2-phone-value">
         <a href={`tel:${value}`}>{value}</a>
         <CopyButton value={value} />
@@ -173,7 +175,7 @@ function renderValue(field, value) {
   if (field.key === 'faqs' && Array.isArray(value)) return <FaqList faqs={value} />;
   if (['images', 'photos'].includes(field.key)) return <MediaGrid items={value} />;
   if (field.key === 'logo') {
-    return (
+    const drawerEl = (
       <span className="v2-logo-value">
         <img src={value} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
         <LinkValue value={value} label="Open source image" />
@@ -187,14 +189,14 @@ function renderValue(field, value) {
 
   if (field.key === 'services' || field.key === 'products' || field.key === 'offers' || field.key === 'bookingLinks') {
     if (!Array.isArray(value)) return <span>{String(value)}</span>;
-    return (
+    const drawerEl = (
       <div className="v2-catalog-list">
         {value.map((item, index) => {
           if (typeof item === 'string') return <span className="v2-chip" key={index}>{item}</span>;
           const label = item.name || item.label || item.title || item.url || 'Untitled';
           const detail = [item.description, item.price && `${item.currency || '₹'} ${item.price}`, item.validUntil && `until ${item.validUntil}`].filter(Boolean).join(' · ');
           const url = safeUrl(item.url);
-          return (
+          const drawerEl = (
             <div className="v2-catalog-item" key={`${label}-${index}`}>
               <b>{url ? <a href={url} target="_blank" rel="noreferrer">{label}<ExternalLink size={10} /></a> : label}</b>
               {detail && <small>{detail}</small>}
@@ -208,7 +210,7 @@ function renderValue(field, value) {
   if (Array.isArray(value)) {
     const simple = value.every(item => typeof item === 'string' || typeof item === 'number');
     if (simple) return <ChipList values={value.map(String)} />;
-    return (
+    const drawerEl = (
       <div className="v2-catalog-list">
         {value.map((item, index) => {
           const label = item?.name || item?.label || item?.author || item?.question || `Item ${index + 1}`;
@@ -241,7 +243,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    const drawerEl = () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -249,7 +251,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
       if (event.key === 'Escape') onClose?.();
     };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    const drawerEl = () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   useEffect(() => {
@@ -364,7 +366,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
   const address = vendor.address || [vendor.city, vendor.district, vendor.state, vendor.pincode].filter(Boolean).join(', ');
   const hasLogo = vendor.logo && !/ui-avatars/i.test(vendor.logo) && !/google\.com\/s2\/favicons/i.test(vendor.logo);
 
-  return (
+  const drawerEl = (
     <div className="v2-drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose?.(); }}>
       <aside className="v2-drawer" role="dialog" aria-modal="true" aria-label={vendor.name || 'Vendor profile'}>
         <header className="v2-drawer-top">
@@ -527,7 +529,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
               <nav className="v2-drawer-groups">
                 {(profile.fieldGroups || []).map(group => {
                   const stat = groupProgress[group.key] || { known: 0, total: group.fields.length, percent: 0 };
-                  return (
+                  const drawerEl = (
                     <button
                       type="button"
                       key={group.key}
@@ -559,7 +561,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
                     const conflict = (profile.conflicts || []).find(item => item.field === path);
                     const provenance = fieldProvenance(profile, field, path);
 
-                    return (
+                    const drawerEl = (
                       <div className={cx('v2-field-row', `status-${status}`)} key={path}>
                         <div className="v2-field-label">
                           <span className={cx('v2-status-dot', `tone-${status}`)} />
@@ -627,4 +629,5 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
       </aside>
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(drawerEl, document.body) : drawerEl;
 }

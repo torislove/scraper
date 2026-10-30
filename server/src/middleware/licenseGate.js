@@ -14,6 +14,8 @@
 const crypto = require('crypto');
 const fs = require('fs');
 
+const credits = require('../services/credits');
+
 const CACHE_TTL_MS = 30 * 1000;
 let cached = null;
 let cachedAt = 0;
@@ -120,6 +122,41 @@ function createLicenseGate() {
     if (!file || req.method === 'GET' || req.method === 'OPTIONS') return next();
 
     const status = readLicenseFile(file);
+
+    /* ---------------------------------------------------------------- */
+    /* Credit model (desktop).                                          */
+    /*                                                                  */
+    /* Free credits are a free tier: a machine with credits left may     */
+    /* scrape without any licence at all. A paid plan adds a monthly     */
+    /* allowance, taken from the signed token so it cannot be inflated.  */
+    /* ---------------------------------------------------------------- */
+    if (credits.ENFORCED) {
+      const payload = status.valid ? status.payload || {} : null;
+
+      credits.applyPlan(
+        payload
+          ? {
+              plan: payload.plan,
+              // `credits` is the monthly allowance minted into the token.
+              allowance: Number(payload.credits) || 0,
+              endsAt: Number(payload.periodEndsAt) || 0
+            }
+          : null
+      );
+
+      if (credits.canStart()) return next();
+
+      const snapshot = credits.status();
+      return res.status(402).json({
+        error: 'credits_exhausted',
+        reason: status.valid ? 'plan_exhausted' : 'free_credits_used',
+        credits: snapshot,
+        message: status.valid
+          ? 'Your monthly credits are used up. They reset at the start of your next billing period.'
+          : 'You have used all 1,000 free credits on this computer. Upgrade to keep scraping.'
+      });
+    }
+
     if (status.valid) return next();
 
     return res.status(402).json({

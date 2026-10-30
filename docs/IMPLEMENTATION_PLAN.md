@@ -1810,13 +1810,17 @@ writable path ever lands inside `Program Files`. Every search still writes its
 own immutable session folder; `deleteAppDataOnUninstall` is false, so updates
 and reinstalls never lose leads.
 
-**Licensing.** Ed25519 tokens signed by `desktop/license-server`, verified by
-the app with an embedded public key. 14-day trial, 7-day grace, plans at
-₹1,999 / ₹3,999 / ₹7,999 with 500 / 2,000 / 10,000 leads per search and
-1 / 3 / 10 seats. Activation is online (API) or offline (`.scraperlic` import).
-The token is cached with Windows DPAPI. The engine re-verifies it on every
-scrape POST when `LICENSE_ENFORCE=1` (desktop only), so removing the activation
-screen does not unlock scraping; the web deployment stays open.
+**Licensing and credits.** Ed25519 tokens signed by `desktop/license-server`,
+verified by the app with an embedded public key. There is **no trial**: every
+desktop gets **1,000 free credits once**, 1 credit = 1 saved lead, never
+expires. Paid plans add 2,000 / 10,000 / 50,000 credits (starter/pro/agency)
+with a 7-day grace period. Activation is online (API) or offline
+(`.scraperlic` import). The token and the credit ledger are cached with Windows
+DPAPI, with the ledger anchored under `HKCU\Software\Scraper` so a reinstall
+cannot mint a second free grant. The app always opens; an empty wallet blocks
+only new searches (`402 credits_exhausted`) while folders, CRM notes and exports
+keep working. `LICENSE_ENFORCE=1` is always set in the desktop shell, so removing
+the activation screen does not unlock scraping; the web deployment stays open.
 
 **Updates.** `electron-updater` against `github.com/torislove/scraper`; pushing
 a `v*` tag makes `.github/workflows/release.yml` build the NSIS installer and

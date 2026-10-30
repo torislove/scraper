@@ -1,10 +1,21 @@
 import axios from 'axios';
 import { API_URL } from '../apiConfig';
+import { getUserId } from '../utils/sessionManager';
 
 const client = axios.create({
   baseURL: API_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' }
+});
+
+// Client request interceptor: attach persistent client identifier and client role
+client.interceptors.request.use(config => {
+  try {
+    const uid = getUserId();
+    if (uid) config.headers['x-user-id'] = uid;
+    config.headers['x-workspace-scope'] = 'client';
+  } catch (e) {}
+  return config;
 });
 
 export const apiBase = API_URL;
@@ -86,6 +97,11 @@ export async function startAuto(payload) {
   return data;
 }
 
+export async function classifySearchLocation(q) {
+  const { data } = await client.get('/search/classify', { params: { q } });
+  return data?.classification || null;
+}
+
 export async function stopAllScrapes() {
   const { data } = await client.post('/scrape/jobs/stop-all');
   return data;
@@ -151,10 +167,47 @@ export async function deleteSession(sessionId) {
   return data;
 }
 
+export async function renameSession(sessionId, payload = {}) {
+  const { data } = await client.patch('/sessions/rename', { sessionId, ...payload });
+  return data;
+}
+
+export async function mergeSessions(sessionIds, newName, tags = [], color = 'purple') {
+  const { data } = await client.post('/sessions/merge', { sessionIds, newName, tags, color });
+  return data;
+}
+
+export async function batchDeleteSessions(sessionIds) {
+  const { data } = await client.post('/sessions/batch-delete', { sessionIds });
+  return data;
+}
+
 export function sessionExportUrl(sessionId, format = 'csv') {
   return `${API_URL}/sessions/export/${encodeURIComponent(sessionId)}?format=${format}`;
 }
 
 export function streamUrl() {
   return `${API_URL}/logs/stream`;
+}
+
+export async function getGeoHierarchy(params = {}) {
+  const { data } = await client.get('/locations/hierarchy', { params });
+  return data;
+}
+
+/* ------------------------------------------------------------ notifications */
+
+export async function getNotifications() {
+  const { data } = await client.get('/notifications');
+  return { notifications: data?.notifications || [], unread: data?.unread || 0 };
+}
+
+export async function markNotificationRead(id) {
+  const { data } = await client.post(`/notifications/${encodeURIComponent(id)}/read`);
+  return data;
+}
+
+export async function getWorkspaceStatus() {
+  const { data } = await client.get('/notifications/status');
+  return data?.client || null;
 }

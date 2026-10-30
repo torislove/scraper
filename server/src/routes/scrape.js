@@ -225,8 +225,8 @@ registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   return res;
 });
 registerTask('scrapeScrapySpider', async (cat, loc) => safeExecute(() => scrapeScrapySpider(cat, loc), 'Scrapy Python Spider', addLog));
-registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId) =>
-  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId), 'Omni Search Orchestrator', addLog)
+registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}) =>
+  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters), 'Omni Search Orchestrator', addLog)
 );
 
 function setDeps(deps) {
@@ -785,7 +785,19 @@ function persistSessionVault({ sessionId, userId, category, location, leads, met
   return { file: written[0] || '', phoneCount, leadCount: safeLeads.length };
 }
 
-async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous') {
+function matchesMasterFilters(lead, filters = {}) {
+  if (!lead) return false;
+  if (Number(filters.minRating) > 0 && Number(lead.rating) < Number(filters.minRating)) return false;
+  if (filters.hasWebsite && !lead.website) return false;
+  if (filters.verifiedOnly && !(lead.verified || Number(lead.profileQuality?.score) >= 70)) return false;
+  if (filters.mobileOnly) {
+    const digits = String(lead.phone || lead.whatsapp || '').replace(/\D/g, '').slice(-10);
+    if (!/^[6-9]\d{9}$/.test(digits)) return false;
+  }
+  return true;
+}
+
+async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}) {
   const sessionAbortSignal = { aborted: false };
   const requestedEngines = Array.isArray(enabledEngines) ? enabledEngines.filter(Boolean) : [];
   const classification = categoryRouter.classifyCategory(category);
@@ -812,7 +824,8 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
         status: 'running',
         startedAt: new Date().toISOString(),
         services: classification.label,
-        engines: activeEngines
+        engines: activeEngines,
+        filters: filters && Object.keys(filters).length ? filters : undefined
       }
     });
   } catch (error) {
@@ -1159,8 +1172,10 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
     // 4. Scrape Completed: Aggregate Session Leads & Automatically Save to Individual Search Vault
     const allVendors = dbAdapter.getVendors();
-    const sessionLeads = allVendors.filter(v => v.sessionId === sessionId);
-    addLog(`[Orchestrator] Swarm finished. Harvested ${sessionLeads.length} leads for session "${sessionId}".`);
+    const harvestedLeads = allVendors.filter(v => v.sessionId === sessionId);
+    const hasFilters = filters && Object.keys(filters).length > 0;
+    const sessionLeads = hasFilters ? harvestedLeads.filter(lead => matchesMasterFilters(lead, filters)) : harvestedLeads;
+    addLog(`[Orchestrator] Swarm finished. Harvested ${sessionLeads.length} leads for session "${sessionId}"${hasFilters ? ` (${harvestedLeads.length - sessionLeads.length} removed by master filters)` : ''}.`);
 
     // Dual-save session vault to disk. This is the user's "search folder":
     // one file per run, kept even after the live dataset is purged.
@@ -1176,7 +1191,9 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
           completedAt: new Date().toISOString(),
           totalZones,
           zones: zones.map(z => z.zoneName),
-          elapsedTimeSec: Math.round((Date.now() - startTime) / 1000)
+          elapsedTimeSec: Math.round((Date.now() - startTime) / 1000),
+          filters: hasFilters ? filters : undefined,
+          harvestedBeforeFilters: hasFilters ? harvestedLeads.length : undefined
         }
       });
       addLog(`[Orchestrator] 📁 Search folder saved: ${saved.file || `${sessionId}.json`} (${saved.leadCount} leads, ${saved.phoneCount} phones)`);
@@ -1289,6 +1306,21 @@ router.post('/omni', async (req, res) => {
     });
   }
 
+  // Client Restriction: Client can ONLY scrape individual cities and mandals!
+  const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+  if (!isMaster) {
+    const { classifyLocation } = require('../utils/universalGeoCluster');
+    const locClassification = classifyLocation(parsed.location);
+    if (locClassification.type === 'state' || locClassification.type === 'district') {
+      return res.status(403).json({
+        error: `Client searches are limited to one city, town or village at a time. A ${locClassification.type}-wide sweep (${locClassification.name}) requires the Master Command Center.`,
+        classification: locClassification,
+        allowedScopes: ['city', 'town', 'village', 'locality'],
+        suggestedZones: locClassification.subZones?.slice(0, 8) || []
+      });
+    }
+  }
+
   const charge = chargeOmniCredits(userId);
   if (!charge.ok) {
     return res.status(charge.status).json({ error: charge.error });
@@ -1384,6 +1416,21 @@ router.post('/auto', async (req, res) => {
       });
     }
 
+    // Client Restriction: Client can ONLY scrape individual cities and mandals!
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    if (!isMaster) {
+      const { classifyLocation } = require('../utils/universalGeoCluster');
+      const locClassification = classifyLocation(plan.location);
+      if (locClassification.type === 'state' || locClassification.type === 'district') {
+        return res.status(403).json({
+          error: `Client searches are limited to one city, town or village at a time. A ${locClassification.type}-wide sweep (${locClassification.name}) requires the Master Command Center.`,
+          classification: locClassification,
+          allowedScopes: ['city', 'town', 'village', 'locality'],
+          suggestedZones: locClassification.subZones?.slice(0, 8) || []
+        });
+      }
+    }
+
     const explicitEngines = (Array.isArray(enabledEngines) && enabledEngines.length)
       ? enabledEngines
       : (Array.isArray(engines) && engines.length)
@@ -1445,6 +1492,116 @@ router.post('/auto', async (req, res) => {
   } catch (error) {
     addLog(`[Auto Scrape Error] ${error.message}`);
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MASTER GEO-COVERAGE SWEEP API (District, Mandal Cluster, & State Sweeps)
+// Dedicated orchestrator for full-district and state coverage folders
+// ──────────────────────────────────────────────────────────────────────────────
+router.post('/master-sweep', async (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    if (!isMaster) {
+      return res.status(403).json({
+        error: 'Access denied: Master territorial sweeps (District & State) are restricted to the Master Command Center.'
+      });
+    }
+
+    const { category, scope = 'district', name, userId = 'master', strategy = 'broad', speedPreset = 'precision_grid', engines } = req.body;
+    if (!category || !name) {
+      return res.status(400).json({ error: 'Both category and target location name are required for a Master Sweep.' });
+    }
+
+    const { classifyLocation, districtIndex, stateIndex, mandalIndex } = require('../utils/universalGeoCluster');
+    const classification = classifyLocation(name);
+
+    // Resolve every constituent zone for the requested scope. The master is the
+    // only workspace allowed to ask for a district, mandal or state sweep.
+    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let resolvedScope = scope;
+    let targetZones = [];
+    let sweepTitle = name;
+
+    const wanted = ['state', 'district', 'mandal', 'city'].includes(scope) ? scope : 'district';
+
+    if (wanted === 'state') {
+      const entry = stateIndex.get(cleanName);
+      if (entry) {
+        resolvedScope = 'state';
+        targetZones = (entry.districts || []).slice(0, 80);
+        sweepTitle = entry.state;
+      }
+    } else if (wanted === 'district') {
+      const entry = districtIndex.get(cleanName);
+      if (entry) {
+        resolvedScope = 'district';
+        targetZones = (entry.mandals || []).slice(0, 80);
+        sweepTitle = `${entry.district} District`;
+      }
+    } else if (wanted === 'mandal') {
+      const entry = mandalIndex.get(cleanName) || mandalIndex.get(name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
+      if (entry) {
+        resolvedScope = 'mandal';
+        targetZones = (entry.villages && entry.villages.length ? entry.villages : [entry.subDistrict]).slice(0, 40);
+        sweepTitle = `${entry.subDistrict} Mandal`;
+      }
+    } else {
+      resolvedScope = 'city';
+      targetZones = (classification.subZones || []).slice(0, 40);
+      sweepTitle = classification.name || name;
+    }
+
+    // If the name is not in the local gazetteer, trust the classifier rather
+    // than launching a one-zone job when the operator asked for a wider sweep.
+    if (!targetZones.length) {
+      resolvedScope = classification.type && classification.type !== 'unknown' ? classification.type : resolvedScope;
+      targetZones = classification.subZones && classification.subZones.length ? classification.subZones : [name];
+      sweepTitle = classification.name || name;
+    }
+
+    const filters = {};
+    if (Number(req.body.minRating) > 0) filters.minRating = Math.min(5, Number(req.body.minRating));
+    if (req.body.mobileOnly === true) filters.mobileOnly = true;
+    if (req.body.hasWebsite === true) filters.hasWebsite = true;
+    if (req.body.verifiedOnly === true) filters.verifiedOnly = true;
+
+    const sessionId = `master_${Date.now().toString(36)}`;
+    const finalLocation = `${sweepTitle} (${resolvedScope.toUpperCase()} SWEEP)`;
+
+    globalAbortSignal.aborted = false;
+    if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
+
+    res.json({
+      ok: true,
+      sessionId,
+      message: `Master ${resolvedScope} sweep initiated for "${sweepTitle}". Swarming ${targetZones.length} sub-zones.`,
+      scope: resolvedScope,
+      targetName: sweepTitle,
+      totalZones: targetZones.length,
+      zones: targetZones.slice(0, 35),
+      filters,
+      isMasterSweep: true
+    });
+
+    addLog(`\n[Master Sweep] 🗺️ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
+
+    addScrapeJob('scrapeOmniOrchestrator', [
+      category,
+      finalLocation,
+      strategy,
+      5,
+      'high',
+      engines || ['geospatial_mesh', 'direct_telecom'],
+      sessionId,
+      userId || 'master',
+      filters
+    ]);
+
+  } catch (error) {
+    console.error('[Master Sweep Error]', error);
+    addLog(`[Master Sweep Error] ${error.message}`);
+    res.status(500).json({ error: error.message });
   }
 });
 

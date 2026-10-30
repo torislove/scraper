@@ -23,9 +23,14 @@ process.on('unhandledRejection', (reason, promise) => {
 // Configs
 const localDb = require('./src/config/localDb');
 const paths = require('./src/config/paths');
+const credits = require('./src/services/credits');
 const { createLicenseGate } = require('./src/middleware/licenseGate');
+const clientGate = require('./src/middleware/clientGate');
+const masterRoutes = require('./src/routes/master');
+const notificationRoutes = require('./src/routes/notifications');
 
 paths.ensureAll();
+credits.init();
 
 // Routes
 const authRoutes = require('./src/routes/auth');
@@ -145,7 +150,9 @@ setInterventionEmitter(emitInterventionEvent);
 // Apply Routes
 app.use('/api/auth', authRoutes);
 app.use('/api', apiRouter);
-app.use('/api/scrape', createLicenseGate(), scrapeRouter);
+app.use('/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
+app.use('/api/master', masterRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/public', publicUsersRoutes);
 app.use('/api/vendors', vendorsRoutes);
 app.use('/api/employees', employeesRoutes);
@@ -179,13 +186,20 @@ app.get('/api/app/info', (req, res) => {
     dataDir: paths.DATA_DIR,
     node: process.version,
     platform: process.platform,
-    uptime: Math.round(process.uptime())
+    uptime: Math.round(process.uptime()),
+    credits: credits.status()
   });
+});
+
+// Credit balance for the cockpit badge and the upgrade screen.
+app.get('/api/credits', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json(credits.status());
 });
 
 app.get('/api/license/status', (req, res) => {
   const file = process.env.LICENSE_FILE;
-  if (!file) return res.json({ enforced: false, status: 'unmanaged' });
+  if (!file) return res.json({ enforced: false, status: 'unmanaged', credits: credits.status() });
   const { verifyToken } = require('./src/middleware/licenseGate');
   let token = '';
   try {
@@ -193,19 +207,32 @@ app.get('/api/license/status', (req, res) => {
     const parsed = JSON.parse(raw);
     token = parsed.token || parsed.license || '';
   } catch (e) {
-    return res.json({ enforced: true, status: 'missing' });
+    return res.json({ enforced: true, status: 'missing', credits: credits.status() });
   }
   const key = process.env.LICENSE_PUBLIC_KEY;
-  if (!key) return res.json({ enforced: false, status: 'unmanaged' });
+  if (!key) return res.json({ enforced: false, status: 'unmanaged', credits: credits.status() });
   const pem = String(key).includes('BEGIN PUBLIC KEY')
     ? String(key).replace(/\\n/g, '\n')
     : `-----BEGIN PUBLIC KEY-----\n${key}\n-----END PUBLIC KEY-----`;
   const result = verifyToken(token, pem);
+
+  // Keep the plan allowance in sync with the signed token on every poll.
+  credits.applyPlan(
+    result.valid
+      ? {
+          plan: result.payload?.plan,
+          allowance: Number(result.payload?.credits) || 0,
+          endsAt: Number(result.payload?.periodEndsAt) || 0
+        }
+      : null
+  );
+
   res.json({
     enforced: true,
     status: result.valid ? result.reason : result.reason,
     plan: result.payload?.plan || null,
-    expiresAt: result.payload?.expiresAt ? new Date(result.payload.expiresAt).toISOString() : null
+    expiresAt: result.payload?.expiresAt ? new Date(result.payload.expiresAt).toISOString() : null,
+    credits: credits.status()
   });
 });
 
@@ -292,7 +319,8 @@ const PORT = rawPort === undefined || rawPort === '' ? 5002 : Number(rawPort);
 const HOST = process.env.SCRAPER_HOST || (paths.isDesktop ? '127.0.0.1' : '0.0.0.0');
 
 const httpServer = app.listen(PORT, HOST, () => {
-  const actualPort = httpServer.address().port;
+  const addr = httpServer.address();
+  const actualPort = addr && typeof addr === 'object' ? addr.port : PORT;
   // The Electron launcher reads this exact line to learn the port.
   console.log(`[ready] ${JSON.stringify({ port: actualPort, host: HOST, desktop: paths.isDesktop })}`);
   console.log(`🚀 LeadHarvest Pro Intelligence Engine running on port ${actualPort}`);

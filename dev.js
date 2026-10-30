@@ -28,6 +28,11 @@ const children = [
   start('client', path.join(root, 'client'), ['run', 'dev'])
 ];
 
+if (process.argv.includes('--all') || process.argv.includes('--master') || process.env.START_MASTER === '1') {
+  console.log('[dev.js] Launching Master Territorial Command Center on port 5174...');
+  children.push(start('master', path.join(root, 'master'), ['run', 'dev']));
+}
+
 function shutdown(signal) {
   for (const child of children) {
     if (!child.killed) child.kill(signal);

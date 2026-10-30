@@ -25,10 +25,12 @@ const DATA_FILE = process.env.LICENSE_DATA || path.join(__dirname, 'data', 'lice
 const KEY_FILE = process.env.LICENSE_PRIVATE_KEY_FILE || path.join(__dirname, '.keys', 'private.pem');
 
 const PLANS = {
-  starter: { maxLeads: 500, price: 1999, seats: 1 },
-  pro: { maxLeads: 2000, price: 3999, seats: 3 },
-  agency: { maxLeads: 10000, price: 7999, seats: 10 }
+  starter: { maxLeads: 500, credits: 2000, price: 1999, seats: 1 },
+  pro: { maxLeads: 2000, credits: 10000, price: 3999, seats: 3 },
+  agency: { maxLeads: 10000, credits: 50000, price: 7999, seats: 10 }
 };
+
+const FREE_CREDITS = Number(process.env.FREE_CREDITS || 1000);
 
 function loadPrivateKey() {
   if (process.env.LICENSE_PRIVATE_KEY) {
@@ -45,9 +47,10 @@ const PRIVATE_KEY = loadPrivateKey();
 
 function loadDb() {
   try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    return { licenses: {}, creditGrants: {}, ...parsed };
   } catch (e) {
-    return { licenses: {} };
+    return { licenses: {}, creditGrants: {} };
   }
 }
 
@@ -98,6 +101,8 @@ function verifyToken(token) {
 
 function issueToken(record, deviceId, email) {
   const now = Date.now();
+  const plan = PLANS[record.plan] || PLANS.starter;
+
   return signToken({
     v: 1,
     sub: record.id,
@@ -105,7 +110,11 @@ function issueToken(record, deviceId, email) {
     plan: record.plan,
     email: email || record.email || '',
     deviceId: deviceId || '',
-    maxLeads: (PLANS[record.plan] || PLANS.starter).maxLeads,
+    maxLeads: plan.maxLeads,
+    // Monthly credit allowance. The engine trusts this number, never a local
+    // setting, so a customer cannot inflate their balance by editing files.
+    credits: plan.credits,
+    periodEndsAt: record.expiresAt,
     issuedAt: now,
     expiresAt: record.expiresAt,
     graceDays: Number(process.env.GRACE_DAYS || 7)
@@ -140,9 +149,65 @@ app.get('/plans', (req, res) => {
       price: `₹${plan.price.toLocaleString('en-IN')}`,
       period: '/month',
       maxLeads: plan.maxLeads,
+      credits: plan.credits,
       seats: plan.seats
     }))
   );
+});
+
+/* ------------------------------------------------------------------ */
+/* free credits (one claim per computer)                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The desktop app calls this on first launch. The grant is keyed by the
+ * machine fingerprint, so reinstalling the app — or wiping its data folder —
+ * does not produce a second 1,000 credits.
+ */
+app.post('/credits/claim', (req, res) => {
+  const deviceId = String((req.body || {}).deviceId || '').trim();
+  if (!deviceId) {
+    return res.status(400).json({ error: 'device_required', message: 'Device id is required.' });
+  }
+
+  const db = loadDb();
+  db.creditGrants = db.creditGrants || {};
+
+  const existing = db.creditGrants[deviceId];
+
+  if (existing) {
+    existing.lastSeen = Date.now();
+    saveDb(db);
+    return res.json({
+      deviceId,
+      granted: existing.granted,
+      used: existing.used,
+      grantedAt: existing.grantedAt,
+      alreadyClaimed: true
+    });
+  }
+
+  const record = {
+    deviceId,
+    granted: FREE_CREDITS,
+    used: 0,
+    grantedAt: Date.now(),
+    lastSeen: Date.now()
+  };
+
+  db.creditGrants[deviceId] = record;
+  saveDb(db);
+
+  res.json({ ...record, alreadyClaimed: false });
+});
+
+/** Authoritative balance lookup (used for support and reinstalls). */
+app.post('/credits/status', (req, res) => {
+  const deviceId = String((req.body || {}).deviceId || '').trim();
+  const db = loadDb();
+  const record = (db.creditGrants || {})[deviceId];
+  if (!record) return res.status(404).json({ error: 'not_found' });
+  res.json({ ...record, left: Math.max(0, record.granted - record.used) });
 });
 
 app.post('/activate', (req, res) => {
@@ -274,6 +339,37 @@ app.post('/admin/extend', requireAdmin, (req, res) => {
   db.licenses[key].expiresAt = base + Number(days) * 86400000;
   saveDb(db);
   res.json({ ok: true, expiresAt: db.licenses[key].expiresAt });
+});
+
+/**
+ * Support tool: correct a device's free-credit record.
+ *   { deviceId, used }  set the spent counter
+ *   { deviceId, grant } reset a grant (only for genuine support cases)
+ */
+app.post('/admin/credits', requireAdmin, (req, res) => {
+  const { deviceId, used, grant } = req.body || {};
+  if (!deviceId) return res.status(400).json({ error: 'device_required' });
+
+  const db = loadDb();
+  db.creditGrants = db.creditGrants || {};
+  const record =
+    db.creditGrants[deviceId] || {
+      deviceId,
+      granted: FREE_CREDITS,
+      used: 0,
+      grantedAt: Date.now()
+    };
+
+  if (used !== undefined) record.used = Math.max(0, Number(used) || 0);
+  if (grant) {
+    record.granted = Math.max(0, Number(grant) || 0);
+    record.grantedAt = Date.now();
+  }
+  record.lastSeen = Date.now();
+
+  db.creditGrants[deviceId] = record;
+  saveDb(db);
+  res.json({ ok: true, ...record, left: Math.max(0, record.granted - record.used) });
 });
 
 /**

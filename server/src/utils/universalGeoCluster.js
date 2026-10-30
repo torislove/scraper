@@ -619,7 +619,8 @@ function resolveUniversalZones(location, category = '') {
   if (districtIndex.has(lowerLoc) || districtIndex.has(primaryName)) {
     const entry = districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
     if (entry.mandals && entry.mandals.length > 0) {
-      const selected = entry.mandals.slice(0, 12);
+      const isMaster = /master|sweep|district/i.test(cleanLoc);
+      const selected = isMaster ? entry.mandals.slice(0, 40) : entry.mandals.slice(0, 15);
       return selected.map(m => {
         const mLower = m.toLowerCase();
         const coords = ZONE_COORDINATES[mLower] || null;
@@ -642,7 +643,8 @@ function resolveUniversalZones(location, category = '') {
   if (stateIndex.has(lowerLoc) || stateIndex.has(primaryName)) {
     const entry = stateIndex.get(lowerLoc) || stateIndex.get(primaryName);
     if (entry.districts && entry.districts.length > 0) {
-      const topDistricts = entry.districts.slice(0, 12);
+      const isMaster = /master|sweep|state/i.test(cleanLoc);
+      const topDistricts = isMaster ? entry.districts.slice(0, 32) : entry.districts.slice(0, 15);
       return topDistricts.map(d => {
         const prefix = category ? `${category} in ` : '';
         return {
@@ -665,9 +667,152 @@ function resolveUniversalZones(location, category = '') {
   }));
 }
 
+/**
+ * Classifies a user's location input into State, District, Metro/City, or Mandal
+ * Returns instant metadata for UI badges, zone counts, lead estimates, and auto-swarm triggers
+ */
+function classifyLocation(queryOrLoc) {
+  if (!queryOrLoc || typeof queryOrLoc !== 'string') {
+    return { type: 'unknown', name: '', zoneCount: 1, estimatedLeads: 50, badge: '📍 LOCAL', label: 'Local search' };
+  }
+
+  let text = queryOrLoc.trim();
+  const prepMatch = text.match(/\s+(in|near|around|at|across|within)\s+(.+)$/i);
+  let locCandidate = prepMatch ? prepMatch[2].trim() : text;
+  locCandidate = locCandidate.replace(/^(the|a|an)\s+/i, '').replace(/[?,.!]+$/, '').trim();
+
+  const explicitDistrict = /\b(district|dist)\b/i.test(locCandidate);
+  const explicitState = /\b(state)\b/i.test(locCandidate);
+  const stripped = locCandidate.replace(/\b(district|dist|mandal|tehsil|taluk|state|city|town|metro)\b/gi, '').trim();
+
+  const rawCandidates = [
+    locCandidate,
+    stripped,
+    locCandidate.split(',')[0].trim(),
+    stripped.split(',')[0].trim(),
+    locCandidate.split(',').pop().trim()
+  ].filter(Boolean);
+
+  const cleanCandidates = [...new Set(rawCandidates.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean))];
+
+  // 1. If explicit District indicated (e.g. "Guntur District", "Krishna Dist")
+  if (explicitDistrict) {
+    for (const clean of cleanCandidates) {
+      if (districtIndex.has(clean)) {
+        const entry = districtIndex.get(clean);
+        const mCount = entry.mandals ? entry.mandals.length : 14;
+        return {
+          type: 'district',
+          name: `${entry.district} District`,
+          state: entry.state,
+          zoneCount: mCount,
+          estimatedLeads: Math.min(1200, mCount * 35),
+          badge: '🗺️ DISTRICT',
+          label: 'District sweep (Master only)',
+          warning: `⚠️ District-wide sweep (${mCount} mandals). Swarms all towns and villages.`,
+          description: `District detected · ${mCount} mandals auto-swarmed · ~${Math.min(1200, mCount * 35)} leads`,
+          subZones: entry.mandals ? entry.mandals.slice(0, 20) : []
+        };
+      }
+    }
+  }
+
+  // 2. Check State
+  for (const clean of cleanCandidates) {
+    if (stateIndex.has(clean)) {
+      const entry = stateIndex.get(clean);
+      const distCount = entry.districts ? entry.districts.length : 25;
+      return {
+        type: 'state',
+        name: entry.state,
+        zoneCount: distCount,
+        totalMandals: distCount * 14,
+        estimatedLeads: 3000,
+        badge: '🏛️ STATE SWEEP',
+        label: 'State Sweep detected (Master only)',
+        warning: `⚠️ State-wide sweep (${distCount} districts, ~${distCount * 14} mandals). Swarms all major hubs.`,
+        description: `State: ${entry.state} (${distCount} districts)`,
+        subZones: entry.districts ? entry.districts.slice(0, 15) : []
+      };
+    }
+  }
+
+  // 3. Check Authoritative Metro / Tier-1/2 City Cluster (when not explicit district)
+  if (!explicitDistrict) {
+    for (const clean of cleanCandidates) {
+      if (AUTHORITATIVE_CLUSTERS[clean]) {
+        const zones = AUTHORITATIVE_CLUSTERS[clean];
+        const displayName = locCandidate.split(',')[0].replace(/\b(city|town|metro)\b/gi, '').trim();
+        return {
+          type: 'city',
+          name: displayName.charAt(0).toUpperCase() + displayName.slice(1),
+          zoneCount: zones.length,
+          estimatedLeads: zones.length * 40,
+          badge: '🏙️ TIER-1/2 CITY',
+          label: 'City detected',
+          description: `Tier-1/2 City · ${zones.length} economic zones swarm · ~${zones.length * 40} leads`,
+          subZones: zones
+        };
+      }
+    }
+  }
+
+  // 4. Check Mandal
+  for (const clean of cleanCandidates) {
+    if (mandalIndex.has(clean)) {
+      const entry = mandalIndex.get(clean);
+      const vCount = entry.villages ? Math.min(entry.villages.length, 10) : 4;
+      return {
+        type: 'mandal',
+        name: entry.subDistrict,
+        district: entry.district,
+        state: entry.state,
+        zoneCount: vCount,
+        estimatedLeads: 85,
+        badge: '📍 MANDAL',
+        label: 'Mandal / Tehsil detected',
+        description: `Mandal in ${entry.district}, ${entry.state} · ~85 leads`,
+        subZones: entry.villages ? entry.villages.slice(0, 10) : []
+      };
+    }
+  }
+
+  // 5. Check District if not already matched
+  for (const clean of cleanCandidates) {
+    if (districtIndex.has(clean)) {
+      const entry = districtIndex.get(clean);
+      const mCount = entry.mandals ? entry.mandals.length : 14;
+      return {
+        type: 'district',
+        name: `${entry.district} District`,
+        state: entry.state,
+        zoneCount: mCount,
+        estimatedLeads: Math.min(1200, mCount * 35),
+        badge: '🗺️ DISTRICT',
+        label: 'District detected (Master only)',
+        description: `District detected · ${mCount} mandals auto-swarmed · ~${Math.min(1200, mCount * 35)} leads`,
+        subZones: entry.mandals ? entry.mandals.slice(0, 20) : []
+      };
+    }
+  }
+
+  // Fallback for general locality / town
+  return {
+    type: 'locality',
+    name: locCandidate,
+    zoneCount: 1,
+    estimatedLeads: 60,
+    badge: '📍 LOCALITY',
+    label: 'Local Radar Mesh',
+    description: `High-precision local zone swarm · ~60 leads`,
+    subZones: [locCandidate]
+  };
+}
+
 module.exports = {
   resolveUniversalZones,
   getUniversalCategoryVectors,
+  classifyLocation,
   AUTHORITATIVE_CLUSTERS,
   ZONE_COORDINATES,
   mandalIndex,

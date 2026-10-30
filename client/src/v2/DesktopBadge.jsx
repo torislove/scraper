@@ -35,26 +35,27 @@ export default function DesktopBadge() {
 
   if (!IS_DESKTOP) return null;
 
-  const state = license?.state || 'trial';
-  const plan = String(license?.plan || (state === 'trial' ? 'trial' : '')).toLowerCase();
-  const daysLeft = Number.isFinite(license?.daysLeft) ? license.daysLeft : null;
+  const state = license?.state || 'credits';
+  const plan = String(license?.plan || '').toLowerCase();
+  const creditsLeft = Number.isFinite(license?.creditsLeft) ? license.creditsLeft : null;
 
   const tone =
     state === 'active' ? 'is-active'
-    : state === 'trial' ? 'is-trial'
+    : state === 'credits' ? 'is-credits'
     : state === 'grace' ? 'is-warning'
     : 'is-expired';
 
   const label =
-    state === 'active' ? (plan && plan !== 'trial' ? plan.toUpperCase() : 'LICENSED')
-    : state === 'trial' ? 'TRIAL'
+    state === 'active' ? (plan ? plan.toUpperCase() : 'LICENSED')
+    : state === 'credits' ? 'FREE'
     : state === 'grace' ? 'GRACE'
-    : 'EXPIRED';
+    : 'OUT OF CREDITS';
 
   const sub =
-    daysLeft === null ? 'Manage'
-    : daysLeft <= 0 ? 'Renew'
-    : `${formatNumber(daysLeft)}d left`;
+    creditsLeft !== null && (state === 'active' || state === 'credits')
+      ? `${formatNumber(creditsLeft)} left`
+      : state === 'grace' ? 'Renew'
+      : 'Get more';
 
   const updateReady = update && (update.state === 'downloaded' || update.state === 'available');
 
@@ -66,7 +67,7 @@ export default function DesktopBadge() {
     desktopBridge?.license?.openPortal?.();
   };
 
-  const Icon = state === 'active' ? BadgeCheck : state === 'trial' ? Sparkles : ShieldAlert;
+  const Icon = state === 'active' ? BadgeCheck : state === 'credits' ? Sparkles : ShieldAlert;
 
   return (
     <button
@@ -78,7 +79,9 @@ export default function DesktopBadge() {
           ? `Update ${update.version || ''} ready — click to install`
           : license?.expiresAt
             ? `Subscription ends ${new Date(license.expiresAt).toLocaleDateString()}`
-            : 'Manage subscription'
+            : state === 'credits'
+              ? `${formatNumber(creditsLeft || 0)} free credits left`
+              : 'Add credits or manage your plan'
       }
     >
       {updateReady ? <Download size={12} /> : <Icon size={12} />}

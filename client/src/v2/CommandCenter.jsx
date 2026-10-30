@@ -2,22 +2,22 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown,
+  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown, Compass,
   ChevronLeft, ChevronRight, CircleDot, Copy, Crosshair, Database, Download,
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
-  Table2, Trash2, Users, Wifi, WifiOff, X, Zap
+  Table2, Tag, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge
 } from 'lucide-react';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
-import CrmBoard, { CRM_STAGES, crmStageOf } from './CrmBoard';
+import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
   startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, updateVendorCrm, streamUrl,
-  deleteSession
+  deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
@@ -25,6 +25,7 @@ import {
 } from './ui';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
+import NotificationBell from './NotificationBell';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 const SORTS = [
@@ -208,25 +209,52 @@ function DeepJobRow({ job, onStop, active = false }) {
   );
 }
 
-function RunCard({ run, onOpen, onExport, onLoadToCockpit, onDelete, active, loading = false }) {
+function RunCard({
+  run,
+  onOpen,
+  onExport,
+  onLoadToCockpit,
+  onDelete,
+  onRename,
+  active,
+  loading = false,
+  selected = false,
+  onToggleSelect
+}) {
   const percentMobiles = run.leadCount > 0 ? Math.round((run.phoneCount / run.leadCount) * 100) : 0;
-  
+  const displayName = run.customName || run.name || `${run.category} in ${run.location}`;
+  const colorStyle = run.color ? { borderLeftColor: run.color, borderLeftWidth: '3px' } : {};
+
   return (
     <div
-      className={cx('v2-run-card', active && 'is-active', loading && 'is-loading')}
+      className={cx('v2-run-card', active && 'is-active', loading && 'is-loading', selected && 'is-selected')}
+      style={colorStyle}
       onClick={(e) => {
-        if (e.target.closest('button') || e.target.closest('a') || e.target.closest('select')) return;
+        if (e.target.closest('button') || e.target.closest('a') || e.target.closest('select') || e.target.closest('input')) return;
         onOpen?.();
       }}
     >
       <header className="v2-run-card-header">
-        <span className="v2-run-mark">
+        <button
+          type="button"
+          className={cx('v2-run-check', selected && 'is-checked')}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.(run.id);
+          }}
+          title={selected ? 'Deselect folder' : 'Select folder for batch operations'}
+        >
+          {selected ? <CheckSquare size={15} /> : <Square size={15} />}
+        </button>
+
+        <span className="v2-run-mark" style={run.color ? { color: run.color } : {}}>
           <FolderArchive size={16} />
         </span>
+
         <div className="v2-run-title-wrap">
           <div className="v2-run-title-row">
-            <b className="v2-run-title" title={run.name || `${run.category} in ${run.location}`}>
-              {run.name || `${run.category} in ${run.location}`}
+            <b className="v2-run-title" title={displayName}>
+              {displayName}
             </b>
             <StatusPill tone={run.status === 'completed' || run.status === 'complete' ? 'lime' : run.status === 'running' ? 'cyan' : run.status === 'aborted' ? 'red' : 'neutral'}>
               {run.status === 'completed' ? 'ready' : run.status}
@@ -239,6 +267,13 @@ function RunCard({ run, onOpen, onExport, onLoadToCockpit, onDelete, active, loa
             <span className="v2-run-dot">•</span>
             <span className="v2-run-mobiles"><Phone size={10} /> {formatNumber(run.phoneCount)} mobiles</span>
           </div>
+          {Array.isArray(run.tags) && run.tags.length > 0 && (
+            <div className="v2-run-tags-row">
+              {run.tags.map(tag => (
+                <span key={tag} className="v2-run-tag"><Tag size={9} /> {tag}</span>
+              ))}
+            </div>
+          )}
         </div>
       </header>
 
@@ -252,10 +287,16 @@ function RunCard({ run, onOpen, onExport, onLoadToCockpit, onDelete, active, loa
           <b>{formatNumber(run.phoneCount)} <small>({percentMobiles}%)</small></b>
         </div>
         <div className="v2-run-metric-cell">
-          <span>SAVED</span>
-          <b className="is-small" title={run.timestamp ? new Date(run.timestamp).toLocaleString() : ''}>
-            {relativeTime(run.timestamp)}
-          </b>
+          <span>{Number(run.dealValueTotal) > 0 ? 'PIPELINE' : 'SAVED'}</span>
+          {Number(run.dealValueTotal) > 0 ? (
+            <b className="is-small v2-text-cyan" title="Total Deal Value in this folder">
+              {formatInr(run.dealValueTotal)}
+            </b>
+          ) : (
+            <b className="is-small" title={run.timestamp ? new Date(run.timestamp).toLocaleString() : ''}>
+              {relativeTime(run.timestamp)}
+            </b>
+          )}
         </div>
       </div>
 
@@ -276,6 +317,15 @@ function RunCard({ run, onOpen, onExport, onLoadToCockpit, onDelete, active, loa
           <button
             type="button"
             className="v2-run-btn-tool"
+            onClick={(e) => { e.stopPropagation(); onRename?.(run); }}
+            title="Rename, tag or change color of this folder"
+          >
+            <Edit3 size={11} />
+            <span>Rename</span>
+          </button>
+          <button
+            type="button"
+            className="v2-run-btn-tool"
             onClick={(e) => { e.stopPropagation(); onLoadToCockpit?.(run); }}
             title="Load this folder into active Cockpit workspace"
           >
@@ -290,14 +340,6 @@ function RunCard({ run, onOpen, onExport, onLoadToCockpit, onDelete, active, loa
           >
             <Download size={10} />
             <span>CSV</span>
-          </button>
-          <button
-            type="button"
-            className="v2-run-btn-tool"
-            onClick={(e) => { e.stopPropagation(); onExport?.(run, 'json'); }}
-            title="Export JSON"
-          >
-            <span>JSON</span>
           </button>
           <button
             type="button"
@@ -321,10 +363,12 @@ function FolderView({
   onDelete,
   onReScrape,
   onSelectVendor,
-  onStageChange
+  onStageChange,
+  onRename
 }) {
   const session = view?.session;
   const leads = Array.isArray(session?.leads) ? session.leads : [];
+  const isMasterSweep = Boolean(session?.isMasterSweep || view?.run?.isMasterSweep || /master_/i.test(session?.id || '') || /sweep/i.test(session?.location || ''));
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedLocality, setSelectedLocality] = useState('all');
@@ -337,7 +381,11 @@ function FolderView({
   const phoneLeads = useMemo(() => leads.filter(l => Boolean(getDisplayPhone(l))), [leads]);
   const webLeads = useMemo(() => leads.filter(l => Boolean(l.website)), [leads]);
   const ratedLeads = useMemo(() => leads.filter(l => Number(l.rating) >= 4.0), [leads]);
+  const wonLeads = useMemo(() => leads.filter(l => (l.crmStage || crmStageOf(l)) === 'won'), [leads]);
+  const pipelineTotal = useMemo(() => leads.reduce((acc, l) => acc + (Number(l.dealValue) || 0), 0), [leads]);
   const percentMobiles = leads.length > 0 ? Math.round((phoneLeads.length / leads.length) * 100) : 0;
+  const percentRated = leads.length > 0 ? Math.round((ratedLeads.length / leads.length) * 100) : 0;
+  const percentWeb = leads.length > 0 ? Math.round((webLeads.length / leads.length) * 100) : 0;
 
   // Extract top localities for quick filter chips
   const localityStats = useMemo(() => {
@@ -562,6 +610,14 @@ function FolderView({
           <div className="v2-folder-top-actions">
             <button
               type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm"
+              onClick={() => onRename?.(view.run || session)}
+              title="Rename folder, change campaign tags or color"
+            >
+              <Edit3 size={12} /> Rename &amp; Tag
+            </button>
+            <button
+              type="button"
               className="v2-btn v2-btn-lime v2-btn-sm"
               onClick={() => onLoadToCockpit?.(view.run, session)}
               title="Load this folder into active Cockpit workspace"
@@ -579,10 +635,44 @@ function FolderView({
           </div>
         </header>
 
+        {/* Quality Scorecard Banner */}
+        <div className="v2-folder-scorecard">
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">VERIFIED MOBILES</span>
+            <b className="v2-scorecard-value is-lime">
+              <Phone size={13} /> {formatNumber(phoneLeads.length)} <small>({percentMobiles}%)</small>
+            </b>
+          </div>
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">RATED 4.0+</span>
+            <b className="v2-scorecard-value">
+              <Star size={13} /> {formatNumber(ratedLeads.length)} <small>({percentRated}%)</small>
+            </b>
+          </div>
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">WEBSITE / SOCIAL</span>
+            <b className="v2-scorecard-value">
+              <Globe2 size={13} /> {formatNumber(webLeads.length)} <small>({percentWeb}%)</small>
+            </b>
+          </div>
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">DEALS WON</span>
+            <b className="v2-scorecard-value is-gold">
+              <CheckCircle2 size={13} /> {formatNumber(wonLeads.length)}
+            </b>
+          </div>
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">PIPELINE VALUE</span>
+            <b className="v2-scorecard-value is-cyan">
+              {formatInr(pipelineTotal)}
+            </b>
+          </div>
+        </div>
+
         {/* Master Actions Ribbon — ALL OPTIONS at user's fingertips */}
         <div className="v2-folder-actions-ribbon">
           <div className="v2-ribbon-group">
-            <span className="v2-ribbon-label">OUTREACH & EXPORT:</span>
+            <span className="v2-ribbon-label">OUTREACH &amp; EXPORT:</span>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
@@ -595,26 +685,34 @@ function FolderView({
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={downloadPhoneListTxt}
-              title="Download clean phone numbers (.txt)"
+              onClick={() => onExport?.(view.run, 'dialer')}
+              title="Download Vicidial / Exotel telecaller dialer CSV"
             >
-              <FileText size={11} /> Mobiles .TXT
+              <PhoneCall size={11} /> Dialer CSV
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={downloadVcfContacts}
-              title="Download vCard (.vcf) to import all business contacts into phone"
+              onClick={() => onExport?.(view.run, 'vcf')}
+              title="Download vCard (.vcf) contacts file to import on Android / iPhone"
             >
               <Smartphone size={11} /> Contacts .VCF
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => (selectedIds.size > 0 ? exportSelectedCsv() : onExport?.(view.run, 'csv'))}
-              title="Download CSV spreadsheet"
+              onClick={() => onExport?.(view.run, 'txt')}
+              title="Download plain phone numbers list (.txt)"
             >
-              <Download size={11} /> CSV
+              <FileText size={11} /> Mobiles .TXT
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-xs"
+              onClick={() => (selectedIds.size > 0 ? exportSelectedCsv() : onExport?.(view.run, 'csv'))}
+              title="Download clean CSV spreadsheet without scientific notation"
+            >
+              <Download size={11} /> Spreadsheet CSV
             </button>
             <button
               type="button"
@@ -736,7 +834,7 @@ function FolderView({
         {/* Locality Quick Chips Strip (if multiple localities found) */}
         {localityStats.length > 1 && (
           <div className="v2-folder-locality-strip">
-            <span className="v2-locality-strip-title">AREAS:</span>
+            <span className="v2-locality-strip-title">{isMasterSweep ? '🗺️ MANDALS & ZONES (' + localityStats.length + ' COVERED):' : 'AREAS:'}</span>
             <button
               type="button"
               className={cx('v2-loc-chip', selectedLocality === 'all' && 'is-active')}
@@ -1437,6 +1535,170 @@ function CockpitView({
   );
 }
 
+function RenameModal({ folder, onClose, onSave }) {
+  const [name, setName] = useState(folder?.customName || folder?.name || '');
+  const [tags, setTags] = useState(Array.isArray(folder?.tags) ? folder.tags.join(', ') : '');
+  const [color, setColor] = useState(folder?.color || '#00f0ff');
+  const [notes, setNotes] = useState(folder?.notes || '');
+  const [saving, setSaving] = useState(false);
+
+  const COLOR_OPTIONS = ['#00f0ff', '#39ff14', '#ff007f', '#ffaa00', '#a855f7', '#3b82f6'];
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+    await onSave(folder.id, {
+      customName: name.trim(),
+      tags: parsedTags,
+      color,
+      notes: notes.trim()
+    });
+    setSaving(false);
+  };
+
+  return (
+    <div className="v2-dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="v2-dialog-card" onClick={e => e.stopPropagation()}>
+        <header className="v2-dialog-head">
+          <div className="v2-dialog-title">
+            <Edit3 size={16} className="v2-text-cyan" />
+            <h3>Folder Settings &amp; Campaign Tags</h3>
+          </div>
+          <button type="button" className="v2-icon-btn" onClick={onClose}><X size={16} /></button>
+        </header>
+
+        <form onSubmit={handleSubmit} className="v2-dialog-form">
+          <label className="v2-dialog-field">
+            <span>Folder Display Name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Hyderabad Q1 Plumbers Outreach"
+              required
+              autoFocus
+            />
+          </label>
+
+          <label className="v2-dialog-field">
+            <span>Campaign Tags (comma separated)</span>
+            <input
+              type="text"
+              value={tags}
+              onChange={e => setTags(e.target.value)}
+              placeholder="e.g. Priority, Cold Call, Telugu, Central Zone"
+            />
+          </label>
+
+          <div className="v2-dialog-field">
+            <span>Campaign Color Badge</span>
+            <div className="v2-color-picker-row">
+              {COLOR_OPTIONS.map(c => (
+                <button
+                  type="button"
+                  key={c}
+                  className={cx('v2-color-dot', color === c && 'is-active')}
+                  style={{ backgroundColor: c }}
+                  onClick={() => setColor(c)}
+                  title={c}
+                />
+              ))}
+            </div>
+          </div>
+
+          <label className="v2-dialog-field">
+            <span>Campaign Notes / Strategy</span>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              placeholder="e.g. Pitched on WhatsApp Tuesday. Target 50 calls daily."
+            />
+          </label>
+
+          <footer className="v2-dialog-actions">
+            <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="v2-btn v2-btn-lime v2-btn-sm" disabled={saving}>
+              {saving ? <Loader2 size={13} className="v2-spin" /> : <Check size={13} />}
+              <span>Save Folder</span>
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function MergeModal({ folders, onClose, onMerge, isMerging }) {
+  const sample = folders[0];
+  const [title, setTitle] = useState(
+    `Merged: ${sample?.category || 'Leads'} (${folders.length} folders)`
+  );
+  const totalRawLeads = folders.reduce((sum, f) => sum + (f.leadCount || 0), 0);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!title.trim() || isMerging) return;
+    onMerge(title.trim());
+  };
+
+  return (
+    <div className="v2-dialog-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="v2-dialog-card" onClick={e => e.stopPropagation()}>
+        <header className="v2-dialog-head">
+          <div className="v2-dialog-title">
+            <GitMerge size={16} className="v2-text-lime" />
+            <h3>Merge &amp; Deduplicate Folders</h3>
+          </div>
+          <button type="button" className="v2-icon-btn" onClick={onClose}><X size={16} /></button>
+        </header>
+
+        <form onSubmit={handleSubmit} className="v2-dialog-form">
+          <p className="v2-dialog-desc">
+            Combine <b>{folders.length} folders</b> ({formatNumber(totalRawLeads)} raw leads) into a single consolidated search vault.
+            Identical phone numbers and business names will be automatically deduplicated with merged metadata.
+          </p>
+
+          <div className="v2-merge-folders-list">
+            {folders.map(f => (
+              <div key={f.id} className="v2-merge-folder-row">
+                <FolderArchive size={14} />
+                <span className="v2-merge-folder-name">{f.customName || f.name}</span>
+                <span className="v2-merge-folder-count">{formatNumber(f.leadCount)} leads · {formatNumber(f.phoneCount)} mobiles</span>
+              </div>
+            ))}
+          </div>
+
+          <label className="v2-dialog-field">
+            <span>New Merged Folder Title</span>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Master Consolidated Outreach Vault"
+              required
+            />
+          </label>
+
+          <footer className="v2-dialog-actions">
+            <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="v2-btn v2-btn-lime v2-btn-sm" disabled={isMerging || !title.trim()}>
+              {isMerging ? <Loader2 size={13} className="v2-spin" /> : <GitMerge size={13} />}
+              <span>Merge &amp; Deduplicate</span>
+            </button>
+          </footer>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function CommandCenter() {
   const navigate = useNavigate();
   const routerLocation = useLocation();
@@ -1489,6 +1751,10 @@ export default function CommandCenter() {
   const [folderSearch, setFolderSearch] = useState('');
   const [folderCity, setFolderCity] = useState('all');
   const [folderSort, setFolderSort] = useState('newest');
+  const [selectedFolderIds, setSelectedFolderIds] = useState(new Set());
+  const [renamingFolder, setRenamingFolder] = useState(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
 
   const [form, setForm] = useState({
     category: 'Plumbers',
@@ -2182,12 +2448,133 @@ export default function CommandCenter() {
       if (updated) {
         setVendors(prev => prev.map(item => item.id === updated.id ? { ...item, ...updated } : item));
         setSelectedVendor(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+        setFolderView(prev => {
+          if (!prev?.session?.leads) return prev;
+          const nextLeads = prev.session.leads.map(l => l.id === updated.id ? { ...l, ...updated } : l);
+          return { ...prev, session: { ...prev.session, leads: nextLeads } };
+        });
       }
       toast.success(`Moved to ${stage.replace(/_/g, ' ')}`);
     } catch (error) {
       toast.error('Could not update the CRM stage.');
     } finally {
       setCrmSavingId('');
+    }
+  };
+
+  const updateDealValue = async (vendor, dealValue) => {
+    if (!vendor?.id || crmSavingId) return;
+    setCrmSavingId(vendor.id);
+    try {
+      const response = await updateVendorCrm(vendor.id, { dealValue: Number(dealValue) || 0 });
+      const updated = response?.vendor;
+      if (updated) {
+        setVendors(prev => prev.map(item => item.id === updated.id ? { ...item, ...updated } : item));
+        setSelectedVendor(prev => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+        setFolderView(prev => {
+          if (!prev?.session?.leads) return prev;
+          const nextLeads = prev.session.leads.map(l => l.id === updated.id ? { ...l, ...updated } : l);
+          return { ...prev, session: { ...prev.session, leads: nextLeads } };
+        });
+      }
+      toast.success(`Deal value saved: ${formatInr(Number(dealValue) || 0)}`);
+    } catch (error) {
+      toast.error('Could not save deal value.');
+    } finally {
+      setCrmSavingId('');
+    }
+  };
+
+  const handleToggleSelectFolder = id => {
+    setSelectedFolderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAllFolders = () => {
+    if (selectedFolderIds.size === filteredRuns.length && filteredRuns.length > 0) {
+      setSelectedFolderIds(new Set());
+    } else {
+      setSelectedFolderIds(new Set(filteredRuns.map(r => r.id)));
+    }
+  };
+
+  const handleRenameFolder = async (folderId, payload) => {
+    try {
+      const res = await renameSession(folderId, payload);
+      if (res?.success) {
+        setSessions(prev => prev.map(s => s.id === folderId ? { ...s, ...res.session } : s));
+        if (folderView?.run?.id === folderId) {
+          setFolderView(prev => ({
+            ...prev,
+            run: { ...prev.run, ...res.session },
+            session: { ...prev.session, ...res.session }
+          }));
+        }
+        setRenamingFolder(null);
+        toast.success('Folder renamed successfully.');
+      } else {
+        toast.error(res?.error || 'Failed to rename folder.');
+      }
+    } catch (err) {
+      toast.error('Error renaming folder.');
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (!selectedFolderIds.size) return;
+    const ids = Array.from(selectedFolderIds);
+    if (!window.confirm(`Permanently delete ${ids.length} selected search folders? This cannot be undone.`)) return;
+    try {
+      const res = await batchDeleteSessions(ids);
+      if (res?.deleted?.length) {
+        const deletedSet = new Set(res.deleted);
+        setSessions(prev => prev.filter(s => !deletedSet.has(s.id)));
+        setSelectedFolderIds(new Set());
+        if (folderView && deletedSet.has(folderView.run?.id)) {
+          setFolderView(null);
+        }
+        toast.success(`Deleted ${res.deleted.length} folders.`);
+      }
+    } catch (err) {
+      toast.error('Failed to delete selected folders.');
+    }
+  };
+
+  const handleMergeFolders = async targetTitle => {
+    if (selectedFolderIds.size < 2) {
+      toast.error('Select at least 2 folders to merge.');
+      return;
+    }
+    const ids = Array.from(selectedFolderIds);
+    setIsMerging(true);
+    try {
+      const res = await mergeSessions(ids, targetTitle);
+      const merged = res?.session || res?.mergedSession;
+      if (merged) {
+        const updated = await getSessions();
+        setSessions(updated || []);
+        setSelectedFolderIds(new Set());
+        setShowMergeModal(false);
+        toast.success(`Merged ${ids.length} folders into "${merged.name}" (${merged.leadCount} unique leads, ${merged.phoneCount} mobiles)!`);
+        openFolder({
+          id: merged.id,
+          name: merged.name,
+          category: merged.category,
+          location: merged.location,
+          leadCount: merged.leadCount,
+          phoneCount: merged.phoneCount
+        });
+      } else {
+        toast.error(res?.error || 'Failed to merge folders.');
+      }
+    } catch (err) {
+      toast.error('Error merging folders.');
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -2317,12 +2704,14 @@ export default function CommandCenter() {
         leadCount: 0,
         phoneCount: 0,
         deepCount: 0,
+        dealValueTotal: 0,
         status: 'saved',
         vendorIds: []
       };
       existing.leadCount += 1;
       if (getDisplayPhone(vendor)) existing.phoneCount += 1;
       if (vendor.deepExtractedAt) existing.deepCount += 1;
+      if (vendor.dealValue) existing.dealValueTotal = (existing.dealValueTotal || 0) + (Number(vendor.dealValue) || 0);
       if (vendor.scrapedAt && (!existing.timestamp || new Date(vendor.scrapedAt) > new Date(existing.timestamp))) existing.timestamp = vendor.scrapedAt;
       existing.vendorIds.push(vendor.id);
       map.set(id, existing);
@@ -2336,15 +2725,25 @@ export default function CommandCenter() {
         leadCount: session.leadCount || 0,
         phoneCount: session.phoneCount || 0,
         deepCount: 0,
+        dealValueTotal: 0,
         status: session.metadata?.status || 'saved',
         vendorIds: []
       };
-      existing.name = session.name || existing.name || (session.category ? `${session.category} in ${session.location || 'India'}` : 'Lead Folder');
+      existing.customName = session.customName || existing.customName || '';
+      existing.name = session.customName || session.name || existing.name || (session.category ? `${session.category} in ${session.location || 'India'}` : 'Lead Folder');
       existing.category = session.category || existing.category;
       existing.location = session.location || existing.location;
       existing.timestamp = session.timestamp || existing.timestamp;
       existing.leadCount = Math.max(existing.leadCount, session.leadCount || 0);
       existing.phoneCount = Math.max(existing.phoneCount, session.phoneCount || 0);
+      existing.tags = Array.isArray(session.tags) ? session.tags : existing.tags || [];
+      existing.color = session.color || existing.color || '';
+      existing.notes = session.notes || existing.notes || '';
+      if (session.dealValueTotal != null && Number(session.dealValueTotal) > 0) {
+        existing.dealValueTotal = Number(session.dealValueTotal);
+      }
+      existing.isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
+      existing.masterScope = session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null);
       existing.status = session.metadata?.status || existing.status;
       map.set(session.id, existing);
     }
@@ -2460,6 +2859,25 @@ export default function CommandCenter() {
           </StatusPill>
           <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · India</span>
 
+          <button
+            type="button"
+            className="v2-btn v2-btn-sm"
+            onClick={() => navigate('/master')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+              color: '#fff',
+              fontWeight: 700,
+              border: 'none',
+              boxShadow: '0 2px 10px rgba(245, 158, 11, 0.4)'
+            }}
+            title="Open Master Command Center for District, State, City-Mesh & Mandal sweeps"
+          >
+            <Compass size={13} /> 🗺️ Master Command Center
+          </button>
+          <NotificationBell />
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
             <button
@@ -2675,7 +3093,7 @@ export default function CommandCenter() {
               <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
             </button>
             <button type="button" className={cx(activeTab === 'runs' && 'is-active')} onClick={() => setActiveTab('runs')}>
-              <FolderArchive size={14} /> Folders <b>{formatNumber(effectiveRuns.length)}</b>
+              <FolderArchive size={14} /> Saved Folders <b>{formatNumber(effectiveRuns.length)}</b>
             </button>
             <span className="v2-cmd-tabs-spacer" />
             <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
@@ -2912,6 +3330,7 @@ export default function CommandCenter() {
                 vendors={vendors}
                 onOpen={setSelectedVendor}
                 onStageChange={updateCrmStage}
+                onValueChange={updateDealValue}
                 savingId={crmSavingId}
               />
             )}
@@ -2934,7 +3353,7 @@ export default function CommandCenter() {
                   </div>
                 </div>
 
-                {/* Runs Toolbar: Search, City Filter Pills, and Sort Dropdown */}
+                {/* Runs Toolbar: Search, City Filter Pills, Select All, and Sort Dropdown */}
                 <div className="v2-runs-toolbar">
                   <div className="v2-runs-search">
                     <Search size={14} />
@@ -2974,15 +3393,72 @@ export default function CommandCenter() {
                     })}
                   </div>
 
-                  <div className="v2-runs-sort">
-                    <select value={folderSort} onChange={e => setFolderSort(e.target.value)}>
-                      <option value="newest">Newest first</option>
-                      <option value="leads">Most leads</option>
-                      <option value="phones">Most mobile numbers</option>
-                      <option value="name">Name A–Z</option>
-                    </select>
+                  <div className="v2-runs-toolbar-right">
+                    <button
+                      type="button"
+                      className="v2-btn v2-btn-ghost v2-btn-xs"
+                      onClick={handleSelectAllFolders}
+                      title="Select or deselect all folders"
+                    >
+                      {selectedFolderIds.size === filteredRuns.length && filteredRuns.length > 0 ? (
+                        <>
+                          <CheckSquare size={12} className="v2-text-lime" /> Deselect All
+                        </>
+                      ) : (
+                        <>
+                          <Square size={12} /> Select All
+                        </>
+                      )}
+                    </button>
+
+                    <div className="v2-runs-sort">
+                      <select value={folderSort} onChange={e => setFolderSort(e.target.value)}>
+                        <option value="newest">Newest first</option>
+                        <option value="leads">Most leads</option>
+                        <option value="phones">Most mobile numbers</option>
+                        <option value="name">Name A–Z</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
+
+                {/* Batch Actions Floating / Sticky Bar */}
+                {selectedFolderIds.size > 0 && (
+                  <div className="v2-runs-batch-bar">
+                    <div className="v2-runs-batch-info">
+                      <CheckSquare size={16} className="v2-text-lime" />
+                      <span><b>{selectedFolderIds.size}</b> folders selected</span>
+                      <span className="v2-runs-batch-leads">
+                        ({formatNumber(effectiveRuns.filter(r => selectedFolderIds.has(r.id)).reduce((acc, r) => acc + (r.leadCount || 0), 0))} total leads)
+                      </span>
+                    </div>
+                    <div className="v2-runs-batch-actions">
+                      {selectedFolderIds.size >= 2 && (
+                        <button
+                          type="button"
+                          className="v2-btn v2-btn-lime v2-btn-sm"
+                          onClick={() => setShowMergeModal(true)}
+                        >
+                          <GitMerge size={13} /> Merge &amp; Deduplicate ({selectedFolderIds.size})
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="v2-btn v2-btn-danger v2-btn-sm"
+                        onClick={handleBatchDelete}
+                      >
+                        <Trash2 size={13} /> Delete Selected ({selectedFolderIds.size})
+                      </button>
+                      <button
+                        type="button"
+                        className="v2-btn v2-btn-ghost v2-btn-sm"
+                        onClick={() => setSelectedFolderIds(new Set())}
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="v2-run-grid">
                   {filteredRuns.map(runCard => (
@@ -2991,7 +3467,10 @@ export default function CommandCenter() {
                       run={runCard}
                       active={sessionFilter === runCard.id || run?.id === runCard.id}
                       loading={folderLoading === runCard.id}
+                      selected={selectedFolderIds.has(runCard.id)}
+                      onToggleSelect={handleToggleSelectFolder}
                       onOpen={() => openFolder(runCard)}
+                      onRename={() => setRenamingFolder(runCard)}
                       onExport={exportFolder}
                       onLoadToCockpit={loadFolderToCockpit}
                       onDelete={deleteFolder}
@@ -3145,6 +3624,24 @@ export default function CommandCenter() {
           onReScrape={reScrapeFolder}
           onSelectVendor={setSelectedVendor}
           onStageChange={updateCrmStage}
+          onRename={folder => setRenamingFolder(folder || folderView.run || folderView.session)}
+        />
+      )}
+
+      {renamingFolder && (
+        <RenameModal
+          folder={renamingFolder}
+          onClose={() => setRenamingFolder(null)}
+          onSave={handleRenameFolder}
+        />
+      )}
+
+      {showMergeModal && (
+        <MergeModal
+          folders={effectiveRuns.filter(r => selectedFolderIds.has(r.id))}
+          onClose={() => setShowMergeModal(false)}
+          onMerge={handleMergeFolders}
+          isMerging={isMerging}
         />
       )}
     </div>

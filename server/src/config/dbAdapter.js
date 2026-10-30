@@ -21,6 +21,7 @@ const vendorSchema = new mongoose.Schema({
 const VendorModel = mongoose.models.Vendor || mongoose.model('Vendor', vendorSchema);
 
 const { DATA_DIR: dataDir } = require('./paths');
+const credits = require('../services/credits');
 const vendorsFile = path.join(dataDir, 'scraped_vendors.json');
 const outOfBoundsFile = path.join(dataDir, 'out_of_bounds.json');
 const usersFile = path.join(dataDir, 'users.json');
@@ -127,6 +128,55 @@ function getVendors(userId) {
   return cachedVendors.filter(v => v.userId === userId);
 }
 
+/* ------------------------------------------------------------------ */
+/* Credit admission                                                    */
+/*                                                                     */
+/* Every lead that enters the database costs one credit, exactly once.  */
+/* The known-id set is rebuilt from disk on boot, so existing leads are */
+/* never charged retroactively and a re-scrape never double-charges.    */
+/* ------------------------------------------------------------------ */
+
+let knownLeadIds = null;
+
+function knownLeads() {
+  if (!knownLeadIds) {
+    try {
+      knownLeadIds = new Set(getVendors().map(vendor => vendor && vendor.id).filter(Boolean));
+    } catch (e) {
+      knownLeadIds = new Set();
+    }
+  }
+  return knownLeadIds;
+}
+
+function admitLeads(list) {
+  if (!credits.ENFORCED) return list;
+
+  const known = knownLeads();
+  const admitted = [];
+  let dropped = 0;
+
+  for (const vendor of list) {
+    if (!vendor || !vendor.id || known.has(vendor.id)) {
+      admitted.push(vendor);
+      continue;
+    }
+
+    if (credits.spend(1).charged >= 1) {
+      known.add(vendor.id);
+      admitted.push(vendor);
+    } else {
+      dropped += 1;
+    }
+  }
+
+  if (dropped) {
+    console.warn(`[credits] run out — ${dropped} new lead(s) not stored. Balance: ${credits.status().left}`);
+  }
+
+  return admitted;
+}
+
 function saveVendor(userId, vendor) {
   const all = getVendors(); 
   const idx = all.findIndex(v => v.id === vendor.id);
@@ -135,6 +185,15 @@ function saveVendor(userId, vendor) {
   if (idx !== -1) {
     all[idx] = vendor;
   } else {
+    // A brand-new lead costs one credit. If there is nothing left to spend the
+    // lead is not stored at all, so the ledger can never go negative.
+    if (credits.ENFORCED && !knownLeads().has(vendor.id)) {
+      if (credits.spend(1).charged < 1) {
+        console.warn('[credits] out of credits — lead not stored:', vendor.id);
+        return false;
+      }
+      knownLeads().add(vendor.id);
+    }
     all.push(vendor);
   }
   
@@ -146,6 +205,7 @@ function saveVendor(userId, vendor) {
   pendingMongoUpdates[vendor.id] = vendor;
   clearTimeout(mongoWriteTimeout);
   mongoWriteTimeout = setTimeout(_flushMongo, 2000);
+  return true;
 }
 
 function deleteVendor(userId, vendorId) {
@@ -163,7 +223,7 @@ function updateVendorsBatch(userId, updatedList) {
 }
 
 function saveVendors(data) {
-  cachedVendors = data;
+  cachedVendors = admitLeads(Array.isArray(data) ? data : []);
   _flushVendors();
 }
 

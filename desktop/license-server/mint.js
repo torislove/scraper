@@ -17,9 +17,9 @@ const DATA_FILE = process.env.LICENSE_DATA || path.join(__dirname, 'data', 'lice
 const KEY_FILE = process.env.LICENSE_PRIVATE_KEY_FILE || path.join(__dirname, '.keys', 'private.pem');
 
 const PLANS = {
-  starter: { maxLeads: 500, seats: 1 },
-  pro: { maxLeads: 2000, seats: 3 },
-  agency: { maxLeads: 10000, seats: 10 }
+  starter: { maxLeads: 500, credits: 2000, seats: 1 },
+  pro: { maxLeads: 2000, credits: 10000, seats: 3 },
+  agency: { maxLeads: 10000, credits: 50000, seats: 10 }
 };
 
 function arg(name, fallback = '') {
@@ -96,6 +96,8 @@ function main() {
       email,
       deviceId: device,
       maxLeads: PLANS[plan].maxLeads,
+      credits: PLANS[plan].credits,
+      periodEndsAt: expiresAt,
       issuedAt: now,
       expiresAt,
       graceDays: Number(process.env.GRACE_DAYS || 7)

@@ -1,22 +1,33 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  motion, AnimatePresence, useInView, useReducedMotion, animate
+  motion, AnimatePresence, useInView, useReducedMotion, useScroll,
+  useSpring, useTransform, animate
 } from 'framer-motion';
 import {
   ArrowRight, Briefcase, Check, CheckCircle2, Clock3, FolderArchive, Layers,
-  LineChart, MapPin, Phone, Play, Plus, Radar as RadarIcon, Search, Sparkles,
-  Store, Target, TrendingUp, Users, X
+  LineChart, MapPin, Phone, Play, Plus, Search, Sparkles, Store, Target,
+  TrendingUp, Users, X
 } from 'lucide-react';
 import './landing.css';
 
-/* ------------------------------------------------------------------ */
-/* Motion helpers                                                      */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Motion helpers                                                     */
+/* ================================================================== */
 
 const EASE = [0.16, 1, 0.3, 1];
 
-function FadeUp({ children, delay = 0, y = 22, className = '', once = true }) {
+const fadeUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: EASE } }
+};
+
+const stagger = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.085, delayChildren: 0.05 } }
+};
+
+function Reveal({ children, className = '', delay = 0, y = 24 }) {
   const reduce = useReducedMotion();
   if (reduce) return <div className={className}>{children}</div>;
   return (
@@ -24,15 +35,15 @@ function FadeUp({ children, delay = 0, y = 22, className = '', once = true }) {
       className={className}
       initial={{ opacity: 0, y }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once, margin: '-70px' }}
-      transition={{ duration: 0.62, delay, ease: EASE }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.66, delay, ease: EASE }}
     >
       {children}
     </motion.div>
   );
 }
 
-function Stagger({ children, className = '', delay = 0, step = 0.09 }) {
+function Stagger({ children, className = '', step = 0.085 }) {
   const reduce = useReducedMotion();
   if (reduce) return <div className={className}>{children}</div>;
   return (
@@ -40,36 +51,28 @@ function Stagger({ children, className = '', delay = 0, step = 0.09 }) {
       className={className}
       initial="hidden"
       whileInView="show"
-      viewport={{ once: true, margin: '-60px' }}
-      variants={{
-        hidden: {},
-        show: { transition: { staggerChildren: step, delayChildren: delay } }
-      }}
+      viewport={{ once: true, margin: '-70px' }}
+      variants={{ hidden: {}, show: { transition: { staggerChildren: step } } }}
     >
       {children}
     </motion.div>
   );
 }
 
-const childVariant = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE } }
-};
-
-function StaggerItem({ children, className = '' }) {
+function Item({ children, className = '' }) {
   const reduce = useReducedMotion();
   if (reduce) return <div className={className}>{children}</div>;
   return (
-    <motion.div className={className} variants={childVariant}>
+    <motion.div className={className} variants={fadeUp}>
       {children}
     </motion.div>
   );
 }
 
-/* Animated number that counts up when it scrolls into view. */
-function Counter({ to, decimals = 0, prefix = '', suffix = '', duration = 1.5 }) {
+/** Counts up the first time it scrolls into view. */
+function Num({ to, decimals = 0, prefix = '', suffix = '', duration = 1.5, format = false }) {
   const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const inView = useInView(ref, { once: true, margin: '-50px' });
   const reduce = useReducedMotion();
   const [value, setValue] = useState(0);
 
@@ -87,30 +90,37 @@ function Counter({ to, decimals = 0, prefix = '', suffix = '', duration = 1.5 })
     return () => controls.stop();
   }, [inView, to, duration, reduce]);
 
+  const shown = format
+    ? value.toLocaleString('en-IN', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      })
+    : value.toFixed(decimals);
+
   return (
     <span ref={ref}>
       {prefix}
-      {value.toFixed(decimals)}
+      {shown}
       {suffix}
     </span>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Copy                                                                */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Content                                                            */
+/* ================================================================== */
 
-const DEMO_QUERIES = [
-  'wedding photographers in Vijayawada',
-  'grocery stores in Guntur',
-  'dental clinics in Warangal'
+const PLACES = [
+  { name: 'Mumbai', state: 'Maharashtra', count: 500 },
+  { name: 'Delhi NCR', state: 'Delhi', count: 500 },
+  { name: 'Bengaluru', state: 'Karnataka', count: 500 },
+  { name: 'Hyderabad', state: 'Telangana', count: 480 },
+  { name: 'Chennai', state: 'Tamil Nadu', count: 460 },
+  { name: 'Pune', state: 'Maharashtra', count: 440 },
+  { name: 'Jaipur', state: 'Rajasthan', count: 310 },
+  { name: 'Kochi', state: 'Kerala', count: 240 }
 ];
-
-const DEMO_ROWS = [
-  { name: 'Sri Balaji Digital Studio', area: 'Benz Circle, Vijayawada', phone: '+91 98480 21456' },
-  { name: 'Sai Ram Photo & Films', area: 'Gunadala, Vijayawada', phone: '+91 99631 78204' },
-  { name: 'NTR Wedding Clicks', area: 'Governorpet, Vijayawada', phone: '+91 90000 31987' }
-];
+const PLACE_TOTAL = PLACES.reduce((sum, place) => sum + place.count, 0); // 3,430
 
 const DASH_ROWS = [
   { name: 'Sri Balaji Plumbing Works', phone: '+91 98480 21456', stage: 'is-new' },
@@ -121,106 +131,109 @@ const DASH_ROWS = [
   { name: 'Amar Hardware & Sanitary', phone: '+91 91778 30094', stage: 'is-new' }
 ];
 
+const MAP_PINS = [
+  { left: '22%', top: '26%' }, { left: '46%', top: '18%' }, { left: '64%', top: '38%' },
+  { left: '34%', top: '52%' }, { left: '58%', top: '66%' }, { left: '76%', top: '58%' },
+  { left: '44%', top: '78%' }
+];
+
 const COMPARE = [
   {
     label: 'Phone quality',
-    bad: 'Landlines (080-, 040-) or switchboards. Around 65% of calls go nowhere.',
-    good: 'Direct Indian 10-digit mobiles (+91 98…, 97…, 99…). If it is not a real mobile, we drop it.'
+    bad: 'Landlines or switchboards. About 65% of those calls go nowhere.',
+    good: 'Direct Indian 10-digit mobiles. If it is not a real mobile, it never reaches you.'
   },
   {
     label: 'Data freshness',
-    bad: 'Lists scraped 6+ months ago, copied from public dumps and resold many times.',
-    good: 'Live harvest every time you search. Closed shops and changed numbers do not come back.'
+    bad: 'Lists from six months ago, copied from public dumps and resold again and again.',
+    good: 'Built fresh every time you search. Closed shops and changed numbers drop out.'
   },
   {
-    label: 'Data depth',
-    bad: 'A name and a phone number. Nothing else to work with.',
-    good: 'A full 52-field dossier: owner, GSTIN, pricing, hours, reviews and socials — whenever the source publishes them.'
+    label: 'How much you get',
+    bad: 'A name and a number. Good luck building a pitch from that.',
+    good: 'Up to 52 fields: owner, GSTIN, pricing, hours, reviews, photos, Instagram.'
   },
   {
     label: 'Location accuracy',
-    bad: 'Messy free text like "Narasaraopet Wedding…" that cannot be filtered.',
-    good: 'A clean 4-level hierarchy: State → District → Mandal → Village.'
+    bad: 'Messy free text like "Narasaraopet Wedding…" that no filter can use.',
+    good: 'Clean columns: state, district, mandal, village — even though you search one place at a time.'
   },
   {
-    label: 'Usable hit rate',
-    bad: 'Under 3% of rows are reachable local businesses.',
-    good: 'Only validated 10-digit numbers. No pincodes, no helplines, no dummy sequences.'
+    label: 'Area covered',
+    bad: 'One keyword, one city, first page only. Roughly 40 businesses.',
+    good: 'Every page inside the city, town or village you named — up to your plan’s cap.'
   },
   {
     label: 'Reply rate',
-    bad: '1.8% on cold calls, and mostly you speak to a gatekeeper.',
-    good: '14.5% reply rate when you send a one-click WhatsApp to the proprietor.'
+    bad: '1.8% on cold calls, and half of those are gatekeepers.',
+    good: '14.5% when a WhatsApp lands on the proprietor’s own number.'
   }
 ];
 
 const STEPS = [
   {
     icon: Search,
-    title: 'Type it the way you speak',
-    body: '“Wedding photographers in Vijayawada” or “grocery stores in Guntur”. Plain English, local spelling, either works.',
-    detail: 'We read the category and the place as two separate things.'
+    title: 'Say what you sell and where',
+    body: 'Type it the way you would say it out loud: “banquet halls in Hyderabad”. No filters, no dropdowns, no training video.',
+    detail: 'The category and the place are read as two separate things.'
   },
   {
-    icon: RadarIcon,
-    title: 'We search the right sources',
-    body: 'The engine picks the correct public sources for that category and district by itself. You never have to choose a directory.',
-    detail: 'Maps, local listings, business directories and the shop’s own website.'
+    icon: MapPin,
+    title: 'We search that place properly',
+    body: 'The city, town or village you named gets every page and every locality searched, then the duplicates are thrown away. Not the first page and a shrug.',
+    detail: 'One search = one place. Run ten places, get ten clean lists.'
   },
   {
     icon: Phone,
-    title: 'Get numbers you can call',
-    body: 'Pincodes, helplines, dummy sequences and duplicates are removed before you ever see them. What is left is a real mobile.',
-    detail: 'Then push each owner through your own follow-up pipeline.'
+    title: 'Call, message, close',
+    body: 'Pincodes, landlines, helplines and dummy numbers are removed before you ever see them. What is left is a real mobile.',
+    detail: 'Usually with WhatsApp already on it.'
   }
 ];
 
 const DASH_POINTS = [
-  {
-    icon: Layers,
-    title: 'Workspace — one search box',
-    body: 'Category, city and how many leads you want. That is the whole setup.'
-  },
-  {
-    icon: Users,
-    title: 'Leads — the list you actually work',
-    body: 'Name, owner mobile, area, rating and full profile. Click a row to see all 52 fields.'
-  },
-  {
-    icon: MapPin,
-    title: 'Map — see the city fill up',
-    body: 'Real pins appear area by area, so you know exactly what has been covered.'
-  },
-  {
-    icon: FolderArchive,
-    title: 'Folders — nothing is ever lost',
-    body: 'Every search is saved with its category, city and leads. Reopen any old search later.'
-  },
-  {
-    icon: Target,
-    title: 'CRM — follow-up built in',
-    body: 'New, pitched, talking, qualified, won. Notes and tasks stay attached to the business.'
-  }
+  { icon: Layers, title: 'Workspace', body: 'Category, city, how many leads. That is the whole setup.' },
+  { icon: Users, title: 'Leads', body: 'Name, owner mobile, area, rating. Click a row for all 52 fields.' },
+  { icon: MapPin, title: 'Map', body: 'Watch the city fill up, area by area, so you know what is covered.' },
+  { icon: FolderArchive, title: 'Folders', body: 'Every search is saved with its category and city. Nothing gets lost.' },
+  { icon: Target, title: 'CRM', body: 'New → pitched → talking → won. Notes and tasks stay on the business.' }
 ];
 
-const AUDIENCES = [
+const PLAYBOOKS = [
   {
-    icon: LineChart,
-    title: 'B2B SaaS & fintech',
-    body: 'Pull 500 grocery stores, restaurants or clinics with verified mobiles for a WhatsApp pitch campaign.',
-    quote: 'Reply rate moves from 1.8% to 14.5% — same team, same number of messages.'
+    who: 'Web / ads agency',
+    title: 'Sell websites to shops that do not have one',
+    body: 'Pick one category and one town. Find every shop with no website, message the owner, and show them a competitor who is already online. That is the entire pitch — no deck needed.',
+    steps: ['Find 200 dentists in Guntur', 'Keep the ones with no website', 'Send 40 WhatsApp messages a day'],
+    money: [{ k: '₹15k–40k', v: 'per client' }, { k: '3–4', v: 'clients a month' }, { k: '₹1,999', v: 'your cost' }]
   },
   {
-    icon: Store,
-    title: 'Marketplaces & aggregators',
-    body: 'Fill entire supplier networks in tier-2 and tier-3 cities — Guntur, Vijayawada, Warangal, Palnadu.',
-    quote: 'A full city list with photos and pricing in about 15 minutes.'
+    who: 'Distributor / wholesaler',
+    title: 'Get your products into every shop in the town',
+    body: 'You already know what sells. What you do not have is a list of every retailer who could stock it. Build the route before the salesmen leave the office.',
+    steps: ['Every hardware shop across 3 towns', 'Filter by area, then plan the route', 'Owner numbers, not counter landlines'],
+    money: [{ k: '1 stockist', v: 'pays for the year' }, { k: '3 towns', v: 'in one afternoon' }, { k: '₹0', v: 'to start' }]
   },
   {
-    icon: Briefcase,
-    title: 'Growth agencies',
-    body: 'Hand every client their own lead vault, exported to CSV or Excel and ready for HubSpot or Notion.',
-    quote: 'Clean columns, no scientific notation, no cleaning up before import.'
+    who: 'SaaS · insurance · loans · EdTech',
+    title: 'Call the person who can actually say yes',
+    body: 'A switchboard keeps you on hold for eleven minutes, then transfers you to somebody who is not there. An owner’s mobile rings once — and gets answered.',
+    steps: ['Verified 10-digit owner mobiles', 'Only businesses in your target category', 'Export straight into your CRM'],
+    money: [{ k: '14.5%', v: 'WhatsApp reply rate' }, { k: '1.8%', v: 'cold calling' }, { k: '8×', v: 'better' }]
+  },
+  {
+    who: 'Freelancer / consultant',
+    title: 'One afternoon, one niche, one list',
+    body: 'You do not need a data team or a ₹40,000-a-month subscription. You need 500 names in one niche — and the nerve to send the first message.',
+    steps: ['Pick the niche you know best', 'Build 500 leads before lunch', 'Start calling the same day'],
+    money: [{ k: '500', v: 'leads in one sitting' }, { k: '₹0', v: 'free credits' }, { k: '1', v: 'first client' }]
+  },
+  {
+    who: 'Agency / market research',
+    title: 'Sell the list itself',
+    body: 'Every client asks the same question: “who should we talk to in this city?”. You can answer it in twenty minutes, with clean columns, and charge for it every month.',
+    steps: ['One city or town per client', 'Export CSV or Excel, clean columns', 'Charge it as market research'],
+    money: [{ k: '₹5k–15k', v: 'per city report' }, { k: '1 city', v: '= 1 deliverable' }, { k: '₹0', v: 'extra effort' }]
   }
 ];
 
@@ -230,76 +243,66 @@ const PLANS = [
     name: 'Starter',
     price: '₹1,999',
     period: '/month',
-    line: 'For one person doing their own outreach.',
-    leads: '500 leads per search',
-    seats: '1 computer',
-    features: [
-      '500 leads in every search',
-      'All 52 vendor fields',
-      'Live map and saved folders',
-      'CSV and Excel export',
-      'Email support'
-    ]
+    line: 'One person doing their own outreach.',
+    credits: '2,000',
+    perLead: '₹1.00',
+    features: ['500 leads per search', 'All 52 fields', 'Map, folders and exports', 'Email support']
   },
   {
     id: 'pro',
     name: 'Pro',
     price: '₹3,999',
     period: '/month',
-    line: 'For agencies running daily sweeps.',
-    leads: '2,000 leads per search',
-    seats: '3 computers',
+    line: 'Agencies running daily searches.',
+    credits: '10,000',
+    perLead: '₹0.40',
     featured: true,
-    features: [
-      '2,000 leads in every search',
-      'Everything in Starter',
-      'CRM with 7 stages and notes',
-      'Deep profile expansion',
-      'Priority support'
-    ]
+    features: ['2,000 leads per search', 'Everything in Starter', 'CRM with 7 stages', 'Deep profile expansion', 'Priority support']
   },
   {
     id: 'agency',
     name: 'Agency',
     price: '₹7,999',
     period: '/month',
-    line: 'For multi-city teams.',
-    leads: '10,000 leads per search',
-    seats: '10 computers',
-    features: [
-      '10,000 leads in every search',
-      'Everything in Pro',
-      'Multi-city category sweeps',
-      'Client-ready export templates',
-      'Onboarding call'
-    ]
+    line: 'Multi-city teams and resellers.',
+    credits: '50,000',
+    perLead: '₹0.16',
+    features: ['10,000 leads per search', 'Everything in Pro', 'Batch city & town searches', 'Client-ready export templates', 'Onboarding call']
   }
 ];
 
 const FAQ = [
   {
-    q: 'Where do the numbers come from?',
-    a: 'From public business information that shops and offices already publish — maps listings, business directories and their own websites. We collect it fresh when you search, then clean and validate it. Nothing is bought from a resold list.'
+    q: 'Where do these numbers come from?',
+    a: 'From what businesses already publish so customers can reach them: their Maps listing, their own website, public directories. We read it fresh when you ask and check every number before it reaches you. Nothing comes from a bought list.'
   },
   {
-    q: 'How do I know the numbers are real?',
-    a: 'Every number is checked against Indian mobile rules: 10 digits, starts with 6, 7, 8 or 9, correct prefix. Pincodes, landlines, helplines and repeated dummy sequences are thrown away. If a field is unknown, we show “Unknown” — we never fill it with a guess.'
+    q: 'How do I know the mobile number is real?',
+    a: 'It has to pass Indian mobile rules: ten digits, starts with 6, 7, 8 or 9, valid prefix. Pincodes, landlines, helplines and repeated dummy numbers are thrown out. If we cannot confirm a field, we write “Unknown”. We never invent a number to fill the row.'
   },
   {
-    q: 'Will the same list be sold to my competitors?',
-    a: 'No. Every search runs live on your computer and the results stay on your computer. There is no shared database that gets resold, which is exactly why your list will not look like everyone else’s.'
+    q: 'Will my competitor end up with the same list?',
+    a: 'No. The list is built on your computer and stays on your computer. There is no shared database being resold to fifty people — which is exactly why your list will not look like everyone else’s.'
+  },
+  {
+    q: 'What happens when my 1,000 free credits finish?',
+    a: 'Nothing dramatic. Every business you already found stays yours: folders, notes, exports, CRM. You only need a plan if you want to keep finding new businesses. And credits never expire, so there is no clock running.'
   },
   {
     q: 'Do I need a fast internet connection?',
-    a: 'A normal home broadband or mobile hotspot is enough. The heavy work happens on your own PC, not on a server, so you are not waiting in a queue behind other users.'
+    a: 'A normal home broadband or a mobile hotspot is fine. The heavy work happens on your own PC, so you are not waiting in a queue behind other users.'
   },
   {
-    q: 'Can I export to Excel or my CRM?',
-    a: 'Yes. Every folder exports to CSV and Excel with clean columns, so numbers stay as text and never turn into scientific notation. It imports straight into HubSpot, Notion or Google Sheets.'
+    q: 'Can I get a whole district, or every mandal in one go?',
+    a: 'Not automatically, and that is on purpose: the app searches one city, town or village at a time, so the list you get is exactly the list you paid for. If you need a district-wide or mandal-level job, or a large multi-town run, email support@scraper.co.in and we will quote it as a custom order.'
   },
   {
-    q: 'Is this allowed?',
-    a: 'You are collecting business contact details that the business itself publishes for customers to call. Use the data responsibly: contact only relevant businesses, respect do-not-disturb requests, and follow the rules of the platforms you reach out on.'
+    q: 'Which parts of India are covered?',
+    a: 'All 28 states and 8 union territories. Major cities, smaller towns, and villages by name. If a place has businesses listed online, it can be searched.'
+  },
+  {
+    q: 'Can I export this into Excel or my CRM?',
+    a: 'Yes. Every folder exports to CSV and Excel with clean columns, so phone numbers stay as text and never turn into scientific notation. It imports straight into HubSpot, Notion or Google Sheets.'
   }
 ];
 
@@ -310,157 +313,111 @@ const CATEGORIES = [
   'Fabricators', 'Hospitals', 'Coaching centres', 'Printers', 'Caterers'
 ];
 
-/* ------------------------------------------------------------------ */
-/* Hero demo console                                                   */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Place queue — the hero visual                                      */
+/* ================================================================== */
 
-const RADAR_PINS = [
-  { left: '26%', top: '34%' },
-  { left: '58%', top: '22%' },
-  { left: '72%', top: '52%' },
-  { left: '38%', top: '62%' },
-  { left: '52%', top: '74%' }
-];
-
-function DemoConsole() {
+function PlaceQueue() {
   const reduce = useReducedMotion();
-  const [typed, setTyped] = useState(reduce ? DEMO_QUERIES[0] : '');
-  const [phase, setPhase] = useState(reduce ? 'results' : 'typing');
-  const [queryIndex, setQueryIndex] = useState(0);
+  const [step, setStep] = useState(reduce ? PLACES.length : 0);
 
   useEffect(() => {
     if (reduce) return undefined;
 
-    let alive = true;
+    let index = 0;
     let timer = null;
-    const query = DEMO_QUERIES[queryIndex];
 
-    setTyped('');
-    setPhase('typing');
+    const tick = () => {
+      index += 1;
+      setStep(index);
 
-    let i = 0;
-    const type = () => {
-      if (!alive) return;
-      i += 1;
-      setTyped(query.slice(0, i));
-      if (i < query.length) {
-        timer = setTimeout(type, 42 + Math.random() * 46);
+      if (index >= PLACES.length) {
+        timer = setTimeout(() => {
+          index = 0;
+          setStep(0);
+          timer = setTimeout(tick, 1000);
+        }, 3600);
         return;
       }
-      timer = setTimeout(() => {
-        if (!alive) return;
-        setPhase('scanning');
-        timer = setTimeout(() => {
-          if (!alive) return;
-          setPhase('results');
-          timer = setTimeout(() => {
-            if (!alive) return;
-            setQueryIndex(prev => (prev + 1) % DEMO_QUERIES.length);
-          }, 5200);
-        }, 1700);
-      }, 420);
+
+      timer = setTimeout(tick, 760);
     };
 
-    timer = setTimeout(type, 350);
+    timer = setTimeout(tick, 500);
+    return () => clearTimeout(timer);
+  }, [reduce]);
 
-    return () => {
-      alive = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [queryIndex, reduce]);
-
-  const scanning = phase === 'scanning';
-  const showRows = phase === 'results';
+  const found = PLACES.slice(0, step).reduce((sum, place) => sum + place.count, 0);
+  const mobiles = Math.round(found * 0.935);
+  const progress = Math.round((step / PLACES.length) * 100);
 
   return (
     <motion.div
-      className="lp-console"
-      initial={reduce ? false : { opacity: 0, y: 26, rotateX: 6 }}
+      className="lp-sweep"
+      initial={reduce ? false : { opacity: 0, y: 30, rotateX: 5 }}
       animate={{ opacity: 1, y: 0, rotateX: 0 }}
-      transition={{ duration: 0.85, delay: 0.15, ease: EASE }}
+      transition={{ duration: 0.9, delay: 0.18, ease: EASE }}
       style={{ perspective: 1200 }}
     >
-      <div className="lp-console-top">
+      <div className="lp-sweep-top">
         <div className="lp-dots"><span /><span /><span /></div>
-        <span className="lp-console-title">Live harvest</span>
-        <span className="lp-console-live"><i />{scanning ? 'Scanning' : showRows ? 'Ready' : 'Idle'}</span>
+        <span className="lp-sweep-title">Search queue</span>
+        <span className="lp-sweep-live"><i /> live</span>
       </div>
 
-      <div className="lp-console-body">
-        <div className="lp-searchbar">
-          <Search size={15} />
-          <div className="lp-searchbar-text">
-            {typed}
-            <span className="lp-caret" />
-          </div>
-        </div>
-
-        <div className="lp-radar">
-          <div className="lp-radar-sweep" />
-          {RADAR_PINS.map((pin, index) => (
-            <motion.span
-              key={index}
-              className="lp-pin-dot"
-              style={{ left: pin.left, top: pin.top }}
-              initial={{ opacity: 0, scale: 0.4 }}
-              animate={{
-                opacity: scanning || showRows ? 1 : 0,
-                scale: scanning || showRows ? 1 : 0.4
-              }}
-              transition={{ duration: 0.4, delay: index * 0.16 }}
-            />
-          ))}
-          <div className="lp-console-count">
-            {scanning ? 'Sweeping 7 zones…' : showRows ? <>Found <b>42</b> businesses</> : 'Waiting for a search'}
-          </div>
-        </div>
-
-        <div className="lp-demo-rows">
-          <AnimatePresence mode="popLayout">
-            {showRows &&
-              DEMO_ROWS.map((row, index) => (
-                <motion.div
-                  key={`${queryIndex}-${row.phone}`}
-                  className="lp-demo-row"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4, delay: index * 0.11, ease: EASE }}
-                >
-                  <span className="lp-demo-avatar">{row.name.charAt(0)}</span>
-                  <div className="lp-demo-main">
-                    <b>{row.name}</b>
-                    <span>{row.area}</span>
-                  </div>
-                  <span className="lp-demo-phone">{row.phone}</span>
-                  <CheckCircle2 size={13} className="lp-demo-check" />
-                </motion.div>
-              ))}
-          </AnimatePresence>
-        </div>
+      <div className="lp-sweep-head">
+        <b>All India</b>
+        <span>cities · towns · villages</span>
       </div>
 
-      <div className="lp-console-foot">
-        <span>Mobile only · validated</span>
-        <span><b>38 of 42</b> have a direct mobile</span>
+      <div className="lp-q">
+        {PLACES.map((place, index) => {
+          const state = index < step ? 'done' : index === step ? 'busy' : 'idle';
+          return (
+            <div className="lp-q-row" data-state={state} key={place.name}>
+              <span className="lp-q-pin"><MapPin size={10} /></span>
+              <span className="lp-q-name">
+                {place.name}
+                <em>{place.state}</em>
+              </span>
+              {state === 'done' ? <span className="lp-q-count">{place.count}</span> : null}
+              {state === 'busy' ? <span className="lp-q-busy">searching…</span> : null}
+              {state === 'idle' ? <span className="lp-q-idle">queued</span> : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="lp-sweep-bar">
+        <motion.span animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: 'linear' }} />
+      </div>
+
+      <div className="lp-sweep-meta">
+        <span>Place <b>{Math.min(step, PLACES.length)}</b> of {PLACES.length}</span>
+        <span><b>{found.toLocaleString('en-IN')}</b> found</span>
+      </div>
+
+      <div className="lp-sweep-foot">
+        <div>
+          <b>{found.toLocaleString('en-IN')}</b>
+          <span>businesses</span>
+        </div>
+        <div>
+          <b>{mobiles.toLocaleString('en-IN')}</b>
+          <span>with a mobile</span>
+        </div>
+        <div>
+          <b>~90s</b>
+          <span>per place</span>
+        </div>
       </div>
     </motion.div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Dashboard mock                                                      */
-/* ------------------------------------------------------------------ */
-
-const MAP_PINS = [
-  { left: '22%', top: '26%' },
-  { left: '46%', top: '18%' },
-  { left: '64%', top: '38%' },
-  { left: '34%', top: '52%' },
-  { left: '58%', top: '66%' },
-  { left: '76%', top: '58%' },
-  { left: '44%', top: '78%' }
-];
+/* ================================================================== */
+/* Dashboard mock                                                     */
+/* ================================================================== */
 
 function DashboardMock() {
   const reduce = useReducedMotion();
@@ -468,14 +425,14 @@ function DashboardMock() {
   return (
     <motion.div
       className="lp-window"
-      initial={reduce ? false : { opacity: 0, y: 30 }}
+      initial={reduce ? false : { opacity: 0, y: 34 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.7, ease: EASE }}
+      viewport={{ once: true, margin: '-90px' }}
+      transition={{ duration: 0.75, ease: EASE }}
     >
       <div className="lp-window-bar">
         <div className="lp-dots"><span /><span /><span /></div>
-        <span className="lp-window-url">scraper — workspace</span>
+        <span className="lp-window-url">workspace — leads</span>
       </div>
 
       <div className="lp-window-tabs">
@@ -495,10 +452,10 @@ function DashboardMock() {
             <motion.div
               key={row.phone}
               className="lp-window-tr"
-              initial={reduce ? false : { opacity: 0, x: -10 }}
+              initial={reduce ? false : { opacity: 0, x: -12 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: index * 0.07, ease: EASE }}
+              transition={{ duration: 0.42, delay: index * 0.07, ease: EASE }}
             >
               <span className="nm">{row.name}</span>
               <span className="ph">{row.phone}</span>
@@ -513,8 +470,8 @@ function DashboardMock() {
               key={index}
               className="lp-map-pin"
               style={{ left: pin.left, top: pin.top }}
-              animate={reduce ? {} : { opacity: [0.45, 1, 0.45] }}
-              transition={{ duration: 2.6, repeat: Infinity, delay: index * 0.24 }}
+              animate={reduce ? {} : { opacity: [0.4, 1, 0.4], scale: [1, 1.25, 1] }}
+              transition={{ duration: 2.8, repeat: Infinity, delay: index * 0.26 }}
             />
           ))}
         </div>
@@ -523,23 +480,85 @@ function DashboardMock() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Section heading                                                     */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Credit meter                                                       */
+/* ================================================================== */
 
-function SectionHead({ tag, title, sub }) {
+function CreditMeter() {
+  const reduce = useReducedMotion();
+  const [left, setLeft] = useState(reduce ? 180 : 1000);
+
+  useEffect(() => {
+    if (reduce) return undefined;
+    const controls = animate(1000, 180, {
+      duration: 5.5,
+      ease: 'easeInOut',
+      repeat: Infinity,
+      repeatType: 'reverse',
+      repeatDelay: 1.1,
+      onUpdate: value => setLeft(value)
+    });
+    return () => controls.stop();
+  }, [reduce]);
+
+  const used = Math.round(1000 - left);
+
   return (
-    <FadeUp className="lp-section-head">
-      <span className="lp-tag">{tag}</span>
-      <h2 className="lp-h2">{title}</h2>
-      {sub ? <p className="lp-sub">{sub}</p> : null}
-    </FadeUp>
+    <motion.div
+      className="lp-credit-card"
+      initial={reduce ? false : { opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-80px' }}
+      transition={{ duration: 0.7, ease: EASE }}
+    >
+      <div className="lp-credit-top">
+        <b>{Math.round(left).toLocaleString('en-IN')}</b>
+        <span>credits left<br />1 credit = 1 business</span>
+      </div>
+
+      <div className="lp-meter">
+        <motion.span animate={{ width: `${Math.max(4, (left / 1000) * 100)}%` }} transition={{ duration: 0.12 }} />
+      </div>
+
+      <ul className="lp-credit-rows">
+        <li>
+          <Check size={14} />
+          <span><b>{used.toLocaleString('en-IN')} businesses found</b> — and every one came with a mobile number that passed the check.</span>
+        </li>
+        <li>
+          <Check size={14} />
+          <span><b>Granted once per computer.</b> Reinstalling, logging in again, or opening a second window will not reset it.</span>
+        </li>
+        <li>
+          <Check size={14} />
+          <span><b>They never expire.</b> Use 60 this month, 940 next month. No countdown, no “your trial ends today” email.</span>
+        </li>
+        <li>
+          <Check size={14} />
+          <span><b>Only new businesses cost credits.</b> Re-opening a folder, exporting, or writing a note is free.</span>
+        </li>
+      </ul>
+    </motion.div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* FAQ                                                                 */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Section heading                                                    */
+/* ================================================================== */
+
+function Head({ tag, title, sub }) {
+  return (
+    <Reveal className="lp-head">
+      <span className="lp-tag">{tag}</span>
+      <h2 className="lp-h2">{title}</h2>
+      {sub ? <p className="lp-sub">{sub}</p> : null}
+    </Reveal>
+  );
+}
+
+/* ================================================================== */
+/* FAQ                                                                */
+/* ================================================================== */
 
 function FaqItem({ item, isOpen, onToggle }) {
   return (
@@ -555,7 +574,7 @@ function FaqItem({ item, isOpen, onToggle }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.26, ease: EASE }}
+            transition={{ duration: 0.28, ease: EASE }}
             style={{ overflow: 'hidden' }}
           >
             {item.a}
@@ -566,49 +585,72 @@ function FaqItem({ item, isOpen, onToggle }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Page                                                               */
+/* ================================================================== */
 
 export default function LandingV2() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
-  const [scrolled, setScrolled] = useState(false);
+  const [solid, setSolid] = useState(false);
   const [openFaq, setOpenFaq] = useState(0);
+  const [play, setPlay] = useState(0);
+
+  const { scrollYProgress } = useScroll();
+  const bar = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
+    const onScroll = () => setSolid(window.scrollY > 12);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const go = useCallback(() => navigate('/command'), [navigate]);
+  // index.css locks the body for the cockpit; the marketing page must scroll.
+  useEffect(() => {
+    document.documentElement.classList.add('lp-page');
+    document.body.classList.add('lp-page');
+    return () => {
+      document.documentElement.classList.remove('lp-page');
+      document.body.classList.remove('lp-page');
+    };
+  }, []);
 
-  const jump = useCallback(id => {
+  const go = () => navigate('/command');
+
+  const jump = id => {
     const node = document.getElementById(id);
     if (!node) return;
     node.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-  }, [reduce]);
+  };
+
+  const active = PLAYBOOKS[play];
 
   return (
     <div className="lp-root">
-      <div className="lp-grid-bg" />
-      <div className="lp-glow lp-glow-a" />
-      <div className="lp-glow lp-glow-b" />
-      <div className="lp-glow lp-glow-c" />
+      <div className="lp-glow lp-glow-1" />
+      <div className="lp-glow lp-glow-2" />
+      <div className="lp-glow lp-glow-3" />
+      <div className="lp-mesh" />
 
-      {/* ---------------------------------------------------------- nav */}
-      <header className="lp-nav" data-scrolled={scrolled}>
-        <div className="lp-nav-inner">
-          <a
-            className="lp-brand"
-            href="/"
-            onClick={event => {
-              event.preventDefault();
-              window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
-            }}
-          >
+      <motion.div
+        style={{
+          scaleX: bar,
+          transformOrigin: '0% 50%',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          zIndex: 80,
+          background: 'linear-gradient(90deg, #2563eb, #22d3ee)',
+          boxShadow: '0 0 14px rgba(34,211,238,0.5)'
+        }}
+      />
+
+      <header className="lp-nav" data-solid={solid}>
+        <div className="lp-nav-in">
+          <div className="lp-brand">
             <span className="lp-brand-mark">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
                 <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" stroke="#e0f2fe" strokeWidth="1.7" strokeLinejoin="round" />
@@ -619,72 +661,70 @@ export default function LandingV2() {
               <b>SCRAPER</b>
               <span>Lead intelligence</span>
             </span>
-          </a>
+          </div>
 
-          <nav className="lp-nav-links">
+          <nav className="lp-links">
             <button type="button" onClick={() => jump('why')}>Why us</button>
+            <button type="button" onClick={() => jump('difference')}>One place at a time</button>
             <button type="button" onClick={() => jump('how')}>How it works</button>
-            <button type="button" onClick={() => jump('dashboard')}>Dashboard</button>
+            <button type="button" onClick={() => jump('money')}>Make money</button>
             <button type="button" onClick={() => jump('pricing')}>Pricing</button>
-            <button type="button" onClick={() => jump('faq')}>FAQ</button>
           </nav>
 
-          <div className="lp-nav-actions">
-            <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={() => jump('pricing')}>
-              Pricing
-            </button>
+          <div className="lp-nav-right">
+            <span className="lp-pill"><i /> 1,000 leads free</span>
             <button type="button" className="lp-btn lp-btn-primary lp-btn-sm" onClick={go}>
-              Open dashboard <ArrowRight size={14} />
+              Launch Workspace <ArrowRight size={14} />
             </button>
           </div>
         </div>
       </header>
 
       <main>
-        {/* -------------------------------------------------------- hero */}
+        {/* ------------------------------------------------------- hero */}
         <section className="lp-hero">
-          <div className="lp-container lp-hero-grid">
-            <div className="lp-hero-copy">
+          <div className="lp-wrap lp-hero-grid">
+            <div>
               <motion.span
                 className="lp-eyebrow"
-                initial={reduce ? false : { opacity: 0, y: -8 }}
+                initial={reduce ? false : { opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: EASE }}
               >
-                <i /> Made in India · for Indian businesses
+                🔥 B2B LEAD RADAR · STARTUPS, AGENCIES & GROWING ENTERPRISES · ALL 28 STATES
               </motion.span>
 
               <motion.h1
                 className="lp-h1"
-                initial={reduce ? false : { opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.06, ease: EASE }}
+                initial={reduce ? false : 'hidden'}
+                animate="show"
+                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.11, delayChildren: 0.05 } } }}
               >
-                Get the <span className="lp-hl">owner’s mobile number</span>, not the office landline.
+                <motion.span variants={fadeUp} style={{ display: 'block' }}>Every shop in the town.</motion.span>
+                <motion.span variants={fadeUp} style={{ display: 'block' }}>
+                  <span className="lp-hl lp-hl-vibrant">Not just page one.</span>
+                </motion.span>
               </motion.h1>
 
               <motion.p
                 className="lp-lede"
-                initial={reduce ? false : { opacity: 0, y: 18 }}
+                initial={reduce ? false : { opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.14, ease: EASE }}
+                transition={{ duration: 0.7, delay: 0.18, ease: EASE }}
               >
-                Type a business type and a city. In <b>under 90 seconds</b> you get a fresh list of
-                real 10-digit mobile numbers with the full shop details — ready to send on WhatsApp.
-                No old lists. No switchboard numbers. No duplicates.
+                Name any city, town or village in India. Ninety seconds later you have a fresh list
+                of real businesses there, with <b>the owner’s mobile number</b> — the one that
+                actually rings, and usually has WhatsApp.
               </motion.p>
 
               <motion.div
-                className="lp-cta-row"
-                initial={reduce ? false : { opacity: 0, y: 18 }}
+                className="lp-cta"
+                initial={reduce ? false : { opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.22, ease: EASE }}
+                transition={{ duration: 0.7, delay: 0.26, ease: EASE }}
               >
-                <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={go}>
-                  Start free for 14 days <ArrowRight size={16} />
-                </button>
-                <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={() => jump('how')}>
-                  <Play size={15} /> See how it works
+                <button type="button" className="lp-btn-3d" onClick={go}>
+                  🚀 Start Finding Leads (Search Any City, Town or Village) <ArrowRight size={16} />
                 </button>
               </motion.div>
 
@@ -692,114 +732,281 @@ export default function LandingV2() {
                 className="lp-micro"
                 initial={reduce ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.32 }}
+                transition={{ duration: 0.6, delay: 0.36 }}
               >
-                <li><Check size={13} /> No card needed</li>
-                <li><Check size={13} /> Runs on your own laptop</li>
-                <li><Check size={13} /> Ready in about 40 seconds</li>
+                <li><Check size={13} /> No card</li>
+                <li><Check size={13} /> No login</li>
+                <li><Check size={13} /> Nothing leaves your PC</li>
+                <li><Check size={13} /> 1,000 leads, once per computer</li>
               </motion.ul>
             </div>
 
-            <DemoConsole />
+            <PlaceQueue />
           </div>
 
-          <div className="lp-container">
-            <Stagger className="lp-stats" delay={0.1}>
-              <StaggerItem className="lp-stat">
-                <b><Counter to={52} suffix="" /> fields</b>
-                <span>Owner, address, category, rating, hours, socials and more — for every business.</span>
-              </StaggerItem>
-              <StaggerItem className="lp-stat">
-                <b><Counter to={90} prefix="<" suffix=" sec" /></b>
-                <span>From typing the query to a working list of mobile numbers.</span>
-              </StaggerItem>
-              <StaggerItem className="lp-stat">
-                <b>4 levels</b>
-                <span>State → District → Mandal → Village. No messy city text.</span>
-              </StaggerItem>
-              <StaggerItem className="lp-stat">
-                <b><Counter to={100} suffix="%" /> mobiles</b>
-                <span>Every number is a validated Indian 10-digit mobile. Nothing else gets through.</span>
-              </StaggerItem>
+          <div className="lp-wrap">
+            <Stagger className="lp-stats" step={0.09}>
+              <Item className="lp-stat">
+                <b><Num to={500} format /> leads</b>
+                <span>From one city, town or village search. More on bigger plans.</span>
+              </Item>
+              <Item className="lp-stat">
+                <b>&lt; <Num to={90} /> sec</b>
+                <span>From typing the words to a list you can start messaging.</span>
+              </Item>
+              <Item className="lp-stat">
+                <b><Num to={52} /> fields</b>
+                <span>Owner, GSTIN, hours, reviews, photos, socials — where published.</span>
+              </Item>
+              <Item className="lp-stat">
+                <b><Num to={100} />% mobiles</b>
+                <span>Every number is a validated Indian 10-digit mobile. Nothing else gets in.</span>
+              </Item>
             </Stagger>
+
+            <Reveal delay={0.05}>
+              <div className="lp-cover">
+                <span className="lp-cover-label"><MapPin size={12} /> Coverage</span>
+                <p>
+                  <b>All 28 states and 8 union territories.</b> Every major city, plus towns and
+                  villages by name. Search them one at a time, or ask us for a district-wide run.
+                </p>
+              </div>
+            </Reveal>
 
             <div className="lp-marquee">
               <div className="lp-marquee-track">
-                {[...CATEGORIES, ...CATEGORIES].map((cat, index) => (
-                  <span className="lp-chip" key={`${cat}-${index}`}>{cat}</span>
+                {[...CATEGORIES, ...CATEGORIES].map((category, index) => (
+                  <span className="lp-chip" key={`${category}-${index}`}>{category}</span>
                 ))}
               </div>
             </div>
           </div>
         </section>
 
+        {/* -------------------------------------------------- difference */}
+        
+        {/* ------------------------------------------------------- AUDIENCE & AGENCY POWER */}
+        <section className="lp-section" id="agency-power">
+          <div className="lp-wrap">
+            <Reveal className="lp-head">
+              <span className="lp-kicker">BUILT FOR HIGH-VELOCITY REVENUE</span>
+              <h2 className="lp-h2">Why Startups, Agencies & Growing Businesses Swear By LeadHarvest Pro</h2>
+              <p className="lp-sub">From a founder needing their first 50 paying customers to a marketing agency delivering multi-city lead campaigns — we do the heavy lifting so you close deals.</p>
+            </Reveal>
+
+            <div className="lp-audience-grid">
+              {/* Pillar 1: Startups */}
+              <div className="lp-audience-card theme-startup">
+                <span className="lp-audience-pill">🚀 FOR STARTUPS & FOUNDERS</span>
+                <h3>Close Your First 50 Customers Before Lunch</h3>
+                <p>Stop paying ₹40,000/mo for stale databases. Type your target niche and town, get verified Indian 10-digit mobile lines, and launch direct WhatsApp outreach the same afternoon.</p>
+                <ul className="lp-audience-points">
+                  <li><Check size={14} className="v2-text-lime" /> Zero gatekeepers — owner mobiles only</li>
+                  <li><Check size={14} className="v2-text-lime" /> High reply rate (14.5% on WhatsApp)</li>
+                  <li><Check size={14} className="v2-text-lime" /> ₹0 to start with 1,000 free credits</li>
+                </ul>
+              </div>
+
+              {/* Pillar 2: Agencies */}
+              <div className="lp-audience-card theme-agency">
+                <span className="lp-audience-pill">🏢 FOR AGENCIES & LEAD RESELLERS</span>
+                <h3>Sell City Lead Packs at ₹5,000–₹15,000 Per Report</h3>
+                <p>Your clients constantly ask "who should we target in this city?". Run a 90-second radar sweep, export a clean client-ready spreadsheet, and charge recurring monthly retainer fees.</p>
+                <ul className="lp-audience-points">
+                  <li><Check size={14} className="v2-text-violet" /> White-label export templates (CSV, Dialer, VCF)</li>
+                  <li><Check size={14} className="v2-text-violet" /> Search Vault Folders for each client account</li>
+                  <li><Check size={14} className="v2-text-violet" /> 3 reports a month = ₹45,000 extra profit</li>
+                </ul>
+              </div>
+
+              {/* Pillar 3: Wholesalers & Establishments */}
+              <div className="lp-audience-card theme-enterprise">
+                <span className="lp-audience-pill">🏭 FOR DISTRIBUTORS & ENTERPRISES</span>
+                <h3>Cover Every Town on the Route, One by One</h3>
+                <p>Expanding dealership routes? Run each town as its own clean folder, then keep them together in the vault. Need a whole district in one shot? We run that as a custom project for you.</p>
+                <ul className="lp-audience-points">
+                  <li><Check size={14} className="v2-text-cyan" /> One tidy folder per town — ask us for district runs</li>
+                  <li><Check size={14} className="v2-text-cyan" /> Built-in 7-stage CRM pipeline with ₹ INR deal values</li>
+                  <li><Check size={14} className="v2-text-cyan" /> Telephony dialer format for your calling team</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Master Geo-Swarm Visual Explainer */}
+            <div className="lp-geo-swarm-box">
+              <span className="lp-kicker">🗺️ ONE PLACE, FULLY COVERED</span>
+              <h3 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: '8px 0 12px' }}>
+                Type any city, town or village. The engine knows every locality inside it.
+              </h3>
+              <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 820, margin: 0 }}>
+                Other tools stop at page one of a single city. Scraper indexes all 36 states, 627
+                districts and 5,618 mandals locally, so one search walks every market, ward and
+                surrounding village inside the place you named. Need a whole district or state?
+                That is a custom run — email support@scraper.co.in.
+              </p>
+              <div className="lp-geo-tiers">
+                <div className="lp-geo-tier-card">
+                  <b>📍 Included: Town / city sweep</b>
+                  <p>Every market, ward and nearby village inside the city, town or village you named. One search, one clean list.</p>
+                </div>
+                <div className="lp-geo-tier-card">
+                  <b>🗺️ Custom: Mandal or district run</b>
+                  <p>We run all 9–35 mandals for you and hand over one consolidated folder with duplicates removed.</p>
+                </div>
+                <div className="lp-geo-tier-card">
+                  <b>🏛️ Custom: State-wide run</b>
+                  <p>For enterprise distributor discovery across every district in a state, quoted per project.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-section" id="difference">
+          <div className="lp-wrap">
+            <Head
+              tag="One place, searched properly"
+              title="Page one is not the whole town."
+              sub={
+                <>
+                  Type “plumbers in Guntur” into a normal tool and you get the first page — maybe forty
+                  shops. We keep going: every page, every locality inside that city, town or village,
+                  duplicates removed. <b>One search gives you the whole place</b> — then you move to the next one.
+                </>
+              }
+            />
+
+            <Reveal>
+              <div className="lp-gap">
+                <div className="lp-gap-row" data-tone="bad">
+                  <div className="lp-gap-label">
+                    <b>Other tools</b>
+                    <span>One keyword · first page</span>
+                  </div>
+                  <div className="lp-gap-track">
+                    <motion.div
+                      className="lp-gap-fill"
+                      initial={reduce ? false : { width: 0 }}
+                      whileInView={{ width: '3.1%' }}
+                      viewport={{ once: true, margin: '-60px' }}
+                      transition={{ duration: 0.9, delay: 0.15, ease: EASE }}
+                    />
+                  </div>
+                  <div className="lp-gap-num">~40</div>
+                </div>
+
+                <div className="lp-gap-row" data-tone="good">
+                  <div className="lp-gap-label">
+                    <b>Scraper</b>
+                    <span>Every page in that city, town or village</span>
+                  </div>
+                  <div className="lp-gap-track">
+                    <motion.div
+                      className="lp-gap-fill"
+                      initial={reduce ? false : { width: 0 }}
+                      whileInView={{ width: '100%' }}
+                      viewport={{ once: true, margin: '-60px' }}
+                      transition={{ duration: 1.6, delay: 0.25, ease: EASE }}
+                    />
+                  </div>
+                  <div className="lp-gap-num">500</div>
+                </div>
+
+                <p className="lp-gap-note">
+                  Same place. Same afternoon. <b>12× more businesses</b> on the smallest plan — and
+                  roughly twelve times more chances to find the one that says yes. Bigger plans go
+                  up to 10,000 per search.
+                </p>
+              </div>
+            </Reveal>
+
+            <Reveal delay={0.08}>
+              <div className="lp-custom">
+                <div>
+                  <span className="lp-custom-kicker"><MapPin size={12} /> Need more than one place?</span>
+                  <h3>Whole district? Every mandal? That is a custom run.</h3>
+                  <p>
+                    The app searches one city, town or village at a time, so you always know exactly
+                    what you are paying for. If you need a district-wide or mandal-level list, or a
+                    big multi-town job, <b>tell us and we will quote it</b>.
+                  </p>
+                </div>
+                <a className="lp-btn lp-btn-ghost" href="mailto:support@scraper.co.in?subject=District%20or%20mandal%20list">
+                  Ask for a custom run <ArrowRight size={14} />
+                </a>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
         {/* --------------------------------------------------------- why */}
         <section className="lp-section" id="why">
-          <div className="lp-container">
-            <SectionHead
-              tag="Why startups need this"
-              title="One wrong number is one lost day."
-              sub="Old lead databases were built for a world of landlines and call centres. Indian businesses run on a proprietor’s mobile and a WhatsApp message. That is the whole reason this product exists."
+          <div className="lp-wrap">
+            <Head
+              tag="Why startups keep this open"
+              title="Three reasons you will not go back to a bought list."
+              sub="Bought lists were built for a world of landlines and call centres. Indian business runs on one proprietor, one mobile, and a WhatsApp message."
             />
 
             <Stagger className="lp-cards-3">
-              <StaggerItem className="lp-card">
+              <Item className="lp-card">
                 <span className="lp-card-icon"><Clock3 size={19} /></span>
-                <h3>Zero stale data</h3>
+                <h3>Everything is fresh</h3>
                 <p>
-                  Every search is a <b>live search</b>. Nothing is pulled from a six-month-old dump.
-                  If a shop has closed or changed hands, it does not come back in your list.
+                  Every search is a <b>live search</b>. Nothing comes from a six-month-old dump.
+                  Shop closed? Changed hands? It does not show up in your list.
                 </p>
                 <div className="lp-card-figure">
                   <b>Fresh</b>
                   <span>on every single search</span>
                 </div>
-              </StaggerItem>
+              </Item>
 
-              <StaggerItem className="lp-card">
+              <Item className="lp-card">
                 <span className="lp-card-icon"><Phone size={19} /></span>
-                <h3>Direct proprietor mobiles</h3>
+                <h3>The owner’s mobile, not the office line</h3>
                 <p>
-                  Not the reception, not the switchboard, not “call between 11 and 4”. The number
-                  that actually belongs to the person who can say yes — and usually has WhatsApp.
+                  Not the reception. Not “call between 11 and 4”. The number that belongs to the
+                  person who can say yes — <b>and usually has WhatsApp</b>.
                 </p>
                 <div className="lp-card-figure">
                   <b>10 digits</b>
                   <span>validated, every time</span>
                 </div>
-              </StaggerItem>
+              </Item>
 
-              <StaggerItem className="lp-card">
+              <Item className="lp-card">
                 <span className="lp-card-icon"><TrendingUp size={19} /></span>
-                <h3>Lower cost to acquire</h3>
+                <h3>Lower cost to win a customer</h3>
                 <p>
-                  When more of your calls and messages reach a real decision-maker, you spend less
-                  to win each customer. Same team, same budget, more closed deals.
+                  When more of your messages reach a real decision-maker, you spend less to win
+                  each one. Same team, same budget, <b>more closed deals</b>.
                 </p>
                 <div className="lp-card-figure">
                   <b>14.5%</b>
-                  <span>WhatsApp reply rate vs 1.8% cold calling</span>
+                  <span>WhatsApp replies vs 1.8% cold calling</span>
                 </div>
-              </StaggerItem>
+              </Item>
             </Stagger>
           </div>
         </section>
 
         {/* ----------------------------------------------------- compare */}
         <section className="lp-section" id="compare">
-          <div className="lp-container">
-            <SectionHead
-              tag="The honest comparison"
-              title="Old databases vs a live harvest"
-              sub="This is the difference our customers feel in the first week. Every row below is something you can check yourself."
+          <div className="lp-wrap">
+            <Head
+              tag="The honest scorecard"
+              title="Old databases vs a live place search"
+              sub="Six rows. Every one of them something you can check yourself in the first ten minutes."
             />
 
-            <FadeUp>
+            <Reveal>
               <div className="lp-compare">
                 <div className="lp-compare-head">
                   <div>What matters</div>
-                  <div className="is-bad">Old scrapers &amp; databases</div>
-                  <div className="is-good">Gomandap / LeadHarvest Pro</div>
+                  <div className="is-bad">Bought lists &amp; old tools</div>
+                  <div className="is-good">LeadHarvest Pro (Live Radar)</div>
                 </div>
 
                 {COMPARE.map((row, index) => (
@@ -812,39 +1019,35 @@ export default function LandingV2() {
                     transition={{ duration: 0.45, delay: index * 0.06, ease: EASE }}
                   >
                     <div className="lp-compare-cell is-label">{row.label}</div>
-                    <div className="lp-compare-cell is-bad">
-                      <X size={13} /> <span>{row.bad}</span>
-                    </div>
-                    <div className="lp-compare-cell is-good">
-                      <Check size={13} /> <span>{row.good}</span>
-                    </div>
+                    <div className="lp-compare-cell is-bad"><X size={13} /> <span>{row.bad}</span></div>
+                    <div className="lp-compare-cell is-good"><Check size={13} /> <span>{row.good}</span></div>
                   </motion.div>
                 ))}
               </div>
-            </FadeUp>
+            </Reveal>
           </div>
         </section>
 
         {/* --------------------------------------------------------- how */}
         <section className="lp-section" id="how">
-          <div className="lp-container">
-            <SectionHead
+          <div className="lp-wrap">
+            <Head
               tag="How it works"
-              title="Three steps. No training needed."
-              sub="If you can type a message on WhatsApp, you can run this. There is nothing to configure and no manual to read."
+              title="Three steps. About the time it takes to make chai."
+              sub="If you can type a WhatsApp message, you can run this. Nothing to configure, no manual, no training call."
             />
 
             <Stagger className="lp-steps">
               {STEPS.map((step, index) => {
                 const Icon = step.icon;
                 return (
-                  <StaggerItem className="lp-step" key={step.title}>
+                  <Item className="lp-step" key={step.title}>
                     <span className="lp-step-num">0{index + 1}</span>
                     <span className="lp-step-icon"><Icon size={20} /></span>
                     <h3>{step.title}</h3>
                     <p>{step.body}</p>
                     <small>{step.detail}</small>
-                  </StaggerItem>
+                  </Item>
                 );
               })}
             </Stagger>
@@ -853,17 +1056,16 @@ export default function LandingV2() {
 
         {/* --------------------------------------------------- dashboard */}
         <section className="lp-section" id="dashboard">
-          <div className="lp-container">
+          <div className="lp-wrap">
             <div className="lp-dash-grid">
               <div>
-                <FadeUp>
+                <Reveal>
                   <span className="lp-tag">Inside the dashboard</span>
-                  <h2 className="lp-h2">One screen. Everything you need to sell.</h2>
+                  <h2 className="lp-h2">One screen. No manual.</h2>
                   <p className="lp-sub">
-                    No tabs full of settings, no live log noise. Open it and start working.
-                    Search on the left, work your leads on the right.
+                    Left: tell it what you want. Right: work the list. That is genuinely the whole app.
                   </p>
-                </FadeUp>
+                </Reveal>
 
                 <ul className="lp-dash-list">
                   {DASH_POINTS.map((point, index) => {
@@ -892,55 +1094,173 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* --------------------------------------------------------- who */}
-        <section className="lp-section" id="who">
-          <div className="lp-container">
-            <SectionHead
-              tag="Who uses it"
-              title="Built for the teams that live on outreach"
-              sub="Same product, three very different jobs."
+        {/* ------------------------------------------------------- money */}
+        <section className="lp-section" id="money">
+          <div className="lp-wrap">
+            <Head
+              tag="How people actually make money"
+              title="Five ways customers use this."
+              sub="Same list. Five very different businesses. Pick the one that sounds like yours."
             />
 
-            <Stagger className="lp-audience">
-              {AUDIENCES.map(item => {
-                const Icon = item.icon;
-                return (
-                  <StaggerItem className="lp-card" key={item.title}>
-                    <h3><Icon size={17} /> {item.title}</h3>
-                    <p>{item.body}</p>
-                    <div className="lp-quote">{item.quote}</div>
-                  </StaggerItem>
-                );
-              })}
+            <div className="lp-money">
+              <div className="lp-tabs">
+                {PLAYBOOKS.map((item, index) => (
+                  <button
+                    key={item.title}
+                    type="button"
+                    className="lp-tab"
+                    data-on={index === play}
+                    onClick={() => setPlay(index)}
+                  >
+                    <span className="n">0{index + 1}</span>
+                    {item.who}
+                  </button>
+                ))}
+              </div>
+
+              <div className="lp-play">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={active.title}
+                    initial={reduce ? false : { opacity: 0, x: 22 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={reduce ? undefined : { opacity: 0, x: -18 }}
+                    transition={{ duration: 0.32, ease: EASE }}
+                  >
+                    <span className="who"><Briefcase size={12} /> {active.who}</span>
+                    <h3>{active.title}</h3>
+                    <p>{active.body}</p>
+
+                    <ul className="lp-play-steps">
+                      {active.steps.map(step => (
+                        <li key={step}><CheckCircle2 size={13} /> {step}</li>
+                      ))}
+                    </ul>
+
+                    <div className="lp-play-money">
+                      {active.money.map(item => (
+                        <div key={item.v}>
+                          <b>{item.k}</b>
+                          <span>{item.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* --------------------------------------------- startups/agencies */}
+        <section className="lp-section" id="who">
+          <div className="lp-wrap">
+            <Head
+              tag="Two very different lives"
+              title="Just starting, or already running?"
+              sub="The list is the same. What you do with it is not."
+            />
+
+            <Stagger className="lp-two">
+              <Item className="lp-panel">
+                <span className="lp-panel-kicker"><Sparkles size={12} /> Just starting</span>
+                <h3>You have everything except a list.</h3>
+                <p>
+                  No data team. No ₹40,000-a-month subscription. No idea where the first hundred
+                  customers are hiding. <b>That is the exact problem this solves</b> — and the first
+                  1,000 leads are on us.
+                </p>
+                <ul className="lp-panel-list">
+                  <li><Check size={13} /> Pick one niche and one town. That is your whole market.</li>
+                  <li><Check size={13} /> Message 100 owners a day on WhatsApp, personally.</li>
+                  <li><Check size={13} /> Book your first call this week, not this quarter.</li>
+                  <li><Check size={13} /> Pay nothing until the 1,000 run out.</li>
+                </ul>
+                <div className="lp-panel-metric">
+                  <b>₹0</b>
+                  <span>to your first real lead list</span>
+                </div>
+              </Item>
+
+              <Item className="lp-panel is-accent">
+                <span className="lp-panel-kicker"><Store size={12} /> Already running</span>
+                <h3>You have clients. You need fresh ground.</h3>
+                <p>
+                  Your process works. What breaks is scale: every new client wants a new city, and
+                  every bought list looks exactly like the one your competitor bought.{' '}
+                  <b>A town nobody else has searched</b> is your unfair advantage.
+                </p>
+                <ul className="lp-panel-list">
+                  <li><Check size={13} /> One new city or town per client, per month.</li>
+                  <li><Check size={13} /> Export clean columns straight into HubSpot or Notion.</li>
+                  <li><Check size={13} /> Deliver market research as a paid add-on.</li>
+                  <li><Check size={13} /> Your list stays private — it is not resold to anyone.</li>
+                </ul>
+                <div className="lp-panel-metric">
+                  <b>1 city</b>
+                  <span>= 1 new billable deliverable</span>
+                </div>
+              </Item>
             </Stagger>
+          </div>
+        </section>
+
+        {/* ----------------------------------------------------- credits */}
+        <section className="lp-section" id="credits">
+          <div className="lp-wrap lp-credit-grid">
+            <div>
+              <Reveal>
+                <span className="lp-tag">The free part, honestly</span>
+                <h2 className="lp-h2">1,000 leads free. <em>No card, no countdown.</em></h2>
+                <p className="lp-sub">
+                  A trial expires while you are busy. Credits wait for you. One credit finds one
+                  business, and your first thousand are on the house — <b>once per computer</b>.
+                </p>
+              </Reveal>
+
+              <Reveal delay={0.1}>
+                <ul className="lp-credit-rows" style={{ marginTop: 22 }}>
+                  <li><Check size={14} /><span><b>One credit, one business.</b> Not one search. Not one page. One real business with a working mobile.</span></li>
+                  <li><Check size={14} /><span><b>Free once per computer.</b> No login required, so there is nothing to sign up for twice.</span></li>
+                  <li><Check size={14} /><span><b>Never expires.</b> Use them at your pace.</span></li>
+                </ul>
+              </Reveal>
+            </div>
+
+            <CreditMeter />
           </div>
         </section>
 
         {/* ----------------------------------------------------- pricing */}
         <section className="lp-section" id="pricing">
-          <div className="lp-container">
-            <SectionHead
+          <div className="lp-wrap">
+            <Head
               tag="Pricing"
-              title="Simple monthly price. Cancel anytime."
-              sub="Every plan includes the full engine, the map, saved folders and exports. You are only choosing how many leads you can pull at once."
+              title="Pick a size. Cancel whenever."
+              sub="Every plan includes the whole engine — map, folders, CRM, exports. The only difference is how many leads you can pull each month."
             />
 
             <Stagger className="lp-pricing">
               {PLANS.map(plan => (
-                <StaggerItem key={plan.id} className={`lp-plan${plan.featured ? ' is-featured' : ''}`}>
+                <Item key={plan.id} className={`lp-plan${plan.featured ? ' is-featured' : ''}`}>
                   {plan.featured ? (
                     <span className="lp-plan-badge"><Sparkles size={10} /> Most popular</span>
                   ) : null}
+
                   <div className="lp-plan-name">{plan.name}</div>
                   <div className="lp-plan-price">
                     <b>{plan.price}</b>
                     <span>{plan.period}</span>
                   </div>
-                  <div className="lp-plan-note">{plan.line}</div>
+                  <div className="lp-plan-line">{plan.line}</div>
+
+                  <div className="lp-plan-credits">
+                    <b>{plan.credits}</b>
+                    <span>leads / month · {plan.perLead} each</span>
+                  </div>
 
                   <ul className="lp-plan-features">
-                    <li><Check size={13} /> {plan.leads}</li>
-                    <li><Check size={13} /> {plan.seats}</li>
                     {plan.features.map(feature => (
                       <li key={feature}><Check size={13} /> {feature}</li>
                     ))}
@@ -951,36 +1271,33 @@ export default function LandingV2() {
                     className={`lp-btn ${plan.featured ? 'lp-btn-primary' : 'lp-btn-ghost'}`}
                     onClick={go}
                   >
-                    {plan.featured ? 'Start free trial' : 'Choose ' + plan.name}
+                    {plan.featured ? 'Start with 1,000 free' : `Choose ${plan.name}`}
                   </button>
-                </StaggerItem>
+                </Item>
               ))}
             </Stagger>
 
-            <FadeUp>
-              <div className="lp-cost-note">
+            <Reveal>
+              <div className="lp-cost">
                 <p>
-                  <b>Look at the cost per lead.</b> Starter works out to about ₹4 per lead, Pro to
-                  about ₹2, and Agency to under ₹1 — for a number you can actually call. One closed
-                  deal covers the month.
+                  <b>Starter is ₹1 per lead. Pro is 40 paise. Agency is 16 paise.</b> For a number
+                  you can actually ring, that is cheaper than the chai you drink while cold-calling.
+                  One closed client covers the month.
                 </p>
                 <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={go}>
-                  Start free for 14 days <ArrowRight size={13} />
+                  Try it free <ArrowRight size={13} />
                 </button>
               </div>
-            </FadeUp>
+            </Reveal>
           </div>
         </section>
 
         {/* --------------------------------------------------------- faq */}
         <section className="lp-section" id="faq">
-          <div className="lp-container">
-            <SectionHead
-              tag="Questions"
-              title="The things people ask before they start"
-            />
+          <div className="lp-wrap">
+            <Head tag="Questions" title="The things people ask before they press the button." />
 
-            <FadeUp className="lp-faq">
+            <Reveal className="lp-faq">
               {FAQ.map((item, index) => (
                 <FaqItem
                   key={item.q}
@@ -989,40 +1306,40 @@ export default function LandingV2() {
                   onToggle={() => setOpenFaq(openFaq === index ? -1 : index)}
                 />
               ))}
-            </FadeUp>
+            </Reveal>
           </div>
         </section>
 
         {/* ------------------------------------------------------- final */}
         <section className="lp-final">
-          <div className="lp-container lp-final-inner">
-            <FadeUp>
-              <span className="lp-tag" style={{ justifyContent: 'center' }}>Get started</span>
-              <h2>Your next customer is already on WhatsApp.</h2>
+          <div className="lp-wrap lp-final-in">
+            <Reveal>
+              <span className="lp-tag" style={{ justifyContent: 'center' }}>Go on then</span>
+              <h2>Your next customer already has WhatsApp.</h2>
               <p>
-                Open the dashboard, type a category and a city, and see the first numbers in about
-                a minute. Fourteen days free. Nothing to install beyond this app.
+                Open the dashboard, type what you sell and where you sell it, and watch the town
+                fill up. The first 1,000 leads cost nothing. The only thing you risk is a busy week.
               </p>
-              <div className="lp-cta-row">
+              <div className="lp-cta">
                 <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={go}>
-                  Open the dashboard <ArrowRight size={16} />
+                  Get 1,000 leads free <ArrowRight size={16} />
                 </button>
                 <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={() => jump('pricing')}>
                   See pricing
                 </button>
               </div>
               <ul className="lp-micro">
-                <li><Check size={13} /> No card needed</li>
+                <li><Check size={13} /> No card</li>
                 <li><Check size={13} /> Cancel anytime</li>
                 <li><Check size={13} /> Your data stays with you</li>
               </ul>
-            </FadeUp>
+            </Reveal>
           </div>
         </section>
       </main>
 
       <footer className="lp-footer">
-        <div className="lp-container lp-footer-inner">
+        <div className="lp-wrap lp-footer-in">
           <span className="lp-footer-note">© {new Date().getFullYear()} scraper.co.in</span>
           <div className="lp-footer-links">
             <a href="/pricing">Pricing</a>

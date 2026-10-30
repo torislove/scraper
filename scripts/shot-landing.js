@@ -33,10 +33,11 @@ const VIEWPORTS = [
 
     await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 });
     await page.waitForSelector('.lp-root', { timeout: 20000 });
-    // let scroll-reveals settle
-    for (let y = 0; y < 8000; y += 700) {
+    // let scroll-reveals settle across the whole document, not just the first screenful
+    const docHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    for (let y = 0; y < docHeight + 900; y += 600) {
       await page.evaluate(v => window.scrollTo(0, v), y);
-      await page.waitForTimeout(120);
+      await page.waitForTimeout(90);
     }
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(600);
@@ -54,19 +55,28 @@ const VIEWPORTS = [
         plans: document.querySelectorAll('.lp-plan').length,
         faq: document.querySelectorAll('.lp-faq-item').length,
         compareRows: document.querySelectorAll('.lp-compare-row').length,
-        height: doc.scrollHeight
+        height: doc.scrollHeight,
+        bodyOverflow: getComputedStyle(document.body).overflowY
       };
     });
 
+    // The cockpit locks the body; the landing page must still scroll with a wheel.
+    await page.mouse.move(vp.width / 2, vp.height / 2);
+    await page.mouse.wheel(0, 2600);
+    await page.waitForTimeout(700);
+    const wheelY = await page.evaluate(() => window.scrollY);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(300);
+
     const file = path.join(OUT, `landing-${vp.name}.png`);
     await page.screenshot({ path: file, fullPage: true });
-    report.push({ viewport: vp.name, ...layout, errors: errors.slice(0, 6), file });
+    report.push({ viewport: vp.name, ...layout, wheelY, errors: errors.slice(0, 6), file });
     await page.close();
   }
 
   await browser.close();
   console.log(JSON.stringify(report, null, 2));
-  const bad = report.filter(r => r.overflow > 2 || r.errors.length);
+  const bad = report.filter(r => r.overflow > 2 || r.errors.length || r.wheelY < 500);
   process.exit(bad.length ? 1 : 0);
 })().catch(err => {
   console.error('shot failed:', err.message);

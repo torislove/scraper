@@ -14,6 +14,7 @@ log.transports.file.resolvePathFn = () => path.join(app.getPath('userData'), 'lo
 const paths = require('./paths');
 const config = require('./config');
 const license = require('./license');
+const { getDeviceId } = require('./license/machine');
 const { bootEngine } = require('./serverManager');
 const updater = require('./updater');
 const { buildMenu } = require('./menu');
@@ -70,7 +71,6 @@ function closeSplash() {
 
 function engineEnv() {
   const st = license.status();
-  const enforced = st.state === 'active' || st.state === 'grace';
 
   return {
     ...process.env,
@@ -87,7 +87,14 @@ function engineEnv() {
     SCRAPER_SETTINGS_FILE: path.join(paths.userData, 'settings.json'),
     LICENSE_FILE: paths.licenseFile,
     LICENSE_PUBLIC_KEY: config.PUBLIC_KEY,
-    LICENSE_ENFORCE: enforced ? '1' : '0',
+    // Always on: free credits are now the gate, so deleting the activation
+    // screen must not unlock the engine.
+    LICENSE_ENFORCE: '1',
+    SCRAPER_CREDITS_ENFORCE: '1',
+    SCRAPER_FREE_CREDITS: String(config.FREE_CREDITS),
+    SCRAPER_DEVICE_ID: getDeviceId(),
+    SCRAPER_CREDITS_FILE: path.join(paths.dataDir, 'credits.json'),
+    SCRAPER_LICENSE_API: config.API_URL,
     SCRAPER_MAX_LEADS: st.maxLeads ? String(st.maxLeads) : '',
     APP_VERSION: app.getVersion(),
     NODE_OPTIONS: '--max-old-space-size=4096'
@@ -275,15 +282,27 @@ async function boot() {
     const handle = await startEngine();
     createMainWindow(handle.baseUrl);
 
+    // The engine owns the ledger and only it knows when credits actually run
+    // out, so watch the file instead of guessing from a timer.
+    let lastLeft = null;
+    setInterval(() => {
+      const st = license.status();
+      if (lastLeft === null || st.creditsLeft !== lastLeft) {
+        lastLeft = st.creditsLeft;
+        broadcastLicense();
+      }
+    }, 4000);
+
     license.startMonitor(() => {
       broadcastLicense();
       dialog
         .showMessageBox(mainWindow || undefined, {
           type: 'warning',
-          title: 'Subscription expired',
-          message: 'Your Scraper subscription has expired.',
-          detail: 'Renew to keep searching for leads. Your saved folders are untouched.',
-          buttons: ['Manage subscription', 'Later'],
+          title: 'Your credits are finished',
+          message: 'You have used all your credits.',
+          detail:
+            'Your saved folders, CRM notes and exports are untouched. Add a licence key to keep finding new businesses.',
+          buttons: ['See plans', 'Later'],
           defaultId: 0,
           cancelId: 1
         })
@@ -407,8 +426,11 @@ if (!app.requestSingleInstanceLock()) {
 
     await license.init();
 
-    if (!license.status().canUse) {
+    // The app always opens: a customer out of credits can still read and
+    // export everything they already have. Only new searches are blocked.
+    if (!license.status().canScrape) {
       openLicenseWindow();
+      boot();
     } else {
       boot();
     }

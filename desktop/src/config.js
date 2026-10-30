@@ -7,8 +7,8 @@
  */
 
 module.exports = {
-  // Set SCRAPER_LICENSE_API at build time to enable online activation.
-  // Leave empty for a fully offline (file-licensed) build.
+  // Set SCRAPER_LICENSE_API at build time to enable online activation and
+  // server-side credit claims. Leave empty for a fully offline build.
   API_URL: process.env.SCRAPER_LICENSE_API || '',
 
   PUBLIC_KEY: [
@@ -17,7 +17,8 @@ module.exports = {
     '-----END PUBLIC KEY-----'
   ].join('\n'),
 
-  TRIAL_DAYS: Number(process.env.SCRAPER_TRIAL_DAYS || 14),
+  // One-time grant per computer. 1 credit = 1 lead.
+  FREE_CREDITS: Number(process.env.SCRAPER_FREE_CREDITS || 1000),
   GRACE_DAYS: Number(process.env.SCRAPER_GRACE_DAYS || 7),
 
   CHECKOUT_URL: process.env.SCRAPER_CHECKOUT_URL || 'https://scraper.co.in/pricing',
@@ -30,6 +31,7 @@ module.exports = {
       price: '₹1,999',
       period: '/month',
       maxLeads: 500,
+      credits: 2000,
       blurb: 'Solo agents and single-city searches'
     },
     {
@@ -38,6 +40,7 @@ module.exports = {
       price: '₹3,999',
       period: '/month',
       maxLeads: 2000,
+      credits: 10000,
       blurb: 'Agencies running daily category sweeps'
     },
     {
@@ -46,6 +49,7 @@ module.exports = {
       price: '₹7,999',
       period: '/month',
       maxLeads: 10000,
+      credits: 50000,
       blurb: 'Multi-city teams with CRM and exports'
     }
   ]

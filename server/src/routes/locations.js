@@ -229,6 +229,67 @@ router.get('/stats', (req, res) => {
     res.json(indiaGeoIndex.getStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
+
+/**
+ * GET /api/locations/hierarchy
+ * Returns States, Districts, Mandals from universalGeoCluster local memory index (0ms)
+ */
+router.get('/hierarchy', (req, res) => {
+  try {
+    const { stateIndex, districtIndex, mandalIndex, AUTHORITATIVE_CLUSTERS } = require('../utils/universalGeoCluster');
+    const { state, district, mandal } = req.query;
+
+    if (mandal) {
+      const cleanM = mandal.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const entry = mandalIndex.get(cleanM);
+      return res.json({
+        ok: true,
+        type: 'mandal',
+        name: entry?.subDistrict || mandal,
+        district: entry?.district || '',
+        state: entry?.state || '',
+        villages: entry?.villages || []
+      });
+    }
+
+    if (district) {
+      const cleanD = district.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const entry = districtIndex.get(cleanD);
+      return res.json({
+        ok: true,
+        type: 'district',
+        name: entry?.district || district,
+        state: entry?.state || '',
+        mandals: entry?.mandals || []
+      });
+    }
+
+    if (state) {
+      const cleanS = state.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const entry = stateIndex.get(cleanS);
+      return res.json({
+        ok: true,
+        type: 'state',
+        name: entry?.state || state,
+        districts: entry?.districts || []
+      });
+    }
+
+    const states = Array.from(stateIndex.values()).map(s => s.state).sort();
+    const cities = Object.keys(AUTHORITATIVE_CLUSTERS).map(c => c.charAt(0).toUpperCase() + c.slice(1));
+    return res.json({
+      ok: true,
+      states,
+      cities,
+      totalStates: stateIndex.size,
+      totalDistricts: districtIndex.size,
+      totalMandals: mandalIndex.size
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
   }
 });
 

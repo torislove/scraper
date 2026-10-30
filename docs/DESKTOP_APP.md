@@ -68,13 +68,14 @@ desktop/
 ├── src/
 │   ├── main.js              lifecycle, windows, IPC
 │   ├── preload.js           window.scraperDesktop bridge
-│   ├── config.js            plans, public key, trial length
+│   ├── config.js            plans, public key, free credits
 │   ├── paths.js             every writable location
 │   ├── serverManager.js     spawn / health / kill-tree
 │   ├── updater.js           auto-update state machine
 │   ├── menu.js              File / Edit / View / Engine / Help
 │   └── license/
-│       ├── index.js         trial + activation state machine
+│       ├── index.js         credits + activation state machine
+│       ├── credits.js       ledgers, free grant, spend/release
 │       ├── token.js         Ed25519 verification
 │       ├── store.js         DPAPI-encrypted cache
 │       └── machine.js       stable device id
@@ -111,8 +112,12 @@ npm run dev
 the View menu.
 
 Expected sequence on a clean profile: splash (~25–40 s while the village index
-and geo engine load) → activation window (trial already active) → cockpit at
-`/command` with a **TRIAL** pill in the top bar.
+and geo engine load) → cockpit at `/command` with a **FREE / OUT OF CREDITS**
+pill in the top bar. There is no trial window and no expiry: the app opens every
+time, and only new searches stop when the credits run out.
+
+The activation window is only shown when the free credits are exhausted (or a
+key is already installed and needs attention).
 
 Note: Electron cannot render in a headless/sandboxed CI session — `BrowserWindow`
 creation aborts the process with `0xC0000005`. Verify the shell on a real
@@ -175,27 +180,33 @@ re-activate with a newly built app.
 
 ### States
 
-| state | meaning | scraping |
+| state | meaning | new searches |
 |---|---|---|
-| `trial` | 14 days from first launch, full features | yes |
-| `active` | valid signed token | yes |
+| `credits` | free grant still has credits (1,000 once per device) | yes |
+| `active` | valid signed token with credits | yes |
 | `grace` | token expired, within 7-day grace | yes, with warning |
-| `expired` | past grace, or no token after trial | 402 `subscription_required` |
+| `expired` | credits exhausted and no token | 402 `credits_exhausted` |
 | `device_mismatch` | token bound to another PC | 402 |
 
-The trial start date and the encrypted token both live in
-`%APPDATA%\Scraper\license.json`, encrypted with Windows DPAPI (`safeStorage`),
-so copying the file to another machine does not transfer the trial.
+The credit ledger and the encrypted token live in
+`%APPDATA%\Scraper\credits.json` and `license.json` (DPAPI via `safeStorage`),
+so copying them to another machine does not transfer the free grant. The ledger
+is anchored in `HKCU\Software\Scraper` as well.
 
-### Plans
+### Credits and plans
 
-| id | price | leads/search | seats |
-|---|---|---|---|
-| `starter` | ₹1,999 / month | 500 | 1 |
-| `pro` | ₹3,999 / month | 2,000 | 3 |
-| `agency` | ₹7,999 / month | 10,000 | 10 |
+1 credit = 1 saved lead. The free grant is **1,000 credits once per desktop**,
+never expires, and is never reset by reinstalling after the anchor exists.
 
-`maxLeads` is baked into the signed token, so the engine enforces it.
+| plan | credits | price |
+|---|---|---|
+| `starter` | 2,000 | ₹1,999 / month |
+| `pro` | 10,000 | ₹3,999 / month |
+| `agency` | 50,000 | ₹7,999 / month |
+
+Credits are spent when a lead is saved and released if the run fails. The engine
+checks the wallet before every new search and returns `402 credits_exhausted`
+when the balance is zero; saved folders, notes and exports stay available.
 
 ### Online activation
 
@@ -233,9 +244,11 @@ checklist.
 ### Server-side enforcement
 
 `server/src/middleware/licenseGate.js` is a no-op unless
-`LICENSE_ENFORCE=1`. The desktop shell sets it whenever a licence or trial is
-valid, and reads `LICENSE_FILE` + `LICENSE_PUBLIC_KEY` from its own config. The
-web deployment and local development therefore stay completely open.
+`LICENSE_ENFORCE=1`. The desktop shell sets it **always**, so removing the
+activation window does not unlock the engine, and passes `SCRAPER_CREDITS_ENFORCE=1`,
+`SCRAPER_FREE_CREDITS`, `SCRAPER_DEVICE_ID` and `SCRAPER_CREDITS_FILE` to the
+engine. The web deployment and local development therefore stay completely open
+(credits report `enforced: false`).
 
 ---
 
@@ -365,8 +378,9 @@ Store blockers to plan for:
 | Window never appears, splash stays | engine failed to boot | check `%APPDATA%\Scraper\logs\desktop.log`; **File → Open logs** |
 | "Engine stopped" dialog on launch | port bind failure or crash | **Engine → Restart scraping engine** |
 | Activation window keeps returning | token invalid or device mismatch | re-import the `.scraperlic`, or use **Manage subscription** |
-| 402 while scraping | `LICENSE_ENFORCE=1` with an expired token | renew, then **Refresh licence** |
-| Brand-new PC has no trial left | `license.json` copied from another machine, or machine id collision | issue a licence; trials are per machine |
+| 402 `credits_exhausted` | free grant spent and no plan credits | add a plan/key; folders and exports still work |
+| 402 `subscription_required` | `LICENSE_ENFORCE=1` with an expired token | renew, then **Refresh licence** |
+| Brand-new PC has no free credits | `credits.json` or the registry anchor was copied from another machine | issue a licence; the free grant is per device |
 | Update never arrives | release is a draft, or repo is private | publish the release / make the repo public |
 | Scrape is slow or captcha-heavy | engine is using proxies | desktop sets `SCRAPER_PROXY=off`; verify it was not overridden |
 
@@ -382,4 +396,4 @@ Store blockers to plan for:
 - [ ] `SCRAPER_LICENSE_API` and `SCRAPER_CHECKOUT_URL` set in CI variables
 - [ ] code signing certificate configured
 - [ ] tag pushed, release published, installer downloaded and installed on a clean VM
-- [ ] trial → activation → cockpit verified on that VM
+- [ ] free credits → exhausted → activation window → cockpit verified on that VM

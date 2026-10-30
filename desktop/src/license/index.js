@@ -6,8 +6,10 @@
  *   2. Offline - the customer imports a signed .scraperlic file or pastes a
  *                token that you minted with the same private key.
  *
- * A 14-day trial is always available on a fresh install so the app is usable
- * before any billing integration exists.
+ * There is no time-limited trial. Every computer receives a one-time grant of
+ * 1,000 credits (1 credit = 1 lead) and may keep using those credits forever.
+ * When they are gone, a licence key is required to keep scraping. Saved
+ * folders, exports and CRM data stay readable either way.
  */
 
 const { EventEmitter } = require('events');
@@ -17,6 +19,7 @@ const log = require('electron-log');
 
 const config = require('../config');
 const store = require('./store');
+const wallet = require('./credits');
 const { getDeviceId, getDeviceName } = require('./machine');
 const { verifyToken } = require('./token');
 
@@ -28,13 +31,16 @@ let state = {
   plan: null,
   daysLeft: null,
   expiresAt: null,
-  canUse: false,
+  canUse: true,
+  canScrape: false,
+  blocked: 'not_initialised',
   deviceId: '',
   email: '',
   reason: 'not_initialised',
   apiEnabled: Boolean(config.API_URL),
   maxLeads: null,
-  trialDays: config.TRIAL_DAYS
+  credits: wallet.status(),
+  creditsLeft: config.FREE_CREDITS
 };
 
 function planLimit(planId) {
@@ -45,23 +51,28 @@ function planLimit(planId) {
 function compute(data) {
   const now = Date.now();
   const deviceId = getDeviceId();
-  const trialStart = data.trialStartedAt || now;
-  const trialEnds = trialStart + config.TRIAL_DAYS * DAY;
-  const trialDaysLeft = Math.max(0, Math.ceil((trialEnds - now) / DAY));
+  const walletStatus = wallet.status();
+  const creditsLeft = Number(walletStatus.left) || 0;
 
   const next = {
     state: 'expired',
     plan: null,
-    daysLeft: trialDaysLeft,
+    daysLeft: null,
     expiresAt: null,
-    canUse: false,
+    // The app always opens: a customer with no credits must still be able to
+    // read, export and work the leads and folders they already paid for.
+    canUse: true,
+    canScrape: false,
+    blocked: 'credits_exhausted',
     deviceId,
     email: data.email || '',
     reason: '',
     apiEnabled: Boolean(config.API_URL),
     maxLeads: null,
-    trialDays: config.TRIAL_DAYS,
-    trialEndsAt: new Date(trialEnds).toISOString()
+    credits: walletStatus,
+    creditsLeft,
+    creditsGranted: walletStatus.granted,
+    creditsUsed: walletStatus.used
   };
 
   if (data.token) {
@@ -72,6 +83,7 @@ function compute(data) {
 
       if (boundTo && boundTo !== deviceId) {
         next.reason = 'device_mismatch';
+        next.blocked = 'device_mismatch';
         next.plan = payload.plan || null;
       } else {
         const expiresAt = Number(payload.expiresAt) || 0;
@@ -79,7 +91,8 @@ function compute(data) {
         next.plan = payload.plan || 'licensed';
         next.expiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
         next.daysLeft = expiresAt ? Math.ceil((expiresAt - now) / DAY) : null;
-        next.canUse = true;
+        next.canScrape = true;
+        next.blocked = null;
         next.maxLeads = payload.maxLeads || planLimit(payload.plan);
         next.reason = result.inGrace ? 'grace_period' : 'active';
         next.email = data.email || payload.email || '';
@@ -91,16 +104,20 @@ function compute(data) {
     }
   }
 
-  if (trialDaysLeft > 0) {
-    next.state = 'trial';
-    next.plan = 'trial';
-    next.canUse = true;
+  // No usable licence: the free credit grant is the free tier.
+  if (creditsLeft > 0) {
+    next.state = 'credits';
+    next.plan = 'free';
+    next.canScrape = true;
+    next.blocked = null;
     next.maxLeads = planLimit('starter');
-    next.reason = 'trial';
+    next.reason = next.reason && next.reason !== 'missing' ? next.reason : 'free_credits';
     return next;
   }
 
-  next.reason = next.reason || 'trial_expired';
+  next.state = 'expired';
+  next.reason = next.reason || 'credits_exhausted';
+  next.blocked = next.reason === 'device_mismatch' ? 'device_mismatch' : 'credits_exhausted';
   return next;
 }
 
@@ -126,9 +143,6 @@ function status() {
 async function init() {
   let data = store.readDecrypted();
 
-  if (!data.trialStartedAt) {
-    data = persist({ ...data, trialStartedAt: Date.now(), deviceId: getDeviceId() });
-  }
   if (!data.deviceId) {
     data = persist({ ...data, deviceId: getDeviceId() });
   }
@@ -140,7 +154,12 @@ async function init() {
     refresh().catch(() => {});
   }
 
-  log.info('[license] state:', state.state, 'plan:', state.plan, 'daysLeft:', state.daysLeft);
+  log.info(
+    '[license] state:', state.state,
+    'plan:', state.plan,
+    'credits left:', state.creditsLeft,
+    'canScrape:', state.canScrape
+  );
   return state;
 }
 

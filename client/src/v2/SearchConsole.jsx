@@ -221,7 +221,8 @@ export default function SearchConsole({
   busy = false,
   running = false,
   compact = false,
-  onResolve
+  onResolve,
+  onMasterSweep
 }) {
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
@@ -246,6 +247,20 @@ export default function SearchConsole({
   const parsedLocation = parsed?.location || response?.location?.value || location || '';
   const parsedZones = parsed?.zonesCount || (response?.location ? 1 : 0);
   const expectedLeads = parsed?.expectedLeads || (parsedCategory && parsedLocation ? '120–240+ verified leads' : 'Type service & location');
+
+  const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
+  const autocorrectItem = useMemo(() => {
+    const list = response?.suggestions || [];
+    return list.find(item => item.corrected) || null;
+  }, [response]);
+
+  const estimatedTimeText = useMemo(() => {
+    const zones = locClassification?.zoneCount || parsedZones || 1;
+    if (zones <= 1) return '~25–40s';
+    if (zones <= 5) return '~1.5–2 min';
+    if (zones <= 15) return '~3–5 min';
+    return '~8–12 min (Full Sweep)';
+  }, [locClassification, parsedZones]);
 
   // Push detected category & location back to parent form if available
   useEffect(() => {
@@ -366,11 +381,16 @@ export default function SearchConsole({
     }
   }, [open, visible, active, choose]);
 
-  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3);
+  const isWideAreaBlocked = !onMasterSweep && (locClassification?.type === 'district' || locClassification?.type === 'state');
+  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3) && !isWideAreaBlocked;
 
   const submit = useCallback(() => {
     if (running) {
       onStop?.();
+      return;
+    }
+    if (isWideAreaBlocked) {
+      toast.error(`Client searches are restricted to individual cities and mandals. District and state-wide sweeps (${locClassification?.name || ''}) require Master Command Center. Choose an individual city or mandal below!`);
       return;
     }
     if (!canDeploy || busy) return;
@@ -383,7 +403,7 @@ export default function SearchConsole({
       engines: selectedEngines,
       targetLeads
     });
-  }, [running, canDeploy, busy, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+  }, [running, canDeploy, busy, isWideAreaBlocked, locClassification, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
 
   return (
     <section ref={wrapRef} className={cx('v2-console', 'is-unified', (running || compact) && 'is-compact')}>
@@ -532,17 +552,20 @@ export default function SearchConsole({
           )}
           <button
             type="button"
-            className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy')}
+            className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy', isWideAreaBlocked && 'is-blocked')}
             onClick={submit}
             disabled={busy || (!running && !canDeploy)}
+            title={isWideAreaBlocked ? 'Wide-area sweeps require Master Command Center. Please pick an individual city or mandal.' : undefined}
           >
             <span className="v2-btn-shimmer" />
             {busy
               ? <Loader2 size={16} className="v2-spin" />
               : running
                 ? <Square size={14} />
-                : <Zap size={16} />}
-            <span>{busy ? 'STARTING...' : running ? 'STOP SWARM' : 'DEPLOY INTELLIGENCE SWARM'}</span>
+                : isWideAreaBlocked
+                  ? <AlertTriangle size={15} />
+                  : <Zap size={16} />}
+            <span>{busy ? 'STARTING...' : running ? 'STOP SWARM' : isWideAreaBlocked ? 'SELECT CITY / MANDAL' : 'DEPLOY INTELLIGENCE SWARM'}</span>
           </button>
         </div>
 
@@ -564,6 +587,18 @@ export default function SearchConsole({
           </div>
         )}
       </div>
+
+      {/* Autocorrect Intelligence Pill */}
+      {autocorrectItem && (
+        <div className="v2-autocorrect-banner">
+          <Sparkles size={13} className="v2-text-cyan" />
+          <span>Intelligent Auto-Correction:</span>
+          <button type="button" className="v2-autocorrect-pill" onClick={() => choose(autocorrectItem)}>
+            <span>Did you mean <b>{autocorrectItem.label}</b>?</span>
+            <Check size={11} />
+          </button>
+        </div>
+      )}
 
       {/* Live Semantic Parsing Intent HUD (Real-Time Feedback) */}
       <div className="v2-intent-hud">
@@ -614,6 +649,36 @@ export default function SearchConsole({
             </div>
           )}
 
+          {locClassification && (
+            <div className={cx('v2-hud-chip chip-geo-intel', 'type-' + locClassification.type)}>
+              <span className="v2-geo-badge-tag">{locClassification.badge || '🗺️ GEO'}</span>
+              <span>Hierarchy:</span>
+              <b>{locClassification.name}</b>
+              <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
+              {onMasterSweep && (locClassification.type === 'district' || locClassification.type === 'state' || locClassification.type === 'mandal') && (
+                <button
+                  type="button"
+                  className="v2-hud-sweep-btn"
+                  onClick={() => onMasterSweep({
+                    category: parsedCategory || category,
+                    name: locClassification.name,
+                    scope: locClassification.type,
+                    engines: selectedEngines
+                  })}
+                  title={'Launch full ' + locClassification.type + ' master sweep'}
+                >
+                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Mandal'}
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="v2-hud-chip chip-time">
+            <Clock size={11} className="v2-text-amber" />
+            <span>Est. Scrape:</span>
+            <b>{estimatedTimeText}</b>
+          </div>
+
           <div className="v2-hud-chip chip-forecast">
             <span className="v2-pulse-dot" />
             <span>Yield Forecast:</span>
@@ -621,6 +686,38 @@ export default function SearchConsole({
           </div>
         </div>
       </div>
+
+      {/* Client Restriction Alert: Suggest Individual Cities & Mandals */}
+      {isWideAreaBlocked && (
+        <div className="v2-widearea-block-box">
+          <div className="v2-widearea-block-head">
+            <AlertTriangle size={15} className="v2-text-amber" />
+            <span>
+              <b>Client search covers individual cities and mandals only.</b>{' '}
+              District &amp; state-wide sweeps require Master Command Center. Choose an individual city or mandal in {locClassification?.name}:
+            </span>
+          </div>
+          {Array.isArray(locClassification?.subZones) && locClassification.subZones.length > 0 && (
+            <div className="v2-widearea-pills">
+              {locClassification.subZones.slice(0, 12).map(subZone => (
+                <button
+                  key={subZone}
+                  type="button"
+                  className="v2-widearea-pill"
+                  onClick={() => {
+                    const cat = parsedCategory || 'Businesses';
+                    const newQuery = `${cat} in ${subZone}`;
+                    setDraft(newQuery);
+                    onChange?.(newQuery);
+                  }}
+                >
+                  📍 {subZone}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Live Swarm Harvesting HUD & ETA (Active when running) */}
       {running && (

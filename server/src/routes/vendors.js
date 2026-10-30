@@ -214,7 +214,10 @@ function asNoteArray(value) {
 // API: Update CRM status, stage, notes and tasks from the command center.
 router.put('/:id/crm', (req, res) => {
   try {
-    const { crmStatus, crmStage, stage, notes, note, tasks, clearNotes, clearTasks } = req.body || {};
+    const {
+      crmStatus, crmStage, stage, notes, note, tasks, clearNotes, clearTasks,
+      dealValue, followUpDate, callOutcome, contactName
+    } = req.body || {};
     const vendors = dbAdapter.getVendors();
     const idx = vendors.findIndex(v => v.id === req.params.id);
     if (idx === -1) return res.status(404).json({ error: 'Vendor not found' });
@@ -225,6 +228,19 @@ router.put('/:id/crm', (req, res) => {
     vendor.crmStatus = nextStage;
     vendor.crmLastUpdated = new Date().toISOString();
     vendor.isEngaged = nextStage !== 'new';
+
+    if (dealValue !== undefined) {
+      vendor.dealValue = Math.max(0, Number(dealValue) || 0);
+    }
+    if (followUpDate !== undefined) {
+      vendor.followUpDate = followUpDate ? String(followUpDate).trim() : '';
+    }
+    if (callOutcome !== undefined) {
+      vendor.callOutcome = String(callOutcome).trim();
+    }
+    if (contactName !== undefined) {
+      vendor.contactName = String(contactName).trim();
+    }
 
     const existingNotes = asNoteArray(vendor.crmNotes);
     const incoming = asNoteArray(note || notes);
@@ -245,7 +261,7 @@ router.put('/:id/crm', (req, res) => {
       vendor.crmTasks = [];
     }
 
-    dbAdapter.saveVendors(vendors);
+    saveUpdatedVendor(vendors, vendor);
     res.json({ success: true, vendor });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
