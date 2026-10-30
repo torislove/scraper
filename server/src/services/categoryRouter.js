@@ -13,6 +13,8 @@
  * No data is invented here. Everything is deterministic classification.
  */
 
+const brandIntel = require('./brandIntel');
+
 const FAMILY_DEFINITIONS = {
   wedding: {
     label: 'Weddings & events',
@@ -284,17 +286,30 @@ function classifyCategory(category) {
   const definition = FAMILY_DEFINITIONS[bestFamily] || FAMILY_DEFINITIONS.generic;
   const confidence = bestScore >= 8 ? 'high' : bestScore >= 4 ? 'medium' : 'low';
 
+  // Product and brand searches need the B2B supplier index. A shop that sells
+  // GPUs is usually listed as "computer hardware dealer", and IndiaMART is the
+  // only engine that indexes those dealers city-wide. Never add it to wedding
+  // venue families, where it returns irrelevant banquet suppliers.
+  const intent = brandIntel.detect(raw);
+  const engines = [...definition.engines];
+  const cityEngines = [...definition.cityEngines];
+  if ((intent.brand || intent.product || intent.genericProduct) && bestFamily !== 'wedding') {
+    if (!engines.includes('indiamart')) engines.push('indiamart');
+    if (!cityEngines.includes('indiamart')) cityEngines.push('indiamart');
+  }
+
   return {
     family: bestFamily,
     label: definition.label,
     description: definition.description,
-    engines: [...definition.engines],
-    cityEngines: [...definition.cityEngines],
+    engines,
+    cityEngines,
     confidence,
     score: bestScore,
     matched: bestMatched,
     wedding: bestFamily === 'wedding',
-    category: raw
+    category: raw,
+    intent
   };
 }
 

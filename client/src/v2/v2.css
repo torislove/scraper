@@ -3407,7 +3407,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   gap: 10px;
 }
 
-/* Master Actions Ribbon */
+/* Quick actions ribbon */
 .v2-folder-actions-ribbon {
   display: flex;
   align-items: center;
@@ -5913,7 +5913,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 
 
 /* ============================================================================
-   MASTER GEO-SWEEP, SUBTABS & AUTOCORRECT HUD STYLES
+   GEO HUD, SUBTABS & AUTOCORRECT STYLES
    ============================================================================ */
 
 /* Autocorrect Intelligence Banner */
@@ -5948,7 +5948,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   transform: translateY(-1px);
 }
 
-/* Geo-Intel HUD Chip & Master Sweep Button */
+/* Geo-Intel HUD Chip */
 .chip-geo-intel {
   background: rgba(245, 158, 11, 0.1) !important;
   border-color: rgba(245, 158, 11, 0.35) !important;
@@ -5977,174 +5977,6 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   font-size: 9px;
   color: var(--v2-dim);
   font-family: var(--v2-mono);
-}
-.v2-hud-sweep-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  margin-left: 6px;
-  border-radius: 5px;
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #000;
-  font-weight: 800;
-  font-size: 9.5px;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
-  transition: all 0.15s ease;
-}
-.v2-hud-sweep-btn:hover {
-  transform: scale(1.04);
-  box-shadow: 0 4px 10px rgba(245, 158, 11, 0.6);
-}
-
-/* Subtab switch in Folders View */
-.v2-runs-subtabs-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px;
-  margin-bottom: 14px;
-  border-radius: 12px;
-  background: rgba(10, 16, 28, 0.8);
-  border: 1px solid var(--v2-line);
-}
-.v2-runs-subtab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--v2-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.v2-runs-subtab-btn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.04);
-}
-.v2-runs-subtab-btn.is-active {
-  background: rgba(0, 240, 255, 0.12);
-  border-color: rgba(0, 240, 255, 0.35);
-  color: #22d3ee;
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.15);
-}
-
-/* Master Sweep Launcher Card */
-.v2-master-sweep-launcher-card {
-  padding: 22px;
-  margin-bottom: 22px;
-  border-radius: 16px;
-  background: radial-gradient(circle at top right, rgba(245, 158, 11, 0.1), transparent 60%),
-              linear-gradient(168deg, rgba(16, 26, 46, 0.95), rgba(9, 14, 28, 0.98));
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 25px rgba(245, 158, 11, 0.12);
-}
-.v2-master-launcher-head h3 {
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-  margin: 6px 0 4px;
-}
-.v2-master-launcher-head p {
-  font-size: 13px;
-  color: #94a3b8;
-  margin: 0;
-  max-width: 750px;
-}
-.v2-badge-gold {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-  font-family: var(--v2-mono);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-}
-.v2-master-launcher-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr 220px 200px;
-  gap: 12px;
-  align-items: flex-end;
-  margin-top: 18px;
-}
-.v2-master-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.v2-master-field label {
-  font-family: var(--v2-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #cbd5e1;
-}
-.v2-master-field input,
-.v2-master-field select {
-  height: 42px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: rgba(6, 11, 22, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  color: #fff;
-  font-size: 13.5px;
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-.v2-master-field input:focus,
-.v2-master-field select:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
-}
-.v2-btn-master-sweep {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 42px;
-  padding: 0 18px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
-  font-weight: 800;
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.45);
-  transition: all 0.15s ease;
-}
-.v2-btn-master-sweep:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.6);
-}
-.v2-btn-master-sweep:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Master Pill on Folder Cards */
-.v2-master-sweep-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(245, 158, 11, 0.2);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
-  font-family: var(--v2-mono);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  margin-left: 6px;
 }
 
 /* Smooth Live Leads slide-in animation */
@@ -6216,75 +6048,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   cursor: not-allowed !important;
 }
 
-/* Master Universal Client Vault Explorer Strip */
-.v2-client-vault-strip {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-  border-radius: 12px;
-  background: rgba(13, 21, 38, 0.85);
-  border: 1px solid rgba(0, 240, 255, 0.2);
-}
-.v2-client-vault-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-family: var(--v2-mono);
-  letter-spacing: 0.05em;
-  color: #94a3b8;
-}
-.v2-client-vault-label b {
-  color: #00f0ff;
-}
-.v2-client-vault-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.v2-client-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #94a3b8;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.v2-client-pill:hover {
-  background: rgba(0, 240, 255, 0.12);
-  border-color: rgba(0, 240, 255, 0.4);
-  color: #fff;
-}
-.v2-client-pill.is-active {
-  background: rgba(0, 240, 255, 0.2);
-  border-color: #00f0ff;
-  color: #00f0ff;
-  font-weight: 700;
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
-}
-.v2-client-owner-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
-  font-size: 9.5px;
-  font-weight: 700;
-  font-family: var(--v2-mono);
-}
-
-/* ------------------------------------------------------ master notification */
+/* ---------------------------------------------------------- notifications */
 
 .v2-notif { position: relative; display: inline-flex; }
 

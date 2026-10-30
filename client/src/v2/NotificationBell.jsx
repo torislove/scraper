@@ -116,7 +116,7 @@ export default function NotificationBell() {
         onClick={() => setOpen(value => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        title={suspended ? `${client.name} is paused by the master account` : 'Messages from the master account'}
+        title={suspended ? 'New searches are paused on this workspace' : 'Messages from the Scraper team'}
       >
         <Bell size={14} />
         {unread ? <b>{unread > 9 ? '9+' : unread}</b> : null}
@@ -136,7 +136,7 @@ export default function NotificationBell() {
               <span>
                 {client
                   ? `${client.name || 'This workspace'} · ${String(client.plan || 'free').toUpperCase()}`
-                  : 'From the master account'}
+                  : 'From the Scraper team'}
               </span>
             </div>
             {unread ? (
@@ -158,7 +158,7 @@ export default function NotificationBell() {
               <div className="v2-notif-empty">
                 <Bell size={18} />
                 <b>Nothing yet</b>
-                <span>Updates and notices from the master account will land here.</span>
+                <span>Updates and notices from the Scraper team will land here.</span>
               </div>
             ) : (
               items.map(item => {

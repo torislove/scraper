@@ -1,5 +1,8 @@
 # Master Command Center
 
+> Planning the intelligence layer (geo resolution, zone scoring, engine matrix, swarm
+> control): see `docs/MASTER_SWEEP_INTELLIGENCE.md`.
+
 The master app is the operator's side of Scraper. It is a **separate Vite app**
 in `master/` (default port `5174`) and talks to the same local engine on `:5002`.
 Clients never see it, and client builds never include it.

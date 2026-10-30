@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
-  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown, Compass,
+  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown,
   ChevronLeft, ChevronRight, CircleDot, Copy, Crosshair, Database, Download,
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
@@ -368,7 +368,6 @@ function FolderView({
 }) {
   const session = view?.session;
   const leads = Array.isArray(session?.leads) ? session.leads : [];
-  const isMasterSweep = Boolean(session?.isMasterSweep || view?.run?.isMasterSweep || /master_/i.test(session?.id || '') || /sweep/i.test(session?.location || ''));
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedLocality, setSelectedLocality] = useState('all');
@@ -669,7 +668,7 @@ function FolderView({
           </div>
         </div>
 
-        {/* Master Actions Ribbon — ALL OPTIONS at user's fingertips */}
+        {/* Quick actions ribbon — every option at the user's fingertips */}
         <div className="v2-folder-actions-ribbon">
           <div className="v2-ribbon-group">
             <span className="v2-ribbon-label">OUTREACH &amp; EXPORT:</span>
@@ -834,7 +833,7 @@ function FolderView({
         {/* Locality Quick Chips Strip (if multiple localities found) */}
         {localityStats.length > 1 && (
           <div className="v2-folder-locality-strip">
-            <span className="v2-locality-strip-title">{isMasterSweep ? '🗺️ MANDALS & ZONES (' + localityStats.length + ' COVERED):' : 'AREAS:'}</span>
+            <span className="v2-locality-strip-title">AREAS:</span>
             <button
               type="button"
               className={cx('v2-loc-chip', selectedLocality === 'all' && 'is-active')}
@@ -1679,7 +1678,7 @@ function MergeModal({ folders, onClose, onMerge, isMerging }) {
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Master Consolidated Outreach Vault"
+              placeholder="e.g. Consolidated Outreach Vault"
               required
             />
           </label>
@@ -2742,8 +2741,6 @@ export default function CommandCenter() {
       if (session.dealValueTotal != null && Number(session.dealValueTotal) > 0) {
         existing.dealValueTotal = Number(session.dealValueTotal);
       }
-      existing.isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
-      existing.masterScope = session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null);
       existing.status = session.metadata?.status || existing.status;
       map.set(session.id, existing);
     }
@@ -2859,24 +2856,6 @@ export default function CommandCenter() {
           </StatusPill>
           <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · India</span>
 
-          <button
-            type="button"
-            className="v2-btn v2-btn-sm"
-            onClick={() => navigate('/master')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
-              color: '#fff',
-              fontWeight: 700,
-              border: 'none',
-              boxShadow: '0 2px 10px rgba(245, 158, 11, 0.4)'
-            }}
-            title="Open Master Command Center for District, State, City-Mesh & Mandal sweeps"
-          >
-            <Compass size={13} /> 🗺️ Master Command Center
-          </button>
           <NotificationBell />
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>

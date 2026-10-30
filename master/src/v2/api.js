@@ -107,6 +107,26 @@ export async function startMasterSweep(payload) {
   return data;
 }
 
+export async function getEngineStatus() {
+  const { data } = await client.get('/scrape/engines/status');
+  return data;
+}
+
+export async function getLearnedTaxonomy() {
+  const { data } = await client.get('/search/taxonomy');
+  return data;
+}
+
+export async function getLearnedCatalog() {
+  const { data } = await client.get('/search/learned');
+  return data;
+}
+
+export async function resetEngineHealth(engine = '') {
+  const { data } = await client.post('/scrape/engines/reset', { engine });
+  return data;
+}
+
 export async function getAllMasterSessions(clientFilter = 'all') {
   const { data } = await client.get('/sessions/master/all', { params: { client: clientFilter } });
   return data;

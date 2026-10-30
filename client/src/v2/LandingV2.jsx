@@ -702,7 +702,7 @@ export default function LandingV2() {
               >
                 <motion.span variants={fadeUp} style={{ display: 'block' }}>Every shop in the town.</motion.span>
                 <motion.span variants={fadeUp} style={{ display: 'block' }}>
-                  <span className="lp-hl lp-hl-vibrant">Not just page one.</span>
+                  <span className="lp-hl lp-hl-vibrant">Every district, mandal & city.</span>
                 </motion.span>
               </motion.h1>
 
@@ -724,7 +724,7 @@ export default function LandingV2() {
                 transition={{ duration: 0.7, delay: 0.26, ease: EASE }}
               >
                 <button type="button" className="lp-btn-3d" onClick={go}>
-                  🚀 Start Finding Leads (Search Any City, Town or Village) <ArrowRight size={16} />
+                  🚀 Start Finding Leads (Search Any City, Town or Mandal) <ArrowRight size={16} />
                 </button>
               </motion.div>
 
@@ -823,10 +823,10 @@ export default function LandingV2() {
               {/* Pillar 3: Wholesalers & Establishments */}
               <div className="lp-audience-card theme-enterprise">
                 <span className="lp-audience-pill">🏭 FOR DISTRIBUTORS & ENTERPRISES</span>
-                <h3>Cover Every Town on the Route, One by One</h3>
-                <p>Expanding dealership routes? Run each town as its own clean folder, then keep them together in the vault. Need a whole district in one shot? We run that as a custom project for you.</p>
+                <h3>Sweep Entire Mandals & Districts in 1 Click</h3>
+                <p>Expanding dealership routes? Our Master Folder engine sweeps all 14–35 mandals in a district simultaneously, eliminating duplicates so your sales reps never collide.</p>
                 <ul className="lp-audience-points">
-                  <li><Check size={14} className="v2-text-cyan" /> One tidy folder per town — ask us for district runs</li>
+                  <li><Check size={14} className="v2-text-cyan" /> Complete district & state geo coverage</li>
                   <li><Check size={14} className="v2-text-cyan" /> Built-in 7-stage CRM pipeline with ₹ INR deal values</li>
                   <li><Check size={14} className="v2-text-cyan" /> Telephony dialer format for your calling team</li>
                 </ul>
@@ -835,28 +835,25 @@ export default function LandingV2() {
 
             {/* Master Geo-Swarm Visual Explainer */}
             <div className="lp-geo-swarm-box">
-              <span className="lp-kicker">🗺️ ONE PLACE, FULLY COVERED</span>
+              <span className="lp-kicker">🗺️ THE ONLY 3-TIER GEO INTELLIGENCE ENGINE IN INDIA</span>
               <h3 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: '8px 0 12px' }}>
-                Type any city, town or village. The engine knows every locality inside it.
+                Type Any State, District, Mandal or Village — The Engine Knows Exactly How to Swarm It
               </h3>
               <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 820, margin: 0 }}>
-                Other tools stop at page one of a single city. Scraper indexes all 36 states, 627
-                districts and 5,618 mandals locally, so one search walks every market, ward and
-                surrounding village inside the place you named. Need a whole district or state?
-                That is a custom run — email support@scraper.co.in.
+                Other tools stop at page one of a single city. LeadHarvest Pro indexes all 36 states, 627 districts, and 5,618 mandals locally. Whether you need every photo studio in Tenali Mandal or all hardware suppliers across Guntur District, you get complete regional coverage.
               </p>
               <div className="lp-geo-tiers">
                 <div className="lp-geo-tier-card">
-                  <b>📍 Included: Town / city sweep</b>
-                  <p>Every market, ward and nearby village inside the city, town or village you named. One search, one clean list.</p>
+                  <b>📍 Tier 1: Mandal / Tehsil Swarm</b>
+                  <p>Swarms all constituent villages, commercial markets, and town wards. Yields 60–150 hyper-targeted local vendor numbers.</p>
                 </div>
                 <div className="lp-geo-tier-card">
-                  <b>🗺️ Custom: Mandal or district run</b>
-                  <p>We run all 9–35 mandals for you and hand over one consolidated folder with duplicates removed.</p>
+                  <b>🗺️ Tier 2: District Master Sweep</b>
+                  <p>Orchestrates all 14–35 mandals across the entire district into a single consolidated Master Folder with zero cross-mandal duplicates.</p>
                 </div>
                 <div className="lp-geo-tier-card">
-                  <b>🏛️ Custom: State-wide run</b>
-                  <p>For enterprise distributor discovery across every district in a state, quoted per project.</p>
+                  <b>🏛️ Tier 3: State-Wide Swarm</b>
+                  <p>Deploys multi-threaded workers across all economic districts in the state for massive enterprise B2B distributor discovery.</p>
                 </div>
               </div>
             </div>

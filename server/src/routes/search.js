@@ -43,6 +43,37 @@ router.get('/suggest', (req, res) => {
 });
 
 /**
+ * GET /api/search/learned
+ *
+ * Full auto-learning catalogue for the master "What the engine learned" view.
+ * Everything is derived from finished runs that returned leads.
+ */
+router.get('/learned', (req, res) => {
+  try {
+    const taxonomyLearner = require('../services/taxonomyLearner');
+    const limit = Math.max(20, Math.min(500, Number(req.query.limit) || 150));
+    res.json({ ok: true, ...taxonomyLearner.getCatalog(limit) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/search/taxonomy
+ *
+ * Auto-learning summary: how many products, categories and brands the engine
+ * has learned from successful runs. Shown in the master engine board.
+ */
+router.get('/taxonomy', (req, res) => {
+  try {
+    const taxonomyLearner = require('../services/taxonomyLearner');
+    res.json({ ok: true, ...taxonomyLearner.getSummary() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/search/classify?q=...
  *
  * Dedicated standalone location classification endpoint for instant HUD badges.

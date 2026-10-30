@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Activity, AlertTriangle, ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown, Compass,
+  BrainCircuit,
   ChevronLeft, ChevronRight, CircleDot, Copy, Crosshair, Database, Download,
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
@@ -12,6 +13,9 @@ import {
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
+import SuggestInput from './SuggestInput';
+import EngineStatusBoard from './EngineStatusBoard';
+import LearningCenter from './LearningCenter';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
@@ -46,7 +50,10 @@ const TAB_ALIASES = {
   crm: 'crm',
   folders: 'runs',
   runs: 'runs',
-  deep: 'deep'
+  deep: 'deep',
+  learning: 'learning',
+  learned: 'learning',
+  intelligence: 'learning'
 };
 
 function tabFromUrl(value) {
@@ -1765,15 +1772,8 @@ export default function MasterCommandCenter() {
   const [folderCity, setFolderCity] = useState('all');
   const [folderSort, setFolderSort] = useState('newest');
   const [runsSubTab, setRunsSubTab] = useState('master'); // 'client' | 'master'
-  const [masterSweepForm, setMasterSweepForm] = useState({
-    category: '',
-    name: '',
-    scope: 'district',
-    minRating: 0,
-    mobileOnly: false,
-    hasWebsite: false,
-    verifiedOnly: false
-  });
+  const [masterSweepForm, setMasterSweepForm] = useState({ category: '', name: '', scope: 'district' });
+  const [masterSweepTarget, setMasterSweepTarget] = useState(null);
   const [masterLaunching, setMasterLaunching] = useState(false);
   const [clientList, setClientList] = useState([]);
   const [clientFilter, setClientFilter] = useState('all');
@@ -2230,15 +2230,14 @@ export default function MasterCommandCenter() {
         category: sweepCat,
         scope,
         name: sweepName,
-        minRating: Number(masterSweepForm.minRating) || 0,
-        mobileOnly: Boolean(masterSweepForm.mobileOnly),
-        hasWebsite: Boolean(masterSweepForm.hasWebsite),
-        verifiedOnly: Boolean(masterSweepForm.verifiedOnly),
         engines: sweepParams.engines || ['geospatial_mesh', 'direct_telecom']
       });
 
       if (res?.sessionId) {
-        toast.success('🗺️ Master ' + scope + ' sweep initiated! Swarming ' + res.totalZones + ' zones across ' + res.targetName);
+        const zoneLabel = res.capped && res.zoneStats
+          ? `${res.totalZones} of ${res.zoneStats.totalZones} zones (cap reached)`
+          : `${res.totalZones} zones`;
+        toast.success('🗺️ Master ' + scope + ' sweep initiated! Swarming ' + zoneLabel + ' across ' + res.targetName);
         setActiveTab('cockpit');
         refresh();
       }
@@ -2931,12 +2930,6 @@ export default function MasterCommandCenter() {
             </div>
           </div>
         </div>
-
-        <div className="v2-desk-nav">
-          <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={() => navigate('/clients')}>
-            <Users size={13} /> Client Desk
-          </button>
-        </div>
       </header>
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
@@ -3115,6 +3108,9 @@ export default function MasterCommandCenter() {
             </button>
             <button type="button" className={cx((activeTab === 'runs' && runsSubTab === 'master') || activeTab === 'master' ? 'is-active' : '')} onClick={() => { setActiveTab('runs'); setRunsSubTab('master'); }}>
               <Compass size={14} /> 🗺️ Master Folders <b>{formatNumber(masterRuns.length)}</b>
+            </button>
+            <button type="button" className={cx(activeTab === 'learning' && 'is-active')} onClick={() => setActiveTab('learning')}>
+              <BrainCircuit size={14} /> Learning
             </button>
             <span className="v2-cmd-tabs-spacer" />
             <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
@@ -3377,6 +3373,8 @@ export default function MasterCommandCenter() {
                 </div>
 
                 {runsSubTab === 'master' && (
+                  <>
+                  <EngineStatusBoard />
                   <div className="v2-master-sweep-launcher-card">
                     <div className="v2-master-launcher-head">
                       <div>
@@ -3387,33 +3385,52 @@ export default function MasterCommandCenter() {
                     </div>
                     <div className="v2-master-launcher-fields">
                       <div className="v2-master-field">
-                        <label>Business Category</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Photography Studios, Plumbers, Banquet Halls"
+                        <label>Product, Brand or Business Category</label>
+                        <SuggestInput
+                          kind="category"
+                          id="master-sweep-category"
                           value={masterSweepForm.category}
-                          onChange={e => setMasterSweepForm(prev => ({ ...prev, category: e.target.value }))}
+                          onChange={value => setMasterSweepForm(prev => ({ ...prev, category: value }))}
+                          placeholder="e.g. photographers, AMD graphic card, Asian Paints dealer"
                         />
                       </div>
                       <div className="v2-master-field">
-                        <label>City, Mandal, District or State</label>
-                        <input
-                          type="text"
-                          placeholder="e.g. Vijayawada, Tenali Mandal, Guntur District, Andhra Pradesh"
+                        <label>District, Mandal or State</label>
+                        <SuggestInput
+                          kind="place"
+                          id="master-sweep-place"
                           value={masterSweepForm.name}
-                          onChange={e => setMasterSweepForm(prev => ({ ...prev, name: e.target.value }))}
+                          onChange={value => setMasterSweepForm(prev => ({ ...prev, name: value }))}
+                          onSelect={item => {
+                            if (!item || item.literal) {
+                              setMasterSweepTarget(null);
+                              return;
+                            }
+                            const nextScope = item.scope || 'district';
+                            setMasterSweepForm(prev => ({ ...prev, name: item.value, scope: nextScope }));
+                            setMasterSweepTarget({
+                              label: item.value,
+                              scope: nextScope,
+                              detail: item.detail || '',
+                              subtitle: item.subtitle || ''
+                            });
+                          }}
+                          placeholder="e.g. Guntur District, Tenali Mandal, Andhra Pradesh"
                         />
                       </div>
                       <div className="v2-master-field">
                         <label>Coverage Scope</label>
                         <select
                           value={masterSweepForm.scope}
-                          onChange={e => setMasterSweepForm(prev => ({ ...prev, scope: e.target.value }))}
+                          onChange={e => {
+                            setMasterSweepForm(prev => ({ ...prev, scope: e.target.value }));
+                            setMasterSweepTarget(prev => (prev ? { ...prev, scope: e.target.value } : prev));
+                          }}
                         >
-                          <option value="city">🏙️ City / Town (all localities)</option>
+                          <option value="district">🗺️ District Sweep (all mandals)</option>
                           <option value="mandal">📍 Mandal Cluster (all villages)</option>
-                          <option value="district">🗺️ District Sweep (all 14–35 mandals)</option>
-                          <option value="state">🏛️ State Sweep (all districts)</option>
+                          <option value="city">🏙️ City / Town (all localities)</option>
+                          <option value="state">🏛️ State Sweep (all districts + major mandals)</option>
                         </select>
                       </div>
                       <button
@@ -3425,47 +3442,31 @@ export default function MasterCommandCenter() {
                         <Compass size={15} /> {masterLaunching ? 'SWARMING...' : '🚀 START MASTER SWEEP'}
                       </button>
                     </div>
-
-                    <div className="v2-master-filters">
-                      <div className="v2-master-field">
-                        <label>Minimum rating</label>
-                        <select
-                          value={masterSweepForm.minRating}
-                          onChange={e => setMasterSweepForm(prev => ({ ...prev, minRating: Number(e.target.value) }))}
-                        >
-                          <option value={0}>Any rating</option>
-                          <option value={3}>3.0 and above</option>
-                          <option value={3.5}>3.5 and above</option>
-                          <option value={4}>4.0 and above</option>
-                          <option value={4.5}>4.5 and above</option>
-                        </select>
-                      </div>
-                      <button
-                        type="button"
-                        className={cx('v2-master-toggle', masterSweepForm.mobileOnly && 'is-on')}
-                        onClick={() => setMasterSweepForm(prev => ({ ...prev, mobileOnly: !prev.mobileOnly }))}
-                      >
-                        <Phone size={13} /> Mobile numbers only
-                      </button>
-                      <button
-                        type="button"
-                        className={cx('v2-master-toggle', masterSweepForm.hasWebsite && 'is-on')}
-                        onClick={() => setMasterSweepForm(prev => ({ ...prev, hasWebsite: !prev.hasWebsite }))}
-                      >
-                        <Globe2 size={13} /> Has website
-                      </button>
-                      <button
-                        type="button"
-                        className={cx('v2-master-toggle', masterSweepForm.verifiedOnly && 'is-on')}
-                        onClick={() => setMasterSweepForm(prev => ({ ...prev, verifiedOnly: !prev.verifiedOnly }))}
-                      >
-                        <CheckCircle2 size={13} /> Verified profiles only
-                      </button>
-                      <span className="v2-master-filter-note">
-                        Filters apply to the saved master folder. All zones are still swept.
-                      </span>
+                    <div className="v2-master-coverage-note">
+                      <span className="v2-master-coverage-dot" />
+                      {masterSweepTarget ? (
+                        <span>
+                          <b>{masterSweepTarget.label}</b>
+                          {masterSweepTarget.detail ? ` · ${masterSweepTarget.detail}` : ''}
+                          {masterSweepTarget.subtitle ? ` · ${masterSweepTarget.subtitle}` : ''}
+                          {' — '}
+                          {masterSweepTarget.scope === 'state'
+                            ? 'every district + major mandals'
+                            : masterSweepTarget.scope === 'mandal'
+                              ? 'every village and ward'
+                              : masterSweepTarget.scope === 'city'
+                                ? 'commercial localities'
+                                : 'every mandal (villages covered by each mandal query)'}
+                        </span>
+                      ) : (
+                        <span>
+                          <b>Coverage policy:</b> district = all mandals (villages covered inside each mandal query) ·
+                          mandal = every village · state = all districts + major mandals. Type anything — suggestions never block you.
+                        </span>
+                      )}
                     </div>
                   </div>
+                  </>
                 )}
 
                 <div className="v2-runs-top">
@@ -3488,7 +3489,7 @@ export default function MasterCommandCenter() {
                 <div className="v2-client-vault-strip">
                   <div className="v2-client-vault-label">
                     <Users size={14} className="v2-text-cyan" />
-                    <span><b>UNIVERSAL CLIENT WORKSPACES ({clientList.filter(c => c.folderCount > 0).length} with data):</b> Master can inspect, telecall, and export leads from all clients</span>
+                    <span><b>UNIVERSAL CLIENT WORKSPACES ({clientList.length} Accounts):</b> Master can inspect, telecall, and export leads from all clients</span>
                   </div>
                   <div className="v2-client-vault-pills">
                     <button
@@ -3498,7 +3499,7 @@ export default function MasterCommandCenter() {
                     >
                       🌐 All Workspaces ({effectiveRuns.length} Folders)
                     </button>
-                    {clientList.filter(c => c.folderCount > 0 || clientFilter === c.id).map(c => (
+                    {clientList.map(c => (
                       <button
                         key={c.id}
                         type="button"
@@ -3661,6 +3662,10 @@ export default function MasterCommandCenter() {
                   ))}
                 </div>
               </section>
+            )}
+
+            {activeTab === 'learning' && (
+              <LearningCenter />
             )}
 
             {activeTab === 'deep' && (

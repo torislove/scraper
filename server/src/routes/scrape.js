@@ -33,6 +33,10 @@ const { deduplicateBatch, generateFingerprint, normalizePhone } = require('../ut
 const { enrichLead } = require('../utils/enricher');
 const categoryRouter = require('../services/categoryRouter');
 const leadRetention = require('../services/leadRetention');
+const engineHealth = require('../services/engineHealth');
+const { buildScopeZones } = require('../services/sweepScopePolicy');
+const brandIntel = require('../services/brandIntel');
+const taxonomyLearner = require('../services/taxonomyLearner');
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the earth in km
@@ -45,11 +49,32 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c; 
 }
 
-// Safe execute wrapper
-async function safeExecute(fn, name = 'Operation', logger = console.log) {
+// Safe execute wrapper. When an engine key is supplied the outcome is written
+// to the engine health ledger so the master board can show live green/red state.
+async function safeExecute(fn, name = 'Operation', logger = console.log, engineKey = null) {
+  const startedAt = Date.now();
   try {
-    return await fn();
+    const result = await fn();
+    if (engineKey) {
+      engineHealth.recordRun(engineKey, {
+        ok: true,
+        ms: Date.now() - startedAt,
+        count: Array.isArray(result)
+          ? result.length
+          : (result && typeof result === 'object'
+            ? Number(result.totalScraped ?? result.newInserted ?? result.count ?? 0)
+            : null)
+      });
+    }
+    return result;
   } catch (error) {
+    if (engineKey) {
+      engineHealth.recordRun(engineKey, {
+        ok: false,
+        error: error.message,
+        ms: Date.now() - startedAt
+      });
+    }
     logger(`[SafeExecute] ${name} failed: ${error.message}`);
     return null;
   }
@@ -189,44 +214,44 @@ function updateSessionTargetState(sessionId, loc, status) {
 // Register tasks
 registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint), 'Google Local Finder Scrape', addLog);
+  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint), 'Google Local Finder Scrape', addLog, 'google-local-finder');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
 registerTask('scrapeGooglePlaces', async (q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint), 'Google Places Scrape', addLog);
+  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint), 'Google Places Scrape', addLog, 'maps');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
 registerTask('scrapeGoogleSerp', async (q, cat, loc, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleSerp(q, cat, loc), 'Google Serp Scrape', addLog);
+  const res = await safeExecute(() => scrapeGoogleSerp(q, cat, loc), 'Google Serp Scrape', addLog, 'google-serp');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
 registerTask('scrapeJustDial', async (cat, loc, dummy, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeJustDial(cat, loc, sessionId), 'JustDial Scrape', addLog);
+  const res = await safeExecute(() => scrapeJustDial(cat, loc, sessionId), 'JustDial Scrape', addLog, 'justdial');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeWeddingBazaar', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingBazaar(cat, loc, sessionId), 'WeddingBazaar Scrape', addLog));
-registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId), 'WeddingWire Scrape', addLog));
-registerTask('scrapeMandap', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeMandap(cat, loc, sessionId), 'Mandap Scrape', addLog));
-registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, globalAbortSignal, sessionId), `DDG Dork ${domain}`, addLog));
-registerTask('scrapeBraveDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeBraveDork(domain, q, cat, loc, sessionId), `Brave Dork ${domain}`, addLog));
-registerTask('scrapeDeepseekAI', async (q, cat, loc) => safeExecute(() => scrapeDeepseekAI(q, cat, loc), 'DeepSeek AI Scrape', addLog));
+registerTask('scrapeWeddingBazaar', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingBazaar(cat, loc, sessionId), 'WeddingBazaar Scrape', addLog, 'weddingbazaar'));
+registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId), 'WeddingWire Scrape', addLog, 'weddingwire'));
+registerTask('scrapeMandap', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeMandap(cat, loc, sessionId), 'Mandap Scrape', addLog, 'mandap'));
+registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, globalAbortSignal, sessionId), `DDG Dork ${domain}`, addLog, 'social'));
+registerTask('scrapeBraveDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeBraveDork(domain, q, cat, loc, sessionId), `Brave Dork ${domain}`, addLog, 'brave'));
+registerTask('scrapeDeepseekAI', async (q, cat, loc) => safeExecute(() => scrapeDeepseekAI(q, cat, loc), 'DeepSeek AI Scrape', addLog, 'deepseek'));
 registerTask('scrapeCrawleeDeep', async (url, vendorName, cat, loc, sessionId) => safeExecute(() => scrapeCrawleeDeep(url, vendorName, cat, loc, sessionId), 'Crawlee Deep Scrape', addLog));
 registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapePuppeteerIndiaMart(cat, loc, sessionId), 'IndiaMart Stealth Scrape', addLog);
+  const res = await safeExecute(() => scrapePuppeteerIndiaMart(cat, loc, sessionId), 'IndiaMart Stealth Scrape', addLog, 'indiamart');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeScrapySpider', async (cat, loc) => safeExecute(() => scrapeScrapySpider(cat, loc), 'Scrapy Python Spider', addLog));
-registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}) =>
-  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters), 'Omni Search Orchestrator', addLog)
+registerTask('scrapeScrapySpider', async (cat, loc) => safeExecute(() => scrapeScrapySpider(cat, loc), 'Scrapy Python Spider', addLog, 'scrapy'));
+registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null) =>
+  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan), 'Omni Search Orchestrator', addLog)
 );
 
 function setDeps(deps) {
@@ -797,7 +822,7 @@ function matchesMasterFilters(lead, filters = {}) {
   return true;
 }
 
-async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}) {
+async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}, plan = null) {
   const sessionAbortSignal = { aborted: false };
   const requestedEngines = Array.isArray(enabledEngines) ? enabledEngines.filter(Boolean) : [];
   const classification = categoryRouter.classifyCategory(category);
@@ -805,6 +830,18 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
   const activeEngines = autoMode
     ? categoryRouter.pickAutoEngines(classification)
     : [...new Set(requestedEngines)];
+
+  // Product/brand intent is searched with the dealer phrase that directories
+  // actually index ("graphic card dealer", "Tamarind wholesaler"), while the
+  // folder keeps the operator's original words.
+  const productIntent = classification.intent
+    && ['product', 'brand', 'brand_product'].includes(classification.intent.intentKind);
+  const searchPhrase = productIntent
+    ? brandIntel.bestSearchPhrase(classification.intent, category)
+    : category;
+  if (productIntent && searchPhrase && searchPhrase.toLowerCase() !== category.toLowerCase()) {
+    addLog(`[Orchestrator] Intent: ${classification.intent.intentKind} · searching dealer phrase "${searchPhrase}" (folder keeps "${category}")`);
+  }
 
   addLog(`[Orchestrator] Starting Universal Omni Search session: ${sessionId} (User: ${userId})`);
   addLog(`[Orchestrator] Query: "${category}" in "${baseLocation}". Family: ${classification.label} (${classification.family}). Strategy: ${strategy}`);
@@ -851,8 +888,23 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
   }
   
   try {
-    // 1. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing)
-    const zones = resolveUniversalZones(baseLocation, category);
+    // 1. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing).
+    //    A master sweep supplies a frozen plan, so its exact zone policy is honoured
+    //    instead of re-resolving from the location string.
+    const zones = (Array.isArray(plan?.zones) && plan.zones.length)
+      ? plan.zones.map(z => {
+          const zoneName = z.name;
+          const suffix = z.kind === 'village' && plan.district ? `, ${plan.district}` : '';
+          return {
+            zoneName,
+            queryText: `${searchPhrase} in ${zoneName}${suffix}`,
+            district: plan.district || null,
+            state: plan.state || null,
+            isVectorQuery: true,
+            isSingle: false
+          };
+        })
+      : resolveUniversalZones(baseLocation, category);
     addLog(`[Orchestrator] Resolved ${zones.length} universal zones for "${baseLocation}": ${zones.map(z => z.zoneName).join(', ')}`);
 
     // Geocode base location for initial radar map focus & fallback coordinates
@@ -984,7 +1036,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
       if (globalAbortSignal.aborted || sessionAbortSignal.aborted) break;
 
       const z = zones[zi];
-      const zoneQuery = (z.isVectorQuery || z.queryText.toLowerCase().includes(category.toLowerCase())) ? z.queryText : `${category} in ${z.queryText}`;
+      const zoneQuery = (z.isVectorQuery || z.queryText.toLowerCase().includes(searchPhrase.toLowerCase())) ? z.queryText : `${searchPhrase} in ${z.queryText}`;
       
       // Attempt 0ms geocode cache lookup for zone
       const zoneCacheKey = `${z.zoneName}, ${baseLocation}`.toLowerCase().trim();
@@ -1038,10 +1090,10 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     // session (not per zone) and stream real listings into the same session.
     const directoryJobs = [];
     if (hasEngine('justdial')) {
-      directoryJobs.push(['scrapeJustDial', [category, baseLocation, 'omni', sessionId]]);
+      directoryJobs.push(['scrapeJustDial', [searchPhrase, baseLocation, 'omni', sessionId]]);
     }
     if (hasEngine('indiamart')) {
-      directoryJobs.push(['scrapePuppeteerIndiaMart', [category, baseLocation, 'omni', sessionId]]);
+      directoryJobs.push(['scrapePuppeteerIndiaMart', [searchPhrase, baseLocation, 'omni', sessionId]]);
     }
     if (hasEngine('weddingbazaar')) {
       directoryJobs.push(['scrapeWeddingBazaar', [category, baseLocation, 'omni', sessionId]]);
@@ -1201,6 +1253,23 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
       addLog(`[Orchestrator] Note: Could not auto-persist vault to disk: ${saveErr.message}`);
     }
 
+    // Auto-learning: only a finished run with real leads may teach the
+    // taxonomy. This is how the dictionary grows for products nobody curated.
+    try {
+      const learned = taxonomyLearner.recordRun({
+        query: category,
+        location: baseLocation,
+        leadCount: sessionLeads.length,
+        phoneCount: sessionLeads.filter(v => v.phone).length,
+        vendors: sessionLeads
+      });
+      if (learned?.product) {
+        addLog(`[Orchestrator] 🧠 Taxonomy learned: "${learned.product}" from ${sessionLeads.length} leads.`);
+      }
+    } catch (learnErr) {
+      addLog(`[Orchestrator] Taxonomy learning skipped: ${learnErr.message}`);
+    }
+
     // Emit 100% complete event
     try {
       emitProgressEvent({
@@ -1313,9 +1382,9 @@ router.post('/omni', async (req, res) => {
     const locClassification = classifyLocation(parsed.location);
     if (locClassification.type === 'state' || locClassification.type === 'district') {
       return res.status(403).json({
-        error: `Client searches are limited to one city, town or village at a time. A ${locClassification.type}-wide sweep (${locClassification.name}) requires the Master Command Center.`,
+        error: `Client searches are restricted to individual cities and mandals. Wide-area ${locClassification.type} sweeps (${locClassification.name}) require Master Command Center access.`,
         classification: locClassification,
-        allowedScopes: ['city', 'town', 'village', 'locality'],
+        allowedScopes: ['city', 'mandal', 'locality', 'town'],
         suggestedZones: locClassification.subZones?.slice(0, 8) || []
       });
     }
@@ -1423,9 +1492,9 @@ router.post('/auto', async (req, res) => {
       const locClassification = classifyLocation(plan.location);
       if (locClassification.type === 'state' || locClassification.type === 'district') {
         return res.status(403).json({
-          error: `Client searches are limited to one city, town or village at a time. A ${locClassification.type}-wide sweep (${locClassification.name}) requires the Master Command Center.`,
+          error: `Client searches are restricted to individual cities and mandals. Wide-area ${locClassification.type} sweeps (${locClassification.name}) require Master Command Center access.`,
           classification: locClassification,
-          allowedScopes: ['city', 'town', 'village', 'locality'],
+          allowedScopes: ['city', 'mandal', 'locality', 'town'],
           suggestedZones: locClassification.subZones?.slice(0, 8) || []
         });
       }
@@ -1499,6 +1568,30 @@ router.post('/auto', async (req, res) => {
 // MASTER GEO-COVERAGE SWEEP API (District, Mandal Cluster, & State Sweeps)
 // Dedicated orchestrator for full-district and state coverage folders
 // ──────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+// ENGINE & API HEALTH BOARD
+// The master command center renders this as green/red chips so the operator
+// knows which engines can actually answer before launching a swarm.
+// ──────────────────────────────────────────────────────────────────────────────
+router.get('/engines/status', (req, res) => {
+  try {
+    const status = engineHealth.getStatus();
+    const metrics = typeof getConcurrencyMetrics === 'function' ? getConcurrencyMetrics() : null;
+    res.json({ ok: true, ...status, queue: metrics });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+router.post('/engines/reset', (req, res) => {
+  try {
+    engineHealth.resetEngine(String(req.body?.engine || '').trim() || null);
+    res.json({ ok: true, ...engineHealth.getStatus() });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
 router.post('/master-sweep', async (req, res) => {
   try {
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
@@ -1513,52 +1606,21 @@ router.post('/master-sweep', async (req, res) => {
       return res.status(400).json({ error: 'Both category and target location name are required for a Master Sweep.' });
     }
 
-    const { classifyLocation, districtIndex, stateIndex, mandalIndex } = require('../utils/universalGeoCluster');
-    const classification = classifyLocation(name);
-
-    // Resolve every constituent zone for the requested scope. The master is the
-    // only workspace allowed to ask for a district, mandal or state sweep.
-    const cleanName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    let resolvedScope = scope;
-    let targetZones = [];
-    let sweepTitle = name;
-
-    const wanted = ['state', 'district', 'mandal', 'city'].includes(scope) ? scope : 'district';
-
-    if (wanted === 'state') {
-      const entry = stateIndex.get(cleanName);
-      if (entry) {
-        resolvedScope = 'state';
-        targetZones = (entry.districts || []).slice(0, 80);
-        sweepTitle = entry.state;
-      }
-    } else if (wanted === 'district') {
-      const entry = districtIndex.get(cleanName);
-      if (entry) {
-        resolvedScope = 'district';
-        targetZones = (entry.mandals || []).slice(0, 80);
-        sweepTitle = `${entry.district} District`;
-      }
-    } else if (wanted === 'mandal') {
-      const entry = mandalIndex.get(cleanName) || mandalIndex.get(name.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
-      if (entry) {
-        resolvedScope = 'mandal';
-        targetZones = (entry.villages && entry.villages.length ? entry.villages : [entry.subDistrict]).slice(0, 40);
-        sweepTitle = `${entry.subDistrict} Mandal`;
-      }
-    } else {
-      resolvedScope = 'city';
-      targetZones = (classification.subZones || []).slice(0, 40);
-      sweepTitle = classification.name || name;
+    // Resolve the requested scope through the India-aware policy layer:
+    //   district → all mandals (villages are covered by each mandal query)
+    //   mandal   → every village / ward
+    //   state    → all districts + district HQ cities + major mandals
+    //   city     → commercial localities
+    const plan = buildScopeZones(scope, name);
+    if (!plan) {
+      return res.status(404).json({
+        error: `Could not resolve "${name}" in the offline India gazetteer. Try a district, mandal, state or city name, or add the parent district.`
+      });
     }
 
-    // If the name is not in the local gazetteer, trust the classifier rather
-    // than launching a one-zone job when the operator asked for a wider sweep.
-    if (!targetZones.length) {
-      resolvedScope = classification.type && classification.type !== 'unknown' ? classification.type : resolvedScope;
-      targetZones = classification.subZones && classification.subZones.length ? classification.subZones : [name];
-      sweepTitle = classification.name || name;
-    }
+    const resolvedScope = plan.resolvedScope;
+    const targetZones = plan.zones;
+    const sweepTitle = plan.title;
 
     const filters = {};
     if (Number(req.body.minRating) > 0) filters.minRating = Math.min(5, Number(req.body.minRating));
@@ -1579,12 +1641,17 @@ router.post('/master-sweep', async (req, res) => {
       scope: resolvedScope,
       targetName: sweepTitle,
       totalZones: targetZones.length,
-      zones: targetZones.slice(0, 35),
+      capped: Boolean(plan.stats?.capped),
+      zoneStats: plan.stats,
+      policy: plan.policy,
+      warnings: plan.warnings || [],
+      zones: targetZones.slice(0, 35).map(z => z.name),
       filters,
       isMasterSweep: true
     });
 
     addLog(`\n[Master Sweep] 🗺️ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
+    addLog(`[Master Sweep] Coverage policy: ${plan.policy.label}. ${plan.policy.note}`);
 
     addScrapeJob('scrapeOmniOrchestrator', [
       category,
@@ -1592,10 +1659,11 @@ router.post('/master-sweep', async (req, res) => {
       strategy,
       5,
       'high',
-      engines || ['geospatial_mesh', 'direct_telecom'],
+      engines || ['auto'],
       sessionId,
       userId || 'master',
-      filters
+      filters,
+      plan
     ]);
 
   } catch (error) {

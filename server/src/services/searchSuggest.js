@@ -11,6 +11,7 @@
  */
 
 const categoryRouter = require('./categoryRouter');
+const brandIntel = require('./brandIntel');
 const { normalizePrepositionTypos } = require('../utils/queryParser');
 
 const PREPOSITION_SPLIT = /^(.*?)\s+(?:in|near|around|within|at|across)\s+(.+)$/i;
@@ -319,6 +320,61 @@ function buildCategoryInfo(match, rawFragment) {
   };
 }
 
+// Words that carry no product meaning on their own. They are ignored when
+// checking whether a fuzzy category row is really about the typed product.
+const GENERIC_TOKENS = new Set([
+  'shop', 'shops', 'store', 'stores', 'dealer', 'dealers', 'supplier', 'suppliers',
+  'distributor', 'distributors', 'wholesaler', 'wholesalers', 'trader', 'traders',
+  'service', 'services', 'centre', 'center', 'centres', 'centers', 'market',
+  'near', 'best', 'top', 'the', 'and', 'for', 'with', 'from', 'india'
+]);
+
+function meaningfulTokens(value) {
+  return norm(value)
+    .split(' ')
+    .filter(token => token.length >= 3 && !GENERIC_TOKENS.has(token));
+}
+
+/**
+ * A typo suggestion is only credible when the whole phrase is a few keystrokes
+ * away. "plumer" → "Plumbers" qualifies; "amd graphic card" → "Car Wash" does not.
+ */
+function isPlausibleCorrection(fragment, label) {
+  const a = norm(fragment);
+  const b = norm(label);
+  if (!a || !b) return false;
+  const budget = typoBudget(Math.min(a.length, b.length));
+  return levenshtein(a, b) <= budget;
+}
+
+function filterRelevantCategories(matches, fragment, intent) {
+  if (!Array.isArray(matches) || !matches.length) return [];
+  const queryTokens = new Set(meaningfulTokens(fragment));
+  for (const part of [
+    intent && intent.product,
+    intent && intent.genericProduct,
+    intent && intent.brand && intent.brand.brand
+  ]) {
+    for (const token of meaningfulTokens(part)) queryTokens.add(token);
+  }
+  for (const expansion of (intent && intent.expansions) || []) {
+    for (const token of meaningfulTokens(expansion)) queryTokens.add(token);
+  }
+  if (!queryTokens.size) return matches;
+
+  const keep = matches.filter(match => {
+    if (Number(match.score || 0) >= 950) return true;
+    // The category router flags every fuzzy hit as "corrected", so verify the
+    // correction is a plausible typo rather than an unrelated directory.
+    if (match.corrected && isPlausibleCorrection(fragment, match.label)) return true;
+    return meaningfulTokens(match.label).some(token => queryTokens.has(token));
+  });
+
+  // Never return an empty list just because the gate was strict; a single
+  // best-effort row is more useful than a blank console.
+  return keep.length ? keep : matches.slice(0, 1);
+}
+
 /**
  * @param {object} options
  * @param {string} options.q          full free-text query
@@ -345,7 +401,16 @@ function suggest(options = {}) {
     splitBy = parts.splitBy;
   }
 
-  const categoryMatches = categoryRouter.suggestCategories(categoryFragment, limit);
+  const intent = brandIntel.detect(categoryFragment);
+  // The fuzzy category index is deliberately loose (it is tuned for typos), so
+  // it also returns near-misses like "Car Wash" for "amd graphic card". Once we
+  // know the product/brand, keep only rows that share a meaningful word with
+  // the query or its expansions. Exact and corrected matches always survive.
+  const categoryMatches = filterRelevantCategories(
+    categoryRouter.suggestCategories(categoryFragment, limit),
+    categoryFragment,
+    intent
+  );
   let locationMatches = findBestPlace(locationFragment, limit);
   const correctedLocation = locationMatches[0]?.corrected ? locationMatches[0] : null;
   if (correctedLocation) locationCorrectedFrom = correctedLocation.correctedFrom || locationFragment;
@@ -391,7 +456,10 @@ function formatVectorDetail(engines) {
   return unique.slice(0, 3).join(' · ');
 }
 
+  const brandRows = brandIntel.suggest(categoryFragment, 3);
+
   const suggestions = [
+    ...brandRows,
     ...categoryMatches.map(match => ({
       type: 'category',
       value: match.label,
@@ -436,6 +504,7 @@ function formatVectorDetail(engines) {
     ok: true,
     query: correctedQuery,
     ready: Boolean(bestCategory && bestLocation),
+    intent,
     fragments: {
       category: categoryFragment,
       location: locationFragment,

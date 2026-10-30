@@ -170,7 +170,9 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                     onClick={() => onPick(item)}
                   >
                     <span className="v2-suggest-mark">
-                      {item.type === 'category' ? <Sparkles size={13} /> : <MapPin size={13} />}
+                      {item.type === 'category' ? <Sparkles size={13} />
+                        : item.type === 'literal' ? <Search size={13} />
+                          : <MapPin size={13} />}
                     </span>
                     <span className="v2-suggest-copy">
                       <div className="v2-suggest-top-line">
@@ -186,14 +188,17 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                           </span>
                         )}
                       </div>
-                      {item.type === 'category' && item.subtitle && (
+                      {(item.type === 'category' || item.type === 'literal') && item.subtitle && (
                         <small>{item.subtitle}</small>
                       )}
                       {item.type === 'location' && (item.display || item.district) && (
                         <small>{item.display || `${item.mandal ? `${item.mandal}, ` : ''}${item.district}`}</small>
                       )}
                     </span>
-                    {item.type === 'category' && item.detail && <span className="v2-suggest-fix">{item.detail}</span>}
+                    {item.learned && <span className="v2-suggest-fix">LEARNED</span>}
+                    {!item.learned && (item.type === 'category' || item.type === 'literal') && item.detail && (
+                      <span className="v2-suggest-fix">{item.detail}</span>
+                    )}
                     <ArrowRight size={11} className="v2-suggest-arrow" />
                   </button>
                 );
@@ -221,8 +226,7 @@ export default function SearchConsole({
   busy = false,
   running = false,
   compact = false,
-  onResolve,
-  onMasterSweep
+  onResolve
 }) {
   const [draft, setDraft] = useState(value);
   const [open, setOpen] = useState(false);
@@ -282,19 +286,51 @@ export default function SearchConsole({
 
   const groups = useMemo(() => {
     const list = response?.suggestions || [];
+    const categories = list.filter(item => item.type === 'category');
+    const literal = draft.trim().length >= 2
+      ? [{
+          type: 'literal',
+          value: draft.trim(),
+          label: `Search “${draft.trim()}” literally`,
+          subtitle: 'Send these exact words to every engine',
+          detail: 'LITERAL',
+          family: 'generic',
+          familyLabel: 'Any wording'
+        }]
+      : [];
     return [
+      {
+        title: 'BRANDS & MODELS',
+        icon: Target,
+        items: categories.filter(item => item.group === 'brand')
+      },
+      {
+        title: 'PRODUCTS & SUPPLIERS',
+        icon: Layers,
+        items: categories.filter(item => item.group === 'product' && !item.learned)
+      },
+      {
+        title: 'LEARNED FROM RUNS',
+        icon: Sparkles,
+        items: categories.filter(item => item.learned)
+      },
       {
         title: 'SERVICES & SPECIALTIES',
         icon: Sparkles,
-        items: list.filter(item => item.type === 'category')
+        items: categories.filter(item => item.group === 'service' || (!item.group && !item.learned))
       },
       {
         title: 'CITIES, MANDALS & WARDS',
         icon: MapPin,
         items: list.filter(item => item.type === 'location')
+      },
+      {
+        title: 'ANY WORDING',
+        icon: Search,
+        items: literal
       }
     ];
-  }, [response]);
+  }, [response, draft]);
 
   const visible = useMemo(() => groups.flatMap(group => group.items), [groups]);
 
@@ -340,7 +376,13 @@ export default function SearchConsole({
 
   const choose = useCallback(item => {
     if (!item) return;
-    if (item.type === 'category') {
+    if (item.type === 'literal') {
+      const loc = parsedLocation || location;
+      const updated = loc ? `${item.value} in ${loc}` : item.value;
+      setDraft(updated);
+      onChange?.(updated);
+      onCategoryChange?.(item.value);
+    } else if (item.type === 'category') {
       const loc = parsedLocation || location;
       const updated = loc ? `${item.value} in ${loc}` : item.value;
       setDraft(updated);
@@ -381,7 +423,7 @@ export default function SearchConsole({
     }
   }, [open, visible, active, choose]);
 
-  const isWideAreaBlocked = !onMasterSweep && (locClassification?.type === 'district' || locClassification?.type === 'state');
+  const isWideAreaBlocked = locClassification?.type === 'district' || locClassification?.type === 'state';
   const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3) && !isWideAreaBlocked;
 
   const submit = useCallback(() => {
@@ -390,7 +432,7 @@ export default function SearchConsole({
       return;
     }
     if (isWideAreaBlocked) {
-      toast.error(`Client searches are restricted to individual cities and mandals. District and state-wide sweeps (${locClassification?.name || ''}) require Master Command Center. Choose an individual city or mandal below!`);
+      toast.error(`One place at a time, please. District and state-wide lists (${locClassification?.name || ''}) are a custom service - email support@scraper.co.in. Pick a city, town or village below.`);
       return;
     }
     if (!canDeploy || busy) return;
@@ -555,7 +597,7 @@ export default function SearchConsole({
             className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy', isWideAreaBlocked && 'is-blocked')}
             onClick={submit}
             disabled={busy || (!running && !canDeploy)}
-            title={isWideAreaBlocked ? 'Wide-area sweeps require Master Command Center. Please pick an individual city or mandal.' : undefined}
+            title={isWideAreaBlocked ? 'District and state lists are a custom service. Please pick a city, town or village.' : undefined}
           >
             <span className="v2-btn-shimmer" />
             {busy
@@ -655,21 +697,6 @@ export default function SearchConsole({
               <span>Hierarchy:</span>
               <b>{locClassification.name}</b>
               <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
-              {onMasterSweep && (locClassification.type === 'district' || locClassification.type === 'state' || locClassification.type === 'mandal') && (
-                <button
-                  type="button"
-                  className="v2-hud-sweep-btn"
-                  onClick={() => onMasterSweep({
-                    category: parsedCategory || category,
-                    name: locClassification.name,
-                    scope: locClassification.type,
-                    engines: selectedEngines
-                  })}
-                  title={'Launch full ' + locClassification.type + ' master sweep'}
-                >
-                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Mandal'}
-                </button>
-              )}
             </div>
           )}
 
@@ -693,8 +720,8 @@ export default function SearchConsole({
           <div className="v2-widearea-block-head">
             <AlertTriangle size={15} className="v2-text-amber" />
             <span>
-              <b>Client search covers individual cities and mandals only.</b>{' '}
-              District &amp; state-wide sweeps require Master Command Center. Choose an individual city or mandal in {locClassification?.name}:
+              <b>One place at a time — that is how we keep the list clean.</b>{' '}
+              A district or state list is a custom run: email support@scraper.co.in. Meanwhile, pick a city, town or village in {locClassification?.name}:
             </span>
           </div>
           {Array.isArray(locClassification?.subZones) && locClassification.subZones.length > 0 && (
