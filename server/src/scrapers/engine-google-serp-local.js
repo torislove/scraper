@@ -6,6 +6,7 @@ const fidelity = require('../services/categoryFidelity');
 const { getBrowser, chromium, applyAdvancedStealth, optimizePageForSpeed } = require('./browserFactory');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const { normalizePhone } = require('../utils/phoneUtils');
+const serpBreaker = require('../services/serpBreaker');
 
 // Global dependencies passed from scrape router
 let globalAbortSignal = { aborted: false };
@@ -34,7 +35,8 @@ async function scrapeGoogleLocalFinder(
   district = null,
   stateName = null,
   centerCoords = null,
-  cityHint = null
+  cityHint = null,
+  mapsBackup = false
 ) {
   addLog(`[Local Finder Core] ⚡ Launching ultra-fast surface harvest for: "${query}" (Target: up to ${maxPages * 20} leads)`);
 
@@ -45,6 +47,39 @@ async function scrapeGoogleLocalFinder(
   if (!chromium) {
     addLog('[Local Finder Core] Playwright Chromium not available on this server.');
     return [];
+  }
+
+  // When Google has already served CAPTCHAs for this surface, skip the browser
+  // page load entirely and let the Maps engine do the work directly.
+  const fallbackToMaps = async reason => {
+    addLog(`[Local Finder Core] ${reason} Sending "${query}" straight to the Google Maps engine.`);
+    try {
+      return await require('./engine-google-places').scrapeGooglePlaces(
+        query,
+        category,
+        location,
+        sessionId,
+        centerCoords?.lat,
+        centerCoords?.lng,
+        null,
+        'deep',
+        district,
+        stateName,
+        null,
+        cityHint
+      );
+    } catch (error) {
+      addLog(`[Local Finder Core] Maps fallback failed: ${error.message}`);
+      return [];
+    }
+  };
+
+  if (serpBreaker.isBlocked()) {
+    if (mapsBackup) {
+      addLog(`[Local Finder Core] Cooldown active. The Maps job for "${query}" already covers this zone, so skipping the duplicate pass.`);
+      return [];
+    }
+    return await fallbackToMaps('Local Finder is in a cooldown window.');
   }
 
   const browser = await getBrowser();
@@ -98,24 +133,15 @@ async function scrapeGoogleLocalFinder(
 
       // Check for Google Search CAPTCHA / Rate-Limit challenge
       if (page.url().includes('/sorry') || page.url().includes('google.com/sorry')) {
-        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA detected. Gracefully pivoting to Google Maps Stealth Engine for "${query}"...`);
+        const tripped = serpBreaker.recordCaptcha();
+        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA detected. Gracefully pivoting to Google Maps Stealth Engine for "${query}"...${tripped ? ' (Local Finder cooling down for 8 minutes)' : ''}`);
         try { await page.close().catch(() => {}); } catch (e) {}
         try { await context.close().catch(() => {}); } catch (e) {}
-        const placesEngine = require('./engine-google-places');
-        return await placesEngine.scrapeGooglePlaces(
-          query,
-          category,
-          location,
-          sessionId,
-          centerCoords?.lat,
-          centerCoords?.lng,
-          null,
-          'deep',
-          district,
-          stateName,
-          null,
-          cityHint
-        );
+        if (tripped && mapsBackup) {
+          addLog(`[Local Finder Core] Maps job already queued for "${query}" — skipping the duplicate fallback.`);
+          return [];
+        }
+        return await fallbackToMaps('CAPTCHA pivot.');
       }
 
       // Bypass Google Consent modal if present
@@ -264,26 +290,14 @@ async function scrapeGoogleLocalFinder(
 
       addLog(`[Local Finder Core] Page ${pageIndex + 1}: Discovered ${pageLeads.length} leads in batch.`);
 
+      if (pageLeads.length > 0) serpBreaker.recordSuccess();
+
       if (pageLeads.length === 0) {
         if (pageIndex === 0) {
           addLog(`[Local Finder Core] 0 leads found on Google Search Page 1 for "${query}". Pivoting to Google Maps Stealth Engine...`);
           try { await page.close().catch(() => {}); } catch (e) {}
           try { await context.close().catch(() => {}); } catch (e) {}
-          const placesEngine = require('./engine-google-places');
-          return await placesEngine.scrapeGooglePlaces(
-            query,
-            category,
-            location,
-            sessionId,
-            centerCoords?.lat,
-            centerCoords?.lng,
-            null,
-            'deep',
-            district,
-            stateName,
-            null,
-            cityHint
-          );
+          return await fallbackToMaps('Empty Local Finder page.');
         }
         consecutiveEmptyPages++;
         if (consecutiveEmptyPages >= 2) {
@@ -301,7 +315,7 @@ async function scrapeGoogleLocalFinder(
       for (const lead of pageLeads) {
         // 0. Strict Geographic Zero-Bleed Containment Check
         const leadCoords = (lead.latitude && lead.longitude) ? { lat: lead.latitude, lng: lead.longitude } : null;
-        const containment = isListingRelevantToQuery(lead.name, lead.address, district, stateName, location, location, leadCoords);
+        const containment = isListingRelevantToQuery(lead.name, lead.address, district, stateName, location, location, leadCoords, null, cityHint);
         if (!containment.relevant) {
           addLog(`[Local Finder Guard] Discarded "${lead.name}": ${containment.reason}`);
           const oobLead = {

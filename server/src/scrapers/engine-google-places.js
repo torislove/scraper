@@ -327,7 +327,7 @@ async function extractStorefrontMediaAndLogo(page, websiteUrl, businessName) {
 // ──────────────────────────────────────────────────────────────────────────────
 // STRICT MULTI-LAYER GEOGRAPHIC CONTAINMENT GUARD (ZERO BLEED)
 // ──────────────────────────────────────────────────────────────────────────────
-function isListingRelevantToQuery(name, address, district, stateName, mandal, location, coords = null, boundingbox = null) {
+function isListingRelevantToQuery(name, address, district, stateName, mandal, location, coords = null, boundingbox = null, parentCity = null) {
   if (!address && !coords) return { relevant: true }; // Insufficient data to reject
 
   const addrLower = (address || '').toLowerCase();
@@ -380,7 +380,13 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
   ];
 
   if (townToken.length >= 3) {
+    // A locality inside a city is still inside that city. If the run's parent
+    // city matches the hub, listings anywhere in the hub are in-bounds even when
+    // they do not repeat the locality name.
+    const parentToken = String(parentCity || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const hub of majorMetros) {
+      const insideParentCity = parentToken.length >= 3
+        && (hub === parentToken || (hub.length >= 5 && parentToken.includes(hub)));
       // If target town is NOT the metro hub itself (e.g. target is 'narasaraopet', hub is 'guntur')
       if (townToken !== hub && !townToken.includes(hub)) {
         if (addrLower.includes(hub)) {
@@ -388,7 +394,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
           const isRoadName = new RegExp(`\\b${hub}\\s+(road|rd|highway|hwy|main\\s+road|bypass|way|street|cross)\\b`, 'i').test(addrLower);
           const mentionsTown = fullText.includes(townToken) || (cleanTargetTown.length > 2 && fullText.includes(cleanTargetTown));
           
-          if (!mentionsTown && !isRoadName) {
+          if (!mentionsTown && !isRoadName && !insideParentCity) {
             return { relevant: false, reason: `Listing belongs to metropolitan hub "${hub}" with no reference to target town "${cleanTargetTown}"` };
           }
 
@@ -646,7 +652,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       const coords = extractCoords(page.url());
       
       // Strict Containment Guard Check
-      const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox);
+      const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox, cityHint);
       if (!containment.relevant) {
         addLog(`[Containment Guard] Discarded "${name}" - ${containment.reason}`);
         const oobLead = {
@@ -1051,7 +1057,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
             // Strict Text & Geographic Containment Check
             const placeCoords = (place.latitude && place.longitude) ? { lat: place.latitude, lng: place.longitude } : extractCoords(place.mapsLink);
-            const containment = isListingRelevantToQuery(place.name, place.address, district, stateName, location, location, placeCoords, boundingbox);
+            const containment = isListingRelevantToQuery(place.name, place.address, district, stateName, location, location, placeCoords, boundingbox, cityHint);
             if (!containment.relevant) {
               addLog(`[Containment Guard] Discarded "${place.name}": ${containment.reason}`);
               const oobLead = {

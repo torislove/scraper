@@ -213,9 +213,9 @@ function updateSessionTargetState(sessionId, loc, status) {
 }
 
 // Register tasks
-registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint) => {
+registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint), 'Google Local Finder Scrape', addLog, 'google-local-finder');
+  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup), 'Google Local Finder Scrape', addLog, 'google-local-finder');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
@@ -1097,7 +1097,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
       if (hasEngine('local_finder')) {
         await addScrapeJob(
           'scrapeGoogleLocalFinder',
-          [zoneQuery, category, z.zoneName, sessionId, 5, targetDistrict, targetState, zoneGeo, baseLocation],
+          [zoneQuery, category, z.zoneName, sessionId, 5, targetDistrict, targetState, zoneGeo, baseLocation, hasEngine('maps')],
           10,
           meta
         );
@@ -1227,7 +1227,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
       // whole scrape window so one hung page can never hold a run for minutes.
       if (finishedZones >= totalZones) {
         if (!allZonesCompleteAt) allZonesCompleteAt = Date.now();
-        if (Date.now() - allZonesCompleteAt > 12000) {
+        if (Date.now() - allZonesCompleteAt > 6000) {
           addLog('[Orchestrator] All zones reported complete. Releasing remaining browser jobs.');
           break;
         }
@@ -1280,7 +1280,9 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
             lead.state,
             baseLocation,
             baseLocation,
-            (lead.latitude && lead.longitude ? { lat: Number(lead.latitude), lng: Number(lead.longitude) } : null)
+            (lead.latitude && lead.longitude ? { lat: Number(lead.latitude), lng: Number(lead.longitude) } : null),
+            null,
+            baseLocation
           );
           if (!check.relevant) {
             addLog(`[Client Containment] Excluded out-of-city lead "${lead.name}" (${check.reason}) - Client restricted to "${baseLocation}"`);
@@ -1673,7 +1675,7 @@ router.get('/engines/status', (req, res) => {
   try {
     const status = engineHealth.getStatus();
     const metrics = typeof getConcurrencyMetrics === 'function' ? getConcurrencyMetrics() : null;
-    res.json({ ok: true, ...status, queue: metrics });
+    res.json({ ok: true, ...status, queue: metrics, breakers: { localFinder: require('../services/serpBreaker').snapshot() } });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

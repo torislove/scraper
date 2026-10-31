@@ -78,6 +78,15 @@ Root causes for the two loudest complaints:
 ### P0.5 Scraper speed without losing accuracy
 Baseline: 122 leads / 74 s (1.65 leads/s) for the Guntur run.
 
+**After (2026-10-31, same machine):**
+- Guntur "computer dealers": 53 leads / 38 s (1.38 leads/s, supply-bound; 2.6 leads/s up to the 50th lead).
+- Vijayawada "restaurants": **219 leads / 39 s (5.62 leads/s)**, first lead 6.2 s, 50th at 6.2 s.
+
+What produced the gain:
+- Local Finder CAPTCHA circuit breaker (`serpBreaker.js`). After two `/sorry` pages the surface cools down for 8 minutes, and zones skip the duplicate Maps fallback when a Maps job is already queued for the same query. This removed roughly one extra Maps pass per zone.
+- Zone-completion grace cut from 12 s to 6 s.
+- Containment guard now accepts listings inside the run's parent city, so a Brodipet/Arundelpet zone no longer discards valid Guntur City shops. Out-of-city bleed is still discarded.
+
 - **HTTP-first everywhere**: JustDial list pages, Local Finder HTML, Maps API; Playwright only for blocked pages, category-id resolution and IndiaMART.
 - **Connection reuse**: keep-alive agents per host, HTTP/2 where offered, gzip.
 - **Browser hygiene** (when Playwright is unavoidable): one browser, one context per engine, block images/fonts/media, reuse pages, close after N queries.

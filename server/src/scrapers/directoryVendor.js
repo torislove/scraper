@@ -559,7 +559,7 @@ function saveDirectoryVendor(incoming, sessionId = incoming.sessionId || 'legacy
   if (incoming.address && incoming.city) {
     try {
       const { isListingRelevantToQuery } = require('./engine-google-places');
-      const containment = isListingRelevantToQuery(incoming.name, incoming.address, incoming.district, incoming.state, incoming.city, incoming.city);
+      const containment = isListingRelevantToQuery(incoming.name, incoming.address, incoming.district, incoming.state, incoming.city, incoming.city, null, null, incoming.city);
       if (!containment.relevant) {
         return { vendor: null, created: false, updated: false, skipped: `out-of-bounds: ${containment.reason}` };
       }
