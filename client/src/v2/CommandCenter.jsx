@@ -2496,6 +2496,7 @@ export default function CommandCenter() {
   const [activeZone, setActiveZone] = useState(null);
   const [gridZones, setGridZones] = useState([]);
   const [scanning, setScanning] = useState(false);
+  const [mascotAlert, setMascotAlert] = useState(null);
 
   const [estimate, setEstimate] = useState(null);
   const [estimating, setEstimating] = useState(true);
@@ -2870,6 +2871,8 @@ export default function CommandCenter() {
         const matching = list.find(job => job.id === run.id || job.sessionId === run.id);
         if (matching?.status === 'completed') {
           finishRun('complete');
+        } else if (matching?.status === 'failed') {
+          setMascotAlert({ id: Date.now(), text: 'That run hit an engine error. Check the engine board and try again.' });
         } else if (!matching && (Date.now() - (run.startedAt || 0) > 60000) && (Date.now() - lastEventRef.current > 90000)) {
           finishRun('complete');
         }
@@ -3028,6 +3031,7 @@ export default function CommandCenter() {
     } catch (error) {
       setScanning(false);
       toast.error(error?.response?.data?.error || 'Search could not be started.');
+      setMascotAlert({ id: Date.now(), text: 'That search did not start. Check the engine board, then try again.' });
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
     } finally {
       setLaunching(false);
@@ -4452,6 +4456,7 @@ export default function CommandCenter() {
         scraping={scanning}
         activeZone={activeZone?.name || activeZone?.zoneName || ''}
         leadsFound={vendors.length}
+        alert={mascotAlert}
       />
     </div>
   );

@@ -50,6 +50,7 @@ export default function ScreenMascotCompanion({
   scraping = false,
   activeZone = '',
   leadsFound = 0,
+  alert = null,
   onOpenVault = null,
   onTriggerSearch = null
 }) {
@@ -143,6 +144,20 @@ export default function ScreenMascotCompanion({
     }
     prevScrapingRef.current = scraping;
   }, [scraping, activeZone, leadsFound, flyToWaypoint, currentWaypoint]);
+
+  // Surface engine/run failures on the mascot himself, then return to patrol.
+  const alertId = alert?.id || 0;
+  useEffect(() => {
+    if (!alertId) return undefined;
+    setActionState('warning');
+    setSpeech(alert?.text || 'Something went wrong on that sweep.');
+    setShowSpeech(true);
+    setShowFlightMenu(false);
+    const timer = setTimeout(() => {
+      setActionState(currentWaypoint === 'patrol' ? 'walking' : 'idle');
+    }, 6500);
+    return () => clearTimeout(timer);
+  }, [alertId, alert?.text, currentWaypoint]);
 
   // Listen for search input focus
   useEffect(() => {
