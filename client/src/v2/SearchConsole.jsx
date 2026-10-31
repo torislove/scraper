@@ -88,6 +88,9 @@ const SPEED_PRESETS = [
   }
 ];
 
+const localSuggestCache = new Map();
+const MAX_LOCAL_CACHE = 300;
+
 function useDebouncedSuggestion(query, onResolve) {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -110,6 +113,19 @@ function useDebouncedSuggestion(query, onResolve) {
       return undefined;
     }
 
+    const cacheKey = text.toLowerCase();
+    if (localSuggestCache.has(cacheKey)) {
+      const cached = localSuggestCache.get(cacheKey);
+      setResponse(cached);
+      setLoading(false);
+      const resolveKey = `${cached?.query || ''}|${cached?.ready ? '1' : '0'}`;
+      if (resolveKey !== lastResolveKey.current) {
+        lastResolveKey.current = resolveKey;
+        resolveRef.current?.(cached);
+      }
+      return undefined;
+    }
+
     clearTimeout(timer.current);
     const requestId = ++requestRef.current;
 
@@ -120,8 +136,18 @@ function useDebouncedSuggestion(query, onResolve) {
       setLoading(true);
 
       try {
-        const data = await suggestSearch({ q: text }, { signal: controller.signal });
+        const data = await suggestSearch({ q: text, isMaster: false }, { signal: controller.signal });
         if (requestRef.current !== requestId) return;
+        
+        // Cache result for ultra-fast 0ms backspace & repeat keystrokes
+        if (data) {
+          localSuggestCache.set(cacheKey, data);
+          if (localSuggestCache.size > MAX_LOCAL_CACHE) {
+            const oldestKey = localSuggestCache.keys().next().value;
+            localSuggestCache.delete(oldestKey);
+          }
+        }
+
         startTransition(() => setResponse(data));
 
         const resolveKey = `${data?.query || ''}|${data?.ready ? '1' : '0'}`;
@@ -135,7 +161,7 @@ function useDebouncedSuggestion(query, onResolve) {
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 150);
+    }, 60);
 
     return () => {
       clearTimeout(timer.current);
@@ -186,7 +212,7 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                         )}
                         {item.type === 'location' && item.detail && (
                           <span className={cx('v2-geo-level-badge', `level-${item.detail.toLowerCase()}`)}>
-                            {item.detail}
+                            {item.detail === 'City' ? '🏙️ City' : item.detail === 'Mandal' ? '📍 Mandal' : item.detail === 'Village' ? '🏡 Village' : item.detail}
                           </span>
                         )}
                       </div>
@@ -304,9 +330,9 @@ export default function SearchConsole({
         items: list.filter(item => item.type === 'category')
       },
       {
-        title: 'CITIES, MANDALS & WARDS',
+        title: 'CITIES, MANDALS & VILLAGES',
         icon: MapPin,
-        items: list.filter(item => item.type === 'location')
+        items: list.filter(item => item.type === 'location' && (!item.level || (item.level !== 'district' && item.level !== 'state')))
       }
     ];
   }, [response]);
@@ -380,29 +406,20 @@ export default function SearchConsole({
     inputRef.current?.focus();
   }, [parsedCategory, parsedLocation, category, location, onChange, onCategoryChange, onLocationChange]);
 
-  const onKeyDown = useCallback(event => {
-    if (!open || !visible.length) {
-      if (event.key === 'ArrowDown') {
-        setOpen(true);
-        event.preventDefault();
-      }
-      return;
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setActive(prev => (prev + 1) % visible.length);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setActive(prev => (prev - 1 + visible.length) % visible.length);
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      if (visible[active]) choose(visible[active]);
-      else setOpen(false);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      setOpen(false);
-    }
-  }, [open, visible, active, choose]);
+  const pickScope = useCallback(option => {
+    if (!option) return;
+    const value = String(option.value || '').trim();
+    const level = String(option.level || '').trim();
+    const hasLevel = level && new RegExp(`\\b${level}\\b`, 'i').test(value);
+    const place = hasLevel || !level ? value : `${value} ${level}`;
+    const cat = parsedCategory || category;
+    const updated = cat ? `${cat} in ${place}` : place;
+    setDraft(updated);
+    onChange?.(updated);
+    onLocationChange?.(place);
+    setOpen(false);
+    inputRef.current?.focus();
+  }, [parsedCategory, category, onChange, onLocationChange]);
 
   const isWideAreaBlocked = !onMasterSweep && (locClassification?.type === 'district' || locClassification?.type === 'state');
   const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3) && !isWideAreaBlocked;
@@ -412,7 +429,9 @@ export default function SearchConsole({
       onStop?.();
       return;
     }
-    const currentDraft = typeof overrideQuery === 'string' ? overrideQuery : draft;
+    const currentDraft = typeof overrideQuery === 'string'
+      ? overrideQuery
+      : (response?.ready && response?.query ? response.query : draft);
     if (isWideAreaBlocked) {
       toast.error(`Client searches are restricted to individual cities and mandals. District and state-wide sweeps (${locClassification?.name || ''}) require Master Command Center. Choose an individual city or mandal below!`);
       return;
@@ -427,7 +446,38 @@ export default function SearchConsole({
       engines: selectedEngines,
       targetLeads
     });
-  }, [running, canDeploy, busy, isWideAreaBlocked, locClassification, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+  }, [running, canDeploy, busy, isWideAreaBlocked, locClassification, onStop, onDeploy, draft, response, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+
+  const onKeyDown = useCallback(event => {
+    if (!open || !visible.length) {
+      if (event.key === 'ArrowDown') {
+        setOpen(true);
+        event.preventDefault();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
+      }
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActive(prev => (prev + 1) % visible.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActive(prev => (prev - 1 + visible.length) % visible.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (visible[active]) {
+        choose(visible[active]);
+      } else {
+        setOpen(false);
+        submit();
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+    }
+  }, [open, visible, active, choose, submit]);
 
   // Listen for companion mascot searches ("Diggy intelligent relative search")
   useEffect(() => {
@@ -628,6 +678,25 @@ return (
       {/* Suggestion Dropdown */}
       {open && visible.length > 0 && (
         <div className="v2-suggest" role="listbox">
+          {response?.disambiguation?.options?.length ? (
+            <div className="v2-suggest-ask">
+              <b>{response.disambiguation.question}</b>
+              <span>Pick the exact level — city, district, mandal or village. Each level covers a different area.</span>
+              <div className="v2-suggest-ask-opts">
+                {response.disambiguation.options.map((option, index) => (
+                  <button
+                    key={`${option.level}-${option.value}-${index}`}
+                    type="button"
+                    className="v2-suggest-ask-chip"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => pickScope(option)}
+                  >
+                    {option.detail || option.level || option.value}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <SuggestionList
             groups={groups}
             active={active}
@@ -645,12 +714,22 @@ return (
     </div>
 
     {/* Autocorrect Intelligence Pill */}
-    {autocorrectItem && (
+    {((response?.query && response?.ready && response.query.toLowerCase() !== draft.trim().toLowerCase()) || autocorrectItem) && (
       <div className="v2-autocorrect-banner">
         <Sparkles size={13} className="v2-text-cyan" />
         <span>Intelligent Auto-Correction:</span>
-        <button type="button" className="v2-autocorrect-pill" onClick={() => choose(autocorrectItem)}>
-          <span>Did you mean <b>{autocorrectItem.label}</b>?</span>
+        <button
+          type="button"
+          className="v2-autocorrect-pill"
+          onClick={() => {
+            const cleanTarget = response?.ready && response?.query ? response.query : (autocorrectItem ? autocorrectItem.label : draft);
+            setDraft(cleanTarget);
+            onChange?.(cleanTarget);
+            if (response?.category?.value) onCategoryChange?.(response.category.value);
+            if (response?.location?.value) onLocationChange?.(response.location.value);
+          }}
+        >
+          <span>Did you mean <b>{response?.ready && response?.query ? response.query : autocorrectItem?.label}</b>?</span>
           <Check size={11} />
         </button>
       </div>

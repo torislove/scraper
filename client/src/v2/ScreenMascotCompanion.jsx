@@ -8,13 +8,13 @@ const WAYPOINTS = {
   patrol: { id: 'patrol', name: 'Edge Patrol', x: null, y: 84, mode: 'walking', label: 'SCOUT PATROL' },
   search: { id: 'search', name: 'Search Omnibox', x: 58, y: 13, mode: 'fly', label: 'PERCHED: SEARCH CONSOLE' },
   leads:  { id: 'leads',  name: 'Leads Stream',    x: 28, y: 44, mode: 'dig', label: 'MINING LIVE LEADS' },
-  radar:  { id: 'radar',  name: 'Telemetry Radar', x: 82, y: 40, mode: 'fly', label: 'ACTIVE RADAR MESH' },
+  radar:  { id: 'radar',  name: 'Telemetry Radar', x: 82, y: 40, mode: 'scan', label: 'ACTIVE RADAR MESH' },
   vault:  { id: 'vault',  name: 'CRM Vault',       x: 18, y: 26, mode: 'dance', label: 'CRM VAULT CELEBRATION' },
-  map:    { id: 'map',    name: 'Excavation Grid', x: 48, y: 56, mode: 'dig', label: 'EXCAVATOR DIVE' }
+  map:    { id: 'map',    name: 'Excavation Grid', x: 48, y: 56, mode: 'scan', label: 'EXCAVATOR DIVE' }
 };
 
 const FUNNY_MESSAGES = [
-  "⛏️ I AM SCRAPING! Digging up fresh +91 WhatsApp leads!",
+  "⛏️ I AM FINDING LEADS! Digging up fresh +91 WhatsApp leads!",
   "📡 Sniffing out shop owners & business phone lines...",
   "💎 Oof! Hit a goldmine of verified phone numbers!",
   "⚡ Jetpack thrusters engaged! 18–24 leads per second!",
@@ -27,7 +27,7 @@ const FUNNY_MESSAGES = [
 ];
 
 const CLICK_REACTIONS = [
-  "⚡ Whoa! That tickles boss! Keep the scrape going!",
+  "⚡ Whoa! That tickles boss! Keep the search going!",
   "⛏️ Can't stop now, my golden pickaxe is glowing hot!",
   "💎 Chief! Look at all these +91 phone numbers pouring in!",
   "🚀 Parachuting into the next constituent ward!",
@@ -165,7 +165,7 @@ export default function ScreenMascotCompanion({
       setActionChips([]);
       setShowSpeech(true);
     } else if (prevScrapingRef.current && !scraping && leadsFound > 0) {
-      flyToWaypoint('vault', `🎉 BOOM! Excavated ${leadsFound} verified leads! Ready for WhatsApp!`, 'dance');
+      flyToWaypoint('vault', `🎉 BOOM! Excavated ${leadsFound} verified leads! Ready for WhatsApp!`, 'celebrate');
       setActionChips([
         { label: "📂 Open CRM Vault", query: "__OPEN_VAULT__" }
       ]);
@@ -196,7 +196,7 @@ export default function ScreenMascotCompanion({
     if (minimized || currentWaypoint !== 'patrol' || isTransitioning || scraping) return;
 
     const walkInterval = setInterval(() => {
-      if (['dance', 'trip', 'tap', 'peek', 'dig', 'sprint'].includes(actionState)) return;
+      if (['dance', 'trip', 'tap', 'peek', 'dig', 'sprint', 'sleep', 'warning', 'celebrate'].includes(actionState)) return;
 
       setPosX(prev => {
         const speed = 0.35 * direction;
@@ -281,6 +281,19 @@ export default function ScreenMascotCompanion({
 
     return () => clearInterval(humorTimer);
   }, [scraping, minimized, currentWaypoint, isTransitioning, flyToWaypoint]);
+
+  // Doze off after a quiet spell, then wake on interaction.
+  useEffect(() => {
+    if (scraping || minimized || isTransitioning) return undefined;
+    const timer = setTimeout(() => {
+      if (currentWaypoint !== 'patrol') return;
+      setActionState('sleep');
+      setSpeech('Zzz... still on watch. Wake me for the next search!');
+      setShowSpeech(true);
+      setShowFlightMenu(false);
+    }, 45000);
+    return () => clearTimeout(timer);
+  }, [scraping, minimized, isTransitioning, currentWaypoint]);
 
   // Interactive click handler
   const handleClick = () => {
@@ -444,9 +457,13 @@ export default function ScreenMascotCompanion({
             scraping ? 'dig' :
             isTransitioning || actionState === 'sprint' ? 'fly' :
             actionState === 'dance' ? 'dance' :
+            actionState === 'celebrate' ? 'celebrate' :
+            actionState === 'scan' ? 'scan' :
             actionState === 'trip' ? 'trip' :
             actionState === 'tap' ? 'tap' :
             actionState === 'peek' ? 'peek' :
+            actionState === 'sleep' ? 'sleep' :
+            actionState === 'warning' ? 'warning' :
             actionState === 'dig' ? 'dig' :
             actionState === 'walking' ? 'walk' :
             actionState === 'fly' ? 'fly' :
@@ -460,7 +477,7 @@ export default function ScreenMascotCompanion({
         <div className="diggy-action-tag">
           {scraping ? (
             <span className="tag-scraping">
-              <Zap size={9} /> I AM SCRAPING!
+              <Zap size={9} /> I AM FINDING LEADS!
             </span>
           ) : isTransitioning ? (
             <span className="tag-scraping" style={{ background: 'linear-gradient(135deg, #0284c7, #00f0ff)' }}>
@@ -488,7 +505,7 @@ export default function ScreenMascotCompanion({
             </span>
           ) : currentWaypoint === 'radar' ? (
             <span className="tag-patrol" style={{ color: '#fde047', borderColor: '#f59e0b' }}>
-              <Radio size={9} /> RADAR HUD
+              <Radio size={9} /> SCANNING
             </span>
           ) : currentWaypoint === 'vault' ? (
             <span className="tag-patrol" style={{ color: '#6ee7b7', borderColor: '#10b981' }}>

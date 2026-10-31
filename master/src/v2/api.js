@@ -66,7 +66,8 @@ export async function suggestSearch(params = {}, options = {}) {
       q: params.q || undefined,
       category: params.category || undefined,
       location: params.location || undefined,
-      limit: params.limit || 6
+      limit: params.limit || 6,
+      isMaster: params.isMaster ?? true
     }
   });
   return data;
@@ -117,8 +118,11 @@ export async function getLearnedTaxonomy() {
   return data;
 }
 
-export async function getLearnedCatalog() {
-  const { data } = await client.get('/search/learned');
+export async function getLearnedCatalog(options = {}) {
+  const { data } = await client.get('/search/learned', {
+    timeout: options.timeout ?? 8000,
+    params: { limit: options.limit || 200 }
+  });
   return data;
 }
 

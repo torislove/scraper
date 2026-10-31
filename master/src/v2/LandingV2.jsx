@@ -7,8 +7,12 @@ import {
 import {
   ArrowRight, Briefcase, Check, CheckCircle2, Clock3, FolderArchive, Layers,
   LineChart, MapPin, Phone, Play, Plus, Search, Sparkles, Store, Target,
-  TrendingUp, Users, X
+  TrendingUp, Users, X, MessageSquare, Send, ShieldCheck, CheckCheck, Zap, Globe2, Download
 } from 'lucide-react';
+import Mascot from './Mascot';
+import Mascot3D from './Mascot3D';
+import LiveAnimationTheater from './LiveAnimationTheater';
+import ScreenMascotCompanion from './ScreenMascotCompanion';
 import './landing.css';
 
 /* ================================================================== */
@@ -481,6 +485,303 @@ function DashboardMock() {
 }
 
 /* ================================================================== */
+/* WhatsApp Campaign Assistant Mock                                   */
+/* ================================================================== */
+
+const WA_PROSPECTS = [
+  {
+    name: 'Sri Venkateswara Digital Prints',
+    phone: '+91 98480 22334',
+    area: 'Brodipet',
+    city: 'Guntur',
+    category: 'Commercial Printing',
+    rating: '4.9',
+    reviews: '128'
+  },
+  {
+    name: 'Canvera Digital Album Lab',
+    phone: '+91 99631 84210',
+    area: 'Arundelpet',
+    city: 'Guntur',
+    category: 'Photobook Lab',
+    rating: '4.8',
+    reviews: '94'
+  },
+  {
+    name: 'Balaji High-Tech Press & Binding',
+    phone: '+91 94402 11985',
+    area: 'Dwaraka Nagar',
+    city: 'Visakhapatnam',
+    category: 'Digital Color Press',
+    rating: '4.7',
+    reviews: '143'
+  }
+];
+
+const WA_PRODUCTS = [
+  {
+    id: 'album',
+    title: '12x36 Velvet Matte Wedding Album',
+    price: '₹3,500',
+    link: 'https://scraper.co.in/catalog/wedding-albums',
+    image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'wholesale',
+    title: 'Commercial B2B Dealership & Supply',
+    price: 'Tier-1 Rates',
+    link: 'https://scraper.co.in/catalog/wholesale-rates',
+    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80'
+  },
+  {
+    id: 'growth',
+    title: 'Business Website & Google Maps Package',
+    price: '₹14,999',
+    link: 'https://scraper.co.in/services/digital-growth',
+    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80'
+  }
+];
+
+const WA_TEMPLATES = [
+  {
+    id: 'product',
+    label: '📦 Product & Pricing Pitch',
+    template: 'Hi {name}, we supply premium *{productTitle}* in {city}. Special wholesale pricing: *{productPrice}*. Check our catalog: {productLink}'
+  },
+  {
+    id: 'b2b',
+    label: '🏢 B2B Supply & Dealership',
+    template: 'Hello {name}, we noticed your {category} business in {area}. Are you open to stocking *{productTitle}*? Check our commercial rates: {productLink}'
+  },
+  {
+    id: 'rating',
+    label: '⭐ High-Ticket Review Pitch',
+    template: 'Hi {name}, congratulations on your {rating}★ rating ({reviews} reviews) in {city}! We help leading providers showcase *{productTitle}*. Take a look: {productLink}'
+  }
+];
+
+function WhatsAppCampaignMock() {
+  const reduce = useReducedMotion();
+  const [activeTab, setActiveTab] = useState(0);
+  const [productIdx, setProductIdx] = useState(0);
+  const [prospectIdx, setProspectIdx] = useState(0);
+  const [contacted, setContacted] = useState(false);
+  const [vcfNotice, setVcfNotice] = useState(false);
+
+  const prospect = WA_PROSPECTS[prospectIdx];
+  const template = WA_TEMPLATES[activeTab];
+  const product = WA_PRODUCTS[productIdx];
+
+  const renderedMessage = useMemo(() => {
+    return template.template
+      .replace(/{name}/g, prospect.name)
+      .replace(/{category}/g, prospect.category)
+      .replace(/{area}/g, prospect.area)
+      .replace(/{city}/g, prospect.city)
+      .replace(/{rating}/g, prospect.rating)
+      .replace(/{reviews}/g, prospect.reviews)
+      .replace(/{productTitle}/g, product.title)
+      .replace(/{productPrice}/g, product.price)
+      .replace(/{productLink}/g, product.link + '?ref=wa_' + prospect.phone.replace(/\D/g, '').slice(-4));
+  }, [prospect, template, product]);
+
+  const handleNext = () => {
+    setContacted(true);
+    setTimeout(() => {
+      setProspectIdx(prev => (prev + 1) % WA_PROSPECTS.length);
+      setContacted(false);
+    }, 700);
+  };
+
+  const handleSimulateVcf = () => {
+    setVcfNotice(true);
+    setTimeout(() => setVcfNotice(false), 3000);
+  };
+
+  return (
+    <motion.div
+      className="lp-wa-composer-mock"
+      initial={reduce ? false : { opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-70px' }}
+      transition={{ duration: 0.7, ease: EASE }}
+    >
+      <div className="lp-wa-mock-bar">
+        <div className="lp-wa-mock-bar-left">
+          <MessageSquare size={15} style={{ color: '#25d366' }} />
+          <span>PRODUCT CATALOG OUTREACH STUDIO &amp; LEAD CAPTURE</span>
+        </div>
+        <div className="lp-wa-mock-bar-shield">
+          <ShieldCheck size={13} />
+          <span>100% Zero-Ban Risk • Official Web Protocol</span>
+        </div>
+      </div>
+
+      <div className="lp-wa-mock-content">
+        {/* Left Side: Campaign Controls */}
+        <div className="lp-wa-mock-left">
+          {/* Product Selector */}
+          <div>
+            <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+              1. Select Product / Service Catalog Item:
+            </span>
+            <div className="lp-wa-mock-products">
+              {WA_PRODUCTS.map((p, idx) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={'lp-wa-mock-prod-pill' + (idx === productIdx ? ' is-active' : '')}
+                  onClick={() => setProductIdx(idx)}
+                >
+                  <span>🏷️ {p.title.slice(0, 20)}...</span>
+                  <b style={{ color: '#25d366' }}>{p.price}</b>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Template Selector */}
+          <div>
+            <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+              2. Select Pitch Playbook:
+            </span>
+            <div className="lp-wa-mock-templates">
+              {WA_TEMPLATES.map((t, idx) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={'lp-wa-mock-tab' + (idx === activeTab ? ' is-active' : '')}
+                  onClick={() => setActiveTab(idx)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="lp-wa-prospect-box">
+            <div className="lp-wa-prospect-top">
+              <span>TARGET QUEUE</span>
+              <span>Lead <b>{prospectIdx + 1}</b> of {WA_PROSPECTS.length}</span>
+            </div>
+            <div className="lp-wa-prospect-name">{prospect.name}</div>
+            <div className="lp-wa-prospect-meta">
+              <span style={{ color: '#25d366', fontWeight: 600 }}>📱 {prospect.phone}</span>
+              <span>📍 {prospect.area}, {prospect.city}</span>
+              <span>★ {prospect.rating} ({prospect.reviews})</span>
+            </div>
+          </div>
+
+          <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>
+            💡 <b>Clipboard Image Bridge:</b> When launched, the product flyer is automatically copied to your OS clipboard. Simply press <b>Ctrl+V</b> in WhatsApp Web to attach!
+          </div>
+
+          <div className="lp-wa-actions-sim">
+            <button
+              type="button"
+              className="lp-wa-btn-send"
+              onClick={handleNext}
+              title="Simulate opening WhatsApp Web with attached product, flyer &amp; link"
+            >
+              <Send size={13} /> Launch WhatsApp Web
+            </button>
+            <button
+              type="button"
+              className="lp-wa-btn-next"
+              onClick={handleSimulateVcf}
+              title="1-tap import all queue contacts to phonebook"
+            >
+              📲 Export VCF
+            </button>
+            <button
+              type="button"
+              className="lp-wa-btn-next"
+              onClick={handleNext}
+            >
+              Next ➔
+            </button>
+          </div>
+        </div>
+
+        {/* Right Side: Simulated WhatsApp Screen */}
+        <div className="lp-wa-mock-right">
+          <div className="lp-wa-phone-header">
+            <div className="lp-wa-phone-avatar">{prospect.name.slice(0, 1)}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className="lp-wa-phone-title">{prospect.name}</div>
+              <div className="lp-wa-phone-sub">online • verified mobile</div>
+            </div>
+          </div>
+
+          <div className="lp-wa-chat-window">
+            <motion.div
+              key={prospectIdx + "-" + activeTab + "-" + productIdx}
+              className="lp-wa-bubble"
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.25 }}
+            >
+              <div className="lp-wa-bubble-prod-header">
+                <span>📦 {product.title}</span>
+                <span className="lp-wa-bubble-price-tag">{product.price}</span>
+              </div>
+
+              <img
+                src={product.image}
+                alt="Product Flyer"
+                className="lp-wa-bubble-img"
+              />
+
+              <div style={{ whiteSpace: 'pre-wrap' }}>
+                {renderedMessage}
+              </div>
+
+              <div className="lp-wa-bubble-link-card">
+                <Globe2 size={13} style={{ color: '#53bdeb', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {product.link}?ref=wa_{prospect.phone.replace(/\D/g, '').slice(-4)}
+                </span>
+              </div>
+
+              <div className="lp-wa-bubble-time">
+                <span>Just now</span>
+                <CheckCheck size={12} style={{ color: '#53bdeb' }} />
+              </div>
+            </motion.div>
+
+            <AnimatePresence>
+              {contacted && (
+                <motion.div
+                  className="lp-wa-crm-sync-toast"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <CheckCircle2 size={12} />
+                  <span>Auto-Logged to CRM: <b>💬 Pitched ({product.title.slice(0, 18)}...)</b></span>
+                </motion.div>
+              )}
+              {vcfNotice && (
+                <motion.div
+                  className="lp-wa-crm-sync-toast"
+                  style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: 'rgba(56, 189, 248, 0.3)', color: '#7dd3fc' }}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <Download size={12} />
+                  <span>vCard (.vcf) generated: <b>3 contacts saved for 1-tap phonebook import</b></span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+/* ================================================================== */
 /* Credit meter                                                       */
 /* ================================================================== */
 
@@ -667,23 +968,16 @@ export default function LandingV2() {
             <button type="button" onClick={() => jump('why')}>Why us</button>
             <button type="button" onClick={() => jump('difference')}>One place at a time</button>
             <button type="button" onClick={() => jump('how')}>How it works</button>
+            <button type="button" onClick={() => jump('dashboard')}>Dashboard</button>
+            <button type="button" onClick={() => jump('whatsapp')}>WhatsApp Outreach</button>
             <button type="button" onClick={() => jump('money')}>Make money</button>
             <button type="button" onClick={() => jump('pricing')}>Pricing</button>
           </nav>
 
           <div className="lp-nav-right">
             <span className="lp-pill"><i /> 1,000 leads free</span>
-            <button
-              type="button"
-              className="lp-btn lp-btn-sm"
-              onClick={() => navigate('/master')}
-              style={{ background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: '#fff', border: 'none', fontWeight: 700 }}
-              title="Open Master Command Center for District, State & Mandal coverage"
-            >
-              🗺️ Master Center
-            </button>
             <button type="button" className="lp-btn lp-btn-primary lp-btn-sm" onClick={go}>
-              Client Workspace <ArrowRight size={14} />
+              Launch Workspace <ArrowRight size={14} />
             </button>
           </div>
         </div>
@@ -726,6 +1020,14 @@ export default function LandingV2() {
                 actually rings, and usually has WhatsApp.
               </motion.p>
 
+              <div className="lp-mascot-hero-greeting" style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '20px 0 16px' }}>
+                <Mascot mode="idle" size={68} bubbleText="Hi! I'm Diggy. Ready to harvest leads across India!" />
+                <div style={{ fontSize: 13, color: '#94a3b8' }}>
+                  <b style={{ color: '#00f0ff', display: 'block', fontSize: 13.5 }}>MEET DIGGY · THE LEAD HARVESTER SCOUT</b>
+                  Digs into 619,287 Indian villages, mandals &amp; cities to unearth verified WhatsApp leads.
+                </div>
+              </div>
+
               <motion.div
                 className="lp-cta"
                 initial={reduce ? false : { opacity: 0, y: 20 }}
@@ -733,15 +1035,7 @@ export default function LandingV2() {
                 transition={{ duration: 0.7, delay: 0.26, ease: EASE }}
               >
                 <button type="button" className="lp-btn-3d" onClick={go}>
-                  🚀 Client Workspace (Single City/Town) <ArrowRight size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="lp-btn-3d lp-btn-3d-cyan"
-                  onClick={() => navigate('/master')}
-                  title="Open Master Command Center for complete district and state sweeps"
-                >
-                  🗺️ Master Center (District & State Sweeps)
+                  🚀 Start Finding Leads (Search Any City, Town or Mandal) <ArrowRight size={16} />
                 </button>
               </motion.div>
 
@@ -1042,6 +1336,13 @@ export default function LandingV2() {
           </div>
         </section>
 
+        {/* ------------------------------------------- live mission theater */}
+        <section className="lp-section" id="simulator">
+          <div className="lp-wrap">
+            <LiveAnimationTheater onDeployClick={go} />
+          </div>
+        </section>
+
         {/* --------------------------------------------------------- how */}
         <section className="lp-section" id="how">
           <div className="lp-wrap">
@@ -1105,6 +1406,90 @@ export default function LandingV2() {
 
               <DashboardMock />
             </div>
+          </div>
+        </section>
+
+        {/* ------------------------------------------- whatsapp campaign engine */}
+        <section className="lp-section" id="whatsapp">
+          <div className="lp-wrap">
+            <div className="lp-wa-grid">
+              <div>
+                <Reveal>
+                  <div className="lp-wa-badge-row">
+                    <span className="lp-wa-pill"><MessageSquare size={13} /> Direct Revenue Outreach</span>
+                    <span className="lp-wa-pill" style={{ background: 'rgba(59,130,246,0.12)', color: '#93c5fd', borderColor: 'rgba(59,130,246,0.25)' }}><ShieldCheck size={13} /> 100% Zero-Ban Risk</span>
+                  </div>
+                  <h2 className="lp-h2">Turn 500 Leads into 50 Conversations in One Afternoon.</h2>
+                  <p className="lp-sub">
+                    No messy Excel imports. No dangerous WhatsApp blaster bots that get your SIM blocked in 20 minutes.
+                    Launch human-paced, personalized outreach directly from your browser.
+                  </p>
+                </Reveal>
+
+                <ul className="lp-wa-features-mini">
+                  <motion.li
+                    initial={reduce ? false : { opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.45, delay: 0.05, ease: EASE }}
+                  >
+                    <span className="lp-wa-feat-ico"><Sparkles size={16} /></span>
+                    <div>
+                      <b>Hyper-Local Smart Variables</b>
+                      <span>Auto-injects <code>{`{name}`}</code>, <code>{`{area}`}</code>, <code>{`{city}`}</code>, and Google Maps <code>{`{rating}`}★</code> into your pitch so every message feels 1-on-1 and authentic.</span>
+                    </div>
+                  </motion.li>
+
+                  <motion.li
+                    initial={reduce ? false : { opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.45, delay: 0.12, ease: EASE }}
+                  >
+                    <span className="lp-wa-feat-ico"><Zap size={16} /></span>
+                    <div>
+                      <b>1-Click Paced Launcher</b>
+                      <span>Walks through your leads one by one. Click to open official WhatsApp Web with the pre-filled text, hit enter, and advance to the next prospect in seconds.</span>
+                    </div>
+                  </motion.li>
+
+                  <motion.li
+                    initial={reduce ? false : { opacity: 0, y: 16 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.45, delay: 0.19, ease: EASE }}
+                  >
+                    <span className="lp-wa-feat-ico"><Target size={16} /></span>
+                    <div>
+                      <b>Zero-Effort CRM Stage Synchronization</b>
+                      <span>Each outreach automatically logs the prospect as <code>💬 Pitched</code> inside your CRM pipeline with full date and locality context.</span>
+                    </div>
+                  </motion.li>
+                </ul>
+              </div>
+
+              <WhatsAppCampaignMock />
+            </div>
+
+            {/* 4 Feature Value Props */}
+            <Stagger className="lp-wa-cards">
+              <Item className="lp-wa-card">
+                <b>📸 Product Catalog &amp; Media Attachments</b>
+                <p>Attach product flyers, brochures, prices &amp; tracked links. Image is auto-copied to clipboard for instant <b>Ctrl+V</b> pasting.</p>
+              </Item>
+              <Item className="lp-wa-card">
+                <b>📲 1-Tap Mobile Phonebook (.vcf) Export</b>
+                <p>Export hundreds of qualified leads into an Apple or Android vCard file to populate your mobile WhatsApp contacts in 3 seconds.</p>
+              </Item>
+              <Item className="lp-wa-card">
+                <b>🛡️ Zero-Ban Official WhatsApp Web Shield</b>
+                <p>Uses official WhatsApp click-to-chat protocol with human anti-spam pacing. Zero bot APIs that trigger Meta bans.</p>
+              </Item>
+              <Item className="lp-wa-card">
+                <b>🎯 100% Strict Single-City Geo-Fencing</b>
+                <p>Client workspace operates strictly inside the chosen city or mandal with zero outer bleed, while Master sweeps entire districts.</p>
+              </Item>
+            </Stagger>
           </div>
         </section>
 
@@ -1364,6 +1749,13 @@ export default function LandingV2() {
           <span className="lp-footer-note">Made in India</span>
         </div>
       </footer>
+
+      {/* Living 3D Screen Mascot Companion ("Diggy") */}
+      <ScreenMascotCompanion
+        scraping={false}
+        activeZone="India Wide"
+        leadsFound={1000}
+      />
     </div>
   );
 }

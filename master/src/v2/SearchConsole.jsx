@@ -11,12 +11,12 @@ import { suggestSearch } from './api';
 import { cx } from './ui';
 
 const EXAMPLES = [
-  'Plumbers in Vijayawada Rural',
-  'Urgent wedding photographers near Benz Circle Vijayawada with phone',
-  'Water tanker suppliers in Mangalagiri with contact numbers',
-  'Electricians in Maruthi Nagar Tenali',
-  'AC repair technicians in Guntur under 5km',
-  'PVC pipe distributors in Auto Nagar Vijayawada'
+  'Wedding Album Printing in Guntur',
+  'Water Purifier Repair in Benz Circle Vijayawada',
+  'Car Detailing & Ceramic Coating in Hyderabad',
+  'Urgent wedding photographers near Benz Circle with phone',
+  'AC repair technicians in Tenali under 5km',
+  'Steel fabrication & iron grills in Auto Nagar'
 ];
 
 const TARGETS = [100, 250, 500, 1000];
@@ -87,6 +87,9 @@ const SPEED_PRESETS = [
   }
 ];
 
+const localSuggestCache = new Map();
+const MAX_LOCAL_CACHE = 300;
+
 function useDebouncedSuggestion(query, onResolve) {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -109,6 +112,19 @@ function useDebouncedSuggestion(query, onResolve) {
       return undefined;
     }
 
+    const cacheKey = text.toLowerCase();
+    if (localSuggestCache.has(cacheKey)) {
+      const cached = localSuggestCache.get(cacheKey);
+      setResponse(cached);
+      setLoading(false);
+      const resolveKey = `${cached?.query || ''}|${cached?.ready ? '1' : '0'}`;
+      if (resolveKey !== lastResolveKey.current) {
+        lastResolveKey.current = resolveKey;
+        resolveRef.current?.(cached);
+      }
+      return undefined;
+    }
+
     clearTimeout(timer.current);
     const requestId = ++requestRef.current;
 
@@ -119,8 +135,18 @@ function useDebouncedSuggestion(query, onResolve) {
       setLoading(true);
 
       try {
-        const data = await suggestSearch({ q: text }, { signal: controller.signal });
+        const data = await suggestSearch({ q: text, isMaster: true }, { signal: controller.signal });
         if (requestRef.current !== requestId) return;
+        
+        // Cache result for ultra-fast 0ms backspace & repeat keystrokes
+        if (data) {
+          localSuggestCache.set(cacheKey, data);
+          if (localSuggestCache.size > MAX_LOCAL_CACHE) {
+            const oldestKey = localSuggestCache.keys().next().value;
+            localSuggestCache.delete(oldestKey);
+          }
+        }
+
         startTransition(() => setResponse(data));
 
         const resolveKey = `${data?.query || ''}|${data?.ready ? '1' : '0'}`;
@@ -134,7 +160,7 @@ function useDebouncedSuggestion(query, onResolve) {
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 150);
+    }, 60);
 
     return () => {
       clearTimeout(timer.current);
@@ -185,7 +211,7 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                         )}
                         {item.type === 'location' && item.detail && (
                           <span className={cx('v2-geo-level-badge', `level-${item.detail.toLowerCase()}`)}>
-                            {item.detail}
+                            {item.detail === 'City' ? '🏙️ City' : item.detail === 'Mandal' ? '📍 Mandal' : item.detail === 'Village' ? '🏡 Village' : item.detail}
                           </span>
                         )}
                       </div>
@@ -323,10 +349,18 @@ export default function SearchConsole({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const parentTimerRef = useRef(null);
+  useEffect(() => () => clearTimeout(parentTimerRef.current), []);
+
   const handleQuery = useCallback(text => {
     setDraft(text);
-    onChange?.(text);
     setOpen(true);
+    clearTimeout(parentTimerRef.current);
+    parentTimerRef.current = setTimeout(() => {
+      startTransition(() => {
+        onChange?.(text);
+      });
+    }, 60);
   }, [onChange]);
 
   const toggleVector = useCallback(vectorId => {
@@ -369,11 +403,36 @@ export default function SearchConsole({
     inputRef.current?.focus();
   }, [parsedCategory, parsedLocation, category, location, onChange, onCategoryChange, onLocationChange]);
 
+  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3);
+
+  const submit = useCallback((overrideQuery = null) => {
+    if (running) {
+      onStop?.();
+      return;
+    }
+    const currentDraft = typeof overrideQuery === 'string'
+      ? overrideQuery
+      : (response?.ready && response?.query ? response.query : draft);
+    if ((!canDeploy && !overrideQuery) || busy) return;
+    setOpen(false);
+    onDeploy?.({
+      query: currentDraft,
+      category: parsedCategory,
+      location: parsedLocation,
+      radius,
+      engines: selectedEngines,
+      targetLeads
+    });
+  }, [running, canDeploy, busy, onStop, onDeploy, draft, response, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+
   const onKeyDown = useCallback(event => {
     if (!open || !visible.length) {
       if (event.key === 'ArrowDown') {
         setOpen(true);
         event.preventDefault();
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
       }
       return;
     }
@@ -385,32 +444,17 @@ export default function SearchConsole({
       setActive(prev => (prev - 1 + visible.length) % visible.length);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (visible[active]) choose(visible[active]);
-      else setOpen(false);
+      if (visible[active]) {
+        choose(visible[active]);
+      } else {
+        setOpen(false);
+        submit();
+      }
     } else if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
     }
-  }, [open, visible, active, choose]);
-
-  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3);
-
-  const submit = useCallback(() => {
-    if (running) {
-      onStop?.();
-      return;
-    }
-    if (!canDeploy || busy) return;
-    setOpen(false);
-    onDeploy?.({
-      query: draft,
-      category: parsedCategory,
-      location: parsedLocation,
-      radius,
-      engines: selectedEngines,
-      targetLeads
-    });
-  }, [running, canDeploy, busy, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+  }, [open, visible, active, choose, submit]);
 
   // Listen for Diggy mascot recommendation clicks
   useEffect(() => {

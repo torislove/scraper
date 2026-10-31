@@ -554,6 +554,17 @@ function saveDirectoryVendor(incoming, sessionId = incoming.sessionId || 'legacy
   if (!incoming || !incoming.name || GENERIC_LABEL.test(cleanText(incoming.name, 240))) {
     return { vendor: null, created: false, updated: false, skipped: 'generic-name' };
   }
+
+  // Geo-Containment Guard: reject out-of-bounds listings from neighboring/distant towns
+  if (incoming.address && incoming.city) {
+    try {
+      const { isListingRelevantToQuery } = require('./engine-google-places');
+      const containment = isListingRelevantToQuery(incoming.name, incoming.address, incoming.district, incoming.state, incoming.city, incoming.city);
+      if (!containment.relevant) {
+        return { vendor: null, created: false, updated: false, skipped: `out-of-bounds: ${containment.reason}` };
+      }
+    } catch (e) {}
+  }
   const all = dbAdapter.getVendors();
   const existing = all.find(candidate => sameVendor(candidate, incoming));
 

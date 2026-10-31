@@ -61,7 +61,8 @@ export async function suggestSearch(params = {}, options = {}) {
       q: params.q || undefined,
       category: params.category || undefined,
       location: params.location || undefined,
-      limit: params.limit || 6
+      limit: params.limit || 6,
+      isMaster: params.isMaster ?? false
     }
   });
   return data;

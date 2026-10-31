@@ -63,6 +63,8 @@ export default function SuggestInput({
   const wrapRef = useRef(null);
   const timerRef = useRef(null);
   const requestRef = useRef(0);
+  const controllerRef = useRef(null);
+  const cacheRef = useRef(new Map());
 
   const query = String(value || '').trim();
 
@@ -86,12 +88,11 @@ export default function SuggestInput({
     clearTimeout(timerRef.current);
     const requestId = ++requestRef.current;
 
-    timerRef.current = setTimeout(async () => {
-      setLoading(true);
-      try {
+    const cacheKey = `${kind}:${query.toLowerCase()}`;
+    const cached = cacheRef.current.get(cacheKey);
+    if (cached) {
+      const apply = data => {
         if (kind === 'place') {
-          const data = await suggestSearch({ q: query, limit: 10 });
-          if (requestRef.current !== requestId) return;
           const places = (data?.suggestions || [])
             .filter(item => item.type === 'location')
             .map((item, index) => ({
@@ -108,8 +109,61 @@ export default function SuggestInput({
           setItems(places);
           setHint(data?.disambiguation || null);
         } else {
-          const data = await suggestSearch({ q: query, limit: 8 });
-          if (requestRef.current !== requestId) return;
+          const cats = (data?.suggestions || [])
+            .filter(item => item.type === 'category')
+            .map((item, index) => ({
+              key: `cat-${item.value}-${index}`,
+              type: 'category',
+              group: item.group || 'category',
+              value: item.value,
+              label: item.label || item.value,
+              subtitle: item.subtitle || item.familyLabel || '',
+              detail: item.detail || 'CATEGORY',
+              raw: item
+            }));
+          setItems(cats);
+          setHint(null);
+        }
+        setActive(-1);
+        setOpen(true);
+        setLoading(false);
+      };
+      apply(cached);
+      return undefined;
+    }
+
+    timerRef.current = setTimeout(async () => {
+      if (controllerRef.current) controllerRef.current.abort();
+      const controller = new AbortController();
+      controllerRef.current = controller;
+      setLoading(true);
+      try {
+        const data = await suggestSearch(
+          kind === 'place' ? { q: query, limit: 10 } : { q: query, limit: 8 },
+          { signal: controller.signal }
+        );
+        if (requestRef.current !== requestId) return;
+        cacheRef.current.set(cacheKey, data);
+        if (cacheRef.current.size > 200) {
+          cacheRef.current.delete(cacheRef.current.keys().next().value);
+        }
+        if (kind === 'place') {
+          const places = (data?.suggestions || [])
+            .filter(item => item.type === 'location')
+            .map((item, index) => ({
+              key: `place-${item.level}-${item.value}-${index}`,
+              type: 'place',
+              placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
+              value: item.value,
+              label: item.label || item.value,
+              subtitle: item.subtitle || item.display || '',
+              detail: String(item.detail || '').toUpperCase(),
+              scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
+              raw: item
+            }));
+          setItems(places);
+          setHint(data?.disambiguation || null);
+        } else {
           const cats = (data?.suggestions || [])
             .filter(item => item.type === 'category')
             .map((item, index) => ({
@@ -138,7 +192,10 @@ export default function SuggestInput({
       }
     }, 150);
 
-    return () => clearTimeout(timerRef.current);
+    return () => {
+      clearTimeout(timerRef.current);
+      if (controllerRef.current) controllerRef.current.abort();
+    };
   }, [query, kind]);
 
   const groups = useMemo(() => {
@@ -236,6 +293,35 @@ export default function SuggestInput({
             <div className="v2-suggest-ask">
               <b>{hint.question}</b>
               <span>Pick the exact level — city, district, mandal or village. The sweep size changes with it.</span>
+              {hint.options?.length ? (
+                <div className="v2-suggest-ask-opts">
+                  {hint.options.map((option, index) => {
+                    const level = String(option.level || '').trim();
+                    const value = String(option.value || '').trim();
+                    const label = level && !new RegExp(`\\b${level}\\b`, 'i').test(value)
+                      ? `${value} ${level}`
+                      : value;
+                    return (
+                      <button
+                        key={`${option.level}-${option.value}-${index}`}
+                        type="button"
+                        className="v2-suggest-ask-chip"
+                        onClick={() => choose({
+                          type: 'place',
+                          placeType: level === 'mandal' ? 'subdistrict' : (level || 'city'),
+                          value: label,
+                          label,
+                          subtitle: option.detail || level,
+                          scope: option.level || 'city',
+                          raw: option
+                        })}
+                      >
+                        {option.detail || option.level || value}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <div className="v2-suggest-groups">

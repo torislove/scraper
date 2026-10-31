@@ -13,11 +13,13 @@ const { classifyLocation } = require('../utils/universalGeoCluster');
 router.get('/suggest', (req, res) => {
   try {
     const rawQ = req.query.q || '';
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.isMaster === 'true';
     const payload = suggest({
       q: rawQ,
       category: req.query.category || '',
       location: req.query.location || '',
-      limit: req.query.limit
+      limit: req.query.limit,
+      isMaster
     });
 
     // Attach real-time universal natural language parsing contract
@@ -52,7 +54,12 @@ router.get('/learned', (req, res) => {
   try {
     const taxonomyLearner = require('../services/taxonomyLearner');
     const limit = Math.max(20, Math.min(500, Number(req.query.limit) || 150));
-    res.json({ ok: true, ...taxonomyLearner.getCatalog(limit) });
+    const catalog = taxonomyLearner.getCatalog(limit);
+    const tag = `W/"learned-${catalog.revision || 0}-${catalog.totals.queries}-${catalog.totals.products}-${catalog.totals.services}-${limit}"`;
+    res.set('ETag', tag);
+    res.set('Cache-Control', 'private, max-age=5');
+    if (req.headers['if-none-match'] === tag) return res.status(304).end();
+    return res.json({ ok: true, ...catalog });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -67,7 +74,12 @@ router.get('/learned', (req, res) => {
 router.get('/taxonomy', (req, res) => {
   try {
     const taxonomyLearner = require('../services/taxonomyLearner');
-    res.json({ ok: true, ...taxonomyLearner.getSummary() });
+    const summary = taxonomyLearner.getSummary();
+    const tag = `W/"taxonomy-${summary.updatedAt || 'new'}-${summary.products}-${summary.services}"`;
+    res.set('ETag', tag);
+    res.set('Cache-Control', 'private, max-age=5');
+    if (req.headers['if-none-match'] === tag) return res.status(304).end();
+    return res.json({ ok: true, ...summary });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

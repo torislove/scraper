@@ -203,22 +203,61 @@ const SPELLING_FIXES = new Map([
   ['repiar', 'repair'], ['repeir', 'repair'], ['repaire', 'repair'], ['repaier', 'repair'],
   ['repait', 'repair'], ['repare', 'repair'], ['repari', 'repair'], ['repares', 'repairs'],
   ['servise', 'service'], ['servce', 'service'], ['serviece', 'service'], ['servis', 'service'],
-  ['srvice', 'service'], ['servies', 'services'],
+  ['srvice', 'service'], ['servies', 'services'], ['servis', 'services'],
   ['delar', 'dealer'], ['dealr', 'dealer'], ['delaer', 'dealer'], ['dealar', 'dealer'],
-  ['dealrs', 'dealers'], ['dealerss', 'dealers'],
+  ['dealrs', 'dealers'], ['dealerss', 'dealers'], ['delears', 'dealers'], ['delear', 'dealer'],
+  ['delear', 'dealer'], ['delars', 'dealers'], ['delaers', 'dealers'], ['dealier', 'dealer'],
   ['suppler', 'supplier'], ['supplir', 'supplier'], ['suplier', 'supplier'], ['supplierss', 'suppliers'],
+  ['supplair', 'supplier'], ['supplayer', 'supplier'],
   ['wholsaler', 'wholesaler'], ['wholesellor', 'wholesaler'], ['wholesaler', 'wholesaler'],
-  ['showrom', 'showroom'], ['distributer', 'distributor'], ['distrubutor', 'distributor'],
-  ['moble', 'mobile'], ['moblie', 'mobile'], ['mobil', 'mobile'],
-  ['laptp', 'laptop'], ['labtop', 'laptop'],
-  ['fridg', 'fridge'], ['refrigirator', 'refrigerator'],
-  ['washin', 'washing'], ['machin', 'machine']
+  ['showrom', 'showroom'], ['showrooms', 'showrooms'], ['distributer', 'distributor'], ['distrubutor', 'distributor'],
+  ['moble', 'mobile'], ['moblie', 'mobile'], ['mobil', 'mobile'], ['mobiles', 'mobiles'],
+  ['laptp', 'laptop'], ['labtop', 'laptop'], ['laptos', 'laptops'], ['laptps', 'laptops'],
+  ['fridg', 'fridge'], ['refrigirator', 'refrigerator'], ['refridgerator', 'refrigerator'],
+  ['washin', 'washing'], ['machin', 'machine'],
+  ['computor', 'computer'], ['computr', 'computer'], ['compter', 'computer'], ['computre', 'computer'],
+  ['cumputer', 'computer'], ['compuetr', 'computer'],
+  ['stor', 'store'], ['stors', 'stores'], ['shoppe', 'shop'], ['shpos', 'shops'],
+  ['mecanic', 'mechanic'], ['mechnic', 'mechanic'], ['electrition', 'electrician'],
+  ['plumer', 'plumber'], ['plubmer', 'plumber'], ['carpentar', 'carpenter'],
+  ['restaurent', 'restaurant'], ['resturant', 'restaurant'], ['hospitel', 'hospital'],
+  ['hardwre', 'hardware'], ['jwellery', 'jewellery'], ['jewelery', 'jewellery'],
+  ['bakary', 'bakery'], ['backery', 'bakery'], ['saloon', 'salon'], ['parlor', 'parlour'],
+  ['gym', 'gym'], ['pharmacy', 'pharmacy'], ['medicl', 'medical'],
+  ['trader', 'trader'], ['traders', 'traders'], ['tarder', 'trader'], ['tradres', 'traders']
 ]);
 
+/**
+ * Fix high-frequency typos word by word. Tokens keep their case and punctuation
+ * so "Computer Delears," still reads as a normal phrase after correction.
+ */
 function fixSpelling(text) {
   return String(text || '')
-    .split(' ')
-    .map(word => SPELLING_FIXES.get(word) || word)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(raw => {
+      const match = raw.match(/^([^a-zA-Z0-9]*)([a-zA-Z0-9]+)([^a-zA-Z0-9]*)$/);
+      if (!match) return raw;
+      const [, lead, word, tail] = match;
+      const lower = word.toLowerCase();
+      const fixed = SPELLING_FIXES.get(lower)
+        || (lower.endsWith('s') ? SPELLING_FIXES.get(lower.slice(0, -1)) : '')
+        || lower;
+      const cased = word[0] === word[0].toUpperCase()
+        ? fixed.charAt(0).toUpperCase() + fixed.slice(1)
+        : fixed;
+      return `${lead}${cased}${tail}`;
+    })
+    .join(' ');
+}
+
+/** Canonicalise a learned phrase: fix typos, then title-case the result. */
+function canonicalPhrase(text) {
+  const fixed = fixSpelling(String(text || '').trim());
+  if (!fixed) return '';
+  return fixed
+    .split(/\s+/)
+    .map(word => (word.length <= 2 ? word.toUpperCase() : word.charAt(0).toUpperCase() + word.slice(1)))
     .join(' ');
 }
 
@@ -534,5 +573,7 @@ module.exports = {
   genericExpansions,
   bestSearchPhrase,
   isServiceQuery,
+  fixSpelling,
+  canonicalPhrase,
   suggest
 };

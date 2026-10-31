@@ -8,9 +8,9 @@ const WAYPOINTS = {
   patrol: { id: 'patrol', name: 'Edge Patrol', x: null, y: 84, mode: 'walking', label: 'MASTER SCOUT PATROL' },
   search: { id: 'search', name: 'Search Omnibox', x: 58, y: 13, mode: 'fly', label: 'PERCHED: MASTER CONSOLE' },
   leads:  { id: 'leads',  name: 'Leads Stream',    x: 28, y: 44, mode: 'dig', label: 'MINING LIVE LEADS' },
-  radar:  { id: 'radar',  name: 'Telemetry Radar', x: 82, y: 40, mode: 'fly', label: 'TERRITORIAL RADAR MESH' },
+  radar:  { id: 'radar',  name: 'Telemetry Radar', x: 82, y: 40, mode: 'scan', label: 'TERRITORIAL RADAR MESH' },
   vault:  { id: 'vault',  name: 'Universal Vault', x: 18, y: 26, mode: 'dance', label: 'UNIVERSAL VAULT LOADED' },
-  map:    { id: 'map',    name: 'Excavation Grid', x: 48, y: 56, mode: 'dig', label: 'MASTER EXCAVATOR DIVE' }
+  map:    { id: 'map',    name: 'Excavation Grid', x: 48, y: 56, mode: 'scan', label: 'MASTER EXCAVATOR DIVE' }
 };
 
 const FUNNY_MESSAGES_MASTER = [
@@ -129,7 +129,7 @@ export default function ScreenMascotCompanion({
       setActionChips([]);
       setShowSpeech(true);
     } else if (prevScrapingRef.current && !scraping && leadsFound > 0) {
-      flyToWaypoint('vault', `🎉 Master Vault Loaded! ${leadsFound} total verified leads ready!`, 'dance');
+      flyToWaypoint('vault', `🎉 Master Vault Loaded! ${leadsFound} total verified leads ready!`, 'celebrate');
       setActionChips([
         { label: "📂 Open Master Vault", query: "__OPEN_VAULT__" }
       ]);
@@ -160,7 +160,7 @@ export default function ScreenMascotCompanion({
     if (minimized || currentWaypoint !== 'patrol' || isTransitioning || scraping) return;
 
     const walkInterval = setInterval(() => {
-      if (['dance', 'trip', 'tap', 'peek', 'dig', 'sprint'].includes(actionState)) return;
+      if (['dance', 'trip', 'tap', 'peek', 'dig', 'sprint', 'sleep', 'warning', 'celebrate'].includes(actionState)) return;
 
       setPosX(prev => {
         const speed = 0.35 * direction;
@@ -244,6 +244,15 @@ export default function ScreenMascotCompanion({
   }, [scraping, minimized, currentWaypoint, isTransitioning, flyToWaypoint]);
 
   const handleClick = () => {
+    if (actionState === 'sleep') {
+      setActionState('tap');
+      setSpeech('I am up! Point me at a city and I will dig.');
+      setShowSpeech(true);
+      setShowFlightMenu(false);
+      setClickCount(prev => prev + 1);
+      setTimeout(() => setActionState(currentWaypoint === 'patrol' ? 'walking' : 'idle'), 1400);
+      return;
+    }
     setClickCount(prev => prev + 1);
     setSpeech("👑 Master Commander Diggy ready! Where should I deploy?");
     setShowSpeech(true);
@@ -402,9 +411,13 @@ export default function ScreenMascotCompanion({
             scraping ? 'dig' :
             isTransitioning || actionState === 'sprint' ? 'fly' :
             actionState === 'dance' ? 'dance' :
+            actionState === 'celebrate' ? 'celebrate' :
+            actionState === 'scan' ? 'scan' :
             actionState === 'trip' ? 'trip' :
             actionState === 'tap' ? 'tap' :
             actionState === 'peek' ? 'peek' :
+            actionState === 'sleep' ? 'sleep' :
+            actionState === 'warning' ? 'warning' :
             actionState === 'dig' ? 'dig' :
             actionState === 'walking' ? 'walk' :
             actionState === 'fly' ? 'fly' :

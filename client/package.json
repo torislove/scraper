@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@orama/orama": "^3.1.18",
     "@tailwindcss/postcss": "^4.3.0",
     "autoprefixer": "^10.5.0",
@@ -25,6 +26,7 @@
     "leaflet.markercluster": "^1.5.3",
     "lodash.debounce": "^4.0.8",
     "lucide-react": "^1.17.0",
+    "olamaps-web-sdk": "^1.4.0",
     "papaparse": "^5.5.3",
     "postcss": "^8.5.15",
     "react": "^19.2.6",
@@ -37,9 +39,8 @@
     "react-virtualized-auto-sizer": "^1.0.24",
     "react-window": "^1.8.10",
     "tailwindcss": "^4.3.0",
-    "uuid": "^14.0.0",
-    "@huggingface/transformers": "^4.2.0",
-    "olamaps-web-sdk": "^1.4.0"
+    "three": "^0.180.0",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -6311,3 +6311,585 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 @media (max-width: 760px) {
   .v2-notif-panel { position: fixed; top: 64px; right: 12px; left: 12px; width: auto; max-height: 70vh; }
 }
+
+/* ==========================================================================
+   ADVANCED COMMERCIAL OUTREACH SUITE (WHATSAPP, PRIME LEADS, TELECOM CLASSIFIER)
+   ========================================================================== */
+
+.v2-btn-prime-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--v2-font, sans-serif);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.v2-btn-prime-filter:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.25));
+  border-color: #f59e0b;
+  color: #fef3c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+}
+.v2-btn-prime-filter.is-active {
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  border-color: #f59e0b;
+  color: #050b14;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.5);
+}
+
+.v2-phone-badge.is-landline {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+}
+
+.v2-collision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--v2-mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.v2-floating-action-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: rgba(10, 20, 38, 0.94);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(6, 182, 212, 0.45);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), 0 0 20px rgba(6, 182, 212, 0.25);
+  animation: v2FloatDock 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes v2FloatDock {
+  from { opacity: 0; transform: translate(-50%, 20px) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.v2-wa-campaign-modal {
+  max-width: 620px;
+  width: 95%;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(16, 185, 129, 0.2);
+}
+.v2-wa-template-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.v2-wa-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.v2-wa-template-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.v2-wa-template-pills button {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.v2-wa-template-pills button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.v2-wa-template-pills button.is-active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+
+.v2-wa-custom-input {
+  margin-bottom: 14px;
+}
+.v2-wa-custom-input textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(5, 12, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.v2-wa-prospect-card {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(5, 12, 24, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 16px;
+}
+.v2-wa-prospect-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.v2-wa-progress-tag {
+  font-family: var(--v2-mono);
+  font-size: 11px;
+  color: #06b6d4;
+  letter-spacing: 0.04em;
+}
+.v2-wa-prospect-info h4 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+.v2-wa-meta-row {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.v2-wa-preview-box {
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.06);
+  border: 1px dashed rgba(16, 185, 129, 0.35);
+}
+.v2-wa-preview-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--v2-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #34d399;
+  margin-bottom: 4px;
+}
+.v2-wa-preview-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.v2-wa-actions-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.v2-btn-green {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #ffffff;
+  border: 0;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+.v2-btn-green:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+
+
+/* ============================================================================
+   WhatsApp Outreach & Product Catalog Studio Styles
+   ========================================================================== */
+
+.v2-wa-campaign-modal {
+  max-width: 960px !important;
+  width: 96% !important;
+  max-height: 92vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.85), 0 0 40px rgba(16, 185, 129, 0.18) !important;
+}
+
+.v2-wa-modal-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+  gap: 20px;
+  overflow-y: auto;
+  padding: 16px 20px;
+  flex: 1;
+}
+
+.v2-wa-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+
+.v2-wa-product-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.v2-wa-product-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.v2-wa-product-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.v2-wa-product-pill.is-active {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: #10b981;
+  color: #a7f3d0;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+
+.v2-wa-product-editor {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.v2-wa-input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.v2-wa-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(5, 12, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f1f5f9;
+  font-size: 11.5px;
+}
+
+.v2-wa-input:focus {
+  outline: none;
+  border-color: #10b981;
+}
+
+.v2-wa-clipboard-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.v2-wa-var-pills {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.v2-wa-var-pill {
+  font-family: var(--v2-mono);
+  font-size: 9.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  cursor: pointer;
+}
+
+.v2-wa-var-pill:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+/* Chat Screen Simulation */
+.v2-wa-phone-sim {
+  background: #0b141a;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  min-height: 420px;
+}
+
+.v2-wa-phone-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1f2c34;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.v2-wa-phone-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #00a884;
+  color: #fff;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex: none;
+}
+
+.v2-wa-phone-meta b {
+  display: block;
+  font-size: 12.5px;
+  color: #e9edef;
+}
+
+.v2-wa-phone-meta span {
+  display: block;
+  font-size: 10px;
+  color: #8696a0;
+}
+
+.v2-wa-phone-chat {
+  flex: 1;
+  padding: 16px;
+  background: #0b141a;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 16px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.v2-wa-bubble-card {
+  background: #005c4b;
+  border-radius: 10px 10px 2px 10px;
+  padding: 12px;
+  color: #e9edef;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.v2-wa-bubble-prod-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.v2-wa-bubble-prod-header span {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6ee7b7;
+  text-transform: uppercase;
+}
+
+.v2-wa-bubble-price-tag {
+  background: #10b981;
+  color: #064e3b;
+  font-weight: 800;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.v2-wa-bubble-img {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.v2-wa-bubble-link-card {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.v2-wa-bubble-link-card a {
+  color: #53bdeb;
+  text-decoration: none;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v2-wa-bubble-time {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 9.5px;
+  color: #8696a0;
+  margin-top: 6px;
+}
+
+@media (max-width: 840px) {
+  .v2-wa-modal-grid { grid-template-columns: 1fr; }
+  .v2-wa-phone-sim { min-height: 320px; }
+}
+
+
+/* --- High-Fidelity Lead Details: Proper Name, Full Address & GPS Distance --- */
+.v2-lead-proper-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  letter-spacing: -0.01em;
+  display: block;
+  line-height: 1.3;
+}
+
+.v2-lead-address-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: #94a3b8;
+  max-width: 420px;
+}
+
+.v2-lead-address {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.v2-distance-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-family: var(--v2-mono, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.v2-geo-level-badge.level-village {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+}
+
+.v2-geo-level-badge.level-city {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.v2-geo-level-badge.level-mandal {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+}
+
+/* ==========================================================================
+   PLACE DISAMBIGUATION PROMPT (client + master)
+   ========================================================================== */
+.v2-suggest-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(34, 211, 238, 0.07);
+}
+.v2-suggest-ask b { font-size: 12px; color: #a5f3fc; letter-spacing: 0.2px; }
+.v2-suggest-ask > span { font-size: 10.5px; color: #8ba0b3; line-height: 1.4; }
+.v2-suggest-ask-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.v2-suggest-ask-chip {
+  appearance: none;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  background: rgba(8, 24, 38, 0.85);
+  color: #d9f6ff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+.v2-suggest-ask-chip:hover {
+  background: rgba(34, 211, 238, 0.2);
+  border-color: rgba(34, 211, 238, 0.7);
+  transform: translateY(-1px);
+}

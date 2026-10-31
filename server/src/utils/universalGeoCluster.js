@@ -1,8 +1,38 @@
 const fs = require('fs');
 const path = require('path');
 
-// Authoritative commercial clusters for major Indian Tier-1 & Tier-2 economic engines
+// ── AUTHORITATIVE COMMERCIAL CLUSTERS FOR MAJOR INDIAN CITIES & METROS ──
 const AUTHORITATIVE_CLUSTERS = {
+  'mumbai': [
+    'Colaba & Cuffe Parade', 'Fort & Marine Drive', 'Lower Parel & Worli',
+    'Dadar & Prabhadevi', 'Byculla & Mazgaon', 'Bandra West & BKC',
+    'Khar & Santacruz West', 'Juhu & Vile Parle', 'Andheri West & Lokhandwala',
+    'Andheri East & MIDC', 'Jogeshwari & Oshiwara', 'Goregaon West & East',
+    'Malad West & Mindspace', 'Kandivali West & East', 'Borivali West & IC Colony',
+    'Dahisar', 'Kurla & BKC Annex', 'Ghatkopar & Vidyavihar',
+    'Chembur & Govandi', 'Sion & Chunabhatti', 'Vikhroli & Kanjurmarg',
+    'Powai & Hiranandani', 'Bhandup & Mulund', 'Thane West & Naupada'
+  ],
+  'bombay': [
+    'Colaba & Cuffe Parade', 'Fort & Marine Drive', 'Lower Parel & Worli',
+    'Dadar & Prabhadevi', 'Byculla & Mazgaon', 'Bandra West & BKC',
+    'Khar & Santacruz West', 'Juhu & Vile Parle', 'Andheri West & Lokhandwala',
+    'Andheri East & MIDC', 'Jogeshwari & Oshiwara', 'Goregaon West & East',
+    'Malad West & Mindspace', 'Kandivali West & East', 'Borivali West & IC Colony',
+    'Dahisar', 'Kurla & BKC Annex', 'Ghatkopar & Vidyavihar',
+    'Chembur & Govandi', 'Sion & Chunabhatti', 'Vikhroli & Kanjurmarg',
+    'Powai & Hiranandani', 'Bhandup & Mulund', 'Thane West & Naupada'
+  ],
+  'delhi': [
+    'Connaught Place', 'Hauz Khas', 'South Extension', 'Karol Bagh', 'Saket', 
+    'Lajpat Nagar', 'Vasant Kunj', 'Dwarka', 'Rohini', 'Pitampura', 
+    'Chandni Chowk', 'Janakpuri', 'Laxmi Nagar', 'Noida Sector 18', 'Gurugram Cyber City'
+  ],
+  'new delhi': [
+    'Connaught Place', 'Hauz Khas', 'South Extension', 'Karol Bagh', 'Saket', 
+    'Lajpat Nagar', 'Vasant Kunj', 'Dwarka', 'Rohini', 'Pitampura', 
+    'Chandni Chowk', 'Janakpuri', 'Laxmi Nagar', 'Noida Sector 18', 'Gurugram Cyber City'
+  ],
   'bangalore': [
     'Indiranagar', 'Koramangala', 'Whitefield', 'HSR Layout', 'Jayanagar', 
     'Electronic City', 'Malleshwaram', 'Hebbal', 'Marathahalli', 'BTM Layout', 
@@ -16,30 +46,79 @@ const AUTHORITATIVE_CLUSTERS = {
   'hyderabad': [
     'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'HITEC City', 'Madhapur', 
     'Kondapur', 'Secunderabad', 'Ameerpet', 'Kukatpally', 'Begumpet', 
-    'Charminar', 'Himayatnagar', 'Malkajgiri', 'Manikonda'
+    'Charminar', 'Himayatnagar', 'Dilsukhnagar', 'LB Nagar'
   ],
-  'mumbai': [
-    'Bandra West', 'Andheri West', 'Andheri East', 'Juhu', 'Powai', 
-    'Colaba', 'Dadar', 'Borivali', 'Malad', 'Goregaon', 
-    'Thane West', 'Navi Mumbai', 'Kandivali', 'Lower Parel'
-  ],
-  'delhi': [
-    'Connaught Place', 'Hauz Khas', 'South Extension', 'Karol Bagh', 'Saket', 
-    'Lajpat Nagar', 'Vasant Kunj', 'Dwarka', 'Rohini', 'Pitampura', 
-    'Chandni Chowk', 'Noida', 'Gurugram'
+  'secunderabad': [
+    'Paradise Secunderabad', 'MG Road Secunderabad', 'Sainikpuri', 'Trimulgherry',
+    'Alwal', 'Marredpally', 'Tarnaka', 'Begumpet'
   ],
   'pune': [
-    'Koregaon Park', 'Kalyani Nagar', 'Viman Nagar', 'Baner', 'Hinjewadi', 
-    'Kothrud', 'Aundh', 'Shivajinagar', 'Wakad', 'Hadapsar', 'Magarpatta'
+    'Shivaji Nagar & Deccan Gymkhana',
+    'Kothrud & Karve Road',
+    'Koregaon Park & Bund Garden',
+    'Kalyani Nagar & Nagar Road',
+    'Viman Nagar & Airport Road',
+    'Baner & Balewadi High Street',
+    'Aundh & University Road',
+    'Hinjawadi IT Park Phase 1 & 2',
+    'Wakad & Dange Chowk',
+    'Pimple Saudagar & Rahatani',
+    'Pimpri & Chinchwad Station',
+    'Bhosari & MIDC Industrial Area',
+    'Nigdi & Akurdi Pradhikaran',
+    'Hadapsar & Magarpatta City',
+    'Fatima Nagar & Wanowrie',
+    'Camp & MG Road (Pune Cantonment)',
+    'Swargate & Tilak Road',
+    'Bibwewadi & Market Yard',
+    'Katraj & Kondhwa',
+    'Sinhagad Road & Dhayari',
+    'Warje & Karve Nagar',
+    'Yerawada & Vishrantwadi',
+    'Dhanori & Lohegaon',
+    'Wagholi & Kharadi IT Hub'
+  ],
+  'punecity': [
+    'Shivaji Nagar & Deccan Gymkhana',
+    'Kothrud & Karve Road',
+    'Koregaon Park & Bund Garden',
+    'Kalyani Nagar & Nagar Road',
+    'Viman Nagar & Airport Road',
+    'Baner & Balewadi High Street',
+    'Aundh & University Road',
+    'Hinjawadi IT Park Phase 1 & 2',
+    'Wakad & Dange Chowk',
+    'Pimple Saudagar & Rahatani',
+    'Pimpri & Chinchwad Station',
+    'Bhosari & MIDC Industrial Area',
+    'Nigdi & Akurdi Pradhikaran',
+    'Hadapsar & Magarpatta City',
+    'Fatima Nagar & Wanowrie',
+    'Camp & MG Road (Pune Cantonment)',
+    'Swargate & Tilak Road',
+    'Bibwewadi & Market Yard',
+    'Katraj & Kondhwa',
+    'Sinhagad Road & Dhayari',
+    'Warje & Karve Nagar',
+    'Yerawada & Vishrantwadi',
+    'Dhanori & Lohegaon',
+    'Wagholi & Kharadi IT Hub'
   ],
   'guntur': [
-    'Guntur City', 'Tenali', 'Mangalagiri', 'Tadepalle', 'Chebrolu', 
-    'Ponnur', 'Pedakakani', 'Medikonduru', 'Tadikonda', 'Thullur'
+    'Brodipet', 'Arundelpet', 'Lakshmipuram', 'Kothapet', 'Pattabhipuram', 
+    'Brindavan Gardens', 'Old Guntur', 'SVN Colony', 'Guvvalagutta', 'Collector Office Road Guntur'
+  ],
+  'tenali': [
+    'Tenali Central', 'Morrispet', 'Chenchupet', 'Ganga Mandiram', 'Chinaravuru', 
+    'Nazarpet', 'Guntur Road Tenali', 'Gandhinagar Tenali'
+  ],
+  'mangalagiri': [
+    'Mangalagiri Town', 'Temple Road Mangalagiri', 'Nowlur', 'Atmakur Mangalagiri', 
+    'Old Bus Stand Mangalagiri', 'Tadepalle'
   ],
   'vijayawada': [
-    'Benz Circle', 'Machavaram', 'Maruthi Nagar', 'Governorpet', 'Satyanarayanapuram', 
-    'Bhavanipuram', 'Patamata', 'Auto Nagar', 'Moghalrajpuram', 'Gunadala',
-    'One Town Vijayawada', 'Two Town Vijayawada', 'Payakapuram', 'Gollapudi', 'Penamaluru'
+    'Benz Circle', 'Governorpet', 'Moghalrajpuram', 'Patamata', 'Auto Nagar', 
+    'Bhavanipuram', 'Satyanarayanapuram', 'Gunadala', 'One Town Vijayawada', 'Machavaram'
   ],
   'visakhapatnam': [
     'Siripuram', 'Dwaraka Nagar', 'MVP Colony', 'Gajuwaka', 'Rushikonda', 
@@ -47,26 +126,86 @@ const AUTHORITATIVE_CLUSTERS = {
   ],
   'chennai': [
     'T Nagar', 'Anna Nagar', 'Nungambakkam', 'Adyar', 'Velachery', 
-    'Besant Nagar', 'Alwarpet', 'Mylapore', 'OMR', 'Kilpauk'
+    'Besant Nagar', 'Alwarpet', 'Mylapore', 'OMR', 'Kilpauk', 'Guindy', 'Porur'
   ],
   'kolkata': [
     'Park Street', 'Salt Lake', 'New Town', 'Ballygunge', 'Alipore', 
-    'Gariahat', 'Howrah', 'Behala', 'Dum Dum'
+    'Gariahat', 'Howrah Central', 'Behala', 'Dum Dum', 'Rajarhat'
   ],
   'jaipur': [
     'C Scheme', 'Malviya Nagar', 'Vaishali Nagar', 'Mansarovar', 
-    'Raja Park', 'Tonk Road', 'MI Road', 'Jagatpura'
+    'Raja Park', 'Tonk Road', 'MI Road', 'Jagatpura', 'Ajmer Road'
   ],
   'ahmedabad': [
     'SG Highway', 'Bodakdev', 'Satellite', 'Vastrapur', 'Prahlad Nagar', 
-    'Navrangpura', 'Maninagar', 'Thaltej', 'Sindhu Bhavan'
+    'Navrangpura', 'Maninagar', 'Thaltej', 'Sindhu Bhavan', 'Ashram Road'
+  ],
+  'surat': [
+    'Adajan', 'Athwa', 'Vesu', 'Ghod Dod Road', 'Varachha', 'Ring Road Surat', 'Katargam', 'Piplod'
+  ],
+  'lucknow': [
+    'Gomti Nagar', 'Hazratganj', 'Alambagh', 'Indira Nagar', 'Mahanagar', 'Aminabad', 'Aliganj', 'Ashiyana'
+  ],
+  'kanpur': [
+    'Civil Lines Kanpur', 'Swaroop Nagar', 'Mall Road Kanpur', 'Kakadeo', 'Kidwai Nagar', 'Govind Nagar', 'Gumti No 5', 'Harsh Nagar'
+  ],
+  'nagpur': [
+    'Dharampeth', 'Ramdaspeth', 'Sitabuldi', 'Sadar', 'Wardha Road', 'Civil Lines Nagpur', 'Pratap Nagar', 'Manish Nagar'
+  ],
+  'indore': [
+    'Vijay Nagar', 'Palasia', 'MG Road Indore', 'Rajwada', 'Chappan Dukan', 'Sapna Sangeeta', 'Bhawarkua', 'Annapurna'
+  ],
+  'bhopal': [
+    'MP Nagar', 'Arera Colony', 'New Market Bhopal', 'Kolar Road', 'TT Nagar', 'Hoshangabad Road', 'Bairagarh', 'Govindpura'
+  ],
+  'coimbatore': [
+    'RS Puram', 'Gandhipuram', 'Saibaba Colony', 'Peelamedu', 'Race Course', 'Ramanathapuram', 'Saravanampatti', 'Singanallur'
+  ],
+  'madurai': [
+    'KK Nagar Madurai', 'Simmakkal', 'Anna Nagar Madurai', 'Town Hall Road', 'West Tower Street', 'Mattuthavani', 'Sellur', 'Bye Pass Road'
+  ],
+  'kochi': [
+    'MG Road Kochi', 'Marine Drive Kochi', 'Edappally', 'Kaloor', 'Kakkanad', 'Fort Kochi', 'Panampilly Nagar', 'Palarivattom'
+  ],
+  'chandigarh': [
+    'Sector 17', 'Sector 35', 'Sector 22', 'Sector 8', 'Sector 9', 'Sector 26', 'Industrial Area Phase 1', 'Mohali Phase 7'
+  ],
+  'nashik': [
+    'College Road Nashik', 'Gangapur Road', 'Panchavati', 'Dwarka Nashik', 'Indira Nagar Nashik', 'Mahatma Nagar', 'Satpur', 'Nashik Road'
+  ],
+  'rajkot': [
+    'Yagnik Road', 'Kalawad Road', 'Ring Road Rajkot', 'University Road', 'Dhebar Road', 'Amin Marg', 'Kotecha Chowk', 'Mavdi'
+  ],
+  'varanasi': [
+    'Sigra', 'Cantt Varanasi', 'Bhelupur', 'Godowlia', 'Lanka', 'Orderly Bazar', 'Mahmoorganj', 'Chowk Varanasi'
+  ],
+  'agra': [
+    'Sanjay Place', 'Civil Lines Agra', 'Kamla Nagar', 'Tajganj', 'Dayal Bagh', 'MG Road Agra', 'Shahganj', 'Sadar Bazar Agra'
+  ],
+  'patna': [
+    'Frazer Road', 'Boring Road', 'Kankarbagh', 'Bailey Road', 'Rajendra Nagar', 'Exhibition Road', 'Patliputra', 'Ashiana Nagar'
+  ],
+  'vadodara': [
+    'Alkapuri', 'Sayajigunj', 'Fatehgunj', 'Gotri', 'Vasna Road', 'Manjalpur', 'Karelibaug', 'Old Padra Road'
+  ],
+  'ludhiana': [
+    'Ferozepur Road', 'Model Town Ludhiana', 'Sarabha Nagar', 'Mall Road Ludhiana', 'Ghumar Mandi', 'Civil Lines Ludhiana', 'Pakhowal Road', 'Focal Point'
+  ],
+  'amritsar': [
+    'Lawrence Road Amritsar', 'Mall Road Amritsar', 'Ranjit Avenue', 'Hall Bazar', 'Katra Jaimal Singh', 'Circular Road', 'Majitha Road', 'Cantonment'
+  ],
+  'dehradun': [
+    'Rajpur Road', 'Paltan Bazar', 'Chakrata Road', 'Ballupur', 'Clement Town', 'Saharanpur Road', 'Dharampur', 'Karanpur'
+  ],
+  'guwahati': [
+    'GS Road Guwahati', 'Christian Basti', 'Paltan Bazar Guwahati', 'Pan Bazar', 'Ganeshguri', 'Zoo Road', 'Dispur', 'Six Mile'
   ]
 };
 
-// ── IN-MEMORY INDEXING OF INDIA_VILLAGES.JSON (0.01ms FAST LOOKUP) ──
-// Eliminates all remote OSM network latency and avoids 429 rate-limits
+// ── IN-MEMORY INDEXING OF INDIA_VILLAGES.JSON ──
 const districtIndex = new Map(); // cleanName -> { district, state, mandals: [] }
-const mandalIndex = new Map();   // cleanName -> { subDistrict, district, state }
+const mandalIndex = new Map();   // cleanName -> { subDistrict, district, state, villages: [] }
+const villageIndex = new Map();  // cleanName -> { village, mandal, district, state, siblings: [] }
 const stateIndex = new Map();    // cleanName -> { state, districts: [] }
 
 let isInitialized = false;
@@ -103,6 +242,22 @@ function initIndiaGeoMemory() {
               const cleanSub = subName.toLowerCase().replace(/[^a-z0-9]/g, '');
               const villages = Array.isArray(subObj.villages) ? subObj.villages : [];
               mandalIndex.set(cleanSub, { subDistrict: subName, district: distName, state: stateName, villages });
+
+              // Index constituent villages with sibling proximity links
+              for (const vName of villages) {
+                if (!vName || typeof vName !== 'string') continue;
+                const cleanV = vName.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (!cleanV) continue;
+                if (!villageIndex.has(cleanV)) {
+                  villageIndex.set(cleanV, {
+                    village: vName,
+                    mandal: subName,
+                    district: distName,
+                    state: stateName,
+                    siblings: villages.filter(x => x && x !== vName).slice(0, 8)
+                  });
+                }
+              }
             }
           }
 
@@ -113,7 +268,7 @@ function initIndiaGeoMemory() {
       stateIndex.set(cleanState, { state: stateName, districts: distList });
     }
 
-    // Authoritative Post-2022 Andhra Pradesh District Reorganization Overrides (Zero Regional Bleed)
+    // Authoritative Post-2022 Andhra Pradesh District Reorganization Overrides
     const AP_OVERRIDES = {
       'narasaraopet': { subDistrict: 'Narasaraopet', district: 'Palnadu', state: 'Andhra Pradesh' },
       'macherla': { subDistrict: 'Macherla', district: 'Palnadu', state: 'Andhra Pradesh' },
@@ -134,382 +289,238 @@ function initIndiaGeoMemory() {
       'machilipatnam': { subDistrict: 'Machilipatnam', district: 'Krishna', state: 'Andhra Pradesh' },
       'gudivada': { subDistrict: 'Gudivada', district: 'Krishna', state: 'Andhra Pradesh' }
     };
-    for (const [k, v] of Object.entries(AP_OVERRIDES)) {
-      const prev = mandalIndex.get(k);
-      mandalIndex.set(k, {
-        ...v,
-        villages: (v.villages && v.villages.length > 0) ? v.villages : (prev?.villages || [])
-      });
+
+    for (const [key, val] of Object.entries(AP_OVERRIDES)) {
+      mandalIndex.set(key, val);
     }
 
-    console.log(`[Universal Geo Engine] Indexed ${stateIndex.size} states, ${districtIndex.size} districts, and ${mandalIndex.size} mandals from local database (0ms lookup ready).`);
+    console.log(`[Universal Geo Engine] Indexed ${stateIndex.size} states, ${districtIndex.size} districts, ${mandalIndex.size} mandals, and ${villageIndex.size} villages from local database.`);
   } catch (err) {
     console.error('[Universal Geo Engine] Error indexing india_villages.json:', err.message);
   }
 }
 
-// Initialize on module load
+// Ensure memory index is built on boot
 initIndiaGeoMemory();
 
-// Precise GPS anchor coordinates for instant radar jumping on map
+// High precision GPS anchors for map centers and distance computation
 const ZONE_COORDINATES = {
-  // Bangalore
-  'indiranagar': { lat: 12.9784, lng: 77.6408 },
-  'koramangala': { lat: 12.9352, lng: 77.6245 },
-  'whitefield': { lat: 12.9698, lng: 77.7500 },
-  'hsr layout': { lat: 12.9121, lng: 77.6446 },
-  'jayanagar': { lat: 12.9308, lng: 77.5838 },
-  'electronic city': { lat: 12.8399, lng: 77.6770 },
-  'malleshwaram': { lat: 13.0031, lng: 77.5643 },
-  'hebbal': { lat: 13.0358, lng: 77.5970 },
-  'marathahalli': { lat: 12.9591, lng: 77.6974 },
-  'btm layout': { lat: 12.9166, lng: 77.6101 },
-  'jp nagar': { lat: 12.9063, lng: 77.5857 },
-  'rajajinagar': { lat: 12.9982, lng: 77.5530 },
-  'yelahanka': { lat: 13.1007, lng: 77.5963 },
-  'banashankari': { lat: 12.9255, lng: 77.5468 },
-  'bellandur': { lat: 12.9304, lng: 77.6784 },
+  // Mumbai Key Zones
+  'mumbai': { lat: 18.9220, lng: 72.8347 },
+  'colaba & cuffe parade': { lat: 18.9067, lng: 72.8147 },
+  'fort & marine drive': { lat: 18.9322, lng: 72.8315 },
+  'lower parel & worli': { lat: 18.9986, lng: 72.8300 },
+  'dadar & prabhadevi': { lat: 19.0178, lng: 72.8478 },
+  'byculla & mazgaon': { lat: 18.9750, lng: 72.8360 },
+  'bandra west & bkc': { lat: 19.0596, lng: 72.8295 },
+  'khar & santacruz west': { lat: 19.0700, lng: 72.8350 },
+  'juhu & vile parle': { lat: 19.1075, lng: 72.8263 },
+  'andheri west & lokhandwala': { lat: 19.1363, lng: 72.8277 },
+  'andheri east & midc': { lat: 19.1136, lng: 72.8697 },
+  'jogeshwari & oshiwara': { lat: 19.1410, lng: 72.8420 },
+  'goregaon west & east': { lat: 19.1663, lng: 72.8526 },
+  'malad west & mindspace': { lat: 19.1860, lng: 72.8485 },
+  'kandivali west & east': { lat: 19.2060, lng: 72.8540 },
+  'borivali west & ic colony': { lat: 19.2288, lng: 72.8541 },
+  'dahisar': { lat: 19.2500, lng: 72.8590 },
+  'kurla & bkc annex': { lat: 19.0726, lng: 72.8845 },
+  'ghatkopar & vidyavihar': { lat: 19.0860, lng: 72.9080 },
+  'chembur & govandi': { lat: 19.0522, lng: 72.8994 },
+  'sion & chunabhatti': { lat: 19.0400, lng: 72.8640 },
+  'vikhroli & kanjurmarg': { lat: 19.1100, lng: 72.9280 },
+  'powai & hiranandani': { lat: 19.1176, lng: 72.9060 },
+  'bhandup & mulund': { lat: 19.1726, lng: 72.9565 },
+  'thane west & naupada': { lat: 19.2183, lng: 72.9781 },
 
-  // Hyderabad
-  'banjara hills': { lat: 17.4156, lng: 78.4357 },
-  'jubilee hills': { lat: 17.4319, lng: 78.4073 },
-  'gachibowli': { lat: 17.4401, lng: 78.3489 },
-  'hitec city': { lat: 17.4474, lng: 78.3762 },
-  'madhapur': { lat: 17.4483, lng: 78.3915 },
-  'kondapur': { lat: 17.4688, lng: 78.3582 },
-  'secunderabad': { lat: 17.4399, lng: 78.4983 },
-  'kukatpally': { lat: 17.4948, lng: 78.3996 },
+  // Metros
+  'delhi': { lat: 28.6139, lng: 77.2090 },
+  'bangalore': { lat: 12.9716, lng: 77.5946 },
+  'bengaluru': { lat: 12.9716, lng: 77.5946 },
+  'hyderabad': { lat: 17.3850, lng: 78.4867 },
+  'chennai': { lat: 13.0827, lng: 80.2707 },
+  'kolkata': { lat: 22.5726, lng: 88.3639 },
+  'pune': { lat: 18.5204, lng: 73.8567 },
+  'punecity': { lat: 18.5204, lng: 73.8567 },
+  'pune city': { lat: 18.5204, lng: 73.8567 },
+  'poona': { lat: 18.5204, lng: 73.8567 },
+  'shivaji nagar & deccan gymkhana': { lat: 18.5314, lng: 73.8446 },
+  'kothrud & karve road': { lat: 18.5074, lng: 73.8077 },
+  'koregaon park & bund garden': { lat: 18.5362, lng: 73.8940 },
+  'kalyani nagar & nagar road': { lat: 18.5463, lng: 73.9034 },
+  'viman nagar & airport road': { lat: 18.5679, lng: 73.9143 },
+  'baner & balewadi high street': { lat: 18.5590, lng: 73.7868 },
+  'aundh & university road': { lat: 18.5580, lng: 73.8075 },
+  'hinjawadi it park phase 1 & 2': { lat: 18.5913, lng: 73.7389 },
+  'wakad & dange chowk': { lat: 18.5987, lng: 73.7686 },
+  'pimple saudagar & rahatani': { lat: 18.5987, lng: 73.7997 },
+  'pimpri & chinchwad station': { lat: 18.6279, lng: 73.8009 },
+  'bhosari & midc industrial area': { lat: 18.6298, lng: 73.8478 },
+  'nigdi & akurdi pradhikaran': { lat: 18.6517, lng: 73.7711 },
+  'hadapsar & magarpatta city': { lat: 18.5089, lng: 73.9259 },
+  'fatima nagar & wanowrie': { lat: 18.4988, lng: 73.8967 },
+  'camp & mg road (pune cantonment)': { lat: 18.5167, lng: 73.8786 },
+  'swargate & tilak road': { lat: 18.5018, lng: 73.8636 },
+  'bibwewadi & market yard': { lat: 18.4789, lng: 73.8678 },
+  'katraj & kondhwa': { lat: 18.4575, lng: 73.8677 },
+  'sinhagad road & dhayari': { lat: 18.4712, lng: 73.8189 },
+  'warje & karve nagar': { lat: 18.4833, lng: 73.8000 },
+  'yerawada & vishrantwadi': { lat: 18.5529, lng: 73.8794 },
+  'dhanori & lohegaon': { lat: 18.5833, lng: 73.8988 },
+  'wagholi & kharadi it hub': { lat: 18.5515, lng: 73.9488 },
+  'ahmedabad': { lat: 23.0225, lng: 72.5714 },
+  'jaipur': { lat: 26.9124, lng: 75.7873 },
+  'surat': { lat: 21.1702, lng: 72.8311 },
+  'lucknow': { lat: 26.8467, lng: 80.9462 },
+  'kanpur': { lat: 26.4499, lng: 80.3319 },
+  'nagpur': { lat: 21.1458, lng: 79.0882 },
+  'indore': { lat: 22.7196, lng: 75.8577 },
+  'bhopal': { lat: 23.2599, lng: 77.4126 },
+  'coimbatore': { lat: 11.0168, lng: 76.9558 },
+  'madurai': { lat: 9.9252, lng: 78.1198 },
+  'kochi': { lat: 9.9312, lng: 76.2673 },
+  'chandigarh': { lat: 30.7333, lng: 76.7794 },
+  'nashik': { lat: 19.9975, lng: 73.7898 },
+  'rajkot': { lat: 22.3039, lng: 70.8022 },
+  'varanasi': { lat: 25.3176, lng: 82.9739 },
+  'agra': { lat: 27.1767, lng: 78.0081 },
+  'patna': { lat: 25.5941, lng: 85.1376 },
+  'vadodara': { lat: 22.3072, lng: 73.1812 },
+  'ludhiana': { lat: 30.9010, lng: 75.8573 },
+  'amritsar': { lat: 31.6340, lng: 74.8723 },
+  'dehradun': { lat: 30.3165, lng: 78.0322 },
+  'guwahati': { lat: 26.1445, lng: 91.7362 },
 
-  // Mumbai
-  'bandra west': { lat: 19.0596, lng: 72.8295 },
-  'andheri west': { lat: 19.1363, lng: 72.8277 },
-  'andheri east': { lat: 19.1136, lng: 72.8697 },
-  'juhu': { lat: 19.1075, lng: 72.8263 },
-  'powai': { lat: 19.1176, lng: 72.9060 },
-  'colaba': { lat: 18.9067, lng: 72.8147 },
-
-  // Delhi
-  'connaught place': { lat: 28.6304, lng: 77.2177 },
-  'hauz khas': { lat: 28.5494, lng: 77.2001 },
-  'south extension': { lat: 28.5714, lng: 77.2215 },
-  'karol bagh': { lat: 28.6517, lng: 77.1906 },
-  'saket': { lat: 28.5244, lng: 77.2167 },
-  'noida': { lat: 28.5355, lng: 77.3910 },
-  'gurugram': { lat: 28.4595, lng: 77.0266 },
-
-  // Andhra Pradesh Town & Mandal Centers
-  'narasaraopet': { lat: 16.2359, lng: 80.0499 },
-  'palnadu': { lat: 16.2359, lng: 80.0499 },
-  'macherla': { lat: 16.4800, lng: 79.3000 },
-  'vinukonda': { lat: 16.0500, lng: 79.7400 },
-  'chilakaluripet': { lat: 16.0892, lng: 80.1672 },
-  'sattenapalle': { lat: 16.3956, lng: 80.1802 },
-  'piduguralla': { lat: 16.4800, lng: 79.8800 },
-  'bapatla': { lat: 15.9042, lng: 80.4673 },
-  'chirala': { lat: 15.8246, lng: 80.3522 },
-  'guntur city': { lat: 16.3067, lng: 80.4365 },
+  // Andhra Pradesh & Telangana
+  'guntur': { lat: 16.3067, lng: 80.4365 },
+  'brodipet': { lat: 16.3115, lng: 80.4372 },
+  'arundelpet': { lat: 16.3032, lng: 80.4418 },
+  'lakshmipuram': { lat: 16.3090, lng: 80.4285 },
+  'kothapet': { lat: 16.2980, lng: 80.4500 },
+  'pattabhipuram': { lat: 16.3160, lng: 80.4250 },
+  'brindavan gardens': { lat: 16.3130, lng: 80.4190 },
+  'old guntur': { lat: 16.2920, lng: 80.4580 },
+  'svn colony': { lat: 16.3220, lng: 80.4140 },
+  'guvvalagutta': { lat: 16.3010, lng: 80.4450 },
   'tenali': { lat: 16.2435, lng: 80.6400 },
-  'morrispet': { lat: 16.2490, lng: 80.6450 },
-  'gandhinagar': { lat: 16.2410, lng: 80.6350 },
-  'angalakuduru': { lat: 16.2620, lng: 80.6200 },
-  'burripalem': { lat: 16.2750, lng: 80.6050 },
-  'china ravuru': { lat: 16.2280, lng: 80.6580 },
-  'kolakaluru': { lat: 16.2950, lng: 80.6150 },
-  'nandivelugu': { lat: 16.2880, lng: 80.6500 },
   'mangalagiri': { lat: 16.4328, lng: 80.5694 },
   'tadepalle': { lat: 16.4820, lng: 80.6030 },
   'chebrolu': { lat: 16.1950, lng: 80.5280 },
   'vijayawada': { lat: 16.5062, lng: 80.6480 },
-  'vijayawada rural': { lat: 16.5350, lng: 80.6650 },
-  'benz circle': { lat: 16.5000, lng: 80.6500 },
-  'machavaram': { lat: 16.5186, lng: 80.6475 },
-  'maruthi nagar': { lat: 16.5150, lng: 80.6530 },
-  'governorpet': { lat: 16.5118, lng: 80.6276 },
-  'satyanarayanapuram': { lat: 16.5242, lng: 80.6305 },
-  'bhavanipuram': { lat: 16.5290, lng: 80.5980 },
-  'patamata': { lat: 16.4950, lng: 80.6620 },
-  'auto nagar': { lat: 16.4900, lng: 80.6750 },
-  'moghalrajpuram': { lat: 16.5050, lng: 80.6420 },
-  'gunadala': { lat: 16.5190, lng: 80.6700 },
-  'payakapuram': { lat: 16.5450, lng: 80.6350 },
-  'one town vijayawada': { lat: 16.5170, lng: 80.6150 },
-  'two town vijayawada': { lat: 16.5100, lng: 80.6220 },
-  'mg road vijayawada': { lat: 16.5080, lng: 80.6380 }
+  'visakhapatnam': { lat: 17.6868, lng: 83.2185 },
+  'narasaraopet': { lat: 16.2359, lng: 80.0499 },
+  'bapatla': { lat: 15.9042, lng: 80.4673 },
+  'chirala': { lat: 15.8246, lng: 80.3522 },
+  'machilipatnam': { lat: 16.1875, lng: 81.1389 },
+  'eluru': { lat: 16.7107, lng: 81.0952 },
+  'rajahmundry': { lat: 17.0005, lng: 81.8040 },
+  'kakinada': { lat: 16.9891, lng: 82.2475 },
+  'tirupati': { lat: 13.6288, lng: 79.4192 },
+  'nellore': { lat: 14.4426, lng: 79.9865 },
+  'kurnool': { lat: 15.8281, lng: 78.0373 },
+  'anantapur': { lat: 14.6819, lng: 77.6006 },
+  'kadapa': { lat: 14.4673, lng: 78.8242 },
+  'warangal': { lat: 17.9689, lng: 79.5941 },
+  'karimnagar': { lat: 18.4386, lng: 79.1288 },
+  'khammam': { lat: 17.2473, lng: 80.1514 },
+  'nizamabad': { lat: 18.6725, lng: 78.0941 },
+  'nalgonda': { lat: 17.0504, lng: 79.2669 }
 };
 
+// State reference points used to spread state-wide sweeps on the map. These are
+// geographic anchors, not claims that every district sits at the capital.
+const STATE_CENTERS = {
+  'andhra pradesh': { lat: 16.5062, lng: 80.648, radius: 2.1 },
+  'telangana': { lat: 17.385, lng: 78.4867, radius: 1.9 },
+  'maharashtra': { lat: 19.7515, lng: 75.7139, radius: 2.4 },
+  'karnataka': { lat: 15.3173, lng: 75.7139, radius: 2.2 },
+  'tamil nadu': { lat: 11.1271, lng: 78.6569, radius: 2.0 },
+  'kerala': { lat: 10.8505, lng: 76.2711, radius: 1.2 },
+  'gujarat': { lat: 22.2587, lng: 71.1924, radius: 2.0 },
+  'rajasthan': { lat: 27.0238, lng: 74.2179, radius: 2.6 },
+  'madhya pradesh': { lat: 23.5937, lng: 78.9629, radius: 2.6 },
+  'uttar pradesh': { lat: 26.8467, lng: 80.9462, radius: 2.6 },
+  'bihar': { lat: 25.0961, lng: 85.3131, radius: 1.4 },
+  'west bengal': { lat: 22.9868, lng: 87.855, radius: 1.5 },
+  'odisha': { lat: 20.9517, lng: 85.0985, radius: 1.8 },
+  'punjab': { lat: 31.1471, lng: 75.3412, radius: 1.2 },
+  'haryana': { lat: 29.0588, lng: 76.0856, radius: 1.1 },
+  'assam': { lat: 26.2006, lng: 92.9376, radius: 1.8 },
+  'jharkhand': { lat: 23.6102, lng: 85.2799, radius: 1.3 },
+  'chhattisgarh': { lat: 21.2787, lng: 81.8661, radius: 1.7 },
+  'uttarakhand': { lat: 30.0668, lng: 79.0193, radius: 1.3 },
+  'himachal pradesh': { lat: 31.1048, lng: 77.1734, radius: 1.2 },
+  'goa': { lat: 15.2993, lng: 74.124, radius: 0.4 },
+  'delhi': { lat: 28.6139, lng: 77.209, radius: 0.25 }
+};
+
+// ── COORDINATE RESOLUTION HELPERS ──
+// A zone may not have a hard-coded anchor. We first consult the persisted
+// forward-geocode cache (populated by earlier runs), then fall back to a
+// deterministic spread around the parent district centre. The spread keeps
+// every zone distinct on the map and inside the search grid, and is flagged
+// `isApproximate` so the UI never pretends it is a precise centroid.
+function cachedZoneCoords(name, district) {
+  if (!name) return null;
+  try {
+    const { getCache } = require('./olaMaps');
+    const cache = getCache() || {};
+    const keys = [];
+    if (district) keys.push(`${name}, ${district}, india`);
+    keys.push(`${name}, india`, `${name}`);
+    for (const key of keys) {
+      const hit = cache[key.toLowerCase().trim()];
+      if (hit && Number.isFinite(Number(hit.lat)) && Number.isFinite(Number(hit.lng))) {
+        return { lat: Number(hit.lat), lng: Number(hit.lng), isApproximate: false };
+      }
+    }
+  } catch (error) {}
+  return null;
+}
+
+function spreadCoords(center, index, total, radius = 0.075) {
+  if (!center || !Number.isFinite(Number(center.lat)) || !Number.isFinite(Number(center.lng))) return null;
+  const golden = 2.399963229728653;
+  const angle = golden * (index + 1);
+  const ring = 0.35 + 0.65 * Math.sqrt(((index + 1) / Math.max(1, total)));
+  return {
+    lat: Number((Number(center.lat) + Math.sin(angle) * radius * ring).toFixed(5)),
+    lng: Number((Number(center.lng) + Math.cos(angle) * radius * ring).toFixed(5)),
+    isApproximate: true
+  };
+}
+
+function zoneCoordinates(name, district, index = 0, total = 1) {
+  const key = String(name || '').toLowerCase().trim();
+  const districtKey = String(district || '').toLowerCase().trim();
+  const direct = ZONE_COORDINATES[key];
+  if (direct) return { lat: direct.lat, lng: direct.lng, isApproximate: false };
+
+  const cached = cachedZoneCoords(name, district);
+  if (cached) return cached;
+
+  const center = ZONE_COORDINATES[districtKey] || cachedZoneCoords(district, '') || null;
+  return spreadCoords(center, index, total, 0.075);
+}
+
 // ── UNIVERSAL CATEGORY & LOCALITY INTELLIGENCE ENGINE ──
-// Expands ANY business category into 5-6 specialized high-yield query vectors
-function getUniversalCategoryVectors(category, cleanLoc) {
-  let cat = (category || 'Business').trim();
+function getUniversalCategoryVectors(category, cleanLoc) {  let cat = (category || 'Business').trim();
   cat = cat.replace(new RegExp(`\\s+(in|near|at|around)\\s+.*$`, 'i'), '').trim();
   if (!cat) cat = 'Business';
   const lowerCat = cat.toLowerCase();
 
-  // 0. Album Printing / Color Labs / Photobook Makers / Digital Press
-  if (lowerCat.includes('album') || lowerCat.includes('color lab') || lowerCat.includes('colour lab') || lowerCat.includes('photobook') || lowerCat.includes('photo book') || lowerCat.includes('karizma') || lowerCat.includes('canvera') || (lowerCat.includes('print') && (lowerCat.includes('photo') || lowerCat.includes('wedding')))) {
-    return [
-      { zoneName: `${cleanLoc} Wedding Album Printing Labs`, queryText: `Wedding Album Printing Lab in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Digital Color Labs`, queryText: `Digital Color Lab in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Photo Book Printing Press`, queryText: `Photo Book Printing in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Album Manufacturers`, queryText: `Wedding Album Manufacturers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Karizma Album Printers`, queryText: `Karizma Album Printing in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Photo Printing Labs`, queryText: `Photo Printing Lab in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 1. Photography / Videography
-  if (lowerCat.includes('photo') || lowerCat.includes('camera') || lowerCat.includes('shoot') || lowerCat.includes('video')) {
+  // Photography / Studio / Album Printing
+  if (lowerCat.includes('photo') || lowerCat.includes('camera') || lowerCat.includes('studio') || lowerCat.includes('album') || lowerCat.includes('shoot') || lowerCat.includes('video')) {
     return [
       { zoneName: `${cleanLoc} Photo Studios`, queryText: `Photo Studio in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Wedding Photography`, queryText: `Wedding Photographers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Event Photographers`, queryText: `Event Photographers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Digital Video & Studio`, queryText: `Digital Studio & Video in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Central Commercial`, queryText: `Photographers near Clock Tower / Market, ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Main Road Photo`, queryText: `Photographers near Main Road, ${cleanLoc}`, isVectorQuery: true }
+      { zoneName: `${cleanLoc} Wedding Photographers`, queryText: `Wedding Photographers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Digital Video & Press`, queryText: `Digital Studio & Video in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Commercial Photography`, queryText: `Commercial Photographers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Main Road Photo Hub`, queryText: `Photographers near Main Road, ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Top Rated Studios`, queryText: `Best Photo Studio in ${cleanLoc}`, isVectorQuery: true }
     ];
   }
 
-  // 2. Banquet Halls / Function Halls / Mandapams / Venues
-  if (lowerCat.includes('mandap') || lowerCat.includes('hall') || lowerCat.includes('banquet') || lowerCat.includes('convention') || lowerCat.includes('venue') || lowerCat.includes('marriage')) {
-    return [
-      { zoneName: `${cleanLoc} Function Halls`, queryText: `Function Halls in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Marriage Halls`, queryText: `Marriage Halls in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Kalyana Mandapams`, queryText: `Kalyana Mandapam in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Convention Centers`, queryText: `Convention Center in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Party & AC Halls`, queryText: `Party Halls in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Lawns & Resorts`, queryText: `Wedding Lawns & Resorts in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 3. Catering / Food / Sweets / Bakeries / Cooks
-  if (lowerCat.includes('cater') || lowerCat.includes('food') || lowerCat.includes('mess') || lowerCat.includes('sweet') || lowerCat.includes('biryani') || lowerCat.includes('cook')) {
-    return [
-      { zoneName: `${cleanLoc} Catering Services`, queryText: `Catering Services in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Wedding Caterers`, queryText: `Wedding Caterers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Outdoor Caterers`, queryText: `Outdoor Caterers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Sweet Shops & Caterers`, queryText: `Sweet Shops & Caterers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Cooking Contractors`, queryText: `Cooking Contractors & Caterers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Veg & Non-Veg Caterers`, queryText: `Caterers in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 4. Decorators / Stage Decoration / Event Organizers / Sound / Lighting / DJ
-  if (lowerCat.includes('decor') || lowerCat.includes('stage') || lowerCat.includes('event') || lowerCat.includes('flower') || lowerCat.includes('tent') || lowerCat.includes('sound') || lowerCat.includes('lighting') || lowerCat.includes('dj') || lowerCat.includes('orchestra')) {
-    return [
-      { zoneName: `${cleanLoc} Event Organizers`, queryText: `Event Organizers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Stage Decorators`, queryText: `Stage Decoration in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Flower Decorators`, queryText: `Flower Decorators in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Tent House & Shamiana`, queryText: `Tent House & Shamiana in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Sound & Lighting`, queryText: `Sound and Lighting Suppliers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} DJ & Music`, queryText: `DJ & Orchestra in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 5. Priests / Purohit / Pandit / Astrology / Vastu
-  if (lowerCat.includes('priest') || lowerCat.includes('pandit') || lowerCat.includes('purohit') || lowerCat.includes('astrolog') || lowerCat.includes('vastu') || lowerCat.includes('jyotish') || lowerCat.includes('pooja') || lowerCat.includes('puja')) {
-    return [
-      { zoneName: `${cleanLoc} Purohits & Pandits`, queryText: `Purohit & Pandits in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Wedding Priests`, queryText: `Wedding Priests in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Astrologers & Jyotish`, queryText: `Astrologers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Vastu Consultants`, queryText: `Vastu Consultants in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Pooja Store & Samagri`, queryText: `Pooja Samagri Stores in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 6. Printing / Cards / Flex / Banners
-  if (lowerCat.includes('print') || lowerCat.includes('flex') || lowerCat.includes('card') || lowerCat.includes('invitation') || lowerCat.includes('offset') || lowerCat.includes('banner')) {
-    return [
-      { zoneName: `${cleanLoc} Wedding Card Printers`, queryText: `Wedding Card Printers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Flex Printing & Banners`, queryText: `Flex Printing in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Offset & Digital Printers`, queryText: `Offset Printing Press in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Invitation Cards`, queryText: `Invitation Cards in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} DTP & Media Works`, queryText: `Printing Press in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 7. Cafes / Coffee Shops / Restaurants / Dining
-  if (lowerCat.includes('cafe') || lowerCat.includes('coffee') || lowerCat.includes('restaurant') || lowerCat.includes('bakery') || lowerCat.includes('tea') || lowerCat.includes('dining') || lowerCat.includes('hotel food')) {
-    return [
-      { zoneName: `${cleanLoc} Cafes`, queryText: `Cafes in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Coffee Shops`, queryText: `Coffee Shops in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Bakeries & Cake Shops`, queryText: `Bakeries in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Family Restaurants`, queryText: `Restaurants in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Central Dining`, queryText: `Top Food & Cafes near Main Road, ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 8. Healthcare / Doctors / Clinics / Hospitals / Dentists / Pharmacies
-  if (lowerCat.includes('doctor') || lowerCat.includes('clinic') || lowerCat.includes('hospital') || lowerCat.includes('dentist') || lowerCat.includes('dental') || lowerCat.includes('health') || lowerCat.includes('diagnostic') || lowerCat.includes('pharmacy') || lowerCat.includes('medical')) {
-    return [
-      { zoneName: `${cleanLoc} Clinics & Specialists`, queryText: `Clinics in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Hospitals`, queryText: `Hospitals in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Dental Clinics`, queryText: `Dental Clinics in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Diagnostic Centers`, queryText: `Diagnostic Centers & Labs in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Specialist Doctors`, queryText: `Doctors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Pharmacies & Medical`, queryText: `Medical Stores & Pharmacies in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 9. Real Estate / Property / Builders / Plots
-  if (lowerCat.includes('real estate') || lowerCat.includes('property') || lowerCat.includes('builder') || lowerCat.includes('plot') || lowerCat.includes('flat') || lowerCat.includes('apartment') || lowerCat.includes('land') || lowerCat.includes('construction')) {
-    return [
-      { zoneName: `${cleanLoc} Real Estate Agents`, queryText: `Real Estate Agents in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Property Dealers`, queryText: `Property Dealers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Builders & Developers`, queryText: `Builders & Developers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Plots & Layouts`, queryText: `Plots & Open Land Developers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Commercial Property`, queryText: `Commercial Real Estate in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 10. Beauty / Salons / Spas / Makeup Artists / Boutiques / Tailors
-  if (lowerCat.includes('salon') || lowerCat.includes('spa') || lowerCat.includes('makeup') || lowerCat.includes('beauty') || lowerCat.includes('boutique') || lowerCat.includes('mehendi') || lowerCat.includes('saree') || lowerCat.includes('tailor')) {
-    return [
-      { zoneName: `${cleanLoc} Beauty Parlours & Salons`, queryText: `Beauty Parlour in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Bridal Makeup Artists`, queryText: `Bridal Makeup Artists in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Mens Hair & Grooming`, queryText: `Mens Salon in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Boutiques & Designer Wear`, queryText: `Boutiques & Saree Centers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Tailors & Magam Work`, queryText: `Tailors & Magam Work in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Spas & Wellness`, queryText: `Spa & Salons in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 11. Gyms / Fitness / Yoga / Sports
-  if (lowerCat.includes('gym') || lowerCat.includes('fitness') || lowerCat.includes('yoga') || lowerCat.includes('workout') || lowerCat.includes('sports')) {
-    return [
-      { zoneName: `${cleanLoc} Gyms`, queryText: `Gyms in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Fitness Centers`, queryText: `Fitness Centers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Unisex Gyms`, queryText: `Unisex Fitness in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Yoga & Health Studios`, queryText: `Yoga Centers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Crossfit & Training`, queryText: `Weight Training & Gyms in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 12. Education / Schools / Colleges / Coaching
-  if (lowerCat.includes('school') || lowerCat.includes('college') || lowerCat.includes('coach') || lowerCat.includes('tuition') || lowerCat.includes('academy') || lowerCat.includes('education') || lowerCat.includes('institute')) {
-    return [
-      { zoneName: `${cleanLoc} Schools`, queryText: `Schools in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Colleges`, queryText: `Colleges in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Coaching & Tuitions`, queryText: `Coaching Centers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Computer & Skills Institutes`, queryText: `Training Institutes in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Pre-Schools & Daycare`, queryText: `Play Schools in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 13. Automotive / Car Rental / Mechanic / Garages / Travels
-  if (lowerCat.includes('car') || lowerCat.includes('auto') || lowerCat.includes('bike') || lowerCat.includes('travel') || lowerCat.includes('rental') || lowerCat.includes('mechanic') || lowerCat.includes('garage') || lowerCat.includes('cab') || lowerCat.includes('taxi')) {
-    return [
-      { zoneName: `${cleanLoc} Car Rentals & Travels`, queryText: `Car Rentals & Travels in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Two Wheeler Showrooms & Service`, queryText: `Bike Showrooms & Service in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Car Repair & Garages`, queryText: `Car Service & Garages in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Taxi & Tour Services`, queryText: `Tours and Travels in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Automobile Spare Parts`, queryText: `Auto Spare Parts in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14a. Plumber / Plumbing / Sanitary / Water Tank / Drainage
-  if (lowerCat.includes('plumb') || lowerCat.includes('pipe') || lowerCat.includes('sanitary') || lowerCat.includes('drain') || lowerCat.includes('tap repair') || lowerCat.includes('water tank clean')) {
-    return [
-      { zoneName: `${cleanLoc} Plumbers`, queryText: `Plumbers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Plumbing Contractors`, queryText: `Plumbing Contractors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Plumbing & Sanitary Services`, queryText: `Plumbing and Sanitary Services in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Pipe & Tap Repair Plumber`, queryText: `Plumber Pipe and Tap Repair in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Water Tank & Drainage Plumber`, queryText: `Water Tank and Drainage Plumber in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} 24/7 Emergency Plumber`, queryText: `Best Plumbers near ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14b. Electrician / Electrical Works
-  if (lowerCat.includes('electric') || lowerCat.includes('wiring') || lowerCat.includes('rewind') || lowerCat.includes('motor repair')) {
-    return [
-      { zoneName: `${cleanLoc} Electricians`, queryText: `Electricians in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Electrical Contractors`, queryText: `Electrical Contractors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Home Wiring Services`, queryText: `Home Electrical Wiring in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Electrical Works & Repair`, queryText: `Electrical Works in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} 24x7 Electrician Services`, queryText: `Electricians near ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14c. Interior Designers / False Ceiling / Cupboards
-  if (lowerCat.includes('interior') || lowerCat.includes('modular kitchen') || lowerCat.includes('false ceiling') || lowerCat.includes('cupboard') || lowerCat.includes('wallpaper')) {
-    return [
-      { zoneName: `${cleanLoc} Interior Designers`, queryText: `Interior Designers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Modular Kitchen & Cupboards`, queryText: `Modular Kitchen in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Home Interior Works`, queryText: `Home Interiors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} False Ceiling Contractors`, queryText: `False Ceiling in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Living Room & Wardrobe Design`, queryText: `Interior Decorators in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14d. Solar / Batteries / Inverters / UPS
-  if (lowerCat.includes('solar') || lowerCat.includes('battery') || lowerCat.includes('inverter') || lowerCat.includes('ups')) {
-    return [
-      { zoneName: `${cleanLoc} Solar Power Solutions`, queryText: `Solar Companies in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Inverter & Battery Dealers`, queryText: `Battery and Inverter Dealers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Rooftop Solar Installers`, queryText: `Rooftop Solar in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Solar Water Heaters`, queryText: `Solar Water Heaters in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14e. Home Painters / Painting Works
-  if (lowerCat.includes('paint') || lowerCat.includes('whitewash') || lowerCat.includes('asian paint')) {
-    return [
-      { zoneName: `${cleanLoc} Home Painters`, queryText: `Home Painters in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Painting Contractors`, queryText: `Painting Contractors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Wall Painting Services`, queryText: `Wall Painting in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Texture & Waterproofing Painting`, queryText: `Waterproofing and Painters in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14f. CCTV & Security Cameras
-  if (lowerCat.includes('cctv') || lowerCat.includes('surveillance') || lowerCat.includes('security cam')) {
-    return [
-      { zoneName: `${cleanLoc} CCTV Dealers`, queryText: `CCTV Dealers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Security Camera Installation`, queryText: `Security Camera Installation in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} CCTV Service & Repair`, queryText: `CCTV Services in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14g. AC Repair & HVAC / Refrigeration
-  if (lowerCat.includes('ac ') || lowerCat.includes('air condition') || lowerCat.includes('hvac') || lowerCat.includes('fridge') || lowerCat.includes('refrigerat')) {
-    return [
-      { zoneName: `${cleanLoc} AC Repair & Service`, queryText: `AC Repair and Service in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} AC Installation Contractors`, queryText: `AC Installation in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} AC Gas Refilling`, queryText: `AC Technicians in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 14h. Carpenters & Woodwork
-  if (lowerCat.includes('carpenter') || lowerCat.includes('wood work') || lowerCat.includes('furniture repair')) {
-    return [
-      { zoneName: `${cleanLoc} Carpenters`, queryText: `Carpenters in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Furniture Wood Work`, queryText: `Wood Work Contractors in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Door & Cupboard Carpenters`, queryText: `Door and Window Carpenters in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 15. Retail / Hardware / Electronics / Jewellery / Furniture
-  if (lowerCat.includes('jewel') || lowerCat.includes('gold') || lowerCat.includes('hardware') || lowerCat.includes('electronic') || lowerCat.includes('furniture') || lowerCat.includes('appliance') || lowerCat.includes('cloth') || lowerCat.includes('textile')) {
-    return [
-      { zoneName: `${cleanLoc} Showrooms & Retail`, queryText: `${cat} Showrooms in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Wholesale & Dealers`, queryText: `${cat} Dealers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Main Market`, queryText: `${cat} near Main Market / Bazar, ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Central Commercial`, queryText: `${cat} in ${cleanLoc} Central`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Top Rated`, queryText: `Best ${cat} in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 16. Legal & Financial / Chartered Accountants / Advocates / Insurance
-  if (lowerCat.includes('lawyer') || lowerCat.includes('advocate') || lowerCat.includes('ca') || lowerCat.includes('chartered') || lowerCat.includes('tax') || lowerCat.includes('insurance') || lowerCat.includes('loan') || lowerCat.includes('auditor') || lowerCat.includes('legal')) {
-    return [
-      { zoneName: `${cleanLoc} Advocates & Legal Advisors`, queryText: `Advocates in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Chartered Accountants`, queryText: `Chartered Accountants & Tax in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Insurance & Loans`, queryText: `Insurance & Loan Agents in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Legal Offices`, queryText: `Law Offices near Court, ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Financial Services`, queryText: `Financial Consultants in ${cleanLoc}`, isVectorQuery: true }
-    ];
-  }
-
-  // 17. UNIVERSAL DYNAMIC FALLBACK FOR ANY INDUSTRY OR CUSTOM QUERY
+  // Generic Dynamic Vectors
   return [
     { zoneName: `${cleanLoc} Core`, queryText: `${cat} in ${cleanLoc}`, isVectorQuery: true },
     { zoneName: `${cleanLoc} Top Rated`, queryText: `Best ${cat} in ${cleanLoc}`, isVectorQuery: true },
@@ -521,7 +532,7 @@ function getUniversalCategoryVectors(category, cleanLoc) {
 }
 
 // ── UNIVERSAL ZONE CLUSTER RESOLVER ──
-function resolveUniversalZones(location, category = '') {
+function resolveUniversalZones(location, category = '', isMaster = false) {
   if (!location || typeof location !== 'string') {
     return [{ zoneName: 'Central Area', queryText: 'Central Area', isSingle: true }];
   }
@@ -529,16 +540,29 @@ function resolveUniversalZones(location, category = '') {
   const cleanLoc = location.trim();
   const lowerLoc = cleanLoc.toLowerCase().replace(/[^a-z0-9]/g, '');
   const primaryName = cleanLoc.split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const strippedName = cleanLoc.replace(/\b(district|dist|mandal|mandals|tehsil|taluk|state|city|town)\b/gi, '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 
-  // 1. Authoritative Pre-Mapped Metros Check (<0.01ms)
-  // Exact match to urban metro cluster, preventing rural subdistricts (e.g. Vijayawada Rural) from being hijacked
+  // Check if query is an explicit broad sweep
+  const isExplicitDistrict = /\b(district|dist)\b/i.test(cleanLoc);
+  const isExplicitState = stateIndex.has(strippedName) || stateIndex.has(lowerLoc) || stateIndex.has(primaryName);
+
+  // In Client mode: block explicit district or state sweeps
+  if (!isMaster) {
+    if (isExplicitDistrict || isExplicitState) {
+      throw new Error(`Client searches are restricted strictly to individual cities, mandals and villages. District and state-wide sweeps require Master Command Center.`);
+    }
+  }
+
+  // 1. Authoritative Pre-Mapped Cities & Metros (All 24 Mumbai Wards, All Delhi Wards, etc.)
+  // Runs comprehensively across ALL localities of the city (NO arbitrary truncation)
   for (const [key, zones] of Object.entries(AUTHORITATIVE_CLUSTERS)) {
-    if ((lowerLoc === key || primaryName === key) && !lowerLoc.includes('rural')) {
-      return zones.map((z, idx) => {
+    if (!isExplicitDistrict && (lowerLoc === key || primaryName === key || strippedName === key) && !lowerLoc.includes('rural')) {
+      const targetList = zones; // Comprehensive search of ALL city wards
+      return targetList.map((z, idx) => {
         let coords = ZONE_COORDINATES[z.toLowerCase()] || null;
-        if (!coords && ZONE_COORDINATES[key]) {
-          const base = ZONE_COORDINATES[key];
-          const angle = (idx * 2 * Math.PI) / zones.length;
+        if (!coords && (ZONE_COORDINATES[key] || ZONE_COORDINATES[strippedName])) {
+          const base = ZONE_COORDINATES[key] || ZONE_COORDINATES[strippedName];
+          const angle = (idx * 2 * Math.PI) / targetList.length;
           coords = {
             lat: Number((base.lat + 0.02 * Math.cos(angle)).toFixed(5)),
             lng: Number((base.lng + 0.02 * Math.sin(angle)).toFixed(5))
@@ -557,16 +581,121 @@ function resolveUniversalZones(location, category = '') {
     }
   }
 
-  // 2. Check if Mandal or Town: Autonomous sweep across constituent villages & wards
+  // 2. District Headquarters / Major City Sweep (e.g. Solapur, Ujjain, Kurnool, Warangal, Bareilly, etc.)
+  if (!isExplicitDistrict && (districtIndex.has(lowerLoc) || districtIndex.has(primaryName))) {
+    const entry = districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
+    const cityName = entry.district;
+    const cityLower = cityName.toLowerCase();
+    const cityCenter = ZONE_COORDINATES[cityLower] || ZONE_COORDINATES[lowerLoc] || null;
+    const prefix = category ? (category + ' in ') : '';
+
+    const citySectors = [
+      { name: cityName + ' Central Commercial Hub', query: prefix + cityName + ' Central' },
+      { name: cityName + ' Main Market & Bazaar Area', query: prefix + 'near Main Market / Bazaar, ' + cityName },
+      { name: cityName + ' Railway Station & Bus Stand', query: prefix + 'near Railway Station, ' + cityName },
+      { name: cityName + ' Main Arterial / Ring Road', query: prefix + 'near Main Road, ' + cityName },
+      { name: cityName + ' Industrial & Trade Zone', query: prefix + 'Industrial Estate, ' + cityName },
+      { name: cityName + ' Top Rated Specialists', query: 'Best ' + (category || 'Services') + ' in ' + cityName },
+      { name: cityName + ' North Sector', query: prefix + cityName + ' North' },
+      { name: cityName + ' South Sector', query: prefix + cityName + ' South' }
+    ];
+
+    return citySectors.map((sector, idx) => {
+      let sCoords = null;
+      if (cityCenter && cityCenter.lat && cityCenter.lng) {
+        const angle = (idx * 2 * Math.PI) / citySectors.length;
+        sCoords = {
+          lat: Number((cityCenter.lat + 0.016 * Math.cos(angle)).toFixed(5)),
+          lng: Number((cityCenter.lng + 0.016 * Math.sin(angle)).toFixed(5))
+        };
+      }
+      return {
+        zoneName: sector.name,
+        queryText: sector.query,
+        district: entry.district,
+        state: entry.state,
+        lat: sCoords ? sCoords.lat : null,
+        lng: sCoords ? sCoords.lng : null,
+        isVectorQuery: true,
+        isSingle: false
+      };
+    });
+  }
+
+  // 3. Village Multi-Node Expansion Protocol
+  // If user searched a village, expand to village hub + nearby contiguous villages + mandal center!
+  const cleanVNorm = lowerLoc.replace(/u$/, '').replace(/a$/, '');
+  const villageEntry = villageIndex.get(lowerLoc) || villageIndex.get(primaryName) || villageIndex.get(cleanVNorm);
+  if (villageEntry) {
+    const vName = villageEntry.village;
+    const mName = villageEntry.mandal;
+    const dName = villageEntry.district;
+    const sName = villageEntry.state;
+    const prefix = category ? `${category} in ` : '';
+    const centerCoords = zoneCoordinates(mName, dName, 0, 1);
+
+    const zones = [];
+    // A. Primary Village Node
+    zones.push({
+      zoneName: `${vName} Village`,
+      queryText: `${prefix}${vName}, ${mName} Mandal`,
+      district: dName,
+      state: sName,
+      lat: centerCoords?.lat || null,
+      lng: centerCoords?.lng || null,
+      isVectorQuery: true,
+      isSingle: false
+    });
+
+    // B. Contiguous Neighboring Villages in the same mandal (within 5-8km)
+    const siblings = Array.isArray(villageEntry.siblings) ? villageEntry.siblings : [];
+    const chosenSiblings = siblings.slice(0, 4);
+    chosenSiblings.forEach((sibling, sIdx) => {
+      let sCoords = null;
+      if (centerCoords?.lat && centerCoords?.lng) {
+        const angle = (sIdx * 2 * Math.PI) / (chosenSiblings.length || 1);
+        sCoords = {
+          lat: Number((centerCoords.lat + 0.012 * Math.cos(angle)).toFixed(5)),
+          lng: Number((centerCoords.lng + 0.012 * Math.sin(angle)).toFixed(5))
+        };
+      }
+      zones.push({
+        zoneName: `${sibling} (Nearby)`,
+        queryText: `${prefix}${sibling}, ${mName}`,
+        district: dName,
+        state: sName,
+        lat: sCoords?.lat || null,
+        lng: sCoords?.lng || null,
+        isVectorQuery: true,
+        isSingle: false
+      });
+    });
+
+    // C. Parent Mandal Commercial Center Hub
+    zones.push({
+      zoneName: `${mName} Mandal Center`,
+      queryText: `${prefix}${mName} Central`,
+      district: dName,
+      state: sName,
+      lat: centerCoords?.lat || null,
+      lng: centerCoords?.lng || null,
+      isVectorQuery: true,
+      isSingle: false
+    });
+
+    return zones;
+  }
+
+  // 3. Mandal / Tehsil Full-Coverage Sweep
   if (mandalIndex.has(lowerLoc) || mandalIndex.has(primaryName)) {
     const entry = mandalIndex.get(lowerLoc) || mandalIndex.get(primaryName);
     const townName = entry.subDistrict || cleanLoc.split(',')[0].trim();
     const townLower = townName.toLowerCase();
-    const centerCoords = ZONE_COORDINATES[townLower] || ZONE_COORDINATES[lowerLoc] || null;
+    const centerCoords = zoneCoordinates(townName, entry.district, 0, 1);
     const prefix = category ? `${category} in ` : '';
 
     const zones = [];
-    // 1. Central Core Hub
+    // Mandal Central Hub
     zones.push({
       zoneName: `${townName} Central`,
       queryText: `${prefix}${townName} Central`,
@@ -578,64 +707,40 @@ function resolveUniversalZones(location, category = '') {
       isSingle: false
     });
 
-    // 2. Real Constituent Villages & Localities from India Villages Memory DB
+    // Constituent commercial villages across mandal (top 8-10 villages)
     const villages = Array.isArray(entry.villages) ? entry.villages : [];
-    if (villages.length > 0) {
-      const selectedVillages = villages.slice(0, 11);
-      selectedVillages.forEach((village, idx) => {
-        const vLower = village.toLowerCase();
-        let vCoords = ZONE_COORDINATES[vLower] || null;
-        if (!vCoords && centerCoords?.lat && centerCoords?.lng) {
-          const angle = (idx * 2 * Math.PI) / selectedVillages.length;
-          const offsetDist = 0.024; // ~2.5km radial offset for 5km coverage circles
-          vCoords = {
-            lat: Number((centerCoords.lat + offsetDist * Math.cos(angle)).toFixed(5)),
-            lng: Number((centerCoords.lng + offsetDist * Math.sin(angle)).toFixed(5))
-          };
-        }
-        zones.push({
-          zoneName: village,
-          queryText: `${prefix}${village}, ${townName}`,
-          district: entry.district,
-          state: entry.state,
-          lat: vCoords?.lat || null,
-          lng: vCoords?.lng || null,
-          isVectorQuery: true,
-          isSingle: false
-        });
-      });
-    }
-
-    // 3. Fallback / supplementary landmark vectors if villages < 6
-    if (zones.length < 6) {
-      const extraVectors = getUniversalCategoryVectors(category, townName);
-      for (const ev of extraVectors) {
-        if (zones.length >= 8) break;
-        zones.push({
-          zoneName: ev.zoneName,
-          queryText: ev.queryText,
-          district: entry.district,
-          state: entry.state,
-          lat: centerCoords?.lat || null,
-          lng: centerCoords?.lng || null,
-          isVectorQuery: true,
-          isSingle: false
-        });
+    const selectedVillages = villages.slice(0, 8);
+    selectedVillages.forEach((village, idx) => {
+      let vCoords = null;
+      if (centerCoords?.lat && centerCoords?.lng) {
+        const angle = (idx * 2 * Math.PI) / (selectedVillages.length || 1);
+        vCoords = {
+          lat: Number((centerCoords.lat + 0.014 * Math.cos(angle)).toFixed(5)),
+          lng: Number((centerCoords.lng + 0.014 * Math.sin(angle)).toFixed(5))
+        };
       }
-    }
+      zones.push({
+        zoneName: village,
+        queryText: `${prefix}${village}, ${townName}`,
+        district: entry.district,
+        state: entry.state,
+        lat: vCoords?.lat || null,
+        lng: vCoords?.lng || null,
+        isVectorQuery: true,
+        isSingle: false
+      });
+    });
 
     return zones;
   }
 
-  // 3. Check if District: Distribute Across Top Mandals
-  if (districtIndex.has(lowerLoc) || districtIndex.has(primaryName)) {
-    const entry = districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
-    if (entry.mandals && entry.mandals.length > 0) {
-      const isMaster = /master|sweep|district/i.test(cleanLoc);
-      const selected = isMaster ? entry.mandals.slice(0, 40) : entry.mandals.slice(0, 15);
-      return selected.map(m => {
-        const mLower = m.toLowerCase();
-        const coords = ZONE_COORDINATES[mLower] || null;
+  // 4. District Sweep: ONLY MASTER CAN DO DISTRICT-WIDE SWEEPS!
+  if (isExplicitDistrict && isMaster) {
+    const entry = districtIndex.get(strippedName) || districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
+    if (entry && entry.mandals && entry.mandals.length > 0) {
+      const selected = entry.mandals.slice(0, 60);
+      return selected.map((m, index) => {
+        const coords = zoneCoordinates(m, entry.district, index, selected.length);
         const prefix = category ? `${category} in ` : '';
         return {
           zoneName: m,
@@ -644,6 +749,7 @@ function resolveUniversalZones(location, category = '') {
           state: entry.state,
           lat: coords?.lat || null,
           lng: coords?.lng || null,
+          isApproximate: Boolean(coords?.isApproximate),
           isVectorQuery: true,
           isSingle: false
         };
@@ -651,17 +757,24 @@ function resolveUniversalZones(location, category = '') {
     }
   }
 
-  // 4. Check if State: Distribute Across Top Districts
-  if (stateIndex.has(lowerLoc) || stateIndex.has(primaryName)) {
-    const entry = stateIndex.get(lowerLoc) || stateIndex.get(primaryName);
-    if (entry.districts && entry.districts.length > 0) {
-      const isMaster = /master|sweep|state/i.test(cleanLoc);
-      const topDistricts = isMaster ? entry.districts.slice(0, 32) : entry.districts.slice(0, 15);
-      return topDistricts.map(d => {
+  // 5. State Sweep: ONLY MASTER CAN DO STATE-WIDE SWEEPS!
+  if (isExplicitState && isMaster) {
+    const entry = stateIndex.get(strippedName) || stateIndex.get(lowerLoc) || stateIndex.get(primaryName);
+    if (entry && entry.districts && entry.districts.length > 0) {
+      const topDistricts = entry.districts.slice(0, 32);
+      const center = STATE_CENTERS[entry.state.toLowerCase()] || STATE_CENTERS[strippedName] || null;
+      return topDistricts.map((d, index) => {
         const prefix = category ? `${category} in ` : '';
+        const coords = zoneCoordinates(d, d, index, topDistricts.length)
+          || (center ? spreadCoords(center, index, topDistricts.length, center.radius) : null);
         return {
           zoneName: d,
           queryText: `${prefix}${d}, ${entry.state}`,
+          district: d,
+          state: entry.state,
+          lat: coords?.lat || null,
+          lng: coords?.lng || null,
+          isApproximate: Boolean(coords?.isApproximate),
           isVectorQuery: true,
           isSingle: false
         };
@@ -669,20 +782,44 @@ function resolveUniversalZones(location, category = '') {
     }
   }
 
-  // 5. Universal Fallback for ANY Global Town, Suburb, or Locality
-  const vectors = getUniversalCategoryVectors(category, cleanLoc.split(',')[0].trim());
-  return vectors.map(v => ({
-    zoneName: v.zoneName,
-    queryText: v.queryText,
-    isVectorQuery: true,
-    isSingle: false
-  }));
+  // 6. Comprehensive City / District Headquarter Sweep for ANY Indian City
+  // (e.g. Coimbatore, Nashik, Agra, Varanasi, Kanpur, Nellore, Tirupati, etc.)
+  const cityName = cleanLoc.split(',')[0].trim();
+  const cityLower = cityName.toLowerCase();
+  const cityCenter = ZONE_COORDINATES[cityLower] || ZONE_COORDINATES[lowerLoc] || null;
+  const prefix = category ? `${category} in ` : '';
+
+  const citySectors = [
+    { name: `${cityName} Central Commercial Hub`, query: `${prefix}${cityName} Central`, offset: 0 },
+    { name: `${cityName} Main Market & Bazaar Area`, query: `${prefix}near Main Market / Bazaar, ${cityName}`, offset: 0.012 },
+    { name: `${cityName} Railway Station & Bus Stand`, query: `${prefix}near Railway Station, ${cityName}`, offset: -0.012 },
+    { name: `${cityName} Main Arterial / Ring Road`, query: `${prefix}near Main Road, ${cityName}`, offset: 0.018 },
+    { name: `${cityName} Industrial & Trade Zone`, query: `${prefix}Industrial Estate, ${cityName}`, offset: -0.018 },
+    { name: `${cityName} Top Rated Specialists`, query: `Best ${category || 'Services'} in ${cityName}`, offset: 0.008 },
+    { name: `${cityName} North Sector`, query: `${prefix}${cityName} North`, offset: 0.022 },
+    { name: `${cityName} South Sector`, query: `${prefix}${cityName} South`, offset: -0.022 }
+  ];
+
+  return citySectors.map((sector, idx) => {
+    let sCoords = null;
+    if (cityCenter?.lat && cityCenter?.lng) {
+      const angle = (idx * 2 * Math.PI) / citySectors.length;
+      sCoords = {
+        lat: Number((cityCenter.lat + 0.016 * Math.cos(angle)).toFixed(5)),
+        lng: Number((cityCenter.lng + 0.016 * Math.sin(angle)).toFixed(5))
+      };
+    }
+    return {
+      zoneName: sector.name,
+      queryText: sector.query,
+      lat: sCoords?.lat || null,
+      lng: sCoords?.lng || null,
+      isVectorQuery: true,
+      isSingle: false
+    };
+  });
 }
 
-/**
- * Classifies a user's location input into State, District, Metro/City, or Mandal
- * Returns instant metadata for UI badges, zone counts, lead estimates, and auto-swarm triggers
- */
 function classifyLocation(queryOrLoc) {
   if (!queryOrLoc || typeof queryOrLoc !== 'string') {
     return { type: 'unknown', name: '', zoneCount: 1, estimatedLeads: 50, badge: '📍 LOCAL', label: 'Local search' };
@@ -705,119 +842,95 @@ function classifyLocation(queryOrLoc) {
     locCandidate.split(',').pop().trim()
   ].filter(Boolean);
 
-  const cleanCandidates = [...new Set(rawCandidates.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean))];
+  const cleanCandidates = [...new Set(rawCandidates.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '')))];
 
-  // 1. If explicit District indicated (e.g. "Guntur District", "Krishna Dist")
-  if (explicitDistrict) {
-    for (const clean of cleanCandidates) {
-      if (districtIndex.has(clean)) {
-        const entry = districtIndex.get(clean);
-        const mCount = entry.mandals ? entry.mandals.length : 14;
-        return {
-          type: 'district',
-          name: `${entry.district} District`,
-          state: entry.state,
-          zoneCount: mCount,
-          estimatedLeads: Math.min(1200, mCount * 35),
-          badge: '🗺️ DISTRICT',
-          label: 'District sweep (Master only)',
-          warning: `⚠️ District-wide sweep (${mCount} mandals). Swarms all towns and villages.`,
-          description: `District detected · ${mCount} mandals auto-swarmed · ~${Math.min(1200, mCount * 35)} leads`,
-          subZones: entry.mandals ? entry.mandals.slice(0, 20) : []
-        };
-      }
-    }
-  }
-
-  // 2. Check State
-  for (const clean of cleanCandidates) {
-    if (stateIndex.has(clean)) {
-      const entry = stateIndex.get(clean);
-      const distCount = entry.districts ? entry.districts.length : 25;
+  // Check state
+  for (const c of cleanCandidates) {
+    if (stateIndex.has(c)) {
+      const stateObj = stateIndex.get(c);
+      const count = stateObj.districts ? stateObj.districts.length : 30;
       return {
         type: 'state',
-        name: entry.state,
-        zoneCount: distCount,
-        totalMandals: distCount * 14,
-        estimatedLeads: 3000,
-        badge: '🏛️ STATE SWEEP',
-        label: 'State Sweep detected (Master only)',
-        warning: `⚠️ State-wide sweep (${distCount} districts, ~${distCount * 14} mandals). Swarms all major hubs.`,
-        description: `State: ${entry.state} (${distCount} districts)`,
-        subZones: entry.districts ? entry.districts.slice(0, 15) : []
+        name: stateObj.state,
+        zoneCount: count,
+        estimatedLeads: count * 80,
+        badge: '🌐 STATE-WIDE',
+        label: `State sweep: ${stateObj.state} (${count} districts)`
       };
     }
   }
 
-  // 3. Check Authoritative Metro / Tier-1/2 City Cluster (when not explicit district)
-  if (!explicitDistrict) {
-    for (const clean of cleanCandidates) {
-      if (AUTHORITATIVE_CLUSTERS[clean]) {
-        const zones = AUTHORITATIVE_CLUSTERS[clean];
-        const displayName = locCandidate.split(',')[0].replace(/\b(city|town|metro)\b/gi, '').trim();
+  // Check district
+  if (explicitDistrict) {
+    for (const c of cleanCandidates) {
+      if (districtIndex.has(c)) {
+        const distObj = districtIndex.get(c);
+        const count = distObj.mandals ? distObj.mandals.length : 25;
         return {
-          type: 'city',
-          name: displayName.charAt(0).toUpperCase() + displayName.slice(1),
-          zoneCount: zones.length,
-          estimatedLeads: zones.length * 40,
-          badge: '🏙️ TIER-1/2 CITY',
-          label: 'City detected',
-          description: `Tier-1/2 City · ${zones.length} economic zones swarm · ~${zones.length * 40} leads`,
-          subZones: zones
+          type: 'district',
+          name: distObj.district,
+          zoneCount: count,
+          estimatedLeads: count * 45,
+          badge: '🗺️ DISTRICT-WIDE',
+          label: `District sweep: ${distObj.district} (${count} mandals)`
         };
       }
     }
   }
 
-  // 4. Check Mandal
-  for (const clean of cleanCandidates) {
-    if (mandalIndex.has(clean)) {
-      const entry = mandalIndex.get(clean);
-      const vCount = entry.villages ? Math.min(entry.villages.length, 10) : 4;
+  // Check metro / city cluster
+  for (const c of cleanCandidates) {
+    if (AUTHORITATIVE_CLUSTERS[c]) {
+      const zones = AUTHORITATIVE_CLUSTERS[c];
+      return {
+        type: 'metro',
+        name: c.charAt(0).toUpperCase() + c.slice(1),
+        zoneCount: zones.length,
+        estimatedLeads: zones.length * 50,
+        badge: '🏙️ METRO/CITY',
+        label: `City sweep: ${zones.length} urban wards`
+      };
+    }
+  }
+
+  // Check village
+  for (const c of cleanCandidates) {
+    const cleanNorm = c.replace(/u$/, '').replace(/a$/, '');
+    if (villageIndex.has(c) || villageIndex.has(cleanNorm)) {
+      const vObj = villageIndex.get(c) || villageIndex.get(cleanNorm);
+      return {
+        type: 'village',
+        name: vObj.village,
+        zoneCount: 6,
+        estimatedLeads: 40,
+        badge: '🏡 VILLAGE EXPANSION',
+        label: `Village multi-node: ${vObj.village} + ${vObj.mandal} Mandal`
+      };
+    }
+  }
+
+  // Check mandal
+  for (const c of cleanCandidates) {
+    if (mandalIndex.has(c)) {
+      const mObj = mandalIndex.get(c);
       return {
         type: 'mandal',
-        name: entry.subDistrict,
-        district: entry.district,
-        state: entry.state,
-        zoneCount: vCount,
-        estimatedLeads: 85,
-        badge: '📍 MANDAL',
-        label: 'Mandal / Tehsil detected',
-        description: `Mandal in ${entry.district}, ${entry.state} · ~85 leads`,
-        subZones: entry.villages ? entry.villages.slice(0, 10) : []
+        name: mObj.subDistrict,
+        zoneCount: 8,
+        estimatedLeads: 60,
+        badge: '📍 MANDAL/TOWN',
+        label: `Mandal sweep: ${mObj.subDistrict} (${mObj.district})`
       };
     }
   }
 
-  // 5. Check District if not already matched
-  for (const clean of cleanCandidates) {
-    if (districtIndex.has(clean)) {
-      const entry = districtIndex.get(clean);
-      const mCount = entry.mandals ? entry.mandals.length : 14;
-      return {
-        type: 'district',
-        name: `${entry.district} District`,
-        state: entry.state,
-        zoneCount: mCount,
-        estimatedLeads: Math.min(1200, mCount * 35),
-        badge: '🗺️ DISTRICT',
-        label: 'District detected (Master only)',
-        description: `District detected · ${mCount} mandals auto-swarmed · ~${Math.min(1200, mCount * 35)} leads`,
-        subZones: entry.mandals ? entry.mandals.slice(0, 20) : []
-      };
-    }
-  }
-
-  // Fallback for general locality / town
   return {
-    type: 'locality',
+    type: 'city',
     name: locCandidate,
-    zoneCount: 1,
-    estimatedLeads: 60,
-    badge: '📍 LOCALITY',
-    label: 'Local Radar Mesh',
-    description: `High-precision local zone swarm · ~60 leads`,
-    subZones: [locCandidate]
+    zoneCount: 8,
+    estimatedLeads: 70,
+    badge: '🏙️ CITY/TOWN',
+    label: `City sweep: ${locCandidate}`
   };
 }
 
@@ -825,9 +938,14 @@ module.exports = {
   resolveUniversalZones,
   getUniversalCategoryVectors,
   classifyLocation,
+  zoneCoordinates,
+  cachedZoneCoords,
+  spreadCoords,
   AUTHORITATIVE_CLUSTERS,
   ZONE_COORDINATES,
+  STATE_CENTERS,
   mandalIndex,
   districtIndex,
+  villageIndex,
   stateIndex
 };

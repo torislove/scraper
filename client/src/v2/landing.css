@@ -1731,3 +1731,396 @@ html.lp-page #root { min-height: 100vh; }
   .lp-audience-grid { grid-template-columns: 1fr; }
   .lp-geo-tiers { grid-template-columns: 1fr; }
 }
+
+
+/* ============================================================================
+   WhatsApp Outreach Campaign Engine & Interactive Simulator
+   ========================================================================== */
+
+.lp-wa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: 40px;
+  align-items: center;
+  margin-top: 36px;
+}
+.lp-wa-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.lp-wa-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(37, 211, 102, 0.14);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.lp-wa-features-mini {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lp-wa-features-mini li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.lp-wa-feat-ico {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  color: #34d399;
+}
+.lp-wa-features-mini b {
+  display: block;
+  font-size: 14px;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.lp-wa-features-mini span {
+  display: block;
+  font-size: 12.5px;
+  color: var(--lp-muted);
+  line-height: 1.5;
+}
+.lp-wa-features-mini code {
+  font-family: var(--lp-mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(52, 211, 153, 0.12);
+  color: #6ee7b7;
+}
+
+/* WhatsApp Mockup Container */
+.lp-wa-composer-mock {
+  border-radius: 18px;
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  background: linear-gradient(180deg, #09171b, #070e17);
+  box-shadow: 0 32px 70px rgba(0, 0, 0, 0.7), 0 0 40px rgba(37, 211, 102, 0.08);
+  overflow: hidden;
+}
+.lp-wa-mock-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(11, 25, 29, 0.95);
+  border-bottom: 1px solid rgba(52, 211, 153, 0.18);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lp-wa-mock-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #6ee7b7;
+}
+.lp-wa-mock-bar-shield {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.18);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.lp-wa-mock-content {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  min-height: 380px;
+}
+.lp-wa-mock-left {
+  padding: 18px;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.lp-wa-mock-templates {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lp-wa-mock-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  color: #94a3b8;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lp-wa-mock-tab.is-active {
+  background: rgba(37, 211, 102, 0.15);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #34d399;
+  font-weight: 600;
+}
+.lp-wa-prospect-box {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  padding: 12px;
+}
+.lp-wa-prospect-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+.lp-wa-prospect-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+.lp-wa-prospect-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #6ee7b7;
+  flex-wrap: wrap;
+}
+.lp-wa-actions-sim {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.lp-wa-btn-send {
+  flex: 1;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+  transition: transform 0.15s ease;
+}
+.lp-wa-btn-send:hover {
+  transform: translateY(-1px);
+}
+.lp-wa-btn-next {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* WhatsApp Phone Screen Simulator */
+.lp-wa-mock-right {
+  background: #0b141a;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.lp-wa-phone-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.lp-wa-phone-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #128c7e;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+}
+.lp-wa-phone-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #e9edef;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lp-wa-phone-sub {
+  font-size: 9.5px;
+  color: #8696a0;
+}
+.lp-wa-chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding-top: 16px;
+}
+.lp-wa-bubble {
+  background: #005c4b;
+  color: #e9edef;
+  padding: 10px 12px;
+  border-radius: 8px 8px 2px 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  position: relative;
+  word-break: break-word;
+}
+.lp-wa-bubble-time {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  font-size: 9px;
+  color: #8696a0;
+  margin-top: 4px;
+}
+.lp-wa-crm-sync-toast {
+  margin-top: 12px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: #86efac;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Feature 4-Card Grid */
+.lp-wa-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  margin-top: 36px;
+}
+.lp-wa-card {
+  padding: 20px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  transition: all 0.25s ease;
+}
+.lp-wa-card:hover {
+  background: rgba(255, 255, 255, 0.045);
+  border-color: rgba(52, 211, 153, 0.3);
+  transform: translateY(-2px);
+}
+.lp-wa-card b {
+  display: block;
+  font-size: 14px;
+  color: #f8fafc;
+  margin-bottom: 6px;
+}
+.lp-wa-card p {
+  font-size: 12px;
+  color: var(--lp-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .lp-wa-grid { grid-template-columns: 1fr; }
+  .lp-wa-mock-content { grid-template-columns: 1fr; }
+  .lp-wa-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .lp-wa-cards { grid-template-columns: 1fr; }
+}
+
+
+/* WhatsApp Product Catalog additions */
+.lp-wa-mock-products {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.lp-wa-mock-prod-pill {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.lp-wa-mock-prod-pill.is-active {
+  background: rgba(37, 211, 102, 0.2);
+  border-color: #25d366;
+  color: #86efac;
+}
+.lp-wa-bubble-prod-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 10px;
+  font-weight: 700;
+  color: #86efac;
+}
+.lp-wa-bubble-price-tag {
+  background: #25d366;
+  color: #064e3b;
+  font-weight: 800;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.lp-wa-bubble-img {
+  width: 100%;
+  max-height: 110px;
+  object-fit: cover;
+  border-radius: 5px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lp-wa-bubble-link-card {
+  margin-top: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 5px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 9.5px;
+  color: #53bdeb;
+}

@@ -134,6 +134,7 @@ export default function CommandMap({
   zoom = 5,
   height = 520,
   onSelect,
+  onSelectZone,
   className = '',
   compact = false
 }) {
@@ -186,12 +187,20 @@ export default function CommandMap({
         {!compact && <InitialFit points={points} />}
 
         {coverage.map((zone, index) => {
-          const isActive = scanning && activeZone?.name === zone.name;
+          const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const isActive = scanning && (
+            norm(activeZone?.name) === norm(zone.name) ||
+            norm(activeZone?.zoneName) === norm(zone.name) ||
+            (activePoint && Math.abs(zone.lat - activePoint[0]) < 0.005 && Math.abs(zone.lng - activePoint[1]) < 0.005)
+          );
           return (
             <Circle
               key={`zone-${zone.index || index}-${zone.name}`}
               center={[zone.lat, zone.lng]}
               radius={5000}
+              eventHandlers={{
+                click: () => onSelectZone?.(zone.name)
+              }}
               pathOptions={{
                 color: isActive ? '#10b981' : '#06b6d4',
                 weight: isActive ? 2.5 : 1.2,

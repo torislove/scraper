@@ -103,6 +103,148 @@ const MAJOR_CITIES = [
 
 const MAJOR_CITY_KEYS = MAJOR_CITIES.map(name => ({ name, key: norm(name) }));
 
+const CITY_TYPO_MAP = {
+  'mubai': 'Mumbai',
+  'mumbai': 'Mumbai',
+  'mumbay': 'Mumbai',
+  'bombay': 'Mumbai',
+  'hydrabad': 'Hyderabad',
+  'hyderbad': 'Hyderabad',
+  'hyd': 'Hyderabad',
+  'secndrabad': 'Secunderabad',
+  'secunderbad': 'Secunderabad',
+  'vijaywada': 'Vijayawada',
+  'vijayawda': 'Vijayawada',
+  'bezawada': 'Vijayawada',
+  'guntr': 'Guntur',
+  'guntor': 'Guntur',
+  'vizag': 'Visakhapatnam',
+  'vishakapatnam': 'Visakhapatnam',
+  'vishakhapatnam': 'Visakhapatnam',
+  'vizianagram': 'Vizianagaram',
+  'tirupathi': 'Tirupati',
+  'bengaluru': 'Bengaluru',
+  'banglore': 'Bengaluru',
+  'bangalore': 'Bengaluru',
+  'madras': 'Chennai',
+  'chenai': 'Chennai',
+  'calcutta': 'Kolkata',
+  'kolkatta': 'Kolkata',
+  'delhy': 'Delhi',
+  'newdelhi': 'New Delhi',
+  'ahmdabad': 'Ahmedabad',
+  'ahmedbad': 'Ahmedabad',
+  'vadodra': 'Vadodara',
+  'baroda': 'Vadodara',
+  'cochin': 'Kochi',
+  'trivandrum': 'Thiruvananthapuram',
+  'poona': 'Pune',
+  'pune': 'Pune',
+  'punecity': 'Pune',
+  'pune city': 'Pune',
+  'poonacity': 'Pune'
+};
+
+const TRADE_TYPO_MAP = {
+  'photgraphy': 'photography',
+  'photograhy': 'photography',
+  'photogrfy': 'photography',
+  'fotogrfy': 'photography',
+  'photogrphy': 'photography',
+  'photogaphy': 'photography',
+  'fotogaphy': 'photography',
+  'photgrapher': 'photographer',
+  'fotography': 'photography',
+  'photograpy': 'photography',
+  'potography': 'photography',
+  'photogrpahy': 'photography',
+  'fotographer': 'photographer',
+  'photograper': 'photographer',
+  'fotographers': 'photographers',
+  'photogal': 'photography',
+  'vedio': 'video',
+  'videograpy': 'videography',
+  'vedigraphy': 'videography',
+  'cameraman': 'photographer',
+  'albm': 'album',
+  'albumb': 'album',
+  'albump': 'album',
+  'flim': 'film',
+  'weeding': 'wedding',
+  'weddding': 'wedding',
+  'wedidng': 'wedding',
+  'marrige': 'marriage',
+  'marraige': 'marriage',
+  'merriage': 'marriage',
+  'mandapam': 'mandap',
+  'mandapams': 'mandap',
+  'functionhall': 'function hall',
+  'caterors': 'caterers',
+  'catrers': 'caterers',
+  'caterar': 'caterer',
+  'catrer': 'caterer',
+  'caterings': 'catering',
+  'cetring': 'catering',
+  'catring': 'catering',
+  'decarator': 'decorator',
+  'decorater': 'decorator',
+  'decoraters': 'decorators',
+  'decarators': 'decorators',
+  'decors': 'decorators',
+  'flwer': 'flower',
+  'florist': 'flower decorators',
+  'shamiana': 'tent house',
+  'shamiyana': 'tent house',
+  'pandol': 'pandal decorators',
+  'pandal': 'pandal decorators',
+  'make up': 'makeup',
+  'mekeup': 'makeup',
+  'beautician': 'beautician',
+  'beatition': 'beautician',
+  'beauty parlour': 'beauty parlour',
+  'beuty parlour': 'beauty parlour',
+  'parlor': 'parlour',
+  'mehendi': 'mehendi artist',
+  'mehandi': 'mehendi artist',
+  'mehendhi': 'mehendi artist',
+  'mehndi': 'mehendi artist',
+  'pandit': 'pandit',
+  'pujari': 'pandit',
+  'brahmin': 'pandit',
+  'purohit': 'pandit',
+  'plumer': 'plumber',
+  'plambur': 'plumber',
+  'plambr': 'plumber',
+  'electrition': 'electrician',
+  'electrican': 'electrician',
+  'electrisian': 'electrician',
+  'carpanter': 'carpenter',
+  'carpentor': 'carpenter',
+  'paniter': 'painter',
+  'peinter': 'painter',
+  'butiqe': 'boutique',
+  'butique': 'boutique',
+  'botique': 'boutique',
+  'jewelery': 'jewellers',
+  'jewellary': 'jewellers',
+  'jwellery': 'jewellers',
+  'tailer': 'tailor',
+  'taylor': 'tailor'
+};
+
+function normalizeTradeTypos(fragment) {
+  if (!fragment || typeof fragment !== 'string') return fragment;
+  let tokens = fragment.toLowerCase().split(/\s+/);
+  let resultTokens = tokens.map(token => TRADE_TYPO_MAP[token] || token);
+  let joined = resultTokens.join(' ');
+  for (const [key, replacement] of Object.entries(TRADE_TYPO_MAP)) {
+    if (key.includes(' ') && joined.includes(key)) {
+      joined = joined.replace(new RegExp(`\\b${key}\\b`, 'gi'), replacement);
+    }
+  }
+  return joined;
+}
+
 function levenshtein(a, b) {
   if (a === b) return 0;
   if (!a.length) return b.length;
@@ -124,16 +266,32 @@ function levenshtein(a, b) {
 
 function typoBudget(length) {
   if (length <= 4) return 1;
-  if (length <= 7) return 2;
-  if (length <= 11) return 2;
-  return 3;
+  return 2;
 }
 
 const NAME_ALIASES = {
   'mumbai city': 'Mumbai',
   'mumbai suburban': 'Mumbai',
   'bengaluru urban': 'Bengaluru',
-  'bengaluru rural': 'Bengaluru'
+  'bengaluru rural': 'Bengaluru',
+  'pune city': 'Pune',
+  'pune urban': 'Pune',
+  'hyderabad city': 'Hyderabad',
+  'delhi city': 'Delhi',
+  'chennai city': 'Chennai',
+  'kolkata city': 'Kolkata',
+  'ahmedabad city': 'Ahmedabad',
+  'surat city': 'Surat',
+  'jaipur city': 'Jaipur',
+  'lucknow city': 'Lucknow',
+  'kanpur city': 'Kanpur',
+  'nagpur city': 'Nagpur',
+  'indore city': 'Indore',
+  'bhopal city': 'Bhopal',
+  'coimbatore city': 'Coimbatore',
+  'guntur city': 'Guntur',
+  'vijayawada city': 'Vijayawada',
+  'visakhapatnam city': 'Visakhapatnam'
 };
 
 function canonicalName(item) {
@@ -183,8 +341,20 @@ function findLocations(fragment, limit = 6) {
   if (text.length < 3) return [];
   try {
     const geo = getGeo();
-    const mapped = geo.searchLocations(text, Math.max(limit, 6))
+    let mapped = geo.searchLocations(text, Math.max(limit, 6))
       .map(item => locationFromResult(item, text));
+
+    // Common Indian phonetic variants (e.g. Namburu -> Nambur, Gunturu -> Guntur)
+    if (!mapped.length && text.length >= 4 && /[uai]$/i.test(text)) {
+      const stem = text.replace(/[uai]$/i, '');
+      if (stem.length >= 3) {
+        const stemResults = geo.searchLocations(stem, Math.max(limit, 6))
+          .map(item => locationFromResult(item, text));
+        if (stemResults.length) {
+          mapped = stemResults;
+        }
+      }
+    }
     const seen = new Set();
     return mapped.filter(item => {
       const key = `${norm(item.value)}|${norm(item.state)}`;
@@ -247,13 +417,17 @@ function findCorrectedLocation(fragment, limit = 6) {
  * Prefer a known major city when the user typed something two keystrokes
  * away from it, even if a tiny village happens to share the misspelling.
  */
-function findBestPlace(fragment, limit = 6) {
-  const direct = findLocations(fragment, limit);
+function findBestPlace(fragment, limit = 6, isMaster = false) {
+  let direct = findLocations(fragment, limit);
+  if (!isMaster) {
+    direct = direct.filter(item => item.level !== 'district' && item.level !== 'state');
+  }
   const fuzzy = clean(fragment).length >= 4 ? findCorrectedLocation(fragment, 1) : [];
+  let filteredFuzzy = isMaster ? fuzzy : fuzzy.filter(item => item.level !== 'district' && item.level !== 'state');
 
-  if (!direct.length) return fuzzy;
+  if (!direct.length) return filteredFuzzy;
 
-  const fuzzyBest = fuzzy[0] || null;
+  const fuzzyBest = filteredFuzzy[0] || null;
   const directBest = direct[0];
   if (fuzzyBest && fuzzyBest.major
     && (directBest.level === 'village' || directBest.level === 'town')
@@ -309,7 +483,11 @@ function detectFragments(query) {
   // An exact place name wins over a fuzzy category match. This is what makes
   // "Vijayawada", "Tenali" and "Nellore" places instead of categories.
   const directPlaces = findLocations(text, 6);
-  const exactPlace = directPlaces.find(place => norm(place.value) === norm(text));
+  const exactPlace = directPlaces.find(place => {
+    const a = norm(place.value);
+    const b = norm(text);
+    return a === b || (a.length >= 3 && b.length >= 3 && a.replace(/[uai]$/i, '') === b.replace(/[uai]$/i, ''));
+  });
   const exactCategory = categoryRouter.suggestCategories(text, 1).some(match => match.score >= 990);
   if (exactPlace && !exactCategory) {
     return {
@@ -325,7 +503,8 @@ function detectFragments(query) {
     if (suffix.length < 3) continue;
     const prefix = words.slice(0, -take).join(' ');
     if (!prefix) continue;
-    if (!categoryRouter.suggestCategories(prefix, 1).length) continue;
+    const normPrefix = normalizeTradeTypos(prefix);
+    if (!categoryRouter.suggestCategories(normPrefix, 1).length && !categoryRouter.suggestCategories(prefix, 1).length) continue;
     const place = resolveExactPlace(suffix);
     if (place) {
       return {
@@ -429,7 +608,7 @@ function filterRelevantCategories(matches, fragment, intent) {
  * Direct O(1) map lookups, no fuzzy scan: this is the fast path that runs on
  * every place keystroke.
  */
-function findPlaceVariants(text, limit = 6) {
+function findPlaceVariants(text, limit = 6, isMaster = false) {
   const raw = clean(text);
   if (raw.length < 3) return [];
   const suffixMatch = raw.match(PLACE_SUFFIX);
@@ -442,12 +621,32 @@ function findPlaceVariants(text, limit = 6) {
   const out = [];
   const push = variant => {
     if (!variant) return;
+    if (!isMaster && (variant.level === 'district' || variant.level === 'state' || variant.scope === 'district' || variant.scope === 'state')) return;
     if (only && variant.level !== only) return;
     const duplicate = out.some(item => item.level === variant.level
       && norm(item.value) === norm(variant.value)
       && norm(item.state) === norm(variant.state));
     if (!duplicate) out.push(variant);
   };
+
+  // Check if base matches a major city by alias, common typo, or close Levenshtein distance
+  const cityAlias = CITY_TYPO_MAP[key];
+  let targetCity = cityAlias;
+  if (!targetCity) {
+    // Only search fuzzy major city if base is not an exact known place (village/mandal/town)
+    const directHits = findLocations(base, 1);
+    const isDirectPlace = directHits.some(p => {
+      const pNorm = norm(p.value);
+      return pNorm === key || (pNorm.length >= 3 && pNorm.replace(/[uai]$/i, '') === key.replace(/[uai]$/i, ''));
+    });
+
+    if (!isDirectPlace) {
+      // Allow distance 1 for short strings, distance 2 only for long strings (>= 8 chars)
+      const budget = key.length >= 8 ? 2 : 1;
+      const match = MAJOR_CITY_KEYS.find(c => levenshtein(key, c.key) <= budget);
+      if (match) targetCity = match.name;
+    }
+  }
 
   let geo;
   try {
@@ -456,42 +655,68 @@ function findPlaceVariants(text, limit = 6) {
     return [];
   }
 
-  const state = geo.statesMap && geo.statesMap.get(key);
-  if (state) {
+  if (targetCity && norm(targetCity) !== key) {
+    // A major city is matched via typo/alias (e.g. mubai -> Mumbai, guntr -> Guntur)
+    const majorLocations = geo.searchLocations(targetCity, 1);
+    const primary = majorLocations[0];
     push({
-      value: state.state,
-      label: state.state,
-      display: `${state.state}, India`,
-      level: 'state',
-      scope: 'state',
-      detail: 'State',
-      state: state.state,
-      district: '',
+      value: targetCity,
+      label: targetCity,
+      display: primary ? primary.display : `${targetCity}, City`,
+      level: 'city',
+      scope: 'city',
+      detail: 'City',
+      state: primary?.state || '',
+      district: primary?.district || '',
       mandal: '',
-      lat: null,
-      lng: null,
-      corrected: false,
-      explicit: true
+      lat: primary ? Number(primary.lat) : null,
+      lng: primary ? Number(primary.lng) : null,
+      corrected: true,
+      correctedFrom: raw,
+      correctedTo: targetCity,
+      explicit: true,
+      major: true
     });
   }
 
-  const district = geo.districtsMap && geo.districtsMap.get(key);
-  if (district) {
-    push({
-      value: `${district.district} District`,
-      label: `${district.district} District`,
-      display: `${district.district} District, ${district.state}`,
-      level: 'district',
-      scope: 'district',
-      detail: 'District',
-      state: district.state,
-      district: district.district,
-      mandal: '',
-      lat: null,
-      lng: null,
-      corrected: false,
-      explicit: true
-    });
+  if (isMaster) {
+    const state = geo.statesMap && geo.statesMap.get(key);
+    if (state) {
+      push({
+        value: state.state,
+        label: state.state,
+        display: `${state.state}, India`,
+        level: 'state',
+        scope: 'state',
+        detail: 'State',
+        state: state.state,
+        district: '',
+        mandal: '',
+        lat: null,
+        lng: null,
+        corrected: false,
+        explicit: true
+      });
+    }
+
+    const district = geo.districtsMap && geo.districtsMap.get(key);
+    if (district) {
+      push({
+        value: `${district.district} District`,
+        label: `${district.district} District`,
+        display: `${district.district} District, ${district.state}`,
+        level: 'district',
+        scope: 'district',
+        detail: 'District',
+        state: district.state,
+        district: district.district,
+        mandal: '',
+        lat: null,
+        lng: null,
+        corrected: false,
+        explicit: true
+      });
+    }
   }
 
   const mandals = (geo.subDistrictsMap && geo.subDistrictsMap.get(key)) || [];
@@ -513,8 +738,13 @@ function findPlaceVariants(text, limit = 6) {
     });
   });
 
-  for (const item of findLocations(base, 10)) {
-    if (norm(item.value) !== key) continue;
+  const searchBase = targetCity || base;
+  for (const item of findLocations(searchBase, 10)) {
+    const itemNorm = norm(item.value);
+    const baseNorm = norm(searchBase);
+    const isMatch = itemNorm === baseNorm ||
+      (itemNorm.length >= 3 && baseNorm.length >= 3 && itemNorm.replace(/[uai]$/i, '') === baseNorm.replace(/[uai]$/i, ''));
+    if (!isMatch) continue;
     push({
       value: item.value,
       label: item.value,
@@ -527,7 +757,9 @@ function findPlaceVariants(text, limit = 6) {
       mandal: item.mandal || '',
       lat: item.lat,
       lng: item.lng,
-      corrected: false,
+      corrected: Boolean(targetCity && norm(targetCity) !== key),
+      correctedFrom: targetCity && norm(targetCity) !== key ? raw : '',
+      correctedTo: targetCity && norm(targetCity) !== key ? targetCity : '',
       explicit: true
     });
   }
@@ -546,6 +778,7 @@ function findPlaceVariants(text, limit = 6) {
  */
 function suggest(options = {}) {
   const limit = Math.max(1, Math.min(12, Number(options.limit) || 6));
+  const isMaster = Boolean(options.isMaster);
   const explicitCategory = clean(options.category);
   const explicitLocation = clean(options.location);
   const explicit = Boolean(explicitCategory || explicitLocation);
@@ -563,6 +796,9 @@ function suggest(options = {}) {
     splitBy = parts.splitBy;
   }
 
+  // Auto-correct common trade typos
+  categoryFragment = normalizeTradeTypos(categoryFragment);
+
   const intent = brandIntel.detect(categoryFragment);
   // The fuzzy category index is deliberately loose (it is tuned for typos), so
   // it also returns near-misses like "Car Wash" for "amd graphic card". Once we
@@ -576,8 +812,8 @@ function suggest(options = {}) {
   // Named places: return every level that shares the name (city, district,
   // mandal, state), which is what drives the "Guntur city or Guntur district?"
   // chooser. Prefix typing falls back to the fuzzy place search.
-  const placeVariants = locationFragment ? findPlaceVariants(locationFragment, limit) : [];
-  let locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit);
+  const placeVariants = locationFragment ? findPlaceVariants(locationFragment, limit, isMaster) : [];
+  let locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit, isMaster);
   const correctedLocation = locationMatches[0]?.corrected ? locationMatches[0] : null;
   if (correctedLocation) locationCorrectedFrom = correctedLocation.correctedFrom || locationFragment;
   else if (!locationMatches.length && locationFragment) {
@@ -660,7 +896,13 @@ function formatVectorDetail(engines) {
         : false,
       correctedFrom: index === 0 ? (match.correctedFrom || locationCorrectedFrom) : ''
     }))
-  ];
+  ].filter(item => {
+    if (isMaster) return true;
+    if (item.type === 'location') {
+      return item.level !== 'district' && item.level !== 'state';
+    }
+    return true;
+  });
 
   let correctedQuery = '';
   if (bestCategory && bestLocation) correctedQuery = `${bestCategory.value} in ${bestLocation.value}`;
@@ -680,14 +922,17 @@ function formatVectorDetail(engines) {
     category: bestCategory,
     location: bestLocation,
     disambiguation: (() => {
-      const levels = [...new Set(locationMatches.map(match => match.level).filter(Boolean))];
-      if (placeVariants.length < 2 || levels.length < 2) return null;
+      const allowedVariants = isMaster 
+        ? placeVariants 
+        : placeVariants.filter(v => v.level !== 'district' && v.level !== 'state');
+      const levels = [...new Set(allowedVariants.map(match => match.level).filter(Boolean))];
+      if (allowedVariants.length < 2 || levels.length < 2) return null;
       const baseName = clean(locationFragment).replace(PLACE_SUFFIX, '$1').trim();
       return {
         name: baseName,
         question: `Which ${titleCase(baseName)}?`,
         levels,
-        options: placeVariants.map(variant => ({
+        options: allowedVariants.map(variant => ({
           value: variant.value,
           level: variant.level,
           detail: variant.detail,
@@ -724,7 +969,26 @@ function correctLocationName(fragment) {
   return '';
 }
 
-module.exports = { suggest: suggestCached, suggestUncached: suggest, detectFragments, findLocations, titleCase, correctLocationName };
+function warmSuggestions() {
+  const seeds = ['g', 'gu', 'gun', 'gunt', 'guntur', 'hy', 'hyd', 'mum', 'del', 'vij', 'ten', 'comp', 'phot'];
+  const started = Date.now();
+  for (const q of seeds) {
+    try {
+      suggestCached({ q, limit: 6, isMaster: true });
+    } catch (error) {}
+  }
+  return Date.now() - started;
+}
+
+module.exports = {
+  suggest: suggestCached,
+  suggestUncached: suggest,
+  warmSuggestions,
+  detectFragments,
+  findLocations,
+  titleCase,
+  correctLocationName
+};
 
 /**
  * Tiny LRU-style memo for the suggestion endpoint. Typing fires a request every
@@ -740,7 +1004,8 @@ function suggestCached(options = {}) {
     clean(options.q),
     clean(options.category),
     clean(options.location),
-    Math.max(1, Math.min(12, Number(options.limit) || 6))
+    Math.max(1, Math.min(12, Number(options.limit) || 6)),
+    Boolean(options.isMaster)
   ].join('\u0000');
 
   const hit = SUGGEST_CACHE.get(key);

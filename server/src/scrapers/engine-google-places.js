@@ -374,7 +374,9 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
     'guntur', 'vijayawada', 'hyderabad', 'secunderabad', 'bangalore', 'bengaluru', 
     'chennai', 'mumbai', 'pune', 'delhi', 'visakhapatnam', 'tirupati', 'kurnool', 
     'nellore', 'rajahmundry', 'kakinada', 'ongole', 'eluru', 'anantapur', 'kadapa', 
-    'warangal', 'kolkata', 'jaipur', 'ahmedabad'
+    'warangal', 'kolkata', 'jaipur', 'ahmedabad',
+    'tenali', 'mangalagiri', 'tadepalle', 'ponnur', 'chebrolu', 'bapatla',
+    'narasaraopet', 'sattenapalle', 'chilakaluripet', 'machilipatnam', 'gudivada'
   ];
 
   if (townToken.length >= 3) {
@@ -391,6 +393,24 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
           }
 
           // Even if road name, check for urban center localities of that metro (e.g. Brodipet, Arundelpet, Lakshmipuram for Guntur)
+          if (hub === 'vijayawada') {
+            const vjaLocalities = ['benz circle', 'governorpet', 'patamata', 'moghalrajpuram', 'bhavanipuram', 'auto nagar', 'machavaram', 'one town vijayawada', 'satyanarayanapuram'];
+            for (const loc of vjaLocalities) {
+              if (addrLower.includes(loc) && !fullText.includes(townToken)) {
+                return { relevant: false, reason: `Listing located in Vijayawada urban area "${loc}" outside target` };
+              }
+            }
+          }
+
+          if (hub === 'tenali') {
+            const tenaliLocalities = ['morrispet', 'chenchupet', 'ganga mandiram', 'chinaravuru', 'nazarpet'];
+            for (const loc of tenaliLocalities) {
+              if (addrLower.includes(loc) && !fullText.includes(townToken)) {
+                return { relevant: false, reason: `Listing located in Tenali area "${loc}" outside target` };
+              }
+            }
+          }
+
           if (hub === 'guntur') {
             const gunturUrbanLocalities = ['brodipet', 'arundelpet', 'lakshmipuram', 'kothapet', 'old guntur', 'patabasti', 'nallapadu', 'collector office guntur', 'guvvalagutta', 'svn colony'];
             for (const loc of gunturUrbanLocalities) {
@@ -428,22 +448,31 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
   if (coords && coords.lat && coords.lng) {
     const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
     let anchorCoords = null;
-    if (townToken && ZONE_COORDINATES[townToken]) {
-      anchorCoords = ZONE_COORDINATES[townToken];
-    } else if (district && ZONE_COORDINATES[district.toLowerCase()]) {
-      anchorCoords = ZONE_COORDINATES[district.toLowerCase()];
+    const cleanLower = cleanTargetTown.toLowerCase();
+    const cleanStripped = cleanLower.replace(/[^a-z0-9]/g, '');
+
+    if (ZONE_COORDINATES[cleanLower]) {
+      anchorCoords = ZONE_COORDINATES[cleanLower];
+    } else if (ZONE_COORDINATES[cleanStripped]) {
+      anchorCoords = ZONE_COORDINATES[cleanStripped];
+    } else if (district) {
+      const distLower = district.toLowerCase();
+      const distStripped = distLower.replace(/[^a-z0-9]/g, '');
+      anchorCoords = ZONE_COORDINATES[distLower] || ZONE_COORDINATES[distStripped] || null;
     }
 
     if (anchorCoords && anchorCoords.lat && anchorCoords.lng) {
       const distKm = getDistanceKm(coords.lat, coords.lng, anchorCoords.lat, anchorCoords.lng);
-      // For a specific town/mandal, anything beyond 22km is bleeding into distant towns/cities
-      const maxAllowedDist = 22.0;
+      const isMetro = /pune|mumbai|bombay|delhi|bangalore|bengaluru|hyderabad|chennai|kolkata/i.test(district || cleanTargetTown);
+      const isSpecificZone = anchorCoords !== ZONE_COORDINATES[district?.toLowerCase()];
+      const maxAllowedDist = isSpecificZone ? 18.0 : (isMetro ? 38.0 : 25.0);
       if (distKm > maxAllowedDist) {
         return {
           relevant: false,
           reason: `Coordinates (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}) are ${distKm.toFixed(1)}km away from ${cleanTargetTown} center (max ${maxAllowedDist}km)`
         };
       }
+
     }
 
     // Also check boundingbox if supplied

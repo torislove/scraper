@@ -26,19 +26,33 @@ export default function LearningCenter() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [stale, setStale] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isRetry = false) => {
     setLoading(true);
     try {
-      const next = await getLearnedCatalog();
+      const next = await getLearnedCatalog({ timeout: 8000 });
       setData(next);
       setError('');
+      setStale(false);
     } catch (err) {
-      setError(err?.response?.data?.error || err.message || 'Learning store unavailable');
+      const isTimeout = err?.code === 'ECONNABORTED' || /timeout/i.test(err?.message || '');
+      // One retry, then keep showing the last good snapshot with a warning
+      // instead of replacing the whole tab with an error.
+      if (!isRetry && !isTimeout) {
+        return load(true);
+      }
+      if (isTimeout && !isRetry) {
+        return load(true);
+      }
+      setError(isTimeout
+        ? 'The engine is busy finishing a run. Showing the last snapshot.'
+        : (err?.response?.data?.error || err.message || 'Learning store unavailable'));
+      setStale(Boolean(data));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [data]);
 
   useEffect(() => { load(); }, [load]);
 

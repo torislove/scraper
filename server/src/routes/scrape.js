@@ -23,7 +23,7 @@ const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
 const { getKeywordSynonyms } = require('../utils/aiParser');
 const intelligentExtractor = require('../utils/intelligentExtractor');
 const { parseNaturalLanguageQuery } = require('../utils/queryParser');
-const { resolveUniversalZones } = require('../utils/universalGeoCluster');
+const { resolveUniversalZones, ZONE_COORDINATES, zoneCoordinates } = require('../utils/universalGeoCluster');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const geoAI = require('../utils/geoAI');
 const { closeAllBrowsers } = require('../scrapers/browserFactory');
@@ -251,8 +251,8 @@ registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   return res;
 });
 registerTask('scrapeScrapySpider', async (cat, loc) => safeExecute(() => scrapeScrapySpider(cat, loc), 'Scrapy Python Spider', addLog, 'scrapy'));
-registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null) =>
-  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan), 'Omni Search Orchestrator', addLog)
+registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null, isMaster = false) =>
+  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan, isMaster), 'Omni Search Orchestrator', addLog)
 );
 
 function setDeps(deps) {
@@ -823,7 +823,7 @@ function matchesMasterFilters(lead, filters = {}) {
   return true;
 }
 
-async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}, plan = null) {
+async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}, plan = null, isMaster = false) {
   const sessionAbortSignal = { aborted: false };
   const requestedEngines = Array.isArray(enabledEngines) ? enabledEngines.filter(Boolean) : [];
   const classification = categoryRouter.classifyCategory(category);
@@ -893,19 +893,24 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     //    A master sweep supplies a frozen plan, so its exact zone policy is honoured
     //    instead of re-resolving from the location string.
     const zones = (Array.isArray(plan?.zones) && plan.zones.length)
-      ? plan.zones.map(z => {
+      ? plan.zones.map((z, index) => {
           const zoneName = z.name;
           const suffix = z.kind === 'village' && plan.district ? `, ${plan.district}` : '';
+          const coords = zoneCoordinates(zoneName, plan.district, index, plan.zones.length);
           return {
             zoneName,
             queryText: `${searchPhrase} in ${zoneName}${suffix}`,
             district: plan.district || null,
             state: plan.state || null,
+            lat: coords?.lat || null,
+            lng: coords?.lng || null,
+            isApproximate: Boolean(coords?.isApproximate),
+            kind: z.kind || 'zone',
             isVectorQuery: true,
             isSingle: false
           };
         })
-      : resolveUniversalZones(baseLocation, category);
+      : resolveUniversalZones(baseLocation, category, isMaster);
     addLog(`[Orchestrator] Resolved ${zones.length} universal zones for "${baseLocation}": ${zones.map(z => z.zoneName).join(', ')}`);
 
     // Geocode base location for initial radar map focus & fallback coordinates
@@ -913,6 +918,31 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
     try {
       baseGeo = await geocodeLocation(baseLocation);
     } catch (e) {}
+
+    // Zero-latency instant coordinate fallback from pre-indexed zones or hubs
+    if (!baseGeo || !baseGeo.lat) {
+      const firstWithCoords = zones.find(z => z.lat && z.lng);
+      if (firstWithCoords) {
+        baseGeo = {
+          lat: Number(firstWithCoords.lat),
+          lng: Number(firstWithCoords.lng),
+          district: firstWithCoords.district || baseLocation,
+          state: firstWithCoords.state || 'India'
+        };
+      } else {
+        const cleanKey = baseLocation.toLowerCase().trim();
+        const strippedKey = cleanKey.replace(/\b(city|town|district|dist|mandal)\b/gi, '').trim().replace(/[^a-z0-9]/g, '');
+        const hub = ZONE_COORDINATES[cleanKey] || ZONE_COORDINATES[strippedKey];
+        if (hub) {
+          baseGeo = {
+            lat: Number(hub.lat),
+            lng: Number(hub.lng),
+            district: baseLocation,
+            state: 'India'
+          };
+        }
+      }
+    }
 
     // Emit initial dispatch event to radar map
     try {
@@ -932,7 +962,7 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
             query: zone.queryText,
             lat: hasCoords ? lat : baseGeo.lat,
             lng: hasCoords ? lng : baseGeo.lng,
-            approx: !hasCoords,
+            approx: !hasCoords || Boolean(zone.isApproximate),
             index: index + 1,
             centerLoc: baseLocation,
             district: zone.district || baseGeo.district || baseLocation,
@@ -1231,12 +1261,37 @@ async function runOmniSearchOrchestrator(category, baseLocation, strategy, radiu
 
     // 4. Scrape Completed: Aggregate Session Leads & Automatically Save to Individual Search Vault
     const allVendors = dbAdapter.getVendors();
-    const harvestedLeads = allVendors.filter(v => 
+    let harvestedLeads = allVendors.filter(v => 
       v.sessionId === sessionId || 
       v.lastSessionId === sessionId ||
       (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId)) ||
       (v.scrapedAt && new Date(v.scrapedAt).getTime() >= startTime)
     );
+
+    // Client Strict Geo Containment: If Client search (not Master), reject out-of-city/out-of-mandal bleed
+    if (!isMaster && baseLocation) {
+      try {
+        const { isListingRelevantToQuery } = require('../scrapers/engine-google-places');
+        harvestedLeads = harvestedLeads.filter(lead => {
+          const check = isListingRelevantToQuery(
+            lead.name,
+            lead.address,
+            lead.district,
+            lead.state,
+            baseLocation,
+            baseLocation,
+            (lead.latitude && lead.longitude ? { lat: Number(lead.latitude), lng: Number(lead.longitude) } : null)
+          );
+          if (!check.relevant) {
+            addLog(`[Client Containment] Excluded out-of-city lead "${lead.name}" (${check.reason}) - Client restricted to "${baseLocation}"`);
+            return false;
+          }
+          return true;
+        });
+      } catch (e) {
+        addLog(`[Client Containment] Warning: ${e.message}`);
+      }
+    }
     const hasFilters = filters && Object.keys(filters).length > 0;
     const sessionLeads = hasFilters ? harvestedLeads.filter(lead => matchesMasterFilters(lead, filters)) : harvestedLeads;
     addLog(`[Orchestrator] Swarm finished. Harvested ${sessionLeads.length} leads for session "${sessionId}"${hasFilters ? ` (${harvestedLeads.length - sessionLeads.length} removed by master filters)` : ''}.`);
@@ -1490,7 +1545,7 @@ router.post('/omni', async (req, res) => {
   addLog(`[Omni Search] Family ${classification.label} · engines ${resolvedEngines.join(', ')}`);
 
   // Add the orchestrator task to the background queue so it starts running
-  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId]);
+  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster]);
 });
 
 /**
@@ -1594,7 +1649,10 @@ router.post('/auto', async (req, res) => {
       gridDensity,
       plan.engines,
       finalSessionId,
-      userId
+      userId,
+      {},
+      plan,
+      isMaster
     ]);
   } catch (error) {
     addLog(`[Auto Scrape Error] ${error.message}`);

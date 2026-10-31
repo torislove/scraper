@@ -42,12 +42,29 @@ let store = {
 let writeTimer = null;
 let loaded = false;
 
+// ── Snapshot cache ──────────────────────────────────────────────────────────
+// Building and serialising the whole catalogue on every request is what made
+// the Learning tab time out while Playwright jobs were saturating the event
+// loop. The snapshot is now built once per store change and served verbatim.
+let snapshot = null;
+let revision = 0;
+
+function invalidateSnapshot() {
+  revision += 1;
+  snapshot = null;
+}
+
 function normalize(value) {
   return String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Fix known typos while keeping the human casing of directory labels. */
+function canonical(text) {
+  return brandIntel.fixSpelling(String(text || '').replace(/\s+/g, ' ').trim());
 }
 
 function load() {
@@ -66,10 +83,44 @@ function load() {
         services: raw.services || {},
         brands: raw.brands || {}
       };
+      absorbTypos();
     }
   } catch (err) {
     store = { version: 1, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {} };
   }
+}
+
+/**
+ * Fold legacy typo entries into their corrected key ("computer delears" →
+ * "computer dealers") so old learning survives a spelling fix instead of
+ * sitting in the store forever as a bad suggestion.
+ */
+function absorbTypos() {
+  for (const name of ['queries', 'products', 'categories', 'services']) {
+    const map = store[name];
+    if (!map || typeof map !== 'object') continue;
+    for (const key of Object.keys(map)) {
+      const entry = map[key];
+      if (!entry) continue;
+      const label = entry.name || entry.text || key;
+      const fixed = canonical(label);
+      const nextKey = normalize(fixed);
+      if (!nextKey || nextKey === key) continue;
+      const target = map[nextKey];
+      if (!target) {
+        map[nextKey] = { ...entry, key: nextKey, name: fixed, text: entry.text ? fixed : entry.text };
+      } else {
+        target.count = Number(target.count || 0) + Number(entry.count || 0);
+        target.lastAt = String(target.lastAt || '') > String(entry.lastAt || '') ? target.lastAt : entry.lastAt;
+        target.expansions = mergeList(target.expansions, entry.expansions);
+        target.samples = mergeList(target.samples, entry.samples, 6);
+        target.leadCount = Math.max(Number(target.leadCount || 0), Number(entry.leadCount || 0));
+        target.phoneCount = Math.max(Number(target.phoneCount || 0), Number(entry.phoneCount || 0));
+      }
+      delete map[key];
+    }
+  }
+  invalidateSnapshot();
 }
 
 function saveSoon() {
@@ -138,7 +189,8 @@ function vendorCategory(vendor) {
  */
 function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, vendors = [] } = {}) {
   load();
-  const text = String(query || '').trim();
+  const rawText = String(query || '').trim();
+  const text = canonical(rawText) || rawText;
   const norm = normalize(text);
   if (!norm) return null;
 
@@ -156,7 +208,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
   // Learn a product only when the run actually produced leads. Zero-result
   // queries are remembered as attempts but never promoted into the dictionary.
   if (Number(leadCount) > 0) {
-    const productName = intent.product || intent.genericProduct;
+    const productName = brandIntel.canonicalPhrase(intent.product || intent.genericProduct);
     if (productName && !intent.repair) {
       const entry = bump(store.products, normalize(productName), {
         name: productName,
@@ -166,7 +218,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
       const learnedExpansions = mergeList(entry.expansions, [
         ...(intent.expansions || []),
         ...brandIntel.genericExpansions(productName, 4)
-      ]);
+      ].map(canonical));
       entry.expansions = learnedExpansions;
       entry.categories = mergeList(entry.categories, learnedExpansions, 8);
     }
@@ -176,7 +228,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
     // "Lawyers", "AC Service Centre") become suggestions on the next query.
     // This is why repair and local-service runs must not be excluded.
     const serviceMode = intent.repair || brandIntel.isServiceQuery(text);
-    const categoryName = vendorCategory(vendors[0]) || text;
+    const categoryName = canonical(vendorCategory(vendors[0])) || text;
     if (categoryName) {
       if (serviceMode) {
         const service = bump(store.services, normalize(categoryName), {
@@ -195,7 +247,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
     // Vendor-set categories are the strongest signal: they are exactly what
     // the directories returned for this phrase.
     for (const vendor of (Array.isArray(vendors) ? vendors.slice(0, 40) : [])) {
-      const category = vendorCategory(vendor);
+      const category = canonical(vendorCategory(vendor));
       if (!category) continue;
       if (serviceMode) {
         const serviceEntry = bump(store.services, normalize(category), { name: category, query: text });
@@ -229,6 +281,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
   trimObject(store.categories, MAX_CATEGORIES);
   trimObject(store.services, MAX_CATEGORIES);
   trimObject(store.brands, MAX_BRANDS);
+  invalidateSnapshot();
   saveSoon();
   return queryEntry;
 }
@@ -366,15 +419,17 @@ function suggest(text, limit = 2) {
   return rows;
 }
 
-function getSummary() {
-  load();
-  return {
-    updatedAt: store.updatedAt,
+function buildSnapshot() {
+  const totals = {
     queries: Object.keys(store.queries).length,
     products: Object.keys(store.products).length,
     categories: Object.keys(store.categories).length,
     services: Object.keys(store.services).length,
-    brands: Object.keys(store.brands).length,
+    brands: Object.keys(store.brands).length
+  };
+  const summary = {
+    updatedAt: store.updatedAt,
+    ...totals,
     topServices: Object.values(store.services)
       .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
       .slice(0, 8)
@@ -382,13 +437,54 @@ function getSummary() {
     topProducts: Object.values(store.products)
       .sort((a, b) => Number(b.count || 0) - Number(a.count || 0))
       .slice(0, 10)
-      .map(item => ({ name: item.name, runs: item.count || 0, expansions: (item.expansions || []).slice(0, 3) }))
+      .map(item => ({
+        name: item.name,
+        runs: item.count || 0,
+        expansions: (item.expansions || []).slice(0, 3).join(' ')
+      }))
+  };
+  const full = {
+    updatedAt: store.updatedAt,
+    totals,
+    queries: catalog(store.queries, 500),
+    products: catalog(store.products, 500),
+    categories: catalog(store.categories, 500),
+    services: catalog(store.services, 500),
+    brands: catalog(store.brands, 500)
+  };
+  snapshot = { revision, summary, full };
+  return snapshot;
+}
+
+function ensureSnapshot() {
+  load();
+  if (!snapshot) buildSnapshot();
+  return snapshot;
+}
+
+function getSummary() {
+  return { ...ensureSnapshot().summary };
+}
+
+function getCatalog(limit = 150) {
+  const { full } = ensureSnapshot();
+  const max = Math.max(1, Number(limit) || 150);
+  return {
+    updatedAt: full.updatedAt,
+    revision,
+    totals: full.totals,
+    queries: full.queries.slice(0, max),
+    products: full.products.slice(0, max),
+    categories: full.categories.slice(0, max),
+    services: full.services.slice(0, max),
+    brands: full.brands.slice(0, max)
   };
 }
 
 function reset() {
   load();
   store = { version: 1, updatedAt: new Date().toISOString(), queries: {}, products: {}, categories: {}, services: {}, brands: {} };
+  invalidateSnapshot();
   saveSoon();
 }
 
@@ -426,6 +522,7 @@ function seedUniversal() {
   }
 
   store.updatedAt = new Date().toISOString();
+  invalidateSnapshot();
   saveSoon();
   return { seeded: SEEDS.length, totalServices: Object.keys(store.services).length };
 }

@@ -324,6 +324,16 @@ const httpServer = app.listen(PORT, HOST, () => {
   // The Electron launcher reads this exact line to learn the port.
   console.log(`[ready] ${JSON.stringify({ port: actualPort, host: HOST, desktop: paths.isDesktop })}`);
   console.log(`🚀 LeadHarvest Pro Intelligence Engine running on port ${actualPort}`);
+  // Warm the suggestion + geo indexes just after boot so the first keystroke
+  // never waits for a cold 619k-village scan.
+  setTimeout(() => {
+    try {
+      const ms = require('./src/services/searchSuggest').warmSuggestions();
+      console.log(`[warmup] suggestions ready in ${ms}ms`);
+    } catch (error) {
+      console.warn('[warmup] suggestion warmup skipped:', error.message);
+    }
+  }, 350);
 });
 
 httpServer.on('error', (err) => {
