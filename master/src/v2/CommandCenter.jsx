@@ -805,9 +805,9 @@ function FolderView({
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
               onClick={() => onReScrape?.(view.run)}
-              title="Re-scrape this query with 5km Radar Swarm"
+              title="Run this search again with the 5km radar swarm"
             >
-              <RefreshCw size={11} /> Re-Scrape Swarm
+              <RefreshCw size={11} /> Run Again
             </button>
             <button
               type="button"
@@ -2226,6 +2226,7 @@ function CockpitView({
               center={mapCenter}
               zoom={mapZoom}
               height="100%"
+              fitKey={run?.id || 'live'}
               onSelect={vendor => onSelectVendor(vendor)}
               onSelectZone={name => onFilterChange('query', name)}
             />
@@ -2990,7 +2991,7 @@ export default function CommandCenter() {
     finishingRef.current = false;
     setRunLeadCount(0);
     setProgress(null);
-    setSessionFilter('');
+    setSessionFilter(sessionId);
     setActiveTab('cockpit');
     setActiveZone(null);
     setGridZones([]);
@@ -3087,7 +3088,7 @@ export default function CommandCenter() {
       setActiveTab('cockpit');
     } catch (error) {
       setScanning(false);
-      toast.error(error?.response?.data?.error || 'Scrape could not be started.');
+      toast.error(error?.response?.data?.error || 'Search could not be started.');
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
     } finally {
       setLaunching(false);
@@ -3762,7 +3763,7 @@ export default function CommandCenter() {
                   <div className="v2-rail-phases">
                     {(estimate.phases || []).map(phase => (
                       <div key={phase.name}>
-                        <span>{phase.name === 'Scrape' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
+                        <span>{phase.name === 'Search' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
                         <b>{phase.label}</b>
                       </div>
                     ))}
@@ -4068,7 +4069,7 @@ export default function CommandCenter() {
                       <EmptyState
                         icon={Search}
                         title="No vendors match this filter."
-                        body="Clear the filters or start a scrape to populate the command center. Nothing is seeded or faked."
+                        body="Clear the filters or start a search to populate the command center. Nothing is seeded or faked."
                         action={() => setFilters({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
                         actionLabel="Reset filters"
                       />
@@ -4113,6 +4114,7 @@ export default function CommandCenter() {
                     center={mapCenter}
                     zoom={mapZoom}
                     height="100%"
+                    fitKey={run?.id || 'live'}
                     onSelect={vendor => setSelectedVendor(vendor)}
                   />
                   <aside className="v2-map-side">

@@ -107,20 +107,20 @@ function LiveFocus({ activePoint, scanning }) {
   return null;
 }
 
-function InitialFit({ points }) {
+function InitialFit({ points, fitKey = 'default' }) {
   const map = useMap();
-  const fitted = useRef(false);
+  const fittedKey = useRef(null);
 
   useEffect(() => {
-    if (fitted.current || !points.length) return;
-    fitted.current = true;
+    if (!points.length || fittedKey.current === fitKey) return;
+    fittedKey.current = fitKey;
     if (points.length === 1) {
       map.setView(points[0], 11, { animate: false });
       return;
     }
     const bounds = L.latLngBounds(points);
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 12, animate: false });
-  }, [map, points]);
+  }, [map, points, fitKey]);
 
   return null;
 }
@@ -136,7 +136,8 @@ export default function CommandMap({
   onSelect,
   onSelectZone,
   className = '',
-  compact = false
+  compact = false,
+  fitKey = 'default'
 }) {
   const points = useMemo(
     () => vendors.filter(hasCoords).map(v => [Number(v.latitude), Number(v.longitude)]),
@@ -184,7 +185,7 @@ export default function CommandMap({
         <TileLayer url={TILE_REFERENCE_URL} maxNativeZoom={16} maxZoom={19} opacity={0.85} />
         <MapReady center={safeCenter} zoom={zoom} />
         <LiveFocus activePoint={activePoint} scanning={scanning} />
-        {!compact && <InitialFit points={points} />}
+        {!compact && <InitialFit points={points} fitKey={fitKey} />}
 
         {coverage.map((zone, index) => {
           const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');

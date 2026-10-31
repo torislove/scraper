@@ -747,7 +747,7 @@ export default function SearchConsole({
 
           <div className="v2-hud-chip chip-time">
             <Clock size={11} className="v2-text-amber" />
-            <span>Est. Scrape:</span>
+            <span>Est. Time:</span>
             <b>{estimatedTimeText}</b>
           </div>
 

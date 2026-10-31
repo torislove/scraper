@@ -271,7 +271,7 @@ function RunCard({
                 <Compass size={10} /> {run.masterScope ? run.masterScope.toUpperCase() + ' SWEEP' : 'MASTER SWEEP'}
               </span>
             ) : (
-              <span className="v2-client-owner-pill" title={`Scraped by ${run.clientLabel || run.userId || 'Client'}`}>
+              <span className="v2-client-owner-pill" title={`Collected by ${run.clientLabel || run.userId || 'Client'}`}>
                 <Users size={9} /> {run.clientLabel || `Client (${run.userId || 'anonymous'})`}
               </span>
             )}
@@ -750,9 +750,9 @@ function FolderView({
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
               onClick={() => onReScrape?.(view.run)}
-              title="Re-scrape this query with 5km Radar Swarm"
+              title="Run this search again with the 5km radar swarm"
             >
-              <RefreshCw size={11} /> Re-Scrape Swarm
+              <RefreshCw size={11} /> Run Again
             </button>
             <button
               type="button"
@@ -2372,7 +2372,7 @@ export default function MasterCommandCenter() {
       setActiveTab('cockpit');
     } catch (error) {
       setScanning(false);
-      toast.error(error?.response?.data?.error || 'Scrape could not be started.');
+      toast.error(error?.response?.data?.error || 'Search could not be started.');
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
     } finally {
       setLaunching(false);
@@ -2976,7 +2976,7 @@ export default function MasterCommandCenter() {
                   <div className="v2-rail-phases">
                     {(estimate.phases || []).map(phase => (
                       <div key={phase.name}>
-                        <span>{phase.name === 'Scrape' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
+                        <span>{phase.name === 'Search' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
                         <b>{phase.label}</b>
                       </div>
                     ))}
@@ -3265,7 +3265,7 @@ export default function MasterCommandCenter() {
                       <EmptyState
                         icon={Search}
                         title="No vendors match this filter."
-                        body="Clear the filters or start a scrape to populate the command center. Nothing is seeded or faked."
+                        body="Clear the filters or start a search to populate the command center. Nothing is seeded or faked."
                         action={() => setFilters({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
                         actionLabel="Reset filters"
                       />

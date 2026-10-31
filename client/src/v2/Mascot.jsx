@@ -267,7 +267,7 @@ export function getMascotMarkerHtml(mode = 'dig', zoneName = '') {
 
       <!-- Comic Dialogue & Telemetry Badge -->
       <div class="excavator-speech-bubble">
-        <span>⛏️ I AM SCRAPING HERE!</span>
+        <span>⛏️ I AM DIGGING HERE!</span>
         <i class="speech-tail"></i>
       </div>
       <div class="excavator-zone-badge">

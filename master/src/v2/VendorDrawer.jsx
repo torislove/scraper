@@ -421,7 +421,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
             <div className="v2-drawer-notice">
               <Zap size={15} />
               <span>
-                <b>Live record only.</b> Fields below come from the existing scrape. Run a deep pass to crawl the website and Google Maps profile.
+                <b>Live record only.</b> Fields below come from the existing search. Run a deep pass to read the website and Google Maps profile.
               </span>
             </div>
           )}
