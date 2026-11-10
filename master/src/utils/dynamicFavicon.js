@@ -34,8 +34,7 @@ export function setDynamicFaviconState(state = 'idle', count = 0) {
   }
 
   if (state === 'idle') {
-    drawRadar(ctx, 0, false, 0);
-    link.href = canvas.toDataURL('image/png');
+    link.href = '/favicon.svg';
     return;
   }
 

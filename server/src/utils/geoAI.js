@@ -1,10 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-// Dynamic import for ES modules like @xenova/transformers
-let pipeline = null;
 
-// Cache file to prevent hitting Nominatim API rate limits
+// Cache file to prevent hitting external APIs
 const cacheFile = path.join(require('../config/paths').DATA_DIR, 'locationCache.json');
 let geoCache = {};
 if (fs.existsSync(cacheFile)) {
@@ -13,23 +11,23 @@ if (fs.existsSync(cacheFile)) {
   } catch (e) { geoCache = {}; }
 }
 
-const saveCache = () => fs.writeFileSync(cacheFile, JSON.stringify(geoCache, null, 2));
+let saveCacheTimer = null;
+const saveCache = () => {
+  if (saveCacheTimer) return;
+  saveCacheTimer = setTimeout(() => {
+    saveCacheTimer = null;
+    try {
+      fs.writeFile(cacheFile, JSON.stringify(geoCache, null, 2), () => {});
+    } catch (e) {}
+  }, 2000);
+};
 
-/**
- * Initializes the Transformers.js pipeline (loads into RAM once for <50ms parsing)
- */
 async function initAI() {
-  // Disabled to ensure lightweight server footprint and prevent ERR_MODULE_NOT_FOUND
   return null;
 }
 
-/**
- * Parses a natural language query into specific location tokens
- */
 async function parseSearchQuery(query) {
   const start = performance.now();
-  
-  // Fast hybrid parsing (Regex + Dictionary + AI) for <50ms constraint
   const result = {
     original: query,
     category: '',
@@ -39,25 +37,18 @@ async function parseSearchQuery(query) {
     state: ''
   };
 
-  // Common Indian states & districts (mocked for speed, can be expanded)
-  const states = ['Andhra Pradesh', 'Telangana', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Delhi'];
-  
-  // Regex heuristics (0.1ms)
+  const states = ['Andhra Pradesh', 'Telangana', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Delhi', 'Goa', 'Gujarat', 'Rajasthan'];
   const inRegex = /\s(in|at|near|around)\s(.*)/i;
   const match = query.match(inRegex);
   
   if (match) {
     result.category = query.replace(match[0], '').trim();
     const locString = match[2];
-    
-    // Check state
     for (const s of states) {
       if (locString.toLowerCase().includes(s.toLowerCase())) {
         result.state = s;
       }
     }
-    
-    // Assume the first word might be the village/city
     const locParts = locString.split(',').map(s => s.trim());
     result.village = locParts[0];
     if (locParts.length > 1) result.district = locParts[1];
@@ -65,34 +56,19 @@ async function parseSearchQuery(query) {
     result.category = query;
   }
 
-  // AI Augmentation (fallback if regex is unsure)
-  // Ensures we only use AI when needed to keep latency < 50ms
-  if (!result.village && pipeline) {
-    try {
-      const classifier = await initAI();
-      const aiResult = await classifier(query, ['location', 'service category', 'business name']);
-      if (aiResult.labels[0] === 'location') {
-        result.village = query;
-        result.category = '';
-      }
-    } catch (e) {
-      console.error('[GeoAI] AI parsing error', e);
-    }
-  }
-
   const duration = performance.now() - start;
-  console.log(`[GeoAI] Parsed "${query}" in ${duration.toFixed(2)}ms`);
-  
   return result;
 }
 
+let lastExternalCallTime = 0;
+
 /**
- * Reverse Geocodes lat/lng into Village, Mandal, District using Cache & Nominatim
+ * Reverse Geocodes lat/lng into Village, Mandal, District using Cache & Local Gazetteer First
  */
-async function reverseGeocode(lat, lng) {
+async function reverseGeocode(lat, lng, context = {}) {
   if (!lat || !lng) return null;
   
-  // Round to ~1.1km grid to heavily cache and group vendors automatically
+  // Round to ~1.1km grid for instant cache lookup
   const gridLat = parseFloat(lat).toFixed(2);
   const gridLng = parseFloat(lng).toFixed(2);
   const cacheKey = `${gridLat},${gridLng}`;
@@ -101,11 +77,33 @@ async function reverseGeocode(lat, lng) {
     return geoCache[cacheKey];
   }
 
+  // 1. Instant 0ms Local Resolution from context metadata
+  if (context && (context.district || context.mandal || context.state || context.city)) {
+    const localInfo = {
+      village: context.village || context.city || '',
+      mandal: context.mandal || '',
+      district: context.district || '',
+      state: context.state || context.stateName || 'India',
+      country: 'India',
+      postcode: (context.address && context.address.match(/\b\d{6}\b/)) ? context.address.match(/\b\d{6}\b/)[0] : ''
+    };
+    geoCache[cacheKey] = localInfo;
+    saveCache();
+    return localInfo;
+  }
+
+  // 2. Throttle external calls (max 1 request per 2000ms) to strictly avoid 429 rate limits
+  const now = Date.now();
+  if (now - lastExternalCallTime < 2000) {
+    return null; // Skip non-essential reverse geocoding to keep scraping blazing fast
+  }
+  lastExternalCallTime = now;
+
   try {
-    // OpenStreetMap Nominatim API
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=14&addressdetails=1`;
     const res = await axios.get(url, {
-      headers: { 'User-Agent': 'Gomandap-Scraper-Agent/1.0' }
+      headers: { 'User-Agent': 'LeadHarvestTerritorialSwarm/3.0' },
+      timeout: 3000
     });
     const data = res.data;
     
@@ -125,7 +123,7 @@ async function reverseGeocode(lat, lng) {
       return locationInfo;
     }
   } catch (err) {
-    console.error('[GeoAI] Geocoding error:', err.message);
+    // Silently ignore external rate limit errors - never spam terminal
   }
   
   return null;

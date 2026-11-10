@@ -182,8 +182,8 @@ const COMMODITIES = [
 ];
 
 // Words that mean the searcher wants a service, not a shop that sells goods.
-// Stems (no trailing \b) so plurals work: plumbers, electricians, painters.
-const SERVICE_WORDS = /\b(repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint(?:er|ing)|clean|pest|tutor|tuition|coach|doctor|clinic|hospital|salon|spa|photograph|cater|advocate|lawyer|consult|banquet|decorat|makeup|parlour|parlor|gym|fitness|travel|transport|logistic|packers|movers|courier|interior|architect|security|housekeep|event)/;
+// Stems (no trailing \b) so plurals and derivations work: plumbers, electricians, painters, rentals.
+const SERVICE_WORDS = /\b(repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|doctor|clinic|hospital|salon|spa|photograph|cater|advocate|lawyer|consult|banquet|decorat|makeup|parlour|parlor|gym|fitness|travel|transport|logistic|packers|movers|courier|interior|architect|security|housekeep|event|restaurant|cafe|dhaba|bakery|food|dining|hotel|lodge|resort|hostel|school|college|institute|academy|pharmacy|chemist|lab|diagnostic|yoga|studio|agency|agent|broker|firm|florist|mandap|auditorium|hall|venue|convention|kalyana|rent|hire|leas|contractor|designer|developer|builder|print)/i;
 const REPAIR_WORDS = /\b(repair|repairs|service centre|service center|servicing|mechanic|technician)\b/;
 
 const PRODUCT_STOPWORDS = /\b(old|new|second hand|secondhand|used|best|top|cheap|cheapest|affordable|near me|nearby|good|local|shop|shops|store|stores|dealer|dealers|supplier|suppliers|wholesaler|wholesalers|distributor|distributors|trader|traders|market|showroom|centre|center)\b/g;
@@ -302,8 +302,19 @@ function detectModel(text) {
 function detectProduct(text) {
   const norm = normalize(text);
   if (!norm) return '';
+  const isAcVenueOrFacility = /\b(hall|halls|convention|mandap|mandapam|venue|venues|banquet|banquets|auditorium|room|rooms|lodge|hotel|bus|coach|travel|restaurant|dining|theatre|theater)\b/i.test(norm);
   const keys = Object.keys(PRODUCT_EXPANSIONS).sort((a, b) => b.length - a.length);
   for (const key of keys) {
+    if (key === 'ac') {
+      if (isAcVenueOrFacility) continue;
+      const isAcProductContext = /\b(repair|service|dealer|dealers|shop|shops|store|stores|showroom|sales|buy|price|cost|split|window|inverter|duct|cassette|ton|star|copper|cooling|compressor|freon|gas|hvac)\b/i.test(norm)
+        || norm === 'ac'
+        || norm === 'air conditioner'
+        || norm === 'air conditioners';
+      if (!isAcProductContext) {
+        if (isServiceQuery(norm)) continue;
+      }
+    }
     if (hasPhrase(norm, key)) return key;
   }
   return '';
@@ -351,6 +362,12 @@ function genericExpansions(text, limit = 4) {
     return out.slice(0, limit);
   }
 
+  const hasTradeRole = /\b(manufacturer|manufacturers|factory|producer|fabricator|exporter|importer|supplier|suppliers|wholesaler|wholesalers|dealer|dealers|distributor|distributors|store|stores|shop|shops|showroom|showrooms|agency|agencies|agent|agents|broker|brokers)\b/i.test(norm);
+  if (hasTradeRole) {
+    push(pretty);
+    return out.slice(0, limit);
+  }
+
   push(`${pretty} dealer`);
   push(`${pretty} shop`);
   push(`${pretty} supplier`);
@@ -364,6 +381,7 @@ function detect(text) {
     return { brand: null, product: '', model: null, expansions: [], roles: [], excludeRoles: [], intentKind: 'unknown' };
   }
   const brand = detectBrand(norm);
+  const isService = isServiceQuery(norm);
   const product = detectProduct(norm);
   const model = detectModel(norm);
   const repair = REPAIR_WORDS.test(norm);
@@ -371,11 +389,14 @@ function detect(text) {
 
   if (repair) {
     expansions = genericExpansions(norm, 5);
+  } else if (isService) {
+    // Known service or venue queries must never be given product dealer expansions!
+    expansions = [];
   } else if (product) {
     expansions = (PRODUCT_EXPANSIONS[product] || []).slice(0, 5);
   } else if (brand) {
     expansions = (brand.hints || []).slice(0, 3);
-  } else if (!SERVICE_WORDS.test(norm)) {
+  } else {
     expansions = genericExpansions(norm, 4);
   }
 
@@ -383,16 +404,18 @@ function detect(text) {
     ? 'brand_product'
     : brand
       ? 'brand'
-      : (product || expansions.length)
+      : (product && !isService)
         ? 'product'
-        : 'unknown';
+        : isService
+          ? 'local_service'
+          : (expansions.length ? 'product' : 'unknown');
 
   return {
     brand: brand || null,
     product,
     model,
     expansions,
-    genericProduct: !product && !brand && expansions.length ? productBase(norm) : '',
+    genericProduct: !product && !brand && !isService && expansions.length ? productBase(norm) : '',
     roles: GENERIC_ROLES,
     excludeRoles: DEFAULT_EXCLUDE_ROLES,
     repair,
@@ -539,6 +562,7 @@ function suggest(text, limit = 4) {
  */
 function bestSearchPhrase(intent, fallback = '') {
   if (!intent) return fallback;
+  if (intent.intentKind === 'local_service') return fallback;
   if (intent.repair) {
     if (intent.brand && intent.product) return `${intent.brand.brand} ${titleCase(intent.product)} repair service`;
     if (intent.brand) return `${intent.brand.brand} repair service`;
@@ -558,7 +582,13 @@ function bestSearchPhrase(intent, fallback = '') {
  */
 function isServiceQuery(text) {
   const norm = normalize(text);
-  return SERVICE_WORDS.test(norm) || REPAIR_WORDS.test(norm);
+  if (SERVICE_WORDS.test(norm) || REPAIR_WORDS.test(norm)) return true;
+  try {
+    const { isKnownServiceOrTypo } = require('../utils/tradeIntelligence');
+    return isKnownServiceOrTypo(norm);
+  } catch (e) {
+    return false;
+  }
 }
 
 module.exports = {

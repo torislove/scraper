@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_URL } from './apiConfig';
+import { parseIndianPhone } from './utils/phoneClassify';
 
 export default function EmployeeDashboard({ user, onLogout }) {
   const [leads, setLeads] = useState([]);
@@ -62,10 +63,11 @@ export default function EmployeeDashboard({ user, onLogout }) {
   };
 
   const handleWhatsApp = (lead) => {
-    let cleanPhone = lead.phone.replace(/[^0-9]/g, '');
-    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone;
+    // A landline must never open WhatsApp; only a validated Indian mobile.
+    const parsed = parseIndianPhone(lead.phone);
+    if (!parsed || !parsed.isMobile) return;
     const msg = `Hi ${lead.name} team! We are reaching out regarding your business. Are you the right person to speak with?`;
-    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(`https://wa.me/91${parsed.national}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const filteredLeads = leads.filter(l => 

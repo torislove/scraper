@@ -14,92 +14,117 @@
  */
 
 const brandIntel = require('./brandIntel');
+const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
 
 const FAMILY_DEFINITIONS = {
+  photography: {
+    label: 'Photography, Studios & Media',
+    description: 'Photo studios, wedding photographers, candid shoots, drone videography and digital labs',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+  },
   wedding: {
     label: 'Weddings & events',
     description: 'Venues, decor, photography, catering and wedding services',
-    engines: ['google-local-finder', 'maps', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap'],
-    cityEngines: ['justdial', 'weddingbazaar', 'weddingwire', 'mandap']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social']
   },
   'home-services': {
     label: 'Home services',
     description: 'Plumbers, electricians, carpenters, painters and repair services',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   retail: {
     label: 'Retail & showrooms',
     description: 'Stores, showrooms, boutiques and consumer brands',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart']
   },
   health: {
     label: 'Health & medical',
     description: 'Clinics, hospitals, dentists, pharmacies and diagnostics',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap']
   },
   beauty: {
     label: 'Beauty & wellness',
     description: 'Salons, spas, makeup artists and wellness studios',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   food: {
     label: 'Food & dining',
     description: 'Restaurants, cafes, bakeries, caterers and cloud kitchens',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   auto: {
     label: 'Automotive',
     description: 'Car and bike showrooms, garages, service centres and parts',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap']
   },
   'real-estate': {
     label: 'Real estate & property',
     description: 'Builders, property dealers, architects and construction',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   education: {
     label: 'Education & training',
     description: 'Schools, colleges, coaching centres and skill institutes',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   professional: {
     label: 'Professional services',
     description: 'Lawyers, accountants, agencies, IT and business services',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   },
   industrial: {
     label: 'Industrial & B2B',
     description: 'Manufacturers, wholesalers, distributors and suppliers',
-    engines: ['google-local-finder', 'maps', 'justdial', 'indiamart'],
-    cityEngines: ['justdial', 'indiamart']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
   },
   generic: {
     label: 'General vendors',
     description: 'Any local business, service or supplier',
-    engines: ['google-local-finder', 'maps', 'justdial'],
-    cityEngines: ['justdial']
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
   }
 };
 
 // Weighted stems. Higher weight wins when two families match the same text.
 // These are stems, so "plumb" matches plumber/plumbing/plumbers.
 const FAMILY_KEYWORDS = {
+  photography: [
+    ['photo studio', 10], ['photo studios', 10], ['photographer', 9], ['photographers', 9],
+    ['photography', 9], ['candid photography', 10], ['candid photographer', 10],
+    ['wedding photographer', 10], ['pre wedding', 10], ['drone videography', 10],
+    ['cinematography', 9], ['digital studio', 9], ['digital photo lab', 9],
+    ['portrait studio', 9], ['photo shoot', 8], ['photoshoot', 8],
+    ['photo', 7], ['studio', 6], ['videographer', 8], ['videography', 8]
+  ],
   wedding: [
     ['wedding', 8], ['bride', 6], ['bridal', 7], ['groom', 5], ['banquet', 7],
     ['mandap', 8], ['sangeet', 7], ['mehendi', 6], ['haldi', 5], ['nikah', 6],
     ['matrimony', 6], ['marriage', 5], ['reception hall', 6], ['engagement', 4],
     ['wedding planner', 8], ['wedding venue', 8], ['wedding photographer', 8],
     ['wedding decorator', 7], ['wedding caterer', 6], ['invitation card', 4],
-    ['tent house', 4], ['event planner', 4], ['event management', 3], ['dq', 1]
+    ['tent house', 4], ['event planner', 4], ['event management', 3], ['dq', 1],
+    ['function hall', 9], ['function halls', 9],
+    ['convention centre', 9], ['convention center', 9], ['convention centres', 9], ['convention centers', 9],
+    ['kalyana mandapam', 9], ['kalyanamandapam', 9],
+    ['marriage hall', 9], ['marriage halls', 9],
+    ['party hall', 8], ['party halls', 8],
+    ['community hall', 8], ['community halls', 8],
+    ['shadi mahal', 9], ['venue', 7], ['venues', 7],
+    ['ac function hall', 10], ['ac function halls', 10],
+    ['ac convention centre', 10], ['ac convention center', 10],
+    ['ac convention centres', 10], ['ac convention centers', 10]
   ],
   'home-services': [
     ['plumb', 8], ['electric', 8], ['carpenter', 8], ['carpentry', 7], ['painter', 6],
@@ -149,7 +174,10 @@ const FAMILY_KEYWORDS = {
     ['automobile', 7], ['car dealer', 8], ['car service', 8], ['garage', 8],
     ['service center', 6], ['tyre', 6], ['tire', 5], ['battery shop', 6],
     ['spare parts', 7], ['auto parts', 7], ['car wash', 7], ['detailing', 5],
-    ['ev charging', 7], ['driving school', 7], ['car', 3], ['bike', 3], ['auto', 2]
+    ['ev charging', 7], ['driving school', 7],
+    ['car rental', 9], ['car rentals', 9], ['bike rental', 9], ['bike rentals', 9],
+    ['rent a car', 9], ['self drive', 9], ['cab service', 8], ['taxi service', 8], ['car hire', 9],
+    ['car', 3], ['bike', 3], ['auto', 2]
   ],
   'real-estate': [
     ['real estate', 9], ['property', 7], ['builder', 7], ['developer', 5],
@@ -193,7 +221,7 @@ const FAMILY_KEYWORDS = {
 
 // Tie-break priority: specialist families win over broad ones with equal score.
 const FAMILY_PRIORITY = [
-  'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
+  'photography', 'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
   'health', 'beauty', 'education', 'food', 'retail', 'professional', 'generic'
 ];
 
@@ -284,6 +312,33 @@ function classifyCategory(category) {
     genericScore = generic.score;
     bestFamily = genericScore ? 'generic' : 'generic';
     bestMatched = generic.matched;
+  }
+
+  // Pan-Indian Trade Intelligence Boost:
+  // Authoritative detection across 11 core commercial sectors
+  const tradeSector = indiaTradeIntelligence.detectTradeSector(raw);
+  if (tradeSector) {
+    const sectorFamilyMap = {
+      photography_media: 'photography',
+      weddings_hospitality: 'wedding',
+      healthcare_doctors: 'health',
+      home_services_contractors: 'home-services',
+      automotive_garages: 'auto',
+      wholesale_building_materials: 'industrial',
+      retail_lifestyle: 'retail',
+      professional_legal_finance: 'professional',
+      beauty_wellness: 'beauty',
+      food_dining: 'food',
+      education_coaching: 'education'
+    };
+    const mappedFamily = sectorFamilyMap[tradeSector.key];
+    if (mappedFamily && FAMILY_DEFINITIONS[mappedFamily]) {
+      if (bestScore < 8 || mappedFamily === 'photography') {
+        bestFamily = mappedFamily;
+        bestScore = 10;
+        bestMatched = ['trade_intelligence', tradeSector.key];
+      }
+    }
   }
 
   const definition = FAMILY_DEFINITIONS[bestFamily] || FAMILY_DEFINITIONS.generic;
@@ -459,7 +514,10 @@ function isWeddingCategory(category) {
  */
 const CATEGORY_CATALOG = [
   // Weddings & events
-  { label: 'Wedding Venues', family: 'wedding', aliases: ['venue', 'wedding hall', 'function hall', 'marriage hall', 'kalyana mandapam', 'ac function hall', 'convention center'] },
+  { label: 'AC Function Halls', family: 'wedding', aliases: ['ac function hall', 'function hall', 'function halls', 'ac hall', 'ac halls', 'ac function halls', 'ac convention hall'] },
+  { label: 'Convention Centres', family: 'wedding', aliases: ['convention centre', 'convention center', 'convention centres', 'convention centers', 'convention halls', 'convention hall'] },
+  { label: 'Kalyana Mandapams', family: 'wedding', aliases: ['kalyana mandapam', 'kalyana mandapams', 'marriage hall', 'marriage halls', 'choultry', 'shadi mahal'] },
+  { label: 'Wedding Venues', family: 'wedding', aliases: ['venue', 'wedding hall', 'marriage hall', 'party lawn'] },
   { label: 'Banquet Halls', family: 'wedding', aliases: ['banquet', 'party hall', 'reception hall', 'ac banquet hall'] },
   { label: 'Wedding Photographers', family: 'wedding', aliases: ['wedding photo', 'marriage photographer', 'photoshoot', 'wedding photography', 'candid photographer', 'wedding studio', 'pre wedding photoshoot'] },
   { label: 'Photo Studios', family: 'professional', aliases: ['photo studio', 'photography studio', 'digital studio', 'digital photo studio', 'photo shoot studio', 'passport photo studio', 'portrait studio', 'videography studio', 'studio'] },
@@ -542,6 +600,7 @@ const CATEGORY_CATALOG = [
   // Auto
   { label: 'Car Showrooms', family: 'auto', aliases: ['car showroom', 'car dealer', 'new car'] },
   { label: 'Bike Showrooms', family: 'auto', aliases: ['bike showroom', 'two wheeler', 'motorcycle showroom', 'scooter showroom'] },
+  { label: 'Car Rentals', family: 'auto', aliases: ['car rental', 'car hire', 'taxi service', 'cab service', 'self drive cars', 'travels', 'car rentals'] },
   { label: 'Car Service', family: 'auto', aliases: ['car service', 'car repair', 'garage', 'automobile service'] },
   { label: 'Tyre Shops', family: 'auto', aliases: ['tyre', 'tire shop', 'puncture'] },
   { label: 'Spare Parts', family: 'auto', aliases: ['spare parts', 'auto parts', 'car accessories'] },
@@ -631,16 +690,27 @@ function isRealCorrection(fragment, label) {
   const b = normalize(label);
   if (!a || !b || a === b) return false;
   if (b.startsWith(a) || a.startsWith(b)) return false;
-  return true;
+  if (a.includes(b) || b.includes(a)) return false;
+
+  // If both share meaningful tokens (length >= 3), it is an alias or related concept, not a typo
+  const aTokens = a.split(' ').filter(t => t.length >= 3);
+  const bTokens = b.split(' ').filter(t => t.length >= 3);
+  const common = aTokens.filter(t => bTokens.includes(t));
+  if (common.length > 0) return false;
+
+  // It is only a real typo correction if the edit distance is within typo budget and lengths are close
+  const dist = levenshtein(a, b);
+  return dist > 0 && dist <= (Math.min(a.length, b.length) <= 5 ? 1 : 2) && Math.abs(a.length - b.length) <= 2;
 }
 
 function allowTypo(a, b) {
   if (!a || !b) return false;
-  if (Math.abs(a.length - b.length) > 2) return false;
+  const diff = Math.abs(a.length - b.length);
+  if (diff > 3) return false;
   if (a.length <= 4 && b.length <= 4) {
     return a.slice(0, 2) === b.slice(0, 2);
   }
-  return a.slice(0, 1) === b.slice(0, 1) || (a.length >= 7 && b.length >= 7);
+  return a.slice(0, 1) === b.slice(0, 1) || (a.length >= 6 && b.length >= 6);
 }
 
 function hasWord(text, word) {
@@ -664,20 +734,26 @@ function stemWord(w) {
 }
 
 function tokenMatchScore(queryWords, candidateWords) {
+  const { consonantSkeleton } = require('../utils/tradeIntelligence');
   let score = 0;
   for (const qw of queryWords) {
     if (qw.length < 2) continue;
     const qStem = stemWord(qw);
+    const qSkel = consonantSkeleton(qw);
     for (const cw of candidateWords) {
       if (cw.length < 2) continue;
       const cStem = stemWord(cw);
+      const cSkel = consonantSkeleton(cw);
       if (qw === cw) score += 320;
       else if (qStem === cStem) score += 280;
       else if (cw.startsWith(qw) || qw.startsWith(cw)) score += 220;
       else if (qw.length >= 4 && cw.includes(qw)) score += 160;
       else if (cw.length >= 4 && qw.includes(cw)) score += 160;
-      else if (qw.length >= 4 && cw.length >= 4 && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length <= 5 ? 1 : 2)) {
-        score += 190;
+      else if (qSkel && cSkel && qSkel.length >= 3 && (qSkel === cSkel || levenshtein(qSkel, cSkel) <= 1)) {
+        if (levenshtein(qw, cw) <= (qw.length >= 8 ? 3 : 2)) score += 260;
+      }
+      else if (qw.length >= 4 && cw.length >= 4 && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length <= 5 ? 1 : (qw.length >= 8 ? 3 : 2))) {
+        score += 200;
       }
     }
   }
@@ -692,10 +768,12 @@ function titleCase(value) {
 
 /**
  * Rank catalogue categories against any partial, multi-word or misspelled fragment.
- * Uses token-intersection, stemming, Levenshtein typo-correction and dynamic intent fallback.
+ * Uses token-intersection, stemming, Levenshtein typo-correction, consonant skeleton matching,
+ * and high-yield trade typo normalization.
  * @returns {Array<{label:string,family:string,familyLabel:string,score:number,corrected:boolean,matched:string}>}
  */
 function suggestCategories(fragment, limit = 6) {
+  const { normalizeTradePhrase, consonantSkeleton } = require('../utils/tradeIntelligence');
   const raw = clean(fragment, 120);
   const query = normalize(raw.replace(CATEGORY_STOPWORDS, ''));
   if (!query) {
@@ -712,60 +790,80 @@ function suggestCategories(fragment, limit = 6) {
     }));
   }
 
+  const normalizedTradeQuery = normalizeTradePhrase(query);
+  const querySkel = consonantSkeleton(query);
   const queryWords = query.split(' ').filter(Boolean);
+  const normalizedWords = normalizedTradeQuery.split(' ').filter(Boolean);
   const scored = [];
   const seenLabels = new Set();
 
   for (const entry of CATEGORY_CATALOG) {
     const label = normalize(entry.label);
     const labelWords = label.split(' ').filter(Boolean);
+    const labelSkel = consonantSkeleton(label);
     let best = 0;
     let matched = entry.label;
 
-    // 1. Exact match
-    if (label === query) {
+    // 1. Exact match (direct or via normalized trade)
+    if (label === query || label === normalizedTradeQuery) {
       best = 1000;
     }
-    // 2. Starts with query
-    else if (label.startsWith(query)) {
-      best = 920 - Math.min(60, label.length - query.length);
+    // 2. Starts with query or normalized trade
+    else if (label.startsWith(query) || label.startsWith(normalizedTradeQuery)) {
+      best = 940 - Math.min(60, label.length - query.length);
     }
-    // 3. Query contains whole label (e.g. query "urgent plumbers near me" contains "plumbers")
-    else if (query.includes(label)) {
-      best = 890;
+    // 3. Query contains whole label
+    else if (query.includes(label) || normalizedTradeQuery.includes(label)) {
+      best = 900;
     }
-    // 4. Token prefix match
+    // 4. Consonant skeleton match (e.g. "phtgaphers" -> "photographers")
+    else if (querySkel.length >= 4 && (querySkel === labelSkel || levenshtein(querySkel, labelSkel) <= 1)) {
+      if (levenshtein(query, label) <= (query.length >= 8 ? 3 : 2)) {
+        best = 930 - levenshtein(query, label) * 20;
+        matched = entry.label;
+      }
+    }
+    // 5. Token prefix match
     else {
-      const tokenScore = tokenPrefixScore(labelWords, queryWords);
+      const tokenScore = Math.max(
+        tokenPrefixScore(labelWords, queryWords),
+        tokenPrefixScore(labelWords, normalizedWords)
+      );
       if (tokenScore) best = tokenScore;
     }
 
-    // 5. Aliases match
+    // 6. Aliases match
     for (const alias of entry.aliases) {
       const a = normalize(alias);
-      if (a === query) {
-        best = Math.max(best, 960);
+      const aSkel = consonantSkeleton(a);
+      if (a === query || a === normalizedTradeQuery) {
+        best = Math.max(best, 970);
         matched = alias;
         break;
       }
-      if (a.startsWith(query)) {
-        best = Math.max(best, 890 - Math.min(60, a.length - query.length));
+      if (a.startsWith(query) || a.startsWith(normalizedTradeQuery)) {
+        best = Math.max(best, 910 - Math.min(60, a.length - query.length));
         matched = alias;
-      } else if (hasWord(query, a) && a.length >= 3) {
-        best = Math.max(best, 860 - Math.min(50, query.length - a.length));
+      } else if (hasWord(query, a) || hasWord(normalizedTradeQuery, a)) {
+        best = Math.max(best, 880 - Math.min(50, query.length - a.length));
         matched = alias;
-      } else if (hasWord(a, query) && query.length >= 3) {
-        best = Math.max(best, 830 - Math.min(50, a.length - query.length));
+      } else if (hasWord(a, query) || hasWord(a, normalizedTradeQuery)) {
+        best = Math.max(best, 850 - Math.min(50, a.length - query.length));
         matched = alias;
+      } else if (querySkel.length >= 4 && (querySkel === aSkel || levenshtein(querySkel, aSkel) <= 1)) {
+        if (levenshtein(query, a) <= (query.length >= 8 ? 3 : 2)) {
+          best = Math.max(best, 920 - levenshtein(query, a) * 20);
+          matched = alias;
+        }
       }
     }
 
-    // 6. Direct typo matching on whole label or alias (catches "plumbar" -> "Plumbers", "fotography" -> "Photographers")
-    if (query.length >= 4) {
-      if (allowTypo(query, label)) {
-        const labelDist = levenshtein(query, label);
-        if (labelDist <= (query.length <= 5 ? 1 : 2)) {
-          const typoScore = 910 - labelDist * 35;
+    // 7. Direct typo matching on whole label or alias
+    if (query.length >= 4 && best < 900) {
+      if (allowTypo(query, label) || allowTypo(normalizedTradeQuery, label)) {
+        const labelDist = Math.min(levenshtein(query, label), levenshtein(normalizedTradeQuery, label));
+        if (labelDist <= (query.length <= 5 ? 1 : (query.length >= 8 ? 3 : 2))) {
+          const typoScore = 920 - labelDist * 30;
           if (typoScore > best) {
             best = typoScore;
             matched = entry.label;
@@ -774,10 +872,10 @@ function suggestCategories(fragment, limit = 6) {
       }
       for (const alias of entry.aliases) {
         const a = normalize(alias);
-        if (allowTypo(query, a)) {
-          const aliasDist = levenshtein(query, a);
-          if (aliasDist <= (query.length <= 5 ? 1 : 2)) {
-            const typoScore = 900 - aliasDist * 35;
+        if (allowTypo(query, a) || allowTypo(normalizedTradeQuery, a)) {
+          const aliasDist = Math.min(levenshtein(query, a), levenshtein(normalizedTradeQuery, a));
+          if (aliasDist <= (query.length <= 5 ? 1 : (query.length >= 8 ? 3 : 2))) {
+            const typoScore = 910 - aliasDist * 30;
             if (typoScore > best) {
               best = typoScore;
               matched = alias;
@@ -787,45 +885,18 @@ function suggestCategories(fragment, limit = 6) {
       }
     }
 
-    // 7. Token Overlap & Stemming (matches "photography studio" to "Photographers" & "Photo Studios")
+    // 8. Token Overlap & Stemming
     if (best < 850) {
       const allCandidateTokens = [
         ...labelWords,
-        ...entry.aliases.flatMap(a => normalize(a).split(' ').filter(Boolean))
+        ...entry.aliases.flatMap(al => normalize(al).split(' ').filter(Boolean))
       ];
-      const overlapScore = tokenMatchScore(queryWords, allCandidateTokens);
+      const overlapScore = Math.max(
+        tokenMatchScore(queryWords, allCandidateTokens),
+        tokenMatchScore(normalizedWords, allCandidateTokens)
+      );
       if (overlapScore > 0) {
-        best = Math.max(best, Math.min(840, 500 + overlapScore));
-      }
-    }
-
-    // 7. Typo Tolerance with Levenshtein Distance
-    if (!best && query.length >= 4) {
-      const dist = levenshtein(query, label);
-      if (dist <= 2) {
-        best = 520 - dist * 60;
-      } else {
-        for (const qw of queryWords) {
-          if (qw.length < 4) continue;
-          for (const lw of labelWords) {
-            const wordDist = levenshtein(qw, lw);
-            if (wordDist <= (qw.length <= 5 ? 1 : 2)) {
-              best = Math.max(best, 480 - wordDist * 50);
-              break;
-            }
-          }
-          if (best) break;
-          for (const alias of entry.aliases) {
-            const a = normalize(alias);
-            const aliasDist = levenshtein(qw, a);
-            if (aliasDist <= (qw.length <= 5 ? 1 : 2)) {
-              best = Math.max(best, 460 - aliasDist * 50);
-              matched = alias;
-              break;
-            }
-          }
-          if (best) break;
-        }
+        best = Math.max(best, Math.min(860, 520 + overlapScore));
       }
     }
 
@@ -844,28 +915,159 @@ function suggestCategories(fragment, limit = 6) {
     });
   }
 
-  // Fallback: If nothing matched or query is specific & uncataloged, dynamically synthesize a verified suggestion
-  if (query.length >= 2) {
-    const titleCased = titleCase(query);
-    if (!seenLabels.has(titleCased)) {
-      const familyClass = classifyCategory(query);
-      const def = FAMILY_DEFINITIONS[familyClass.family] || FAMILY_DEFINITIONS.generic;
+  // High-confidence custom query preservation:
+  // If the query is a recognized service/trade phrase, preserve it at the top with full score
+  const highConfClass = classifyCategory(normalizedTradeQuery || query);
+  if (highConfClass.confidence === 'high' || highConfClass.score >= 10) {
+    const customLabel = titleCase(raw);
+    if (!seenLabels.has(customLabel)) {
+      const def = FAMILY_DEFINITIONS[highConfClass.family] || FAMILY_DEFINITIONS.generic;
       scored.unshift({
+        label: customLabel,
+        family: highConfClass.family,
+        familyLabel: def.label,
+        description: def.description,
+        engines: [...def.engines],
+        score: 1000,
+        corrected: false,
+        matched: customLabel
+      });
+      seenLabels.add(customLabel);
+    }
+  }
+
+  // Fallback: ONLY when no catalog or auto-corrected match is found
+  if (query.length >= 2 && !scored.some(s => s.score >= 820)) {
+    const titleCased = titleCase(normalizedTradeQuery || query);
+    if (!seenLabels.has(titleCased)) {
+      const familyClass = classifyCategory(normalizedTradeQuery || query);
+      const def = FAMILY_DEFINITIONS[familyClass.family] || FAMILY_DEFINITIONS.generic;
+      scored.push({
         label: titleCased,
         family: familyClass.family,
         familyLabel: def.label,
         description: def.description,
         engines: [...def.engines],
-        score: scored.length ? Math.min(scored[0].score + 10, 950) : 800,
+        score: 750,
         corrected: false,
         matched: titleCased
       });
     }
   }
 
+  // Pan-Indian Trade Subvector Injection & Cross-Industry Noise Elimination
+  const detectedSector = indiaTradeIntelligence.detectTradeSector(query);
+  if (detectedSector && Array.isArray(detectedSector.subvectors)) {
+    const def = FAMILY_DEFINITIONS[detectedSector.key === 'photography_media' ? 'photography' : 'generic'] || FAMILY_DEFINITIONS.generic;
+    for (const sub of detectedSector.subvectors) {
+      if (!seenLabels.has(sub)) {
+        seenLabels.add(sub);
+        scored.push({
+          label: sub,
+          family: detectedSector.key === 'photography_media' ? 'photography' : (FAMILY_DEFINITIONS[detectedSector.key] ? detectedSector.key : 'generic'),
+          familyLabel: detectedSector.label,
+          description: `Specialized ${detectedSector.label}`,
+          engines: [...(def.engines || ['maps', 'google-local-finder'])],
+          score: 890,
+          corrected: false,
+          matched: sub
+        });
+      }
+    }
+
+    // Discard cross-industry noise (e.g. Nail / Tattoo Studios when Photography is searched)
+    const noiseFilter = new Set([
+      ...(detectedSector.avoids || []).map(a => a.toLowerCase()),
+      ...(detectedSector.key === 'photography_media' ? ['nail', 'tattoo', 'hair salon', 'beauty parlour', 'yoga', 'dance'] : [])
+    ]);
+    for (let i = scored.length - 1; i >= 0; i--) {
+      const lower = scored[i].label.toLowerCase();
+      if ([...noiseFilter].some(bad => lower.includes(bad))) {
+        scored.splice(i, 1);
+      }
+    }
+  }
+
   return scored
     .sort((a, b) => b.score - a.score || a.label.length - b.label.length)
     .slice(0, Math.max(1, Math.min(20, Number(limit) || 6)));
+}
+
+function getCategorySubvectors(category) {
+  const normCat = normalize(category);
+  const tradeVectors = indiaTradeIntelligence.getSubvectorsForQuery(category);
+  if (Array.isArray(tradeVectors) && tradeVectors.length > 0) {
+    return tradeVectors;
+  }
+  if (/\b(dentist|dentists|dental|teeth|orthodont|dental clinic)\b/i.test(normCat)) {
+    return [
+      'Dentists',
+      'Dental Hospitals',
+      'Dental Clinics',
+      'Orthodontists',
+      'Teeth Care & Implant Centres'
+    ];
+  }
+  if (/\b(hospital|hospitals|healthcare|nursing home)\b/i.test(normCat)) {
+    return [
+      'Hospitals',
+      'Dental Hospitals & Dentists',
+      'Eye Hospitals & Eye Care',
+      'Children & Maternity Hospitals',
+      'Multi Speciality Clinics'
+    ];
+  }
+  if (/\b(doctor|doctors|physician|physicians|clinic|clinics)\b/i.test(normCat)) {
+    return [
+      'General Physicians',
+      'Dentists & Dental Care',
+      'Gynecologists & Maternity',
+      'Pediatricians & Child Specialists',
+      'Orthopedic & Bone Specialists'
+    ];
+  }
+  if (/\b(wedding|marriage|matrimony|banquet|mandap|event)\b/i.test(normCat)) {
+    return [
+      'Wedding Photographers',
+      'Banquet Halls & Function Halls',
+      'Catering Services',
+      'Bridal Makeup Artists',
+      'Event & Wedding Decorators'
+    ];
+  }
+  if (/\b(real estate|property|properties|builder|builders|realtor)\b/i.test(normCat)) {
+    return [
+      'Real Estate Agents',
+      'Builders & Developers',
+      'Property Dealers & Brokers',
+      'Plot Promoters'
+    ];
+  }
+  if (/\b(car repair|auto repair|automobile|car service|mechanic)\b/i.test(normCat)) {
+    return [
+      'Car Service & Repair Centers',
+      'Car Mechanics',
+      'Car Detailing & Washing',
+      'Tyre Dealers & Alignment'
+    ];
+  }
+  if (/\b(school|schools|college|colleges|coaching|tuition|institute)\b/i.test(normCat)) {
+    return [
+      'Schools',
+      'Junior Colleges',
+      'Coaching Centers & Tuition',
+      'Educational Institutes'
+    ];
+  }
+  if (/\b(lawyer|lawyers|advocate|advocates|legal|attorney)\b/i.test(normCat)) {
+    return [
+      'Advocates & Lawyers',
+      'Legal Consultants & Advisors',
+      'High Court Lawyers',
+      'Notaries'
+    ];
+  }
+  return [category];
 }
 
 module.exports = {
@@ -877,5 +1079,6 @@ module.exports = {
   parseSearchQuery,
   buildAutoPlan,
   isWeddingCategory,
-  suggestCategories
+  suggestCategories,
+  getCategorySubvectors
 };

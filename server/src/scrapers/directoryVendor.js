@@ -62,20 +62,6 @@ function normalizeName(value) {
 
 const GENERIC_LABEL = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha)$/i;
 
-function nameFromProfileUrl(url) {
-  const raw = cleanText(url, 1000);
-  if (!raw) return '';
-  try {
-    const pathname = new URL(raw, 'https://example.com').pathname;
-    const segment = pathname.split('/').filter(Boolean).pop() || '';
-    const words = segment.replace(/\.[a-z0-9]+$/i, '').replace(/-in-.*$/i, '').replace(/[-_]+/g, ' ').trim();
-    if (!words || words.length < 3) return '';
-    return words.replace(/\b\w/g, c => c.toUpperCase());
-  } catch (e) {
-    return '';
-  }
-}
-
 function parseRating(value) {
   if (value == null || value === '') return '';
   const match = String(value).replace(',', '.').match(/([0-5](?:\.\d{1,2})?)/);
@@ -348,8 +334,12 @@ function buildDirectoryVendor(input = {}) {
     capacity: cleanText(capacity, 80),
     businessStatus: '',
 
-    phone: bestPhone ? bestPhone.e164 : '',
+    phone: bestPhone ? (bestPhone.displayPhone || bestPhone.e164) : '',
     phones: phoneList,
+    phoneType: bestPhone ? (bestPhone.isMobile ? 'mobile' : (bestPhone.isLandline ? 'landline' : 'unknown')) : '',
+    callUrl: bestPhone ? (bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`) : '',
+    isMobile: Boolean(bestPhone && bestPhone.isMobile),
+    isLandline: Boolean(bestPhone && bestPhone.isLandline),
     whatsapp: bestPhone && bestPhone.isMobile ? bestPhone.e164 : '',
     whatsappAvailable: Boolean(bestPhone && bestPhone.isMobile),
     email: cleanText(email, 240),
@@ -357,6 +347,8 @@ function buildDirectoryVendor(input = {}) {
 
     address: cleanAddress,
     locality: cleanLocality,
+    suburb: cleanLocality || cleanCity || 'Central',
+    zoneName: cleanLocality || cleanCity || 'Central',
     city: cleanCity || cleanLocality,
     district: cleanText(district, 120),
     state: cleanText(state, 120),
@@ -559,14 +551,28 @@ function saveDirectoryVendor(incoming, sessionId = incoming.sessionId || 'legacy
   if (incoming.address && incoming.city) {
     try {
       const { isListingRelevantToQuery } = require('./engine-google-places');
-      const containment = isListingRelevantToQuery(incoming.name, incoming.address, incoming.district, incoming.state, incoming.city, incoming.city, null, null, incoming.city);
+      const isMaster = Boolean(incoming.isMaster || (sessionId && String(sessionId).startsWith('master_')) || incoming.masterScope);
+      const scope = incoming.scope || incoming.masterScope || (isMaster ? 'district' : null);
+      const containment = isListingRelevantToQuery(
+        incoming.name,
+        incoming.address,
+        incoming.district,
+        incoming.state,
+        incoming.city,
+        incoming.city,
+        null,
+        null,
+        incoming.city,
+        isMaster,
+        scope
+      );
       if (!containment.relevant) {
         return { vendor: null, created: false, updated: false, skipped: `out-of-bounds: ${containment.reason}` };
       }
     } catch (e) {}
   }
-  const all = dbAdapter.getVendors();
-  const existing = all.find(candidate => sameVendor(candidate, incoming));
+  // O(1) Instant Match lookup via indexed vendor store
+  const existing = dbAdapter.findMatch(incoming);
 
   if (existing) {
     const merged = mergeDirectoryVendor(existing, incoming, sessionId);

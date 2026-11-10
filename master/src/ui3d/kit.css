@@ -1,0 +1,824 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   k3 kit — physical surfaces. Additive only.
+
+   Every rule here is namespaced `k3-` so it can never collide with the legacy
+   `v2-` / `lp-` sheets. Components are wired in primitives.jsx; this file owns
+   the look, the depth and the motion. No images, no external fonts.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BUTTON — real bevel, rim light, specular sweep, press detent
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-btn {
+  --k3-btn-bg-a: #22344f;
+  --k3-btn-bg-b: #121d31;
+  --k3-btn-ink: var(--k3-text);
+  --k3-btn-line: rgba(148, 163, 184, 0.22);
+  --k3-btn-rim: rgba(255, 255, 255, 0.14);
+  --k3-btn-glow: rgba(56, 189, 248, 0.22);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 20px;
+  border: 1px solid var(--k3-btn-line);
+  border-radius: var(--k3-r-md);
+  background: linear-gradient(180deg, var(--k3-btn-bg-a), var(--k3-btn-bg-b));
+  color: var(--k3-btn-ink);
+  font: inherit;
+  font-weight: 650;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  isolation: isolate;
+  overflow: hidden;
+  transform: translateY(0);
+  box-shadow:
+    inset 0 1px 0 var(--k3-btn-rim),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(0, 0, 0, 0.6),
+    0 10px 22px -12px rgba(0, 0, 0, 0.95),
+    0 18px 40px -24px var(--k3-btn-glow);
+  transition:
+    transform var(--k3-fast) var(--k3-ease),
+    box-shadow var(--k3-fast) var(--k3-ease),
+    filter var(--k3-base) var(--k3-ease);
+}
+
+/* specular highlight follows the pointer via --k3-mx / --k3-my */
+.k3-btn::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    130px 70px at var(--k3-mx, 28%) var(--k3-my, 0%),
+    rgba(255, 255, 255, 0.30),
+    rgba(255, 255, 255, 0.06) 45%,
+    transparent 72%
+  );
+  opacity: 0;
+  transition: opacity var(--k3-base) var(--k3-ease);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* bottom bevel — the "thickness" of the object */
+.k3-btn::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 0 0 10px 10px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.75));
+  opacity: 0.85;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.k3-btn > * { position: relative; z-index: 1; }
+
+.k3-btn:not(:disabled):hover {
+  transform: translateY(-1.5px);
+  filter: brightness(1.05);
+  box-shadow:
+    inset 0 1px 0 var(--k3-btn-rim),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.45),
+    0 2px 0 rgba(0, 0, 0, 0.55),
+    0 16px 32px -14px rgba(0, 0, 0, 0.95),
+    0 24px 54px -26px var(--k3-btn-glow);
+}
+
+.k3-btn:not(:disabled):hover::before { opacity: 1; }
+
+.k3-btn:not(:disabled):active {
+  transform: translateY(2px);
+  transition-duration: 60ms;
+  box-shadow:
+    inset 0 2px 6px rgba(0, 0, 0, 0.55),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(0, 0, 0, 0.5),
+    0 4px 10px -6px rgba(0, 0, 0, 0.9);
+}
+
+.k3-btn:focus-visible {
+  outline: 2px solid var(--k3-cyan);
+  outline-offset: 3px;
+}
+
+.k3-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: saturate(0.4);
+}
+
+/* ── sizes ──────────────────────────────────────────────────────────────────*/
+
+.k3-btn--sm { height: 36px; padding: 0 14px; font-size: 12.5px; border-radius: 10px; gap: 7px; }
+.k3-btn--lg { height: 56px; padding: 0 28px; font-size: 15.5px; border-radius: 15px; gap: 11px; }
+.k3-btn--block { display: flex; width: 100%; }
+
+/* ── brass: the primary action ──────────────────────────────────────────────*/
+
+.k3-btn--brass {
+  --k3-btn-bg-a: #f6d38c;
+  --k3-btn-bg-b: #c8913a;
+  --k3-btn-ink: #2a1a02;
+  --k3-btn-line: #8a5f16;
+  --k3-btn-rim: rgba(255, 255, 255, 0.65);
+  --k3-btn-glow: rgba(240, 194, 116, 0.45);
+  background:
+    linear-gradient(180deg, #ffe7ab 0%, #f0c274 38%, #d9a441 62%, #b57e28 100%);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -3px 0 rgba(122, 82, 16, 0.55),
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 12px 26px -12px rgba(0, 0, 0, 0.95),
+    0 20px 44px -22px rgba(240, 194, 116, 0.55);
+}
+
+.k3-btn--brass::before {
+  background: radial-gradient(
+    150px 80px at var(--k3-mx, 30%) var(--k3-my, 0%),
+    rgba(255, 255, 255, 0.75),
+    rgba(255, 255, 255, 0.12) 45%,
+    transparent 72%
+  );
+}
+
+.k3-btn--brass::after {
+  background: linear-gradient(180deg, rgba(110, 72, 10, 0.35), rgba(90, 58, 6, 0.8));
+}
+
+/* ── glass: secondary ───────────────────────────────────────────────────────*/
+
+.k3-btn--glass {
+  --k3-btn-bg-a: rgba(30, 45, 70, 0.92);
+  --k3-btn-bg-b: rgba(12, 19, 34, 0.95);
+  --k3-btn-line: rgba(148, 163, 184, 0.24);
+  backdrop-filter: blur(10px);
+}
+
+/* ── ghost: tertiary ────────────────────────────────────────────────────────*/
+
+.k3-btn--ghost {
+  --k3-btn-bg-a: transparent;
+  --k3-btn-bg-b: transparent;
+  --k3-btn-line: rgba(148, 163, 184, 0.20);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: var(--k3-text-2);
+}
+.k3-btn--ghost:hover { color: var(--k3-text); background: rgba(148, 163, 184, 0.07); }
+
+/* ── danger ─────────────────────────────────────────────────────────────────*/
+
+.k3-btn--danger {
+  --k3-btn-bg-a: #7f1d2d;
+  --k3-btn-bg-b: #4c0f1c;
+  --k3-btn-line: rgba(251, 113, 133, 0.45);
+  --k3-btn-glow: rgba(251, 113, 133, 0.35);
+  color: #ffe4e6;
+}
+
+/* ── loading ────────────────────────────────────────────────────────────────*/
+
+.k3-btn.is-loading { pointer-events: none; }
+.k3-btn.is-loading .k3-btn__label { opacity: 0.45; }
+
+.k3-btn__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: k3-rotate 0.7s linear infinite;
+}
+
+@keyframes k3-rotate { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TILT + MAGNETIC WRAPPERS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-tilt {
+  transform: rotateX(var(--k3-rx, 0deg)) rotateY(var(--k3-ry, 0deg));
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.k3-tilt-wrap { transform-style: preserve-3d; }
+
+.k3-magnetic {
+  display: inline-flex;
+  transition: transform 140ms var(--k3-ease);
+  will-change: transform;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   CARD — three-shadow stack + rim light
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-card {
+  position: relative;
+  border-radius: var(--k3-r-lg);
+  border: 1px solid var(--k3-line);
+  background:
+    linear-gradient(165deg, rgba(24, 36, 60, 0.92) 0%, rgba(10, 16, 28, 0.97) 58%, rgba(7, 11, 20, 1) 100%);
+  box-shadow:
+    inset 0 1px 0 var(--k3-rim),
+    var(--k3-e2);
+  transform-style: preserve-3d;
+  transition:
+    transform var(--k3-base) var(--k3-ease),
+    box-shadow var(--k3-base) var(--k3-ease),
+    border-color var(--k3-base) var(--k3-ease);
+}
+
+/* a single bright edge, top-left, that sells the key light */
+.k3-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, 0.22),
+    rgba(255, 255, 255, 0.02) 32%,
+    transparent 60%
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.k3-card.is-interactive { cursor: pointer; }
+
+.k3-card.is-interactive:hover {
+  border-color: var(--k3-line-strong);
+  box-shadow:
+    inset 0 1px 0 var(--k3-rim-strong),
+    var(--k3-e3);
+}
+
+.k3-card__glow {
+  position: absolute;
+  inset: -30% -10% auto -10%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--k3-card-glow, rgba(56, 189, 248, 0.14)), transparent 68%);
+  filter: blur(24px);
+  opacity: 0.9;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.k3-card__body { position: relative; z-index: 1; transform: translateZ(14px); }
+
+/* ceramic — for pricing / product surfaces on the marketing page */
+.k3-card--ceramic {
+  background: linear-gradient(168deg, #ffffff 0%, #eef3fb 52%, #dde6f3 100%);
+  border-color: rgba(15, 23, 42, 0.10);
+  color: #0b1526;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 4px rgba(2, 6, 23, 0.18),
+    0 18px 38px -18px rgba(2, 6, 23, 0.55),
+    0 40px 80px -40px rgba(2, 6, 23, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SHELF — a panel that looks bolted into the dashboard
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-shelf {
+  position: relative;
+  padding: 16px;
+  border-radius: var(--k3-r-lg);
+  border: 1px solid rgba(148, 163, 184, 0.10);
+  background:
+    linear-gradient(180deg, rgba(23, 35, 59, 0.55) 0%, rgba(9, 14, 25, 0.82) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 -24px 48px -36px rgba(0, 0, 0, 0.95),
+    0 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FIELD — an inset well, not a floating box
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: var(--k3-r-md);
+  border: 1px solid var(--k3-line);
+  background: #060a12;
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color var(--k3-base) var(--k3-ease), box-shadow var(--k3-base) var(--k3-ease);
+}
+
+.k3-field:focus-within {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow:
+    inset 0 1px 3px rgba(0, 0, 0, 0.7),
+    0 0 0 3px rgba(56, 189, 248, 0.14);
+}
+
+.k3-field input,
+.k3-field textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--k3-text);
+  font: inherit;
+}
+
+.k3-field input::placeholder { color: var(--k3-text-3); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SEGMENTED — sliding thumb, zero layout shift
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-seg {
+  position: relative;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 13px;
+  border: 1px solid var(--k3-line);
+  background: #070c15;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.k3-seg__thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / var(--k3-count, 2));
+  border-radius: 9px;
+  background: linear-gradient(180deg, #253a58, #14203a);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 6px 14px -8px rgba(0, 0, 0, 0.95);
+  transform: translateX(calc(var(--k3-index, 0) * 100%));
+  transition: transform var(--k3-base) var(--k3-ease);
+  pointer-events: none;
+}
+
+.k3-seg__item {
+  position: relative;
+  z-index: 1;
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--k3-text-3);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--k3-base) var(--k3-ease);
+}
+
+.k3-seg__item:hover { color: var(--k3-text-2); }
+.k3-seg__item.is-active { color: var(--k3-text); }
+.k3-seg__item:focus-visible { outline: 2px solid var(--k3-cyan); outline-offset: -2px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STAT — number on a plinth
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-stat { display: flex; flex-direction: column; gap: 6px; }
+.k3-stat__label { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--k3-text-3); }
+.k3-stat__value {
+  font-size: clamp(24px, 2.4vw, 34px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--k3-text);
+}
+.k3-stat__value small { font-size: 0.45em; font-weight: 600; color: var(--k3-text-3); margin-left: 4px; }
+.k3-stat__hint { font-size: 11.5px; line-height: 1.5; color: var(--k3-text-3); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ORB — a live status sphere, no character
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-orb {
+  position: relative;
+  width: var(--k3-orb-size, 34px);
+  height: var(--k3-orb-size, 34px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 26%, #ffffff 0%, var(--k3-orb-tone, #7dd3fc) 28%, #0a1a2e 74%);
+  box-shadow:
+    inset -5px -5px 12px rgba(0, 0, 0, 0.7),
+    inset 2px 2px 6px rgba(255, 255, 255, 0.35),
+    0 0 0 1px rgba(125, 211, 252, 0.28),
+    0 0 18px rgba(56, 189, 248, 0.35);
+  flex: none;
+}
+
+.k3-orb::before,
+.k3-orb::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--k3-orb-tone, #7dd3fc);
+  opacity: 0.28;
+  animation: k3-ping 2.8s var(--k3-ease) infinite;
+}
+.k3-orb::after { inset: -9px; animation-delay: 0.9s; opacity: 0.14; }
+
+.k3-orb.is-live::before,
+.k3-orb.is-live::after { animation-duration: 1.4s; }
+
+@keyframes k3-ping {
+  0% { transform: scale(0.72); opacity: 0.5; }
+  70% { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SPARK BURST — max 12 particles, one celebration per action
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-spark-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 4;
+}
+
+.k3-spark {
+  position: absolute;
+  left: var(--k3-sx, 50%);
+  top: var(--k3-sy, 50%);
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #fff3cf, #f0c274);
+  box-shadow: 0 0 10px rgba(240, 194, 116, 0.9);
+  animation: k3-spark 640ms var(--k3-ease) forwards;
+}
+
+@keyframes k3-spark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--k3-dx, 0), var(--k3-dy, -30px)) scale(0.2); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ORBITAL RADAR — the hero object. Pure CSS 3D, drag to spin.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-radar {
+  position: relative;
+  width: var(--k3-size, 430px);
+  height: var(--k3-size, 430px);
+  display: grid;
+  place-items: center;
+  perspective: 1300px;
+  perspective-origin: 50% 42%;
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+  flex: none;
+}
+
+.k3-radar.is-grabbing { cursor: grabbing; }
+
+.k3-radar__halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 96%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.20) 0%, rgba(56, 189, 248, 0.05) 46%, transparent 68%);
+  filter: blur(16px);
+  pointer-events: none;
+}
+
+.k3-radar__stage {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--k3-rx, -12deg)) rotateY(var(--k3-ry, -18deg));
+  will-change: transform;
+}
+
+/* the sphere itself */
+.k3-radar__globe {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 31% 25%, rgba(125, 211, 252, 0.42) 0%, rgba(37, 99, 235, 0.16) 38%, rgba(4, 9, 20, 0.97) 70%),
+    radial-gradient(circle at 72% 80%, rgba(94, 234, 212, 0.18), transparent 55%);
+  border: 1px solid rgba(125, 211, 252, 0.22);
+  box-shadow:
+    inset 0 0 70px rgba(56, 189, 248, 0.20),
+    inset -20px -26px 70px rgba(0, 0, 0, 0.9),
+    0 0 100px rgba(56, 189, 248, 0.16);
+}
+
+/* latitude + longitude wireframe */
+.k3-radar__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  border: 1px solid rgba(125, 211, 252, 0.17);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.08);
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+/* radar sweep plane */
+.k3-radar__sweep {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 70%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgba(94, 234, 212, 0.5) 0deg,
+    rgba(56, 189, 248, 0.14) 55deg,
+    transparent 110deg,
+    transparent 360deg
+  );
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 55%);
+  mask: radial-gradient(circle, transparent 54%, #000 55%);
+  animation: k3-sweep 5.4s linear infinite;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+@keyframes k3-sweep {
+  from { transform: translate(-50%, -50%) rotateX(74deg) rotateZ(0deg); }
+  to   { transform: translate(-50%, -50%) rotateX(74deg) rotateZ(360deg); }
+}
+
+/* a single lead pin on the sphere */
+.k3-radar__pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--k3-pin, #5eead4);
+  box-shadow:
+    0 0 8px var(--k3-pin, #5eead4),
+    0 0 20px rgba(94, 234, 212, 0.5);
+  pointer-events: none;
+  animation: k3-pin-breathe 3.2s ease-in-out infinite;
+  animation-delay: var(--k3-delay, 0s);
+}
+
+@keyframes k3-pin-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* centre core glow */
+.k3-radar__core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, #7dd3fc 38%, transparent 72%);
+  box-shadow: 0 0 34px rgba(125, 211, 252, 0.85);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* floating chips around the sphere */
+.k3-radar__float {
+  position: absolute;
+  z-index: 3;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  background: linear-gradient(160deg, rgba(19, 30, 50, 0.96), rgba(8, 13, 23, 0.98));
+  box-shadow: var(--k3-e3);
+  padding: 9px 12px;
+  font-size: 11px;
+  color: var(--k3-text-2);
+  pointer-events: none;
+  animation: k3-float 7s ease-in-out infinite;
+}
+
+.k3-radar__float b { display: block; color: var(--k3-text); font-size: 12.5px; margin-bottom: 2px; }
+
+@keyframes k3-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+
+.k3-radar__drag-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--k3-text-3);
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HINTS / TOOLTIPS / BADGES — the explanatory layer
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--k3-text-2);
+}
+
+.k3-hint svg { flex: none; margin-top: 2px; color: var(--k3-cyan); }
+.k3-hint--brass svg { color: var(--k3-brass-2); }
+.k3-hint b { color: var(--k3-text); font-weight: 620; }
+
+.k3-tip { position: relative; display: inline-flex; }
+
+.k3-tip__body {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  width: max-content;
+  max-width: 260px;
+  transform: translate(-50%, 6px);
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--k3-line-strong);
+  background: #0b1322;
+  box-shadow: var(--k3-e3);
+  color: var(--k3-text-2);
+  font-size: 11.5px;
+  line-height: 1.5;
+  font-weight: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--k3-base) var(--k3-ease), transform var(--k3-base) var(--k3-ease);
+  z-index: 60;
+}
+
+.k3-tip:hover .k3-tip__body,
+.k3-tip:focus-within .k3-tip__body {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.k3-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--k3-line);
+  background: rgba(148, 163, 184, 0.06);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--k3-text-2);
+  white-space: nowrap;
+}
+
+.k3-badge--brass {
+  border-color: rgba(240, 194, 116, 0.35);
+  background: rgba(240, 194, 116, 0.10);
+  color: var(--k3-brass-1);
+}
+
+.k3-badge--live {
+  border-color: rgba(94, 234, 212, 0.35);
+  background: rgba(94, 234, 212, 0.08);
+  color: var(--k3-mint);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTION UTILITIES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-shimmer { position: relative; overflow: hidden; }
+
+.k3-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    108deg,
+    transparent 30%,
+    rgba(255, 231, 171, 0.16) 48%,
+    transparent 66%
+  );
+  transform: translateX(-120%);
+  animation: k3-shimmer 3.2s var(--k3-ease) infinite;
+  pointer-events: none;
+}
+
+@keyframes k3-shimmer {
+  0% { transform: translateX(-120%); }
+  55%, 100% { transform: translateX(120%); }
+}
+
+.k3-grid-floor {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.10) 1px, transparent 1px);
+  background-size: 44px 44px;
+  transform: perspective(600px) rotateX(62deg);
+  transform-origin: bottom center;
+  mask-image: linear-gradient(180deg, transparent, #000 55%);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 55%);
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k3-radar__sweep { animation: none; opacity: 0.35; }
+  .k3-radar__pin { animation: none; opacity: 0.85; }
+  .k3-radar__float { animation: none; }
+  .k3-shimmer::after { animation: none; opacity: 0; }
+  .k3-orb::before, .k3-orb::after { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAB — dev-only gallery (not shipped in production bundles)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.k3-lab {
+  min-height: 100vh;
+  padding: 48px 32px 120px;
+  background:
+    radial-gradient(1200px 700px at 80% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+    radial-gradient(900px 600px at 0% 100%, rgba(240, 194, 116, 0.05), transparent 60%),
+    #05080f;
+  color: var(--k3-text);
+}
+
+.k3-lab__wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+.k3-lab__head h1 { font-size: 34px; letter-spacing: -0.03em; margin: 10px 0 6px; }
+.k3-lab__head p { color: var(--k3-text-2); font-size: 14px; max-width: 60ch; line-height: 1.6; }
+.k3-lab__row { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.k3-lab__grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.k3-lab__label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--k3-text-3);
+  margin-bottom: 14px;
+}
+.k3-lab__label::after { content: ""; flex: 1; height: 1px; background: var(--k3-line); }
+.k3-lab__radar { display: grid; place-items: center; gap: 10px; padding: 20px 0; }
+.k3-lab__note { font-size: 12px; color: var(--k3-text-3); }

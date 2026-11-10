@@ -15,19 +15,63 @@ const brandIntel = require('./brandIntel');
 const { normalizePrepositionTypos } = require('../utils/queryParser');
 
 const PREPOSITION_SPLIT = /^(.*?)\s+(?:in|near|around|within|at|across)\s+(.+)$/i;
-const PLACE_SUFFIX = /^(.*?)\s+(district|mandal|mandals|tehsil|taluk|circle|block|city|town|village|state)$/i;
+const PLACE_SUFFIX = /^(.*?)\s+(districts?|dists?|zillas?|zilas?|jillas?|jilas?|mandals?|tehsils?|tahsils?|talukas?|taluks?|taluq|circles?|blocks?|subdivisions?|sub[-\s]?districts?|cities|city|towns?|villages?|states?|municipalities?|municipal\s+corporations?|nagar\s+palikas?|nagar\s+nigams?|gram\s+panchayats?|GPs?|wards?)$/i;
 const SUFFIX_LEVEL = {
   district: 'district',
+  districts: 'district',
+  dist: 'district',
+  dists: 'district',
+  zilla: 'district',
+  zillas: 'district',
+  zila: 'district',
+  zilas: 'district',
+  jilla: 'district',
+  jillas: 'district',
+  jila: 'district',
+  jilas: 'district',
   mandal: 'mandal',
   mandals: 'mandal',
   tehsil: 'mandal',
+  tehsils: 'mandal',
+  tahsil: 'mandal',
+  tahsils: 'mandal',
   taluk: 'mandal',
+  taluks: 'mandal',
+  taluka: 'mandal',
+  talukas: 'mandal',
+  taluq: 'mandal',
   circle: 'mandal',
+  circles: 'mandal',
   block: 'mandal',
+  blocks: 'mandal',
+  subdivision: 'mandal',
+  subdivisions: 'mandal',
+  'sub-district': 'mandal',
+  'sub district': 'mandal',
+  'sub-districts': 'mandal',
+  'sub districts': 'mandal',
   city: 'city',
+  cities: 'city',
   town: 'town',
+  towns: 'town',
   village: 'village',
-  state: 'state'
+  villages: 'village',
+  municipality: 'city',
+  municipalities: 'city',
+  'municipal corporation': 'city',
+  'municipal corporations': 'city',
+  'nagar palika': 'city',
+  'nagar palikas': 'city',
+  'nagar nigam': 'city',
+  'nagar nigams': 'city',
+  'gram panchayat': 'village',
+  'gram panchayats': 'village',
+  gp: 'village',
+  gps: 'village',
+  ward: 'city',
+  wards: 'city',
+  state: 'state',
+  states: 'state'
 };
 const LEVEL_RANK = { city: 0, town: 1, district: 2, mandal: 3, state: 4, village: 5 };
 const LEVEL_LABEL = {
@@ -233,6 +277,11 @@ const TRADE_TYPO_MAP = {
 };
 
 function normalizeTradeTypos(fragment) {
+  try {
+    const { normalizeTradePhrase } = require("../utils/tradeIntelligence");
+    return normalizeTradePhrase(fragment);
+  } catch (e) {}
+
   if (!fragment || typeof fragment !== 'string') return fragment;
   let tokens = fragment.toLowerCase().split(/\s+/);
   let resultTokens = tokens.map(token => TRADE_TYPO_MAP[token] || token);
@@ -322,6 +371,8 @@ function locationFromResult(item, fragment) {
   const district = item.district || (item.type === 'district' ? item.name : '');
   const state = item.state || (item.type === 'state' ? item.name : '');
   const level = LOCATION_LEVELS[item.type] || item.type || 'city';
+  const detail = item.detail || LEVEL_LABEL[level] || 'City';
+  const scope = item.scope || (level === 'district' ? 'district' : level === 'state' ? 'state' : level === 'mandal' ? 'mandal' : 'city');
   return {
     value: name,
     display,
@@ -329,6 +380,8 @@ function locationFromResult(item, fragment) {
     district,
     state,
     level,
+    detail,
+    scope,
     lat: Number.isFinite(Number(item.lat)) ? Number(item.lat) : null,
     lng: Number.isFinite(Number(item.lng)) ? Number(item.lng) : null,
     corrected: isRealCorrection(fragment, name),
@@ -336,19 +389,19 @@ function locationFromResult(item, fragment) {
   };
 }
 
-function findLocations(fragment, limit = 6) {
+function findLocations(fragment, limit = 6, isMaster = false) {
   const text = clean(fragment);
   if (text.length < 3) return [];
   try {
     const geo = getGeo();
-    let mapped = geo.searchLocations(text, Math.max(limit, 6))
+    let mapped = geo.searchLocations(text, Math.max(limit, 6), isMaster)
       .map(item => locationFromResult(item, text));
 
     // Common Indian phonetic variants (e.g. Namburu -> Nambur, Gunturu -> Guntur)
     if (!mapped.length && text.length >= 4 && /[uai]$/i.test(text)) {
       const stem = text.replace(/[uai]$/i, '');
       if (stem.length >= 3) {
-        const stemResults = geo.searchLocations(stem, Math.max(limit, 6))
+        const stemResults = geo.searchLocations(stem, Math.max(limit, 6), isMaster)
           .map(item => locationFromResult(item, text));
         if (stemResults.length) {
           mapped = stemResults;
@@ -418,7 +471,7 @@ function findCorrectedLocation(fragment, limit = 6) {
  * away from it, even if a tiny village happens to share the misspelling.
  */
 function findBestPlace(fragment, limit = 6, isMaster = false) {
-  let direct = findLocations(fragment, limit);
+  let direct = findLocations(fragment, limit, isMaster);
   if (!isMaster) {
     direct = direct.filter(item => item.level !== 'district' && item.level !== 'state');
   }
@@ -458,16 +511,50 @@ function detectFragments(query) {
   const text = normalizePrepositionTypos(clean(query));
   if (!text) return { categoryFragment: '', locationFragment: '', splitBy: 'none' };
 
+  try {
+    const { parseUniversalQuery } = require('../utils/universalQueryEngine');
+    const parsedNL = parseUniversalQuery(query);
+    if (parsedNL.ready && parsedNL.category && parsedNL.location) {
+      let cleanLoc = parsedNL.location;
+      if (cleanLoc.includes(',')) cleanLoc = cleanLoc.split(',')[0].trim();
+      return {
+        categoryFragment: parsedNL.category,
+        locationFragment: cleanLoc,
+        splitBy: 'universal-nl',
+        locationCorrectedFrom: ''
+      };
+    }
+  } catch (e) {}
+
   const explicit = text.match(PREPOSITION_SPLIT);
   if (explicit) {
+    let cleanLoc = clean(explicit[2]);
+    if (cleanLoc.includes(',')) cleanLoc = cleanLoc.split(',')[0].trim();
     return {
       categoryFragment: clean(explicit[1]),
-      locationFragment: clean(explicit[2]),
+      locationFragment: cleanLoc,
       splitBy: 'preposition'
     };
   }
 
   const words = text.split(/\s+/).filter(Boolean);
+
+  // Common service suffix tokens (e.g. "car rental", "wedding cards", "real estate", "pest control")
+  // These should NEVER be split into trailing places even if a distant village shares the name.
+  const SERVICE_KEYWORD_TOKENS = new Set([
+    'rental', 'rentals', 'repair', 'repairs', 'service', 'services', 'store', 'stores',
+    'shop', 'shops', 'centre', 'centres', 'center', 'centers', 'dealer', 'dealers',
+    'contractor', 'contractors', 'design', 'designer', 'designers', 'hall', 'halls',
+    'planner', 'planners', 'studio', 'studios', 'card', 'cards', 'care', 'clinic',
+    'clinics', 'hospital', 'hospitals', 'doctor', 'doctors', 'tutor', 'tutors',
+    'parlour', 'parlours', 'decorator', 'decorators', 'caterer', 'caterers',
+    'catering', 'photography', 'photographer', 'photographers', 'agent', 'agents',
+    'estate', 'maker', 'makers', 'cleaning', 'wash', 'washing', 'detailing'
+  ]);
+
+  const lastWord = words.length ? norm(words[words.length - 1]) : '';
+  const isProtectedServiceCompound = words.length >= 2 && SERVICE_KEYWORD_TOKENS.has(lastWord);
+  const isHighConfCategory = categoryRouter.suggestCategories(text, 1).some(m => m.score >= 750);
 
   // "Guntur District", "Tenali Mandal", "Guntur City" — the suffix decides the
   // level even when the name exists at several levels.
@@ -482,51 +569,65 @@ function detectFragments(query) {
 
   // An exact place name wins over a fuzzy category match. This is what makes
   // "Vijayawada", "Tenali" and "Nellore" places instead of categories.
-  const directPlaces = findLocations(text, 6);
-  const exactPlace = directPlaces.find(place => {
-    const a = norm(place.value);
-    const b = norm(text);
-    return a === b || (a.length >= 3 && b.length >= 3 && a.replace(/[uai]$/i, '') === b.replace(/[uai]$/i, ''));
-  });
-  const exactCategory = categoryRouter.suggestCategories(text, 1).some(match => match.score >= 990);
-  if (exactPlace && !exactCategory) {
-    return {
-      categoryFragment: '',
-      locationFragment: exactPlace.value,
-      splitBy: 'standalone-location',
-      locationCorrectedFrom: ''
-    };
-  }
-
-  for (let take = Math.min(4, words.length - 1); take >= 1; take--) {
-    const suffix = words.slice(-take).join(' ');
-    if (suffix.length < 3) continue;
-    const prefix = words.slice(0, -take).join(' ');
-    if (!prefix) continue;
-    const normPrefix = normalizeTradeTypos(prefix);
-    if (!categoryRouter.suggestCategories(normPrefix, 1).length && !categoryRouter.suggestCategories(prefix, 1).length) continue;
-    const place = resolveExactPlace(suffix);
-    if (place) {
+  // BUT do not treat as standalone place if it's a known service word or prefix.
+  if (text.length >= 4) {
+    const directPlaces = findLocations(text, 6);
+    const exactPlace = directPlaces.find(place => {
+      const a = norm(place.value);
+      const b = norm(text);
+      return a === b || (a.length >= 4 && b.length >= 4 && a.replace(/[uai]$/i, '') === b.replace(/[uai]$/i, ''));
+    });
+    const exactCategory = categoryRouter.suggestCategories(text, 1).some(match => match.score >= 950);
+    if (exactPlace && !exactCategory && !isProtectedServiceCompound) {
       return {
-        categoryFragment: prefix,
-        locationFragment: place.match.value,
-        locationCorrectedFrom: place.corrected ? suffix : '',
-        splitBy: 'trailing-place'
+        categoryFragment: '',
+        locationFragment: exactPlace.value,
+        splitBy: 'standalone-location',
+        locationCorrectedFrom: ''
       };
     }
   }
 
-  // Fallback standalone detection for prefix typing ("vijaya", "guntu").
-  const prefixPlaces = findLocations(text, 3);
-  if (prefixPlaces.length > 0) {
-    const isCat = categoryRouter.suggestCategories(text, 1).some(c => c.score >= 950);
-    if (!isCat) {
-      return {
-        categoryFragment: '',
-        locationFragment: prefixPlaces[0].value || text,
-        locationCorrectedFrom: prefixPlaces[0].corrected ? text : '',
-        splitBy: 'standalone-location'
-      };
+  // Trailing place detection ("wedding venues mangalagiri", "plumbers tenali")
+  // Only attempt if not a protected multi-word category compound
+  if (!isProtectedServiceCompound && !isHighConfCategory) {
+    for (let take = Math.min(4, words.length - 1); take >= 1; take--) {
+      const suffix = words.slice(-take).join(' ');
+      if (suffix.length < 3) continue;
+      const normSuffix = norm(suffix);
+      if (SERVICE_KEYWORD_TOKENS.has(normSuffix)) continue;
+
+      const prefix = words.slice(0, -take).join(' ');
+      if (!prefix) continue;
+      const normPrefix = normalizeTradeTypos(prefix);
+      if (!categoryRouter.suggestCategories(normPrefix, 1).length && !categoryRouter.suggestCategories(prefix, 1).length) continue;
+      const place = resolveExactPlace(suffix);
+      if (place && place.match && place.match.level !== 'village') {
+        return {
+          categoryFragment: prefix,
+          locationFragment: place.match.value,
+          locationCorrectedFrom: place.corrected ? suffix : '',
+          splitBy: 'trailing-place'
+        };
+      }
+    }
+  }
+
+  // Fallback standalone detection for prefix typing of major cities ("vijaya", "guntu", "hyder").
+  // Standalone prefixes MUST be >= 4 characters and match a Town/City/Mandal/District, NOT a remote village!
+  if (text.length >= 4 && !isProtectedServiceCompound) {
+    const prefixPlaces = findLocations(text, 3);
+    const nonVillagePlace = prefixPlaces.find(p => p.level !== 'village');
+    if (nonVillagePlace) {
+      const isCat = categoryRouter.suggestCategories(text, 1).some(c => c.score >= 800);
+      if (!isCat) {
+        return {
+          categoryFragment: '',
+          locationFragment: nonVillagePlace.value || text,
+          locationCorrectedFrom: nonVillagePlace.corrected ? text : '',
+          splitBy: 'standalone-location'
+        };
+      }
     }
   }
 
@@ -858,10 +959,13 @@ function formatVectorDetail(engines) {
   return unique.slice(0, 3).join(' · ');
 }
 
-  const brandRows = brandIntel.suggest(categoryFragment, 3);
+  const { getUniversalRichExpansions, isKnownServiceOrTypo } = require('../utils/tradeIntelligence');
+  const isService = isKnownServiceOrTypo(categoryFragment) || categoryMatches.length > 0;
+  const brandRows = isService ? [] : brandIntel.suggest(categoryFragment, 3);
+  const richExpansions = bestCategory ? getUniversalRichExpansions(bestCategory.value, bestCategory.family, bestLocation?.value || '') : [];
 
   const suggestions = [
-    ...brandRows,
+    ...richExpansions,
     ...categoryMatches.map(match => ({
       type: 'category',
       value: match.label,
@@ -886,7 +990,7 @@ function formatVectorDetail(engines) {
         match.district && norm(match.district) !== norm(match.value) ? `District: ${match.district}` : (match.district ? `District: ${match.district}` : ''),
         match.state
       ].filter(Boolean).join(' • '),
-      detail: LEVEL_LABEL[match.level] || 'City',
+      detail: match.detail || LEVEL_LABEL[match.level] || 'City',
       level: match.level,
       scope: match.scope || (match.level === 'village' ? 'city' : match.level),
       lat: match.lat,
@@ -921,6 +1025,7 @@ function formatVectorDetail(engines) {
     },
     category: bestCategory,
     location: bestLocation,
+    didYouMean: (bestCategory?.corrected || bestLocation?.corrected) ? correctedQuery : null,
     disambiguation: (() => {
       const allowedVariants = isMaster 
         ? placeVariants 

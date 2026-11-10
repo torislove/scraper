@@ -24,7 +24,7 @@ router.get('/suggest', (req, res) => {
 
     // Attach real-time universal natural language parsing contract
     const parsed = parseUniversalQuery(rawQ || `${req.query.category || ''} in ${req.query.location || ''}`);
-    const locationClassification = classifyLocation(parsed.location || rawQ);
+    const locationClassification = parsed.location ? classifyLocation(parsed.location) : null;
     parsed.locationClassification = locationClassification;
     payload.parsed = parsed;
     payload.locationClassification = locationClassification;
@@ -80,6 +80,22 @@ router.get('/taxonomy', (req, res) => {
     res.set('Cache-Control', 'private, max-age=5');
     if (req.headers['if-none-match'] === tag) return res.status(304).end();
     return res.json({ ok: true, ...summary });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/search/localities
+ *
+ * Micro-localities learned from vendor addresses by city.
+ */
+router.get('/localities', (req, res) => {
+  try {
+    const taxonomyLearner = require('../services/taxonomyLearner');
+    const city = req.query.city || '';
+    const localities = taxonomyLearner.getLocalities(city);
+    return res.json({ ok: true, city, localities });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

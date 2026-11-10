@@ -95,17 +95,26 @@ export default function SuggestInput({
         if (kind === 'place') {
           const places = (data?.suggestions || [])
             .filter(item => item.type === 'location')
-            .map((item, index) => ({
-              key: `place-${item.level}-${item.value}-${index}`,
-              type: 'place',
-              placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
-              value: item.value,
-              label: item.label || item.value,
-              subtitle: item.subtitle || item.display || '',
-              detail: String(item.detail || '').toUpperCase(),
-              scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
-              raw: item
-            }));
+            .map((item, index) => {
+              const d = String(item.detail || '').toUpperCase();
+              const badgeLabel = d === 'DISTRICT' ? '🗺️ District Sweep'
+                : d === 'STATE' ? '🏛️ State Swarm'
+                : d === 'MANDAL' ? '📍 Mandal Swarm'
+                : d === 'CITY' ? '🏙️ City'
+                : d === 'VILLAGE' ? '🏡 Village'
+                : d;
+              return {
+                key: `place-${item.level}-${item.value}-${index}`,
+                type: 'place',
+                placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
+                value: item.value,
+                label: item.label || item.value,
+                subtitle: item.subtitle || item.display || '',
+                detail: badgeLabel,
+                scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
+                raw: item
+              };
+            });
           setItems(places);
           setHint(data?.disambiguation || null);
         } else {
@@ -139,7 +148,7 @@ export default function SuggestInput({
       setLoading(true);
       try {
         const data = await suggestSearch(
-          kind === 'place' ? { q: query, limit: 10 } : { q: query, limit: 8 },
+          kind === 'place' ? { q: query, limit: 10, isMaster: true } : { q: query, limit: 8, isMaster: true },
           { signal: controller.signal }
         );
         if (requestRef.current !== requestId) return;
@@ -150,17 +159,26 @@ export default function SuggestInput({
         if (kind === 'place') {
           const places = (data?.suggestions || [])
             .filter(item => item.type === 'location')
-            .map((item, index) => ({
-              key: `place-${item.level}-${item.value}-${index}`,
-              type: 'place',
-              placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
-              value: item.value,
-              label: item.label || item.value,
-              subtitle: item.subtitle || item.display || '',
-              detail: String(item.detail || '').toUpperCase(),
-              scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
-              raw: item
-            }));
+            .map((item, index) => {
+              const d = String(item.detail || '').toUpperCase();
+              const badgeLabel = d === 'DISTRICT' ? '🗺️ District Sweep'
+                : d === 'STATE' ? '🏛️ State Swarm'
+                : d === 'MANDAL' ? '📍 Mandal Swarm'
+                : d === 'CITY' ? '🏙️ City'
+                : d === 'VILLAGE' ? '🏡 Village'
+                : d;
+              return {
+                key: `place-${item.level}-${item.value}-${index}`,
+                type: 'place',
+                placeType: item.level === 'mandal' ? 'subdistrict' : (item.level || 'city'),
+                value: item.value,
+                label: item.label || item.value,
+                subtitle: item.subtitle || item.display || '',
+                detail: badgeLabel,
+                scope: item.scope || SCOPE_BY_TYPE[item.level] || 'district',
+                raw: item
+              };
+            });
           setItems(places);
           setHint(data?.disambiguation || null);
         } else {

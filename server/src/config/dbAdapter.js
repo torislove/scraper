@@ -55,32 +55,21 @@ function getUsers() {
 function saveUsers(data) { fs.writeFileSync(usersFile, JSON.stringify(data, null, 2)); }
 
 // --- MEMORY BUFFERED I/O FOR BLAZING FAST SCRAPING ---
-let cachedVendors = null;
+// The live lead dataset is owned by vendorStore (atomic snapshots + journal).
+// dbAdapter remains the public facade used by every route and engine.
+const vendorStore = require('./vendorStore');
+
 let cachedOutOfBounds = null;
-let vendorsWriteTimeout = null;
 let oobWriteTimeout = null;
+let isWritingOob = false;
+let pendingOobFlush = false;
+let currentOobRun = null;
 
 let pendingMongoUpdates = {};
 let mongoWriteTimeout = null;
 
-function _flushVendors() {
-  if (cachedVendors) {
-    fs.writeFile(vendorsFile, JSON.stringify(cachedVendors), (err) => {
-      if (err) console.error('Failed to write vendors file:', err.message);
-    });
-  }
-}
-
 function flushSync() {
-  clearTimeout(vendorsWriteTimeout);
-  if (cachedVendors) {
-    try {
-      fs.writeFileSync(vendorsFile, JSON.stringify(cachedVendors, null, 2));
-      console.log(`[dbAdapter] Synchronously committed ${cachedVendors.length} vendors to disk store.`);
-    } catch (e) {
-      console.error('[dbAdapter] Sync flush error:', e.message);
-    }
-  }
+  vendorStore.flushNow();
 }
 
 function _flushMongo() {
@@ -111,21 +100,44 @@ function _flushMongo() {
 }
 
 function _flushOutOfBounds() {
-  if (cachedOutOfBounds) {
-    fs.writeFile(outOfBoundsFile, JSON.stringify(cachedOutOfBounds), (err) => {
-      if (err) console.error('Failed to write out of bounds file:', err.message);
-    });
+  if (!cachedOutOfBounds) return;
+  if (isWritingOob) {
+    pendingOobFlush = true;
+    return;
   }
+  isWritingOob = true;
+  pendingOobFlush = false;
+
+  const dataStr = JSON.stringify(cachedOutOfBounds);
+  const tmpFile = `${outOfBoundsFile}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`;
+
+  fs.writeFile(tmpFile, dataStr, (err) => {
+    if (err) {
+      isWritingOob = false;
+      fs.writeFile(outOfBoundsFile, dataStr, () => {});
+      return;
+    }
+    fs.rename(tmpFile, outOfBoundsFile, (renameErr) => {
+      isWritingOob = false;
+      if (renameErr) {
+        fs.writeFile(outOfBoundsFile, dataStr, () => {
+          try { fs.unlinkSync(tmpFile); } catch (e) {}
+        });
+      }
+      if (pendingOobFlush) {
+        setImmediate(_flushOutOfBounds);
+      }
+    });
+  });
 }
 
 // --- MULTI-TENANT VENDORS ---
 function getVendors(userId) {
-  if (!cachedVendors) {
-    try { cachedVendors = JSON.parse(fs.readFileSync(vendorsFile, 'utf-8')); } 
-    catch (e) { cachedVendors = []; }
-  }
-  if (!userId) return cachedVendors;
-  return cachedVendors.filter(v => v.userId === userId);
+  return vendorStore.all(userId);
+}
+
+function getVendorsBySession(sessionId) {
+  return vendorStore.bySession(sessionId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -157,7 +169,13 @@ function admitLeads(list) {
   let dropped = 0;
 
   for (const vendor of list) {
-    if (!vendor || !vendor.id || known.has(vendor.id)) {
+    if (!vendor || !vendor.id) {
+      admitted.push(vendor);
+      continue;
+    }
+
+    // Update / merge of a lead we already hold is free.
+    if (known.has(vendor.id) || vendorStore.isKnown(vendor)) {
       admitted.push(vendor);
       continue;
     }
@@ -177,31 +195,28 @@ function admitLeads(list) {
   return admitted;
 }
 
+/**
+ * Store one lead. New leads cost one credit (desktop build), updates are free.
+ * Returns false only when the ledger refused a brand-new lead, so callers can
+ * surface an honest "credits exhausted" state instead of silently losing rows.
+ */
 function saveVendor(userId, vendor) {
-  const all = getVendors(); 
-  const idx = all.findIndex(v => v.id === vendor.id);
-  vendor.userId = userId || vendor.userId || 'admin_1'; 
-  
-  if (idx !== -1) {
-    all[idx] = vendor;
-  } else {
-    // A brand-new lead costs one credit. If there is nothing left to spend the
-    // lead is not stored at all, so the ledger can never go negative.
-    if (credits.ENFORCED && !knownLeads().has(vendor.id)) {
-      if (credits.spend(1).charged < 1) {
-        console.warn('[credits] out of credits — lead not stored:', vendor.id);
-        return false;
-      }
-      knownLeads().add(vendor.id);
-    }
-    all.push(vendor);
-  }
-  
-  // Debounced write (1000ms window) for ultra-fast scraping
-  clearTimeout(vendorsWriteTimeout);
-  vendorsWriteTimeout = setTimeout(_flushVendors, 1000);
+  if (!vendor || !vendor.id) return false;
+  vendor.userId = userId || vendor.userId || 'admin_1';
 
-  // Buffer and bulk-upsert MongoDB updates (every 2 seconds) for ultra-fast scraping
+  // Credit is charged only when this row creates a NEW lead. A row that merges
+  // by Maps link or mobile into an existing lead is an update, not a new lead.
+  const isNew = !vendorStore.isKnown(vendor);
+  if (isNew && credits.ENFORCED && !knownLeads().has(vendor.id)) {
+    if (credits.spend(1).charged < 1) {
+      console.warn('[credits] out of credits — lead not stored:', vendor.id);
+      return false;
+    }
+    knownLeads().add(vendor.id);
+  }
+
+  vendorStore.upsert(vendor);
+
   pendingMongoUpdates[vendor.id] = vendor;
   clearTimeout(mongoWriteTimeout);
   mongoWriteTimeout = setTimeout(_flushMongo, 2000);
@@ -209,53 +224,137 @@ function saveVendor(userId, vendor) {
 }
 
 function deleteVendor(userId, vendorId) {
-  let all = getVendors();
-  cachedVendors = all.filter(v => !(v.id === vendorId && v.userId === userId));
-  _flushVendors(); // Flush immediately on delete
+  const vendor = vendorStore.findById(vendorId);
+  if (!vendor) return false;
+  if (userId && vendor.userId !== userId) return false;
+  // A single delete is still a delete: keep a restorable copy first.
+  try {
+    require('../services/leadArchive').archive([vendor], {
+      reason: 'lead_delete',
+      sessionId: vendor.sessionId || '',
+    });
+  } catch (e) {}
+  return vendorStore.removeById(vendorId);
 }
 
 function updateVendorsBatch(userId, updatedList) {
-  const all = getVendors();
-  const others = all.filter(v => v.userId !== userId);
-  const updatedWithTenant = updatedList.map(v => ({...v, userId: userId}));
-  cachedVendors = [...others, ...updatedWithTenant];
-  _flushVendors(); // Flush immediately on batch updates
+  const rows = (Array.isArray(updatedList) ? updatedList : []).map(v => ({ ...v, userId: userId || v.userId }));
+  vendorStore.upsertMany(rows);
 }
 
+/**
+ * Merge rows into the store. This is the safe default: an engine that saves the
+ * rows from its own run can never wipe every previous folder, and a partial row
+ * can never erase a known mobile. Pass `replaceVendors` for real deletions.
+ */
 function saveVendors(data) {
-  cachedVendors = admitLeads(Array.isArray(data) ? data : []);
-  _flushVendors();
+  const incoming = Array.isArray(data) ? data.filter(Boolean) : [];
+  if (!incoming.length) return;
+  vendorStore.upsertMany(admitLeads(incoming));
+}
+
+/**
+ * Overwrite the whole store. Only for explicit delete / clear / prune paths.
+ *
+ * Every row that disappears is archived first, whichever route triggered the
+ * replace (folder delete, clear-all, prune). `meta.reason` labels the entry so
+ * the recovery bin stays understandable.
+ */
+function replaceVendors(data, meta = {}) {
+  const rows = admitLeads(Array.isArray(data) ? data.filter(Boolean) : []);
+  const nextIds = new Set(rows.map(vendor => vendor && vendor.id).filter(Boolean));
+  try {
+    const removed = vendorStore.all().filter(vendor => vendor && vendor.id && !nextIds.has(vendor.id));
+    if (removed.length) {
+      require('../services/leadArchive').archive(removed, {
+        reason: meta.reason || 'bulk_replace',
+        sessionId: meta.sessionId || '',
+      });
+    }
+  } catch (e) {
+    /* archiving must never block the requested change */
+  }
+  knownLeadIds = nextIds;
+  vendorStore.replaceAll(rows);
+}
+
+function findMatch(candidate) {
+  if (!candidate) return null;
+  return vendorStore.findMatch(candidate);
+}
+
+function isKnown(vendor) {
+  if (!vendor) return false;
+  return vendorStore.isKnown(vendor);
+}
+
+function isDuplicate(candidate) {
+  if (!candidate) return false;
+  return vendorStore.isKnown(candidate);
 }
 
 // --- OUT OF BOUNDS ---
+// Rejected rows are kept as evidence ("we found it, it is outside the area"),
+// but never in the live lead table. The panel is per-run and capped so it can
+// not grow forever like the old 1,320-row file.
+const OOB_MAX_ROWS = 500;
+
 function getOutOfBounds() {
   if (!cachedOutOfBounds) {
-    try { cachedOutOfBounds = JSON.parse(fs.readFileSync(outOfBoundsFile, 'utf-8')); } 
+    try { cachedOutOfBounds = JSON.parse(fs.readFileSync(outOfBoundsFile, 'utf-8')); }
     catch (e) { cachedOutOfBounds = []; }
   }
+  if (!Array.isArray(cachedOutOfBounds)) cachedOutOfBounds = [];
+  if (currentOobRun) return cachedOutOfBounds.filter(v => v && v.runId === currentOobRun);
   return cachedOutOfBounds;
 }
 
-function saveOutOfBounds(data) { 
-  cachedOutOfBounds = data;
-  _flushOutOfBounds();
+/**
+ * Start a fresh out-of-bounds ledger for one run. Called at the start of every
+ * search so the panel answers "what did THIS run reject", not 1,300 rows from
+ * an engine that no longer exists.
+ */
+function resetOutOfBounds(runId) {
+  currentOobRun = runId || `run_${Date.now().toString(36)}`;
+  cachedOutOfBounds = [];
+  clearTimeout(oobWriteTimeout);
+  oobWriteTimeout = setTimeout(_flushOutOfBounds, 200);
+  return currentOobRun;
 }
 
-function saveOutOfBoundsVendor(vendor) {
-  const all = getOutOfBounds();
-  const idx = all.findIndex(v => 
-    v.id === vendor.id || 
-    (v.mapsLink && vendor.mapsLink && v.mapsLink === vendor.mapsLink) || 
+function saveOutOfBounds(data) {
+  cachedOutOfBounds = Array.isArray(data) ? data.slice(-OOB_MAX_ROWS) : [];
+  clearTimeout(oobWriteTimeout);
+  oobWriteTimeout = setTimeout(_flushOutOfBounds, 400);
+}
+
+function saveOutOfBoundsVendor(vendor, runId) {
+  if (!vendor) return;
+  // Mutate the real ledger, NOT getOutOfBounds(): during a run that returns a
+  // filtered copy, and pushing into a copy silently discarded every rejection.
+  if (!Array.isArray(cachedOutOfBounds)) cachedOutOfBounds = [];
+  const all = cachedOutOfBounds;
+  const targetRun = runId || currentOobRun || vendor.runId || null;
+  vendor.runId = targetRun;
+
+  const idx = all.findIndex(v =>
+    v.id === vendor.id ||
+    (v.mapsLink && vendor.mapsLink && v.mapsLink === vendor.mapsLink) ||
     (v.name && vendor.name && v.name === vendor.name)
   );
-  
+
   if (idx !== -1) {
     vendor.id = all[idx].id;
     all[idx] = { ...all[idx], ...vendor };
   } else {
     all.push(vendor);
   }
-  
+
+  // Hard cap: keep the newest rows, never an unbounded historical dump.
+  if (all.length > OOB_MAX_ROWS) {
+    cachedOutOfBounds = all.slice(all.length - OOB_MAX_ROWS);
+  }
+
   clearTimeout(oobWriteTimeout);
   oobWriteTimeout = setTimeout(_flushOutOfBounds, 1000);
 }
@@ -282,7 +381,9 @@ module.exports = {
   getUsers,
   saveUsers,
   getVendors,
+  getVendorsBySession,
   saveVendors,
+  replaceVendors,
   saveVendor,
   deleteVendor,
   updateVendorsBatch,
@@ -291,7 +392,11 @@ module.exports = {
   getPublicUsers,
   savePublicUsers,
   getOutOfBounds,
+  resetOutOfBounds,
   saveOutOfBounds,
   saveOutOfBoundsVendor,
+  isKnown,
+  findMatch,
+  isDuplicate,
   flushSync
 };

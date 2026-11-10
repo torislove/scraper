@@ -172,6 +172,25 @@ function parseUniversalQuery(rawInput) {
   normalized = normalized.replace(/\s+/g, ' ').trim();
   normalized = normalizePrepositionTypos(normalized);
 
+  // Normalize isolated typo prepositions (e.g. 'phtgaphers I gntur' -> 'phtgaphers in gntur')
+  normalized = normalized.replace(/\s+\b([iI]|n|arund|aroun)\b\s+/g, ' in ');
+
+  // Normalize city typos in tokens
+  const CITY_TYPO_MAP = {
+    'gntur': 'Guntur', 'guntor': 'Guntur', 'mubai': 'Mumbai', 'mumbay': 'Mumbai',
+    'hydrabad': 'Hyderabad', 'hyderbad': 'Hyderabad', 'vijaywada': 'Vijayawada',
+    'vijayawda': 'Vijayawada', 'vizag': 'Visakhapatnam', 'tirupathi': 'Tirupati',
+    'bengaluru': 'Bengaluru', 'banglore': 'Bengaluru', 'bangalore': 'Bengaluru',
+    'madras': 'Chennai', 'chenai': 'Chennai', 'calcutta': 'Kolkata', 'kolkatta': 'Kolkata',
+    'delhy': 'Delhi', 'poona': 'Pune', 'pune': 'Pune'
+  };
+
+  const normTokens = normalized.split(/\s+/).map(t => {
+    const cleanT = t.toLowerCase().replace(/[^a-z]/g, '');
+    return CITY_TYPO_MAP[cleanT] || t;
+  });
+  normalized = normTokens.join(' ');
+
   // 4. Split Category vs Location
   let rawCategory = normalized;
   let rawLocation = '';
@@ -191,11 +210,20 @@ function parseUniversalQuery(rawInput) {
   }
 
   if (!rawLocation) {
-    const prepMatch = normalized.match(/\s+(in|near|around|within|at|across)\s+/i);
-    if (prepMatch) {
-      const splitIndex = prepMatch.index;
-      rawCategory = normalized.substring(0, splitIndex).trim();
-      rawLocation = normalized.substring(splitIndex + prepMatch[0].length).trim();
+    const prepRegex = /\s+(in|near|around|within|at|across)\s+/i;
+    if (prepRegex.test(normalized)) {
+      const parts = normalized.split(prepRegex).filter(Boolean);
+      rawCategory = parts[0].trim();
+      const locCandidates = parts.slice(1);
+      const locMap = new Map();
+      locCandidates.forEach(cand => {
+        const cleanCand = cand.replace(/\b(in|near|at|around|within|across)\b/gi, '').trim();
+        if (cleanCand) {
+          const canonical = CITY_TYPO_MAP[cleanCand.toLowerCase()] || cleanCand;
+          locMap.set(canonical.toLowerCase(), canonical);
+        }
+      });
+      rawLocation = Array.from(locMap.values()).join(', ');
     } else {
       // Check known cities occurring at the end or start
       for (const city of MAJOR_CITIES) {
@@ -231,13 +259,29 @@ function parseUniversalQuery(rawInput) {
     }
   }
 
-  // Clean and capitalize category
+  // Clean and auto-correct trade typos in category
   let cleanCategory = rawCategory
     .replace(/\b(?:with|and|or|in|near|at|around|under|from)\b/gi, ' ')
     .replace(/^(services?|contractors?|works?|dealers?|repair)\s+/gi, '')
     .replace(/\s+(services?|works?)$/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
+
+  // Strip duplicate location name if it still leaked into cleanCategory
+  if (rawLocation) {
+    const locWords = rawLocation.toLowerCase().split(/[\s,]+/).filter(w => w.length >= 3);
+    for (const lw of locWords) {
+      const rx = new RegExp(`(^|\\s)${lw}(\\s|$)`, 'gi');
+      cleanCategory = cleanCategory.replace(rx, ' ').trim();
+    }
+  }
+
+  try {
+    const { normalizeTradePhrase } = require('./tradeIntelligence');
+    cleanCategory = normalizeTradePhrase(cleanCategory);
+  } catch (e) {
+    // fallback
+  }
 
   const catWords = cleanCategory.split(/\s+/).filter(Boolean);
   const formattedCategory = catWords.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -269,7 +313,7 @@ function parseUniversalQuery(rawInput) {
   let resolvedZones = [];
   if (formattedLocation) {
     try {
-      resolvedZones = resolveUniversalZones(formattedLocation) || [];
+      resolvedZones = resolveUniversalZones(formattedLocation, formattedCategory) || [];
     } catch (e) {
       // safe fallback
     }
@@ -279,6 +323,7 @@ function parseUniversalQuery(rawInput) {
   const ready = Boolean(formattedCategory && formattedLocation);
   const expectedMin = zonesCount * (uniqueVectors.length >= 4 ? 20 : 14);
   const expectedMax = zonesCount * (uniqueVectors.length >= 4 ? 40 : 25);
+  const coverageKind = zonesCount > 10 ? 'whole-city' : 'locality';
 
   return {
     raw: text,
@@ -291,8 +336,11 @@ function parseUniversalQuery(rawInput) {
     vectorDetails,
     zones: resolvedZones.slice(0, 15),
     zonesCount,
+    coverageKind,
+    gridCells: resolvedZones.filter(z => z.coverageKind === 'grid').length,
+    vectorZones: resolvedZones.filter(z => z.coverageKind === 'vector').length,
     expectedLeads: ready ? `${expectedMin}–${expectedMax}+ verified leads` : 'Add location for estimate',
-    estimatedSpeed: ready ? `${Math.min(10, Math.max(3, Math.round(zonesCount * 0.7)))}s` : 'Instant',
+    estimatedSpeed: ready ? `${Math.max(25, Math.round(zonesCount * 4))}s+` : 'Instant',
     ready
   };
 }

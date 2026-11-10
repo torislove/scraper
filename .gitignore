@@ -35,6 +35,10 @@ client/.env.local
 backend/.env
 firebase-service-account.json
 service-account.json
+# Provider keys live in the user's data folder (env or data/settings.json),
+# never in a tracked source file.
+server/src/config/settings.json
+server/data/settings.json
 
 # licence signing keys - back these up privately
 desktop/license-server/.keys/

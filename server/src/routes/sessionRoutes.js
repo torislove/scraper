@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 
 const { SESSIONS_DIR } = require('../config/paths');
+const { normalizePhone } = require('../utils/phoneUtils');
+const { calculateLeadQuality } = require('../utils/leadScoring');
 
 // Ensure base sessions directory exists
 if (!fs.existsSync(SESSIONS_DIR)) {
@@ -19,12 +21,182 @@ function getUserDir(userId) {
   return userDir;
 }
 
+function safeSessionKey(id) {
+  return String(id || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * The single source of truth for "which folders can this caller see?".
+ * List, get, rename, merge and delete all use it, so a folder can never be
+ * visible but undeletable (or deletable but invisible).
+ */
+function listSessionDirs({ isMaster = false } = {}) {
+  const dirs = [];
+  if (!fs.existsSync(SESSIONS_DIR)) return dirs;
+  for (const entry of fs.readdirSync(SESSIONS_DIR)) {
+    try {
+      if (!fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) continue;
+    } catch (e) {
+      continue;
+    }
+    if (!isMaster && entry === 'master') continue;
+    dirs.push(path.join(SESSIONS_DIR, entry));
+  }
+  dirs.sort((a, b) => {
+    const an = path.basename(a);
+    const bn = path.basename(b);
+    if (an === 'anonymous') return -1;
+    if (bn === 'anonymous') return 1;
+    return an.localeCompare(bn);
+  });
+  return dirs;
+}
+
+/** Every on-disk copy of one folder, in the directories the caller may see. */
+function resolveSessionFiles(sessionId, { isMaster = false } = {}) {
+  const safeId = safeSessionKey(sessionId);
+  const files = [];
+  for (const dir of listSessionDirs({ isMaster })) {
+    const filePath = path.join(dir, `${safeId}.json`);
+    if (fs.existsSync(filePath)) files.push(filePath);
+  }
+  return files;
+}
+
+function isSessionRunning(sessionId) {
+  try {
+    const { isSessionActive } = require('./scrape');
+    return isSessionActive(sessionId);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Remove a deleted folder's rows from the live store.
+ *
+ * A row is only removed when the deleted folder was its *only* source. Search
+ * results are shared: a repeat search appends the new session id to a row that
+ * already belonged to earlier runs. Deleting the newest folder must therefore
+ * forget that folder, not destroy a lead another folder still owns. CRM-engaged
+ * leads are kept on purpose even when the folder was their only source.
+ */
+function purgeSessionLeads(sessionId) {
+  const dbAdapter = require('../config/dbAdapter');
+  const { isEngaged, removeDeepProfile } = require('../services/leadRetention');
+  const all = dbAdapter.getVendors() || [];
+  const keep = [];
+  const removed = [];
+  let engagedKept = 0;
+  let sharedKept = 0;
+  let changed = false;
+
+  for (const vendor of all) {
+    if (!vendor || !vendor.id) {
+      keep.push(vendor);
+      continue;
+    }
+
+    const history = new Set(
+      [
+        ...(Array.isArray(vendor.sessionIds) ? vendor.sessionIds : []),
+        vendor.sessionId,
+        vendor.lastSessionId,
+      ].filter(Boolean)
+    );
+
+    if (!history.has(sessionId)) {
+      keep.push(vendor);
+      continue;
+    }
+
+    const remaining = Array.from(history).filter((id) => id !== sessionId);
+
+    // The row has another owner. Forget this folder and keep the lead.
+    if (remaining.length > 0) {
+      const pointer = remaining[remaining.length - 1];
+      vendor.sessionIds = remaining;
+      if (vendor.sessionId === sessionId) vendor.sessionId = pointer;
+      if (vendor.lastSessionId === sessionId) vendor.lastSessionId = pointer;
+      keep.push(vendor);
+      sharedKept += 1;
+      changed = true;
+      continue;
+    }
+
+    if (isEngaged(vendor)) {
+      // Keep the conversation, but stop pointing at a folder that no longer exists.
+      vendor.sessionIds = [];
+      if (vendor.sessionId === sessionId) vendor.sessionId = '';
+      if (vendor.lastSessionId === sessionId) vendor.lastSessionId = '';
+      keep.push(vendor);
+      engagedKept += 1;
+      changed = true;
+      continue;
+    }
+
+    removed.push(vendor);
+    changed = true;
+  }
+
+  if (changed) {
+    // Two independent recovery points before the row leaves the live store:
+    // the replace archives each removed row (per-lead restore), and a
+    // pre-change full backup allows a whole-store rollback.
+    if (removed.length) {
+      try {
+        require('../config/vendorStore').backupNow(`pre-delete:${sessionId}`);
+      } catch (e) {}
+    }
+    dbAdapter.replaceVendors(keep, { reason: 'folder_delete', sessionId });
+    try { dbAdapter.flushSync(); } catch (e) {}
+    for (const vendor of removed) {
+      try { removeDeepProfile(vendor.id); } catch (e) {}
+    }
+    try {
+      require('../services/deepProfileService')
+        .stopJobsForVendorIds(removed.map(vendor => vendor.id));
+    } catch (e) {}
+  }
+
+  return { leadsRemoved: removed.length, engagedKept, sharedKept };
+}
+
+/**
+ * Folders are snapshots. Deep enrichment and late stragglers keep improving the
+ * live store after a run finishes, so an export must read the freshest version
+ * of every lead or the customer silently loses a phone number they paid for.
+ *
+ * With master filters in play we only refresh rows the folder already contains;
+ * we never re-introduce a lead that was filtered out on purpose.
+ */
+function freshenLeadsFromStore(sessionId, folderLeads, metadata) {
+  const base = Array.isArray(folderLeads) ? folderLeads : [];
+  if (!sessionId) return base;
+  try {
+    const dbAdapter = require('../config/dbAdapter');
+    const live = dbAdapter.getVendorsBySession(sessionId);
+    if (!Array.isArray(live) || !live.length) return base;
+
+    const filters = metadata && metadata.filters;
+    const allowAdd = !(filters && Object.keys(filters).length);
+    const byId = new Map(base.filter(Boolean).map(lead => [lead.id, lead]));
+
+    for (const row of live) {
+      if (!row || !row.id) continue;
+      if (byId.has(row.id)) byId.set(row.id, row);
+      else if (allowAdd) byId.set(row.id, row);
+    }
+    return Array.from(byId.values());
+  } catch (e) {
+    return base;
+  }
+}
+
 function buildVcard(lead) {
   const name = (lead.name || 'Vendor Lead').replace(/[;\r\n]/g, ' ');
   const category = (lead.category || '').replace(/[;\r\n]/g, ' ');
-  const ph = lead.phone || lead.primaryPhone || '';
-  const digits = String(ph).replace(/\D/g, '').slice(-10);
-  const formattedPhone = digits.length === 10 ? `+91${digits}` : ph;
+  const phones = leadPhoneList(lead);
   const addr = (lead.address || lead.area || lead.city || '').replace(/[;\r\n]/g, ' ');
   const city = (lead.city || lead.mandal || '').replace(/[;\r\n]/g, ' ');
   const state = (lead.state || 'India').replace(/[;\r\n]/g, ' ');
@@ -37,8 +209,12 @@ function buildVcard(lead) {
     `ORG:${name};${category}`,
     `TITLE:${category}`
   ];
-  if (formattedPhone) {
-    lines.push(`TEL;TYPE=CELL,VOICE:${formattedPhone}`);
+  if (phones.length) {
+    for (const phone of phones) {
+      const digits = String(phone).replace(/\D/g, '').slice(-10);
+      const formatted = digits.length === 10 ? `+91${digits}` : phone;
+      lines.push(`TEL;TYPE=${isMobileNumber(phone) ? 'CELL,VOICE' : 'WORK,VOICE'}:${formatted}`);
+    }
   }
   if (lead.email) {
     lines.push(`EMAIL;TYPE=WORK:${lead.email}`);
@@ -56,26 +232,191 @@ function buildVcard(lead) {
 
 function formatExcelPhone(ph) {
   if (!ph) return '';
-  const digits = String(ph).replace(/\D/g, '').slice(-10);
-  if (digits.length === 10) {
-    return `+91 ${digits}`;
+  const { normalizePhone } = require('../utils/phoneUtils');
+  const parsed = normalizePhone(ph);
+  if (parsed) {
+    if (parsed.isLandline) {
+      // STD Landline starting with 0: strictly NO +91
+      return parsed.displayPhone || ('0' + parsed.national);
+    }
+    if (parsed.isMobile) {
+      return `+91 ${parsed.national.slice(0, 5)} ${parsed.national.slice(5)}`;
+    }
+  }
+  if (String(ph).trim().startsWith('0')) {
+    return String(ph).trim();
   }
   return String(ph);
 }
 
-function buildExportContent(leads, format, baseName) {
+/**
+ * Every usable number for a lead, in one deduped list. The store keeps extra
+ * phones in `phones[]`; exports used to look only at `phone`, so a business
+ * whose only number is a landline shipped with an empty phone column.
+ */
+function leadPhoneList(lead) {
+  const out = [];
+  const push = (value) => {
+    if (value == null) return;
+    let text = '';
+    if (typeof value === 'string') text = value;
+    else if (typeof value === 'number') text = String(value);
+    else if (typeof value === 'object') text = String(value.e164 || value.number || value.raw || value.national || '');
+    text = text.trim();
+    if (!text || /^\[object /i.test(text)) return;
+    const digits = text.replace(/\D/g, '').slice(-10);
+    const key = digits.length === 10 ? digits : text.toLowerCase();
+    if (out.some(entry => entry.key === key)) return;
+    out.push({ key, text });
+  };
+  push(lead.phone);
+  push(lead.primaryPhone);
+  push(lead.secondaryPhone);
+  for (const extra of Array.isArray(lead.phones) ? lead.phones : []) push(extra);
+  return out.map(entry => entry.text);
+}
+
+function isMobileNumber(value) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return false;
+  try {
+    const parsed = normalizePhone(text, { context: 'phone mobile', trusted: true });
+    return Boolean(parsed && parsed.isMobile);
+  } catch (e) {
+    return false;
+  }
+}
+
+// ── In-Memory Metadata Header Cache (Ultra-Fast 0ms File Handling) ──────────
+const sessionHeaderCache = new Map(); // filePath -> { mtimeMs, summary }
+
+function readSessionHeader(filePath, fallbackClientId) {
+  try {
+    const stat = fs.statSync(filePath);
+    const cached = sessionHeaderCache.get(filePath);
+    if (cached && cached.mtimeMs === stat.mtimeMs) {
+      return cached.summary;
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const data = JSON.parse(raw);
+    if (!data || !data.id) return null;
+
+    let leads = Array.isArray(data.leads) ? data.leads : [];
+    // Instant Database Auto-Backfill: If vault file has 0 leads but DB has harvested leads, recover immediately!
+    if (leads.length === 0) {
+      try {
+        const dbAdapter = require('../config/dbAdapter');
+        const dbLeads = (dbAdapter.getVendors() || []).filter(v =>
+          v.sessionId === data.id ||
+          v.lastSessionId === data.id ||
+          (Array.isArray(v.sessionIds) && v.sessionIds.includes(data.id))
+        );
+        if (dbLeads.length > 0) {
+          leads = dbLeads;
+          data.leads = dbLeads;
+          data.leadCount = dbLeads.length;
+          data.phoneCount = dbLeads.filter(l => l.phone && !String(l.phone).includes('Requires')).length;
+          data.verifiedCount = dbLeads.filter(l => l.verified || l.phone).length;
+          try {
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+          } catch (e) {}
+        }
+      } catch (e) {}
+    }
+
+    const phoneCount = data.phoneCount || 
+      data.metadata?.phoneCount || 
+      data.metadata?.verifiedPhones || 
+      leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
+    const verifiedCount = data.verifiedCount ||
+      data.metadata?.verifiedCount ||
+      leads.filter(l => l && (l.verified || isMobileNumber(l.phone))).length;
+
+    const cleanCat = (data.category || 'Business Search').replace(/[^\w\s&,-]/g, '').trim();
+    const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
+
+    const dateObj = new Date(data.timestamp || data.createdAt || Date.now());
+    const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+    const dateTimeSuffix = (dateStr && timeStr) ? ` • ${dateStr}, ${timeStr}` : '';
+    const friendlyName = (data.name && data.name.includes('•'))
+      ? data.name
+      : (cleanCat && cleanLoc ? `${cleanCat} in ${cleanLoc}${dateTimeSuffix}` : (data.name || data.category || 'Lead Vault'));
+
+    const customName = data.customName || data.name || friendlyName;
+    const tags = Array.isArray(data.tags) ? data.tags : (data.metadata?.tags || []);
+    const color = data.color || data.metadata?.color || 'blue';
+    const folderNotes = data.notes || data.metadata?.notes || '';
+    const dealValueTotal = leads.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
+    const isMasterSweep = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/.test(data.id) || /sweep/i.test(data.location || ''));
+    const masterScope = data.masterScope || data.metadata?.masterScope || (isMasterSweep ? (/(state)/i.test(data.location || '') ? 'state' : 'district') : null);
+
+    // Extract top neighborhood sub-folders for instant tree display in sidebar
+    const { extractLeadArea } = require('../utils/godLevelExcelGenerator');
+    const areaCounts = {};
+    leads.forEach(l => {
+      const a = extractLeadArea(l, cleanLoc);
+      if (a && a !== 'General') areaCounts[a] = (areaCounts[a] || 0) + 1;
+    });
+    const subFolders = Object.entries(areaCounts)
+      .map(([area, count]) => ({ area, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const summary = {
+      id: data.id,
+      name: customName,
+      customName,
+      tags,
+      color,
+      notes: folderNotes,
+      dealValueTotal,
+      isMasterSweep,
+      masterScope,
+      subFolders,
+      clientId: data.userId || fallbackClientId,
+      clientLabel: (data.userId || fallbackClientId) === 'master' ? '👑 Master System' : `👤 Client (${data.userId || fallbackClientId})`,
+      userId: data.userId || fallbackClientId,
+      category: cleanCat,
+      location: cleanLoc,
+      timestamp: data.timestamp || new Date().toISOString(),
+      createdAt: data.createdAt || data.timestamp || new Date().toISOString(),
+      leadCount: data.leadCount || leads.length,
+      phoneCount,
+      verifiedCount,
+      status: data.metadata?.status || 'completed',
+      metadata: data.metadata || {}
+    };
+
+    sessionHeaderCache.set(filePath, { mtimeMs: stat.mtimeMs, summary });
+    return summary;
+  } catch (e) {
+    return null;
+  }
+}
+
+
+function buildExportContent(leads, format, baseName, options = {}) {
   const cleanFormat = String(format || 'csv').toLowerCase();
+  const { extractLeadArea } = require('../utils/godLevelExcelGenerator');
+  const { normalizePhone } = require('../utils/phoneUtils');
+  let exportLeads = Array.isArray(leads) ? [...leads] : [];
+
+  if (options.area && options.area !== 'all') {
+    exportLeads = exportLeads.filter(l => extractLeadArea(l, options.city || '') === options.area);
+    baseName = `${baseName}_${String(options.area).replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+  }
 
   if (cleanFormat === 'json') {
     return {
       contentType: 'application/json',
       filename: `${baseName}.json`,
-      body: JSON.stringify(leads, null, 2)
+      body: JSON.stringify(exportLeads, null, 2)
     };
   }
 
   if (cleanFormat === 'vcf') {
-    const vcfCards = leads.map(l => buildVcard(l)).filter(Boolean).join('\r\n\r\n');
+    const vcfCards = exportLeads.map(l => buildVcard(l)).filter(Boolean).join('\r\n\r\n');
     return {
       contentType: 'text/vcard; charset=utf-8',
       filename: `${baseName}.vcf`,
@@ -84,10 +425,11 @@ function buildExportContent(leads, format, baseName) {
   }
 
   if (cleanFormat === 'txt') {
-    const phones = leads
-      .map(l => {
-        const ph = l.phone || l.primaryPhone;
-        if (!ph) return null;
+    const phones = exportLeads
+      .flatMap(l => leadPhoneList(l))
+      .map(ph => {
+        const parsed = normalizePhone(ph);
+        if (parsed?.isLandline) return parsed.displayPhone || ('0' + parsed.national);
         const d = String(ph).replace(/\D/g, '').slice(-10);
         return d.length === 10 ? `+91${d}` : ph;
       })
@@ -95,82 +437,134 @@ function buildExportContent(leads, format, baseName) {
     const unique = [...new Set(phones)];
     return {
       contentType: 'text/plain; charset=utf-8',
-      filename: `${baseName}_mobiles.txt`,
+      filename: `${baseName}_phones.txt`,
       body: unique.join('\r\n')
     };
   }
 
-  if (cleanFormat === 'dialer') {
-    const headers = [
-      'Phone Number', 'Contact Name', 'Company Name', 'Address', 'City',
-      'State', 'Pincode', 'Category', 'Rating', 'Website', 'Deal Value', 'Notes'
-    ];
-    const escapeCsv = val => `"${String(val == null ? '' : val).replace(/"/g, '""')}"`;
-    const rows = leads.map(l => {
-      const ph = l.phone || l.primaryPhone || '';
-      const d = String(ph).replace(/\D/g, '').slice(-10);
-      const cleanPhone = d.length === 10 ? `91${d}` : ph;
-      const notesStr = Array.isArray(l.crmNotes)
-        ? l.crmNotes.map(n => typeof n === 'string' ? n : n.text).filter(Boolean).join(' | ')
-        : (l.crmNotes || l.notes || '');
-      return [
-        escapeCsv(cleanPhone),
-        escapeCsv(l.contactName || l.name),
-        escapeCsv(l.name),
-        escapeCsv(l.address || l.area),
-        escapeCsv(l.city || l.village || l.mandal),
-        escapeCsv(l.state || 'India'),
-        escapeCsv(l.pincode),
-        escapeCsv(l.category),
-        escapeCsv(l.rating),
-        escapeCsv(l.website),
-        escapeCsv(l.dealValue || 0),
-        escapeCsv(notesStr)
-      ].join(',');
-    });
-    return {
-      contentType: 'text/csv; charset=utf-8',
-      filename: `${baseName}_telephony_dialer.csv`,
-      body: [headers.join(','), ...rows].join('\n')
-    };
-  }
-
-  // Default: Standard Clean Spreadsheet CSV (no scientific notation)
-  const headers = [
-    'Business Name', 'Category', 'Primary Phone', 'Secondary Phone', 'WhatsApp Direct URL',
-    'Email', 'Website', 'Instagram', 'Address', 'City / Mandal', 'District', 'State',
-    'Pincode', 'Rating', 'Reviews Count', 'Deal Value (INR)', 'CRM Stage', 'Follow Up Date', 'CRM Notes'
-  ];
   const escapeCsv = val => `"${String(val == null ? '' : val).replace(/"/g, '""')}"`;
-  const rows = leads.map(lead => {
-    const ph = lead.phone || lead.primaryPhone;
-    const cleanDigits = ph ? String(ph).replace(/\D/g, '').slice(-10) : '';
+  const headers = [
+    'Business Name', 'Category', 'Area / Locality', 'Primary Phone', 'Phone Type',
+    'Alternate Numbers', 'Total Lines',
+    'WhatsApp Direct URL', 'Direct Call Link', 'Email Address', 'Website',
+    'Complete Address', 'City', 'District', 'State', 'Pincode', 'Rating', 'Reviews Count',
+    'Profile Quality (%)', 'Quality Tier',
+    'Google Maps URL', 'CRM Stage', 'CRM Notes'
+  ];
+
+  const buildCsvRow = (lead) => {
+    const rawPhone = lead.phone || lead.primaryPhone || '';
+    const parsed = rawPhone ? normalizePhone(rawPhone) : null;
+    let displayPhone = '';
+    let phoneType = 'Unlisted';
+    let whatsappUrl = '';
+    let callUrl = '';
+
+    if (parsed) {
+      if (parsed.isMobile) {
+        displayPhone = parsed.displayPhone || `+91 ${parsed.national.slice(0, 5)} ${parsed.national.slice(5)}`;
+        phoneType = 'Mobile';
+        whatsappUrl = `https://wa.me/91${parsed.national}`;
+        callUrl = parsed.callUrl || `tel:+91${parsed.national}`;
+      } else if (parsed.isLandline) {
+        // Strictly preserve leading 0, no +91! Prepend tab so Excel keeps 0
+        displayPhone = parsed.displayPhone || ('0' + parsed.national);
+        phoneType = 'STD Landline';
+        whatsappUrl = '';
+        callUrl = parsed.callUrl || `tel:0${parsed.national}`;
+      } else {
+        displayPhone = rawPhone;
+        phoneType = 'Other';
+        callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+      }
+    } else if (rawPhone) {
+      displayPhone = rawPhone;
+      phoneType = rawPhone.trim().startsWith('0') ? 'STD Landline' : 'Contact';
+      callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+    }
+
+    const allPhones = Array.isArray(lead.phones) ? lead.phones : [];
+    const primaryDigits = parsed ? parsed.national : String(rawPhone).replace(/\D/g, '').slice(-10);
+    const seenAltDigits = new Set([primaryDigits]);
+    const alternatePhones = [];
+    for (const p of allPhones) {
+      const parsedAlt = normalizePhone(p);
+      const altDigits = parsedAlt ? parsedAlt.national : String(p).replace(/\D/g, '').slice(-10);
+      if (altDigits && altDigits.length >= 7 && !seenAltDigits.has(altDigits)) {
+        seenAltDigits.add(altDigits);
+        alternatePhones.push(parsedAlt ? parsedAlt.displayPhone : p);
+      }
+    }
+    const alternateStr = alternatePhones.join(', ');
+    const totalLinesCount = Math.max(1, (displayPhone ? 1 : 0) + alternatePhones.length);
+
+    const area = extractLeadArea(lead, options.city || lead.city);
     const notesStr = Array.isArray(lead.crmNotes)
       ? lead.crmNotes.map(n => typeof n === 'string' ? n : n.text).filter(Boolean).join(' | ')
       : (lead.crmNotes || lead.notes || '');
+
+    const mapsLink = lead.mapsLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((lead.name || '') + ' ' + (lead.address || ''))}`;
+
+    const qualityObj = lead.profileQuality?.score != null
+      ? { score: Number(lead.profileQuality.score), tier: lead.tier || 'Gold' }
+      : calculateLeadQuality(lead);
+
     return [
       escapeCsv(lead.name),
       escapeCsv(lead.category),
-      escapeCsv(formatExcelPhone(ph)),
-      escapeCsv(formatExcelPhone(lead.secondaryPhone)),
-      escapeCsv(lead.whatsappLink || (cleanDigits ? `https://wa.me/91${cleanDigits}` : '')),
-      escapeCsv(lead.email),
-      escapeCsv(lead.website),
-      escapeCsv(lead.instagram),
-      escapeCsv(lead.address),
-      escapeCsv(lead.city || lead.village || lead.mandal),
-      escapeCsv(lead.district),
-      escapeCsv(lead.state),
-      escapeCsv(lead.pincode),
-      escapeCsv(lead.rating),
-      escapeCsv(lead.reviewsCount || lead.reviewCount),
-      escapeCsv(lead.dealValue || 0),
+      escapeCsv(area),
+      escapeCsv(displayPhone ? `\t${displayPhone}` : ''), // Leading tab preserves 0 in Excel
+      escapeCsv(phoneType),
+      escapeCsv(alternateStr ? `\t${alternateStr}` : '—'),
+      escapeCsv(totalLinesCount),
+      escapeCsv(whatsappUrl),
+      escapeCsv(callUrl),
+      escapeCsv(lead.email || (Array.isArray(lead.emails) ? lead.emails[0] : '') || ''),
+      escapeCsv(lead.website || ''),
+      escapeCsv(lead.address || ''),
+      escapeCsv(lead.city || lead.village || lead.mandal || ''),
+      escapeCsv(lead.district || ''),
+      escapeCsv(lead.state || 'India'),
+      escapeCsv(lead.pincode || ''),
+      escapeCsv(lead.rating || ''),
+      escapeCsv(lead.reviewsCount || lead.reviewCount || ''),
+      escapeCsv(`${qualityObj.score}%`),
+      escapeCsv(qualityObj.tier),
+      escapeCsv(mapsLink),
       escapeCsv(lead.crmStage || lead.crmStatus || 'new'),
-      escapeCsv(lead.followUpDate || ''),
       escapeCsv(notesStr)
     ].join(',');
-  });
+  };
 
+  // If Area-Divided CSV is requested
+  if (options.divided) {
+    const areaMap = new Map();
+    exportLeads.forEach(lead => {
+      const area = extractLeadArea(lead, options.city || lead.city);
+      if (!areaMap.has(area)) areaMap.set(area, []);
+      areaMap.get(area).push(lead);
+    });
+
+    const csvSections = [];
+    csvSections.push(`# Scraper.co.in Area-Divided Export · Total Leads: ${exportLeads.length}\n`);
+
+    for (const [areaName, areaLeads] of areaMap.entries()) {
+      csvSections.push(`\n=== AREA: ${areaName.toUpperCase()} (${areaLeads.length} LEADS) ===`);
+      csvSections.push(headers.join(','));
+      areaLeads.forEach(lead => {
+        csvSections.push(buildCsvRow(lead));
+      });
+    }
+
+    return {
+      contentType: 'text/csv; charset=utf-8',
+      filename: `${baseName}_area_divided.csv`,
+      body: csvSections.join('\n').trim()
+    };
+  }
+
+  // Standard Flat CSV
+  const rows = exportLeads.map(lead => buildCsvRow(lead));
   return {
     contentType: 'text/csv; charset=utf-8',
     filename: `${baseName}.csv`,
@@ -208,6 +602,9 @@ function syncVendorToSessionVault(vendor) {
               followUpDate: vendor.followUpDate !== undefined ? vendor.followUpDate : content.leads[leadIndex].followUpDate,
               callOutcome: vendor.callOutcome !== undefined ? vendor.callOutcome : content.leads[leadIndex].callOutcome,
               contactName: vendor.contactName !== undefined ? vendor.contactName : content.leads[leadIndex].contactName,
+              contactPerson: vendor.contactPerson || content.leads[leadIndex].contactPerson,
+              gstin: vendor.gstin || content.leads[leadIndex].gstin,
+              pincode: vendor.pincode || content.leads[leadIndex].pincode,
               phone: vendor.phone || content.leads[leadIndex].phone
             };
             fs.writeFileSync(filePath, JSON.stringify(content, null, 2), 'utf-8');
@@ -311,65 +708,13 @@ router.get('/master/all', (req, res) => {
       const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
 
       for (const file of files) {
-        try {
-          const raw = fs.readFileSync(path.join(dir, file), 'utf-8');
-          const data = JSON.parse(raw);
-          if (!data || !data.id) continue;
+        const filePath = path.join(dir, file);
+        const summary = readSessionHeader(filePath, clientId);
+        if (!summary || !summary.id) continue;
 
-          if (!sessionMap.has(data.id)) {
-            const leads = Array.isArray(data.leads) ? data.leads : [];
-            const phoneCount = data.phoneCount || 
-              data.metadata?.phoneCount || 
-              data.metadata?.verifiedPhones || 
-              leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
-            const verifiedCount = data.verifiedCount ||
-              data.metadata?.verifiedCount ||
-              leads.filter(l => l && (l.verified || (l.phone && /^[6-9]\d{9}$/.test(String(l.phone).replace(/\D/g, '').slice(-10))))).length;
-
-            const cleanCat = (data.category || 'Business Search').replace(/[^\w\s&,-]/g, '').trim();
-            const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
-
-            const dateObj = new Date(data.timestamp || data.createdAt || Date.now());
-            const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-            const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-            const dateTimeSuffix = (dateStr && timeStr) ? ` • ${dateStr}, ${timeStr}` : '';
-            const friendlyName = (data.name && data.name.includes('•'))
-              ? data.name
-              : (cleanCat && cleanLoc ? `${cleanCat} in ${cleanLoc}${dateTimeSuffix}` : (data.name || data.category || 'Lead Vault'));
-
-            const customName = data.customName || data.name || friendlyName;
-            const tags = Array.isArray(data.tags) ? data.tags : (data.metadata?.tags || []);
-            const color = data.color || data.metadata?.color || 'blue';
-            const folderNotes = data.notes || data.metadata?.notes || '';
-            const dealValueTotal = leads.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
-            const isMaster = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/.test(data.id) || /sweep/i.test(data.location || ''));
-            const masterScope = data.masterScope || data.metadata?.masterScope || (isMaster ? (/(state)/i.test(data.location || '') ? 'state' : 'district') : null);
-
-            sessionMap.set(data.id, {
-              id: data.id,
-              name: customName,
-              customName,
-              tags,
-              color,
-              notes: folderNotes,
-              dealValueTotal,
-              isMasterSweep: isMaster,
-              masterScope,
-              clientId: data.userId || clientId,
-              clientLabel: (data.userId || clientId) === 'master' ? '👑 Master System' : `👤 Client (${data.userId || clientId})`,
-              userId: data.userId || clientId,
-              category: cleanCat,
-              location: cleanLoc,
-              timestamp: data.timestamp || new Date().toISOString(),
-              createdAt: data.createdAt || data.timestamp || new Date().toISOString(),
-              leadCount: data.leadCount || leads.length,
-              phoneCount,
-              verifiedCount,
-              status: data.metadata?.status || 'completed',
-              metadata: data.metadata || {}
-            });
-          }
-        } catch (e) {}
+        if (!sessionMap.has(summary.id)) {
+          sessionMap.set(summary.id, summary);
+        }
       }
     }
 
@@ -393,6 +738,46 @@ router.get('/master/all', (req, res) => {
   }
 });
 
+// Recovery bin. Every removed lead is archived before the store drops it, so a
+// mistaken folder delete or a bad merge can be undone from the dashboard.
+router.get('/trash', (req, res) => {
+  try {
+    const leadArchive = require('../services/leadArchive');
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
+    return res.json({ success: true, ...leadArchive.stats({ limit }) });
+  } catch (error) {
+    console.error('Trash summary error:', error.message);
+    return res.status(500).json({ error: 'Could not read the recovery archive' });
+  }
+});
+
+router.post('/trash/restore', (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map(String).filter(Boolean).slice(0, 2_000)
+      : [];
+    if (!ids.length) {
+      return res.status(400).json({ error: 'Send the lead ids to restore.' });
+    }
+    const sessionId = String(req.body?.sessionId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const userId = String(
+      req.headers['x-user-id'] || req.body?.userId || 'anonymous'
+    ).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const leadArchive = require('../services/leadArchive');
+    const result = leadArchive.restore(ids, { sessionId, userId });
+    return res.json({
+      success: true,
+      requested: ids.length,
+      restored: result.restored,
+      missing: ids.length - result.restored,
+      sessionId: sessionId || null,
+    });
+  } catch (error) {
+    console.error('Trash restore error:', error.message);
+    return res.status(500).json({ error: 'Could not restore those leads' });
+  }
+});
+
 // 2. List all saved sessions (Scoped: Client sees ONLY client data; Master sees ALL)
 router.get(['/list', '/list/:userId'], (req, res) => {
   try {
@@ -401,161 +786,48 @@ router.get(['/list', '/list/:userId'], (req, res) => {
 
     if (isMaster) {
       // Master view: Aggregates across ALL clients and master sweeps
-      const dirsToScan = [];
-      if (fs.existsSync(SESSIONS_DIR)) {
-        const subdirs = fs.readdirSync(SESSIONS_DIR).filter(f => {
-          try { return fs.statSync(path.join(SESSIONS_DIR, f)).isDirectory(); } catch (e) { return false; }
-        });
-        subdirs.forEach(sd => dirsToScan.push({ dir: path.join(SESSIONS_DIR, sd), clientId: sd }));
-      }
+      const dirsToScan = listSessionDirs({ isMaster: true })
+        .map(dir => ({ dir, clientId: path.basename(dir) }));
 
       for (const { dir, clientId } of dirsToScan) {
         if (!fs.existsSync(dir)) continue;
         const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
 
         for (const file of files) {
-          try {
-            const raw = fs.readFileSync(path.join(dir, file), 'utf-8');
-            const data = JSON.parse(raw);
-            if (!data || !data.id) continue;
+          const filePath = path.join(dir, file);
+          const summary = readSessionHeader(filePath, clientId);
+          if (!summary || !summary.id) continue;
 
-            if (!sessionMap.has(data.id)) {
-              const leads = Array.isArray(data.leads) ? data.leads : [];
-              const phoneCount = data.phoneCount || 
-                data.metadata?.phoneCount || 
-                data.metadata?.verifiedPhones || 
-                leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
-              const verifiedCount = data.verifiedCount ||
-                data.metadata?.verifiedCount ||
-                leads.filter(l => l && (l.verified || (l.phone && /^[6-9]\d{9}$/.test(String(l.phone).replace(/\D/g, '').slice(-10))))).length;
-
-              const cleanCat = (data.category || 'Business Search').replace(/[^\w\s&,-]/g, '').trim();
-              const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
-
-              const dateObj = new Date(data.timestamp || data.createdAt || Date.now());
-              const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-              const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-              const dateTimeSuffix = (dateStr && timeStr) ? ` • ${dateStr}, ${timeStr}` : '';
-              const friendlyName = (data.name && data.name.includes('•'))
-                ? data.name
-                : (cleanCat && cleanLoc ? `${cleanCat} in ${cleanLoc}${dateTimeSuffix}` : (data.name || data.category || 'Lead Vault'));
-
-              const customName = data.customName || data.name || friendlyName;
-              const tags = Array.isArray(data.tags) ? data.tags : (data.metadata?.tags || []);
-              const color = data.color || data.metadata?.color || 'blue';
-              const folderNotes = data.notes || data.metadata?.notes || '';
-              const dealValueTotal = leads.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
-              const isMasterSweep = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/.test(data.id) || /sweep/i.test(data.location || ''));
-              const masterScope = data.masterScope || data.metadata?.masterScope || (isMasterSweep ? (/(state)/i.test(data.location || '') ? 'state' : 'district') : null);
-
-              sessionMap.set(data.id, {
-                id: data.id,
-                name: customName,
-                customName,
-                tags,
-                color,
-                notes: folderNotes,
-                dealValueTotal,
-                isMasterSweep,
-                masterScope,
-                clientId: data.userId || clientId,
-                clientLabel: (data.userId || clientId) === 'master' ? '👑 Master System' : `👤 Client (${data.userId || clientId})`,
-                userId: data.userId || clientId,
-                category: cleanCat,
-                location: cleanLoc,
-                timestamp: data.timestamp || new Date().toISOString(),
-                createdAt: data.createdAt || data.timestamp || new Date().toISOString(),
-                leadCount: data.leadCount || leads.length,
-                phoneCount,
-                verifiedCount,
-                status: data.metadata?.status || 'completed',
-                metadata: data.metadata || {}
-              });
-            }
-          } catch (e) {}
+          if (!sessionMap.has(summary.id)) {
+            sessionMap.set(summary.id, summary);
+          }
         }
       }
     } else {
       // Client view: Access client session folders (own user ID, anonymous, and guest/client runs).
       // STRICT RULE: Master territorial sweeps are filtered out and inaccessible.
       const userId = req.headers['x-user-id'] || req.params.userId || 'anonymous';
-      const userDirs = [getUserDir(userId)];
-      if (userId !== 'anonymous') {
-        userDirs.push(getUserDir('anonymous'));
-      }
-      if (fs.existsSync(SESSIONS_DIR)) {
-        const subdirs = fs.readdirSync(SESSIONS_DIR).filter(f => {
-          try { return f !== 'master' && fs.statSync(path.join(SESSIONS_DIR, f)).isDirectory(); } catch (e) { return false; }
-        });
-        subdirs.forEach(sd => {
-          const dir = path.join(SESSIONS_DIR, sd);
-          if (!userDirs.includes(dir)) userDirs.push(dir);
-        });
-      }
+      const userDirs = listSessionDirs({ isMaster: false });
 
       for (const userDir of userDirs) {
         if (!fs.existsSync(userDir)) continue;
         const files = fs.readdirSync(userDir).filter(f => f.endsWith('.json'));
 
         for (const file of files) {
-          try {
-            const raw = fs.readFileSync(path.join(userDir, file), 'utf-8');
-            const data = JSON.parse(raw);
-            if (!data || !data.id) continue;
+          const filePath = path.join(userDir, file);
+          const summary = readSessionHeader(filePath, userId);
+          if (!summary || !summary.id) continue;
 
-            // Never leak Master Sweeps to standard client!
-            const isMasterSweep = Boolean(data.isMasterSweep || data.metadata?.isMasterSweep || /master_/i.test(data.id));
-            if (isMasterSweep) continue;
+          // Never leak Master Sweeps to standard client!
+          if (summary.isMasterSweep) continue;
 
-            if (!sessionMap.has(data.id)) {
-              const leads = Array.isArray(data.leads) ? data.leads : [];
-              const phoneCount = data.phoneCount || 
-                data.metadata?.phoneCount || 
-                data.metadata?.verifiedPhones || 
-                leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
-              const verifiedCount = data.verifiedCount ||
-                data.metadata?.verifiedCount ||
-                leads.filter(l => l && (l.verified || (l.phone && /^[6-9]\d{9}$/.test(String(l.phone).replace(/\D/g, '').slice(-10))))).length;
-
-              const cleanCat = (data.category || 'Business Search').replace(/[^\w\s&,-]/g, '').trim();
-              const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
-
-              const dateObj = new Date(data.timestamp || data.createdAt || Date.now());
-              const dateStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-              const timeStr = !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
-              const dateTimeSuffix = (dateStr && timeStr) ? ` • ${dateStr}, ${timeStr}` : '';
-              const friendlyName = (data.name && data.name.includes('•'))
-                ? data.name
-                : (cleanCat && cleanLoc ? `${cleanCat} in ${cleanLoc}${dateTimeSuffix}` : (data.name || data.category || 'Lead Vault'));
-
-              const customName = data.customName || data.name || friendlyName;
-              const tags = Array.isArray(data.tags) ? data.tags : (data.metadata?.tags || []);
-              const color = data.color || data.metadata?.color || 'blue';
-              const folderNotes = data.notes || data.metadata?.notes || '';
-              const dealValueTotal = leads.reduce((sum, l) => sum + (Number(l.dealValue) || 0), 0);
-
-              sessionMap.set(data.id, {
-                id: data.id,
-                name: customName,
-                customName,
-                tags,
-                color,
-                notes: folderNotes,
-                dealValueTotal,
-                isMasterSweep: false,
-                userId: data.userId || userId,
-                category: cleanCat,
-                location: cleanLoc,
-                timestamp: data.timestamp || new Date().toISOString(),
-                createdAt: data.createdAt || data.timestamp || new Date().toISOString(),
-                leadCount: data.leadCount || leads.length,
-                phoneCount,
-                verifiedCount,
-                status: data.metadata?.status || 'completed',
-                metadata: data.metadata || {}
-              });
-            }
-          } catch (e) {}
+          if (!sessionMap.has(summary.id)) {
+            sessionMap.set(summary.id, {
+              ...summary,
+              isMasterSweep: false,
+              userId: summary.userId || userId
+            });
+          }
         }
       }
     }
@@ -570,7 +842,7 @@ router.get(['/list', '/list/:userId'], (req, res) => {
 });
 
 // 3. Export a session by id alone (used by the V2 folder cards).
-router.get('/export/:sessionId', (req, res) => {
+router.get('/export/:sessionId', async (req, res) => {
   try {
     const sessionId = String(req.params.sessionId || '').replace(/[^a-zA-Z0-9_-]/g, '_');
     const format = String(req.query.format || 'csv').toLowerCase();
@@ -595,9 +867,44 @@ router.get('/export/:sessionId', (req, res) => {
     }
     if (!data) return res.status(404).json({ error: 'Session not found' });
 
-    const leads = Array.isArray(data.leads) ? data.leads : [];
+    let leads = freshenLeadsFromStore(sessionId, data.leads, data.metadata);
+    // Instant DB auto-backfill if vault file was empty
+    if (!Array.isArray(leads) || leads.length === 0) {
+      try {
+        const dbAdapter = require('../config/dbAdapter');
+        leads = (dbAdapter.getVendors() || []).filter(v =>
+          v.sessionId === sessionId ||
+          v.lastSessionId === sessionId ||
+          (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
+        );
+      } catch (e) {}
+    }
+
+    try {
+      const { isVendorRelevant } = require('../services/categoryFidelity');
+      if (data.category && Array.isArray(leads)) {
+        leads = leads.filter(l => isVendorRelevant(l, data.category));
+      }
+    } catch (e) {}
     const baseName = `${data.category || 'leads'}_${data.location || 'india'}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
-    const exportResult = buildExportContent(leads, format, baseName);
+
+    const exportOptions = {
+      divided: req.query.divided === 'true' || req.query.mode === 'divided',
+      area: req.query.area || '',
+      category: data.category,
+      city: data.location
+    };
+
+    // God-Level Multi-Sheet Excel Format
+    if (format === 'xlsx' || format === 'excel') {
+      const { buildGodLevelExcelBuffer } = require('../utils/godLevelExcelGenerator');
+      const buffer = await buildGodLevelExcelBuffer(leads, exportOptions);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}_god_level.xlsx"`);
+      return res.send(buffer);
+    }
+
+    const exportResult = buildExportContent(leads, format, baseName, exportOptions);
 
     res.setHeader('Content-Type', exportResult.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${exportResult.filename}"`);
@@ -611,41 +918,34 @@ router.get('/export/:sessionId', (req, res) => {
 // 4. Rename and tag session folder
 router.patch(['/rename', '/:sessionId/rename', '/:userId/:sessionId/rename'], (req, res) => {
   try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
     const sessionId = req.body.sessionId || req.params.sessionId;
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
-    const safeSessionId = String(sessionId).replace(/[^a-zA-Z0-9_-]/g, '_');
     const { name, tags, color, notes } = req.body;
 
-    const candidateDirs = [getUserDir('anonymous')];
-    if (fs.existsSync(SESSIONS_DIR)) {
-      for (const entry of fs.readdirSync(SESSIONS_DIR)) {
-        try {
-          if (fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) {
-            candidateDirs.push(path.join(SESSIONS_DIR, entry));
-          }
-        } catch (e) {}
-      }
+    const files = resolveSessionFiles(sessionId, { isMaster });
+    if (!files.length) {
+      return res.status(404).json({ error: 'Session folder not found' });
     }
 
-    for (const dir of candidateDirs) {
-      const filePath = path.join(dir, `${safeSessionId}.json`);
-      if (fs.existsSync(filePath)) {
-        const session = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        if (name !== undefined) {
-          session.name = String(name).trim();
-          session.customName = String(name).trim();
-        }
-        if (tags !== undefined) session.tags = Array.isArray(tags) ? tags : [];
-        if (color !== undefined) session.color = String(color).trim();
-        if (notes !== undefined) session.notes = String(notes).trim();
-        session.updatedAt = new Date().toISOString();
-
-        fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
-        return res.json({ success: true, session });
+    let updated = null;
+    for (const filePath of files) {
+      const session = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      if (name !== undefined) {
+        session.name = String(name).trim();
+        session.customName = String(name).trim();
       }
+      if (tags !== undefined) session.tags = Array.isArray(tags) ? tags : [];
+      if (color !== undefined) session.color = String(color).trim();
+      if (notes !== undefined) session.notes = String(notes).trim();
+      session.updatedAt = new Date().toISOString();
+
+      fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf-8');
+      sessionHeaderCache.delete(filePath);
+      if (!updated) updated = session;
     }
 
-    return res.status(404).json({ error: 'Session folder not found' });
+    return res.json({ success: true, session: updated, filesUpdated: files.length });
   } catch (error) {
     console.error('Rename error:', error);
     return res.status(500).json({ error: 'Failed to rename folder' });
@@ -660,29 +960,15 @@ router.post('/merge', (req, res) => {
       return res.status(400).json({ error: 'At least 2 sessionIds are required for merging' });
     }
 
-    const candidateDirs = [getUserDir('anonymous')];
-    if (fs.existsSync(SESSIONS_DIR)) {
-      for (const entry of fs.readdirSync(SESSIONS_DIR)) {
-        try {
-          if (fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) {
-            candidateDirs.push(path.join(SESSIONS_DIR, entry));
-          }
-        } catch (e) {}
-      }
-    }
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
 
     const loadedSessions = [];
     for (const id of sessionIds) {
-      const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
-      for (const dir of candidateDirs) {
-        const filePath = path.join(dir, `${safeId}.json`);
-        if (fs.existsSync(filePath)) {
-          try {
-            loadedSessions.push(JSON.parse(fs.readFileSync(filePath, 'utf-8')));
-            break;
-          } catch (e) {}
-        }
-      }
+      const files = resolveSessionFiles(id, { isMaster });
+      if (!files.length) continue;
+      try {
+        loadedSessions.push(JSON.parse(fs.readFileSync(files[0], 'utf-8')));
+      } catch (e) {}
     }
 
     if (loadedSessions.length < 2) {
@@ -698,11 +984,15 @@ router.post('/merge', (req, res) => {
       initialCount += leads.length;
 
       for (const lead of leads) {
-        const ph = lead.phone || lead.primaryPhone || '';
-        const digits = String(ph).replace(/\D/g, '').slice(-10);
-        const dedupeKey = digits && digits.length === 10
-          ? `phone_${digits}`
-          : (lead.id || `name_${String(lead.name).toLowerCase()}_${String(lead.city || lead.area || '').toLowerCase()}`);
+        // Identity is a validated phone (mobile or landline with STD code),
+        // never "the last 10 digits" - that can merge two different businesses
+        // that share a landline. Fall back to the stable row id.
+        const parsed = normalizePhone(lead.phone || lead.primaryPhone || '');
+        const dedupeKey = parsed && parsed.isValid
+          ? `e164_${parsed.e164}`
+          : (lead.id
+            ? `id_${lead.id}`
+            : `name_${String(lead.name || '').toLowerCase()}_${String(lead.city || lead.area || '').toLowerCase()}`);
 
         if (!leadMap.has(dedupeKey)) {
           leadMap.set(dedupeKey, { ...lead });
@@ -772,36 +1062,60 @@ router.post('/merge', (req, res) => {
 // 6. Batch Delete Sessions
 router.post('/batch-delete', (req, res) => {
   try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
     const { sessionIds } = req.body;
     if (!Array.isArray(sessionIds) || !sessionIds.length) {
       return res.status(400).json({ error: 'sessionIds array is required' });
     }
 
-    const candidateDirs = [getUserDir('anonymous')];
-    if (fs.existsSync(SESSIONS_DIR)) {
-      for (const entry of fs.readdirSync(SESSIONS_DIR)) {
-        try {
-          if (fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) {
-            candidateDirs.push(path.join(SESSIONS_DIR, entry));
-          }
-        } catch (e) {}
-      }
+    const ids = [...new Set(sessionIds.map(String).filter(Boolean))];
+    const blocked = ids.filter(id => isSessionRunning(id));
+    if (blocked.length) {
+      return res.status(409).json({
+        error: 'Some folders are still being written. Stop the swarm before deleting them.',
+        blocked
+      });
     }
 
-    let deletedCount = 0;
-    for (const id of sessionIds) {
-      const safeId = String(id).replace(/[^a-zA-Z0-9_-]/g, '_');
-      for (const dir of candidateDirs) {
-        const filePath = path.join(dir, `${safeId}.json`);
-        if (fs.existsSync(filePath)) {
+    const deleted = [];
+    const missing = [];
+    let filesRemoved = 0;
+    let leadsRemoved = 0;
+    let engagedKept = 0;
+    let sharedKept = 0;
+
+    for (const id of ids) {
+      const files = resolveSessionFiles(id, { isMaster });
+      if (!files.length) {
+        missing.push(id);
+        continue;
+      }
+      for (const filePath of files) {
+        try {
           fs.unlinkSync(filePath);
-          deletedCount++;
-          break;
+          sessionHeaderCache.delete(filePath);
+          filesRemoved += 1;
+        } catch (e) {
+          // Ignore files locked by another reader.
         }
       }
+      const purge = purgeSessionLeads(id);
+      leadsRemoved += purge.leadsRemoved;
+      engagedKept += purge.engagedKept;
+      sharedKept += purge.sharedKept;
+      deleted.push(id);
     }
 
-    return res.json({ success: true, count: deletedCount });
+    return res.json({
+      success: true,
+      count: deleted.length,
+      deleted,
+      missing,
+      filesRemoved,
+      leadsRemoved,
+      engagedKept,
+      sharedKept
+    });
   } catch (error) {
     console.error('Batch delete error:', error);
     return res.status(500).json({ error: 'Failed to batch delete sessions' });
@@ -853,13 +1167,65 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
           return res.status(403).json({ error: 'Access denied: Master territorial sweeps are restricted to Master Command Center.' });
         }
 
+        // Real-Time Category Fidelity & Smart Brand Deduplication auto-sanitization
+        try {
+          const { isVendorRelevant } = require('../services/categoryFidelity');
+          const { areNearDuplicates, mergeVendorLeads } = require('../utils/indiaTradeIntelligence');
+          if (Array.isArray(data.leads) && data.leads.length > 0) {
+            const originalCount = data.leads.length;
+            // 1. Category fidelity
+            let sanitized = data.category ? data.leads.filter(lead => isVendorRelevant(lead, data.category)) : data.leads;
+
+            // 2. Smart Multi-Vendor Deduplication & Multi-Phone Merging
+            const deduped = [];
+            for (const lead of sanitized) {
+              let matchedIndex = -1;
+              for (let i = 0; i < deduped.length; i++) {
+                if (areNearDuplicates(deduped[i], lead)) {
+                  matchedIndex = i;
+                  break;
+                }
+              }
+              if (matchedIndex >= 0) {
+                deduped[matchedIndex] = mergeVendorLeads(deduped[matchedIndex], lead);
+              } else {
+                deduped.push(lead);
+              }
+            }
+            data.leads = deduped;
+
+            if (data.leads.length !== originalCount) {
+              data.leadCount = data.leads.length;
+              data.phoneCount = data.leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
+              data.verifiedCount = data.leads.filter(l => l.verified || l.phone).length;
+              try {
+                fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+
         // Merge with current live dbAdapter vendors for freshest CRM stages, notes, and contacts!
         try {
           const dbAdapter = require('../config/dbAdapter');
           const liveVendors = dbAdapter.getVendors() || [];
           const liveMap = new Map(liveVendors.map(v => [v.id, v]));
 
-          if (Array.isArray(data.leads)) {
+          const dbSessionLeads = liveVendors.filter(v =>
+            v.sessionId === safeSessionId ||
+            v.lastSessionId === safeSessionId ||
+            (Array.isArray(v.sessionIds) && v.sessionIds.includes(safeSessionId))
+          );
+
+          if ((!Array.isArray(data.leads) || data.leads.length === 0) && dbSessionLeads.length > 0) {
+            data.leads = dbSessionLeads;
+            data.leadCount = dbSessionLeads.length;
+            data.phoneCount = dbSessionLeads.filter(l => l.phone && !String(l.phone).includes('Requires')).length;
+            data.verifiedCount = dbSessionLeads.filter(l => l.verified || l.phone).length;
+            try {
+              fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+            } catch (e) {}
+          } else if (Array.isArray(data.leads)) {
             data.leads = data.leads.map(lead => {
               const live = liveMap.get(lead.id);
               if (!live) return lead;
@@ -875,6 +1241,25 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
             });
           }
         } catch (e) { /* ignore merge error */ }
+
+        // Ensure subFolders is always present and up-to-date
+        if (!Array.isArray(data.subFolders) || data.subFolders.length === 0) {
+          try {
+            const { extractLeadArea } = require('../utils/godLevelExcelGenerator');
+            const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
+            const areaCounts = {};
+            (data.leads || []).forEach(l => {
+              const a = extractLeadArea(l, cleanLoc);
+              if (a && a !== 'General') areaCounts[a] = (areaCounts[a] || 0) + 1;
+            });
+            data.subFolders = Object.entries(areaCounts)
+              .map(([area, count]) => ({ area, count }))
+              .sort((a, b) => b.count - a.count);
+          } catch (e) {
+            data.subFolders = [];
+          }
+        }
+
         return res.json({ success: true, session: data, isMasterAuthorized: isMaster });
       }
     }
@@ -889,25 +1274,42 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
 // 4. Delete session
 router.delete(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
   try {
-    const userId = req.params.userId || 'anonymous';
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
     const sessionId = req.params.sessionId || req.params.userId;
-    const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-    const candidateDirs = [
-      getUserDir(userId),
-      getUserDir('anonymous')
-    ];
-
-    let deleted = false;
-    for (const dir of candidateDirs) {
-      const filePath = path.join(dir, `${safeSessionId}.json`);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-        deleted = true;
-      }
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required' });
     }
 
-    return res.json({ success: true, message: deleted ? 'Session deleted' : 'Session not found' });
+    if (isSessionRunning(sessionId)) {
+      return res.status(409).json({
+        error: 'This folder is still being written. Stop the swarm before deleting it.',
+        sessionId
+      });
+    }
+
+    const files = resolveSessionFiles(sessionId, { isMaster });
+    if (!files.length) {
+      return res.status(404).json({
+        error: 'Session folder not found',
+        deleted: [],
+        missing: [sessionId]
+      });
+    }
+
+    for (const filePath of files) {
+      fs.unlinkSync(filePath);
+      sessionHeaderCache.delete(filePath);
+    }
+
+    const purge = purgeSessionLeads(sessionId);
+    return res.json({
+      success: true,
+      message: 'Session deleted',
+      deleted: [sessionId],
+      missing: [],
+      filesRemoved: files.length,
+      ...purge
+    });
   } catch (error) {
     console.error('Failed to delete session:', error);
     return res.status(500).json({ error: 'Failed to delete session' });
@@ -915,7 +1317,7 @@ router.delete(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
 });
 
 // 5. Export session directly
-router.get('/export/:userId/:sessionId', (req, res) => {
+router.get('/export/:userId/:sessionId', async (req, res) => {
   try {
     const { userId, sessionId } = req.params;
     const { format = 'csv' } = req.query;
@@ -928,8 +1330,24 @@ router.get('/export/:userId/:sessionId', (req, res) => {
     }
 
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    const leads = data.leads || [];
+    let leads = freshenLeadsFromStore(safeSessionId, data.leads, data.metadata);
+    try {
+      const { isVendorRelevant } = require('../services/categoryFidelity');
+      if (data.category && Array.isArray(leads)) {
+        leads = leads.filter(l => isVendorRelevant(l, data.category));
+      }
+    } catch (e) {}
     const baseName = `${data.category || 'leads'}_${data.location || 'india'}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
+
+    // God-Level Excel Format
+    if (format === 'xlsx' || format === 'excel') {
+      const { buildGodLevelExcelBuffer } = require('../utils/godLevelExcelGenerator');
+      const buffer = await buildGodLevelExcelBuffer(leads, { city: data.location, category: data.category });
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${baseName}_god_level.xlsx"`);
+      return res.send(buffer);
+    }
+
     const exportResult = buildExportContent(leads, format, baseName);
 
     res.setHeader('Content-Type', exportResult.contentType);
@@ -938,6 +1356,125 @@ router.get('/export/:userId/:sessionId', (req, res) => {
   } catch (error) {
     console.error('Export error:', error);
     return res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// All-India Territory & Villages SEO API (633 Districts & 619,290 Villages)
+// -----------------------------------------------------------------------------
+const { getTerritorySummary, searchTerritory } = require('../utils/territoryHelper');
+
+router.get('/territory/summary', (req, res) => {
+  try {
+    const summary = getTerritorySummary();
+    res.json({
+      success: true,
+      totalStates: summary.length,
+      totalDistricts: summary.reduce((acc, s) => acc + s.districtCount, 0),
+      totalMandals: 5920,
+      totalVillages: 619290,
+      states: summary
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve territory summary' });
+  }
+});
+
+router.get('/territory/search', (req, res) => {
+  try {
+    const q = req.query.q || '';
+    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
+    const results = searchTerritory(q, limit);
+    res.json({
+      success: true,
+      query: q,
+      count: results.length,
+      results
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Territory search failed' });
+  }
+});
+
+// Download sample God-Level Excel workbook directly from landing page
+router.get('/export/sample-excel', async (req, res) => {
+  try {
+    const category = req.query.category || 'Dental Clinics';
+    const city = req.query.city || 'Guntur';
+    const { buildGodLevelExcelBuffer } = require('../utils/godLevelExcelGenerator');
+
+    const sampleLeads = [
+      {
+        name: 'Kalyani Multispeciality Dental Clinic',
+        owner: 'Dr. K. Srinivas Rao, MDS (Managing Director)',
+        phone: '+91 76750 71081',
+        secondaryPhone: '+91 98480 23145',
+        email: 'contact@kalyanidental.com',
+        address: '4th Line, Brodipet, Guntur - 522002',
+        rating: 4.9,
+        reviewsCount: 420,
+        socialProfile: 'https://instagram.com/kalyanidental',
+        waMessage: 'Hello Dr. Srinivas Rao, reaching out from Scraper.co.in regarding premium dental implants distribution in Guntur.'
+      },
+      {
+        name: 'Happy Dental Hospital & Implant Centre',
+        owner: 'Dr. P. Venkat Reddy (Chief Implantologist)',
+        phone: '+91 80084 91391',
+        secondaryPhone: '',
+        email: 'info@happydental.in',
+        address: 'Main Road, Arundelpet, Guntur - 522002',
+        rating: 4.8,
+        reviewsCount: 315,
+        socialProfile: '',
+        waMessage: 'Hi Dr. Venkat Reddy, connecting regarding dental digital imaging solutions and patient appointment CRM.'
+      },
+      {
+        name: 'Siri Super Speciality Dental Hospital',
+        owner: 'Dr. M. Chaitanya Kumar (Oral Surgeon)',
+        phone: '+91 70363 51100',
+        secondaryPhone: '+91 94401 55678',
+        email: 'support@siridental.com',
+        address: 'Opp. Hindu College, Guntur - 522003',
+        rating: 4.8,
+        reviewsCount: 260,
+        socialProfile: 'https://facebook.com/siridental',
+        waMessage: 'Hello Dr. Chaitanya, contacting you regarding specialized surgical tools and autoclave sterilization supplies.'
+      },
+      {
+        name: 'Guntur Dental Care & Laser Centre',
+        owner: 'Dr. Anusha Reddy (Owner & Cosmetologist)',
+        phone: '+91 99890 12344',
+        secondaryPhone: '',
+        email: 'care@gunturdental.com',
+        address: 'Lakshmipuram Main Road, Guntur - 522007',
+        rating: 4.7,
+        reviewsCount: 185,
+        socialProfile: '',
+        waMessage: 'Hello Dr. Anusha, reaching out regarding painless laser dentistry consumables and patient outreach.'
+      },
+      {
+        name: 'Venkateswara Dental Orthodontic Clinic',
+        owner: 'Dr. B. Prasad Rao (Consultant Orthodontist)',
+        phone: '+91 98495 67890',
+        secondaryPhone: '',
+        email: '',
+        address: 'Old Club Road, Kothapet, Guntur - 522001',
+        rating: 4.8,
+        reviewsCount: 220,
+        socialProfile: '',
+        waMessage: 'Namaste Dr. Prasad Rao, connecting regarding invisible aligners and orthodontic bracket wholesale pricing.'
+      }
+    ];
+
+    const buffer = await buildGodLevelExcelBuffer(sampleLeads, { city, category });
+    const cleanFilename = `God_Level_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${city.replace(/[^a-zA-Z0-9]/g, '_')}_Leads.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('Sample excel generation error:', err);
+    res.status(500).json({ error: 'Failed to generate sample Excel' });
   }
 });
 

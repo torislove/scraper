@@ -23,21 +23,23 @@ const { DATA_DIR } = require('../config/paths');
 const brandIntel = require('./brandIntel');
 
 const LEARNED_FILE = path.join(DATA_DIR, 'taxonomy', 'learned.json');
+const MASTER_LEARNED_FILE = path.join(DATA_DIR, 'master', 'learned_intelligence.json');
 const WRITE_DEBOUNCE_MS = 2000;
 const MAX_QUERIES = 4000;
 const MAX_PRODUCTS = 1500;
-const MAX_CATEGORIES = 2500;
-const MAX_BRANDS = 800;
-const MAX_EXPANSIONS = 12;
+const MAX_CATEGORIES = 3500;
+const MAX_BRANDS = 1200;
+const MAX_EXPANSIONS = 16;
 
 let store = {
-  version: 1,
+  version: 2,
   updatedAt: null,
   queries: {},
   products: {},
   categories: {},
   services: {},
-  brands: {}
+  brands: {},
+  localities: {}
 };
 let writeTimer = null;
 let loaded = false;
@@ -71,22 +73,27 @@ function load() {
   if (loaded) return;
   loaded = true;
   try {
-    if (!fs.existsSync(LEARNED_FILE)) return;
-    const raw = JSON.parse(fs.readFileSync(LEARNED_FILE, 'utf8'));
+    let raw = null;
+    if (fs.existsSync(LEARNED_FILE)) {
+      raw = JSON.parse(fs.readFileSync(LEARNED_FILE, 'utf8'));
+    } else if (fs.existsSync(MASTER_LEARNED_FILE)) {
+      raw = JSON.parse(fs.readFileSync(MASTER_LEARNED_FILE, 'utf8'));
+    }
     if (raw && typeof raw === 'object') {
       store = {
-        version: 1,
+        version: 2,
         updatedAt: raw.updatedAt || null,
         queries: raw.queries || {},
         products: raw.products || {},
         categories: raw.categories || {},
         services: raw.services || {},
-        brands: raw.brands || {}
+        brands: raw.brands || {},
+        localities: raw.localities || {}
       };
       absorbTypos();
     }
   } catch (err) {
-    store = { version: 1, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {} };
+    store = { version: 2, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {}, localities: {} };
   }
 }
 
@@ -129,6 +136,14 @@ function saveSoon() {
     try {
       fs.mkdirSync(path.dirname(LEARNED_FILE), { recursive: true });
       fs.writeFileSync(LEARNED_FILE, JSON.stringify(store, null, 2));
+
+      // Bi-Directional Master Intelligence Bridge:
+      // Keep master intelligence registry updated with aggregated learnings across all runs
+      fs.mkdirSync(path.dirname(MASTER_LEARNED_FILE), { recursive: true });
+      fs.writeFileSync(MASTER_LEARNED_FILE, JSON.stringify({
+        ...store,
+        federatedAt: new Date().toISOString()
+      }, null, 2));
     } catch (err) {
       /* learning must never break a run */
     }
@@ -181,6 +196,39 @@ function vendorCategory(vendor) {
     return vendor.services.split(/[,/|]/)[0].trim();
   }
   return '';
+}
+
+/**
+ * Extract micro-localities, colonies, and roads from vendor addresses
+ */
+function extractMicroLocalities(vendors, baseLocation) {
+  if (!Array.isArray(vendors) || !vendors.length) return [];
+  const cityKey = normalize(baseLocation);
+  if (!cityKey) return [];
+
+  const foundLocalities = new Map();
+  const localityRegex = /\b([A-Za-z0-9\s]{3,30}?)\s+(Nagar|Colony|Pet|Peta|Bazaar|Bazar|Road|Rd|Line|Ln|Circle|Bypass|Enclave|Layout|Apartments|Gutta|Palem|Cheruvu|Garuvu|Padu|Agraharam)\b/gi;
+
+  for (const v of vendors) {
+    const addr = String(v.address || '');
+    if (!addr) continue;
+
+    let match;
+    while ((match = localityRegex.exec(addr)) !== null) {
+      const fullLocality = `${match[1].trim()} ${match[2].trim()}`;
+      const normLoc = normalize(fullLocality);
+      if (normLoc.length >= 4 && !normLoc.includes('door no') && !normLoc.includes('near')) {
+        const existing = foundLocalities.get(normLoc) || { name: fullLocality, count: 0, samples: [] };
+        existing.count += 1;
+        if (v.name && existing.samples.length < 3 && !existing.samples.includes(v.name)) {
+          existing.samples.push(v.name);
+        }
+        foundLocalities.set(normLoc, existing);
+      }
+    }
+  }
+
+  return Array.from(foundLocalities.values());
 }
 
 /**
@@ -246,7 +294,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
 
     // Vendor-set categories are the strongest signal: they are exactly what
     // the directories returned for this phrase.
-    for (const vendor of (Array.isArray(vendors) ? vendors.slice(0, 40) : [])) {
+    for (const vendor of (Array.isArray(vendors) ? vendors.slice(0, 80) : [])) {
       const category = canonical(vendorCategory(vendor));
       if (!category) continue;
       if (serviceMode) {
@@ -256,6 +304,49 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
       }
       const categoryEntry = bump(store.categories, normalize(category), { name: category, product: productName || '' });
       categoryEntry.samples = mergeList(categoryEntry.samples, [vendor.name], 5);
+    }
+
+    // Dynamic Category Expansion: inspect all vendors and learn all subcategories, services and specialties
+    for (const vendor of (Array.isArray(vendors) ? vendors : [])) {
+      const labels = [
+        vendor.category,
+        vendor.subcategory,
+        vendor.businessType,
+        vendor.vendorType,
+        ...(Array.isArray(vendor.services) ? vendor.services : [])
+      ].filter(Boolean);
+
+      for (const lab of labels) {
+        const canon = canonical(String(lab).trim());
+        const key = normalize(canon);
+        if (key && key.length >= 3 && !key.includes('undefined')) {
+          const entry = bump(store.categories, key, {
+            name: canon,
+            product: productName || '',
+            lastLocation: String(location || '').slice(0, 100)
+          });
+          if (vendor.name) {
+            entry.samples = mergeList(entry.samples, [vendor.name], 6);
+          }
+        }
+      }
+    }
+
+    // Learn micro-localities from lead addresses for this city
+    const cityKey = normalize(location);
+    if (cityKey) {
+      if (!store.localities) store.localities = {};
+      if (!store.localities[cityKey]) store.localities[cityKey] = {};
+
+      const discovered = extractMicroLocalities(vendors, location);
+      for (const loc of discovered) {
+        const locKey = normalize(loc.name);
+        const existing = store.localities[cityKey][locKey] || { name: loc.name, count: 0, samples: [] };
+        existing.count += loc.count;
+        existing.lastSeenAt = new Date().toISOString();
+        existing.samples = mergeList(existing.samples, loc.samples, 5);
+        store.localities[cityKey][locKey] = existing;
+      }
     }
 
     // Brand mentions: only known brands, or a brand-like first token that
@@ -552,8 +643,24 @@ function catalog(map, limit) {
     }));
 }
 
+function getLocalities(city = '') {
+  load();
+  if (!store.localities) return [];
+  if (city) {
+    const cityKey = normalize(city);
+    const map = store.localities[cityKey] || {};
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }
+  return Object.entries(store.localities).map(([c, map]) => ({
+    city: c,
+    count: Object.keys(map).length,
+    localities: Object.values(map).sort((a, b) => b.count - a.count).slice(0, 30)
+  }));
+}
+
 function getCatalog(limit = 150) {
   load();
+  const totalLocalities = Object.values(store.localities || {}).reduce((acc, m) => acc + Object.keys(m).length, 0);
   return {
     updatedAt: store.updatedAt,
     totals: {
@@ -561,13 +668,15 @@ function getCatalog(limit = 150) {
       products: Object.keys(store.products).length,
       categories: Object.keys(store.categories).length,
       services: Object.keys(store.services).length,
-      brands: Object.keys(store.brands).length
+      brands: Object.keys(store.brands).length,
+      localities: totalLocalities
     },
     queries: catalog(store.queries, limit),
     products: catalog(store.products, limit),
     categories: catalog(store.categories, limit),
     services: catalog(store.services, limit),
-    brands: catalog(store.brands, limit)
+    brands: catalog(store.brands, limit),
+    localities: getLocalities()
   };
 }
 
@@ -577,7 +686,9 @@ module.exports = {
   expansionsFor,
   getSummary,
   getCatalog,
+  getLocalities,
   reset,
   seedUniversal,
-  learnedFile: LEARNED_FILE
+  learnedFile: LEARNED_FILE,
+  masterLearnedFile: MASTER_LEARNED_FILE
 };

@@ -16,6 +16,17 @@ function loadCache() {
 }
 loadCache();
 
+// The geocoder is a real engine, so its health is reported like the others.
+// Everything here is free: Nominatim is the default and needs no key.
+function noteGeoHealth(ok, count = 1, error = '') {
+  try {
+    const engineHealth = require('../services/engineHealth');
+    engineHealth.recordRun('geocoder', { ok, count, error });
+  } catch (err) {
+    /* health must never break a search */
+  }
+}
+
 function saveCache() {
   try {
     const dir = path.dirname(cacheFile);
@@ -97,6 +108,7 @@ async function geocodeLocation(locationQuery) {
           };
           forwardCache[key] = result;
           saveCache();
+          noteGeoHealth(true, 1);
           return result;
         }
       }
@@ -138,6 +150,7 @@ async function geocodeLocation(locationQuery) {
         };
         forwardCache[key] = result;
         saveCache();
+        noteGeoHealth(true, 1);
         return result;
       }
       
@@ -172,6 +185,7 @@ async function geocodeLocation(locationQuery) {
           };
           forwardCache[key] = result;
           saveCache();
+          noteGeoHealth(true, 1);
           return result;
         }
       }
@@ -180,6 +194,7 @@ async function geocodeLocation(locationQuery) {
       const emptyResult = { formattedLocation: locationQuery.trim(), lat: null, lng: null, boundingbox: null };
       forwardCache[key] = emptyResult;
       saveCache();
+      noteGeoHealth(true, 0);
       return emptyResult;
       
     } catch (err) {
@@ -188,6 +203,7 @@ async function geocodeLocation(locationQuery) {
       if (attempts < maxAttempts) {
         await sleep(1500);
       } else {
+        noteGeoHealth(false, 0, err.message);
         return { formattedLocation: locationQuery.trim(), lat: null, lng: null, boundingbox: null };
       }
     }

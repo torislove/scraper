@@ -431,6 +431,11 @@ async function scrapeMandap(category, location, sessionId = 'legacy') {
       updated++;
       try { deps.emitVendorEvent(result.vendor, 'updated'); } catch (e) {}
     }
+
+    try {
+      const { streamingEnricher } = require('../services/phoneBackfillService');
+      streamingEnricher.enqueue(result.vendor);
+    } catch (e) {}
   }
 
   deps.logger(`[Mandap] Complete. ${cards.length} live venues, ${created} new, ${updated} refreshed. Phone stays unknown (OTP-gated on source).`);

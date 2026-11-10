@@ -1,4 +1,4 @@
-/**
+﻿/**
  * leadRetention.js
  *
  * Fresh-data policy for the command center.
@@ -7,7 +7,7 @@
  * shows the current run, never a pile of yesterday's vendors. Two things are
  * deliberately preserved:
  *   1. Leads that are engaged in the CRM (stage changed, notes, tasks,
- *      assignment) — deleting a real sales conversation would be destructive.
+ *      assignment) â€” deleting a real sales conversation would be destructive.
  *   2. Leads explicitly passed in `keepIds` (used by tests and resumable runs).
  *
  * Search folders (session vaults) are also preserved by default. The live
@@ -118,7 +118,7 @@ function purgeStaleLeads(options = {}) {
     return { removed: 0, kept: kept.length, profilesRemoved: 0, engagedKept };
   }
 
-  dbAdapter.saveVendors(kept);
+  dbAdapter.replaceVendors(kept);
   if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
   let profilesRemoved = 0;
@@ -175,23 +175,31 @@ function purgeSessionVaults(options = {}) {
 /**
  * One call used by the auto/manual run routes.
  *
- * Session vaults are the user's search folders, so they are NOT deleted on a
- * fresh run. Pass `purgeVaults: true` only for an explicit hard reset.
+ * IMPORTANT: since the "no lead is ever lost" policy, a fresh run is APPEND
+ * ONLY. The live store keeps every lead forever, tagged with its session. The
+ * table simply filters to the session the user is looking at. Deleting the
+ * previous dataset here was the root cause of "my leads disappeared".
+ *
+ * Pass `purgeLive: true` only for an explicit hard reset (never from a search).
  */
 function prepareFreshRun(options = {}) {
-  const leads = purgeStaleLeads(options);
+  const all = dbAdapter.getVendors();
+  const leads = options.purgeLive === true
+    ? purgeStaleLeads(options)
+    : { removed: 0, kept: Array.isArray(all) ? all.length : 0, profilesRemoved: 0, engagedKept: 0 };
   const vaults = options.purgeVaults === true
     ? purgeSessionVaults({
       keepSessionIds: options.keepSessionId ? [options.keepSessionId] : [],
       force: true
     })
     : { removed: 0 };
-  return { ...leads, vaultsRemoved: vaults.removed };
+  return { ...leads, vaultsRemoved: vaults.removed, appendOnly: options.purgeLive !== true };
 }
 
 module.exports = {
   purgeStaleLeads,
   purgeSessionVaults,
   prepareFreshRun,
-  isEngaged
+  isEngaged,
+  removeDeepProfile
 };

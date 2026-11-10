@@ -1,6 +1,8 @@
 // Persistent Queue with In-Memory Buffering (Removes I/O Blocking and ECONNREFUSED 127.0.0.1:6379 errors)
 const fs = require('fs');
 const path = require('path');
+const browserBudget = require('./browserBudget');
+const requestGuard = require('./requestGuard');
 
 const JOBS_FILE = path.join(require('../config/paths').DATA_DIR, 'jobs.json');
 
@@ -49,7 +51,7 @@ function initQueue(deps) {
   globalDeps = { ...globalDeps, ...deps };
   loadQueue();
   // Resume any jobs that were pending/running when the server restarted
-  setTimeout(processQueue, 2000); 
+  setTimeout(processQueue, 2000);
 }
 
 // Map of task types to actual execution functions
@@ -74,7 +76,6 @@ let playwrightActiveCount = 0;
 // Chromium contexts at once, which is what made runs slow and unstable.
 const PLAYWRIGHT_TASKS = new Set([
   'scrapeGooglePlaces',
-  'scrapeGoogleSerp',
   'scrapeGoogleLocalFinder',
   'scrapeWeddingBazaar',
   'scrapeWeddingWire',
@@ -91,16 +92,14 @@ function getDynamicConcurrency() {
     const freeMem = os.freemem();
     const freeRamPct = Math.round((freeMem / totalMem) * 100);
 
-    // Dynamic auto-scaling (Start with 6 workers, scale to 12 if free RAM > 40%, throttle to 3 if < 20%)
+    // HTTP concurrency stays deliberately modest. A dozen parallel directory
+    // requests is how a single IP starts seeing 429s; eight is enough to keep
+    // the run fast and polite at the same time.
     let maxHttp = 8;
-    let maxPlaywright = 6;
+    const maxPlaywright = browserBudget.discoveryLimit();
 
-    if (freeRamPct > 40) {
-      maxHttp = 16;
-      maxPlaywright = 12; // High-velocity mode
-    } else if (freeRamPct < 20) {
+    if (freeRamPct < 20) {
       maxHttp = 4;
-      maxPlaywright = 3; // RAM Guard auto-throttling
     }
 
     return {
@@ -117,17 +116,48 @@ function getDynamicConcurrency() {
 
 function getConcurrencyMetrics() {
   const dynamic = getDynamicConcurrency();
+  const browserActive = Math.max(0, dynamic.playwrightActiveCount || 0);
   return {
     activeWorkers: activeCount,
     maxWorkers: dynamic.maxPlaywrightConcurrency,
+    // Split the budget so the UI can show "3/5 browsers, 2/8 HTTP" instead of
+    // one merged worker count that makes the panel look over-subscribed.
+    browserSlots: dynamic.maxPlaywrightConcurrency,
+    httpSlots: dynamic.maxHttpConcurrency,
+    browserActive,
+    httpActive: Math.max(0, activeCount - browserActive),
     freeRamPct: dynamic.freeRamPct,
-    pendingJobs: inMemoryQueue.length
+    pendingJobs: inMemoryQueue.length,
+    browserBudget: browserBudget.getStatus(),
+    guard: requestGuard.snapshot()
   };
 }
 
 const activeJobs = new Map();
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Deferred-job timer
+   Pacing and cooldowns mean a job may not be runnable for a few seconds. Instead
+   of busy-looping, schedule one wake-up for the earliest `notBefore`.
+   ──────────────────────────────────────────────────────────────────────────── */
+let deferredTimer = null;
+
+function scheduleDeferred(waitMs) {
+  if (!Number.isFinite(waitMs) || waitMs <= 0) return;
+  const delay = Math.max(40, Math.min(Math.ceil(waitMs) + 25, 60_000));
+  clearTimeout(deferredTimer);
+  deferredTimer = setTimeout(() => {
+    deferredTimer = null;
+    processQueue();
+  }, delay);
+  if (typeof deferredTimer.unref === 'function') deferredTimer.unref();
+}
+
 async function processQueue() {
+  if (deferredTimer) {
+    clearTimeout(deferredTimer);
+    deferredTimer = null;
+  }
   if (isProcessing) return;
   isProcessing = true;
 
@@ -144,34 +174,60 @@ async function processQueue() {
 
       const limits = getDynamicConcurrency();
 
-      // Find the first job that we have a slot available for
+      // Find the first job that has a worker slot *and* passes the politeness
+      // guard. Checking the slot first matters: a job that cannot run yet must
+      // not consume its engine's pacing window.
       let jobIndex = -1;
       let isPlaywrightJob = false;
+      let deferredWait = Infinity;
+      let skipped = 0;
 
       for (let i = 0; i < inMemoryQueue.length; i++) {
-        if (!inMemoryQueue[i]) continue;
-        const isPlaywright = PLAYWRIGHT_TASKS.has(inMemoryQueue[i].taskName);
-        if (isPlaywright && playwrightActiveCount < limits.maxPlaywrightConcurrency) {
-          jobIndex = i;
-          isPlaywrightJob = true;
-          break;
+        const candidate = inMemoryQueue[i];
+        if (!candidate) continue;
+
+        if (candidate.notBefore && candidate.notBefore > Date.now()) {
+          deferredWait = Math.min(deferredWait, candidate.notBefore - Date.now());
+          continue;
         }
-        if (!isPlaywright && (activeCount - playwrightActiveCount) < limits.maxHttpConcurrency) {
-          jobIndex = i;
-          isPlaywrightJob = false;
-          break;
+
+        const isPlaywright = PLAYWRIGHT_TASKS.has(candidate.taskName);
+        const hasSlot = isPlaywright
+          ? playwrightActiveCount < limits.maxPlaywrightConcurrency
+          : (activeCount - playwrightActiveCount) < limits.maxHttpConcurrency;
+        if (!hasSlot) continue;
+
+        const gate = requestGuard.beforeJob(candidate.taskName);
+        if (!gate.allow) {
+          if (gate.skip) {
+            inMemoryQueue.splice(i, 1);
+            i -= 1;
+            skipped += 1;
+            globalDeps.logger(
+              `[Guard] Skipped ${candidate.taskName}: ${gate.reason} (${Math.round((gate.remainingMs || 0) / 1000)}s cooldown left). Other engines continue.`
+            );
+            continue;
+          }
+          candidate.notBefore = Date.now() + Math.max(40, gate.waitMs || 50);
+          deferredWait = Math.min(deferredWait, candidate.notBefore - Date.now());
+          continue;
         }
+
+        jobIndex = i;
+        isPlaywrightJob = isPlaywright;
+        break;
       }
 
       if (jobIndex === -1) {
-        // No slots available for any job in the queue currently
+        if (skipped) savePersistentQueue();
+        scheduleDeferred(deferredWait);
         break;
       }
 
       // Extract the runnable job
       const job = inMemoryQueue.splice(jobIndex, 1)[0];
       savePersistentQueue(); // Debounced disk save
-      
+
       if (job) {
         startJobExecution(job, isPlaywrightJob);
       }
@@ -180,30 +236,38 @@ async function processQueue() {
     console.error('[Queue Error] Error in processQueue loop:', err.message);
   } finally {
     isProcessing = false;
+    publishDiscoveryQueued();
   }
 }
 
 // Rest of worker code remains identical for stability
 function startJobExecution(job, isPlaywright) {
-    activeCount++;
-    if (isPlaywright) playwrightActiveCount++;
-    
-    const instanceId = Math.random().toString(36).substr(2, 5).toUpperCase();
-    activeJobs.set(instanceId, job);
-    
-    // Staged boot logic for Playwright
-    const delay = Promise.resolve(); // No staged delay - launch all workers instantly
-    
-    delay.then(() => processJob(job, instanceId)).finally(() => {
-      activeCount--;
-      if (isPlaywright) playwrightActiveCount--;
-      activeJobs.delete(instanceId);
-      if (globalDeps.emitActivePointEvent) {
-        globalDeps.emitActivePointEvent({ instanceId, completed: true });
-      }
-      // Trigger next process loop without blowing up stack
-      setImmediate(processQueue);
-    });
+  activeCount++;
+  if (isPlaywright) {
+    playwrightActiveCount++;
+    browserBudget.setDiscoveryActive(playwrightActiveCount);
+  }
+
+  const instanceId = Math.random().toString(36).substr(2, 5).toUpperCase();
+  activeJobs.set(instanceId, job);
+
+  // Staged boot logic for Playwright
+  const delay = Promise.resolve(); // No staged delay - launch all workers instantly
+
+  delay.then(() => processJob(job, instanceId)).finally(() => {
+    activeCount--;
+    if (isPlaywright) {
+      playwrightActiveCount--;
+      browserBudget.setDiscoveryActive(playwrightActiveCount);
+    }
+    activeJobs.delete(instanceId);
+    publishDiscoveryQueued();
+    if (globalDeps.emitActivePointEvent) {
+      globalDeps.emitActivePointEvent({ instanceId, completed: true });
+    }
+    // Trigger next process loop without blowing up stack
+    setImmediate(processQueue);
+  });
 }
 
 function getActiveJobs() {
@@ -224,10 +288,11 @@ async function processJob(job, instanceId) {
     globalDeps.emitActivePointEvent({ ...meta, instanceId });
   }
 
+  let timer = null;
   try {
     const timeoutMs = 600000; // 10 minutes hard limit (Places extraction can take time)
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`Job timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer = setTimeout(() => reject(new Error(`Job timed out after ${timeoutMs}ms`)), timeoutMs);
     });
 
     await Promise.race([
@@ -237,21 +302,76 @@ async function processJob(job, instanceId) {
     globalDeps.logger(`[Instance-${instanceId}] Job ${taskName} completed successfully.`);
   } catch (err) {
     globalDeps.logger(`[Instance-${instanceId} Error] ${taskName} failed: ${err.message}`);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
 async function addScrapeJob(taskName, args, priority = 10, meta = null) {
+  if (globalDeps.abortSignal && globalDeps.abortSignal.aborted) {
+    globalDeps.abortSignal.aborted = false;
+  }
   inMemoryQueue.push({ taskName, args, priority, meta });
   inMemoryQueue.sort((a, b) => b.priority - a.priority);
   savePersistentQueue();
-  
+  publishDiscoveryQueued();
+
   processQueue(); // Kick off processing if not already running
+}
+
+/**
+ * Tell the browser budget how many browser discovery jobs are still waiting.
+ * The enricher yields while this is above zero, so discovery always gets the
+ * whole machine first (see browserBudget.js).
+ */
+function publishDiscoveryQueued() {
+  let waiting = 0;
+  for (const job of inMemoryQueue) {
+    if (job && PLAYWRIGHT_TASKS.has(job.taskName)) waiting++;
+  }
+  browserBudget.setDiscoveryQueued(waiting);
 }
 
 async function clearQueue() {
   inMemoryQueue = [];
   savePersistentQueue();
+  publishDiscoveryQueued();
   globalDeps.logger(`[Queue] Persistent queue obliterated.`);
+}
+
+/**
+ * Drop only the queued jobs that belong to one run. A targeted Stop must not
+ * cancel a master sweep that happens to share the engine.
+ */
+async function clearQueueForSession(sessionId) {
+  if (!sessionId) return clearQueue();
+  const before = inMemoryQueue.length;
+  inMemoryQueue = inMemoryQueue.filter(job => {
+    const jobSession = job?.meta?.sessionId;
+    return jobSession && jobSession !== sessionId;
+  });
+  savePersistentQueue();
+  publishDiscoveryQueued();
+  const removed = before - inMemoryQueue.length;
+  if (removed) globalDeps.logger(`[Queue] Removed ${removed} queued job(s) for session ${sessionId}.`);
+  return removed;
+}
+
+/**
+ * Drop jobs left behind by crashed or finished runs without touching jobs that
+ * belong to a session that is still running. Used at the start of a new run.
+ */
+async function clearStaleQueue(isActiveSession) {
+  const before = inMemoryQueue.length;
+  inMemoryQueue = inMemoryQueue.filter(job => {
+    const sid = job?.meta?.sessionId;
+    if (!sid) return false;
+    return typeof isActiveSession === 'function' ? Boolean(isActiveSession(sid)) : true;
+  });
+  savePersistentQueue();
+  const removed = before - inMemoryQueue.length;
+  if (removed) globalDeps.logger(`[Queue] Dropped ${removed} stale queued job(s).`);
+  return removed;
 }
 
 module.exports = {
@@ -259,6 +379,8 @@ module.exports = {
   registerTask,
   addScrapeJob,
   clearQueue,
+  clearQueueForSession,
+  clearStaleQueue,
   getPersistentQueue,
   getActiveJobs,
   getConcurrencyMetrics

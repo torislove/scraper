@@ -12,18 +12,56 @@ if (fs.existsSync(backendEnvPath)) {
   require('dotenv').config();
 }
 
-// Global Exception Handlers to prevent Playwright crashes
+// Global Exception Handlers to prevent Playwright crashes from taking the UI
+// down with them. Every fatal is written to a bounded crash log so a support
+// report can name the real cause instead of "it closed".
+function recordFatal(kind, err) {
+  const detail = err && (err.stack || err.message) ? (err.stack || err.message) : String(err);
+  const line = `[${new Date().toISOString()}] ${kind}: ${detail}\n`;
+  console.error(line.trim());
+  try {
+    const file = path.join(__dirname, 'error_crash.log');
+    fs.appendFileSync(file, line);
+    if (fs.statSync(file).size > 1_000_000) {
+      fs.writeFileSync(file, fs.readFileSync(file, 'utf8').slice(-400_000));
+    }
+  } catch (e) {
+    /* the crash logger must never throw */
+  }
+}
+
 process.on('uncaughtException', (err) => {
-  console.error('[Global] Uncaught Exception:', err.message);
+  recordFatal('Uncaught Exception', err);
 });
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[Global] Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+  recordFatal('Unhandled Rejection', reason);
 });
 
 // Configs
 const localDb = require('./src/config/localDb');
 const paths = require('./src/config/paths');
 const credits = require('./src/services/credits');
+const vendorStore = require('./src/config/vendorStore');
+
+// Take the store lock at boot. A second engine must never believe it owns the
+// same dataset just because the first one has not loaded it yet.
+const storeOwnership = vendorStore.claimOwnership();
+if (storeOwnership.readOnly) {
+  console.warn(`[Server] Store is owned by live pid ${storeOwnership.ownerPid}; this instance is READ-ONLY. Stop the other engine first.`);
+}
+process.on('exit', () => {
+  try { vendorStore.flushNow(); } catch (e) {}
+  vendorStore.releaseOwnership();
+});
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  try {
+    process.on(signal, () => {
+      try { vendorStore.flushNow(); } catch (e) {}
+      vendorStore.releaseOwnership();
+      process.exit(0);
+    });
+  } catch (e) {}
+}
 const { createLicenseGate } = require('./src/middleware/licenseGate');
 const clientGate = require('./src/middleware/clientGate');
 const masterRoutes = require('./src/routes/master');
@@ -46,15 +84,92 @@ const sessionRoutes = require('./src/routes/sessionRoutes');
 const crmRoutes = require('./src/routes/crm');
 const deepProfileRoutes = require('./src/routes/deepProfile');
 const searchRoutes = require('./src/routes/search');
+const whatsappRoutes = require('./src/routes/whatsapp');
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.disable('x-powered-by');
+app.set('trust proxy', false);
+
+/* ------------------------------------------------------------------ */
+/* Local-first security                                                */
+/*                                                                     */
+/* The engine is a local service. These guards keep random websites,   */
+/* DNS-rebinding pages and runaway tabs away from the customer's data. */
+/* ------------------------------------------------------------------ */
+const security = require('./src/middleware/security');
+const mutationLimiter = security.createRateLimiter({ windowMs: 60_000, max: 240, name: 'Write' });
+const scrapeStartLimiter = security.createRateLimiter({ windowMs: 60_000, max: 30, name: 'Search start' });
+
+app.use(security.securityHeaders);
+app.use(security.createHostGuard());
+app.use(cors(security.corsOptions));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '2mb', extended: true }));
+
+// Broad ceiling for every API call, then a stricter one for writes and an even
+// stricter one for endpoints that start real work.
+app.use('/api', security.createRateLimiter({ windowMs: 60_000, max: 2400, name: 'API' }));
+app.use('/api', security.sanitizeRequest);
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  return mutationLimiter(req, res, next);
+});
+app.use('/api/scrape', (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  if (!/^\/(omni|auto|master-sweep|batch|deep-enrich|resume)(\/|$)/.test(req.path)) return next();
+  return scrapeStartLimiter(req, res, next);
+});
 
 // System Logging State & SSE
 let systemLogs = [];
 let sseClients = [];
+
+/* ------------------------------------------------------------------ */
+/* Vendor SSE batching                                                 */
+/*                                                                     */
+/* Every inserted lead used to be one JSON.stringify plus one socket    */
+/* write per connected client. Five zones × twenty cards produced a     */
+/* burst of hundreds of synchronous writes in the same tick, which is   */
+/* exactly the kind of stall that makes the whole UI feel late. Events  */
+/* now coalesce for 100 ms and are written once per client. The wire    */
+/* format is unchanged (`event: vendor`), so no client needs to change. */
+/* ------------------------------------------------------------------ */
+const VENDOR_SSE_FLUSH_MS = 100;
+const VENDOR_OUTBOX_MAX = 400;
+let vendorOutbox = [];
+let vendorFlushTimer = null;
+// Dedicated per-session streams (/api/scrape/stream/:sessionId).
+const sessionStreams = new Map();
+
+function vendorBelongsToSession(vendor, sessionId) {
+  if (!vendor || !sessionId) return false;
+  if (vendor.sessionId === sessionId || vendor.lastSessionId === sessionId) return true;
+  return Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(sessionId);
+}
+
+function flushVendorOutbox() {
+  if (vendorFlushTimer) {
+    clearTimeout(vendorFlushTimer);
+    vendorFlushTimer = null;
+  }
+  if (!vendorOutbox.length) return;
+  const batch = vendorOutbox;
+  vendorOutbox = [];
+  const globalFrame = batch.map(entry => `event: vendor\ndata: ${entry.data}\n\n`).join('');
+  sseClients.forEach(res => {
+    try { res.write(globalFrame); } catch (e) {}
+  });
+  for (const [sessionId, clients] of sessionStreams) {
+    const frame = batch
+      .filter(entry => vendorBelongsToSession(entry.vendor, sessionId))
+      .map(entry => `event: vendor\ndata: ${entry.data}\n\n`)
+      .join('');
+    if (!frame) continue;
+    clients.forEach(res => {
+      try { res.write(frame); } catch (e) {}
+    });
+  }
+}
 
 function sendSse(msg) {
   const safe = msg.replace(/\n/g, '\\n');
@@ -70,13 +185,41 @@ function addLog(msg) {
   sendSse(msg);
 }
 
+/* Surface politeness decisions in the live log so the customer sees why a
+   source is resting instead of wondering why a zone was quieter than usual. */
+const requestGuard = require('./src/utils/requestGuard');
+requestGuard.onGuardEvent((event) => {
+  try {
+    if (event.type === 'cooldown') {
+      addLog(
+        `[Guard] ${event.engineKey} asked us to slow down (${event.reason}). Resting ${Math.round(event.cooldownMs / 1000)}s; every other engine keeps working.`
+      );
+    } else if (event.type === 'skip') {
+      addLog(
+        `[Guard] ${event.engineKey} is still resting for ${Math.round((event.remainingMs || 0) / 1000)}s; this zone will use the remaining engines.`
+      );
+    }
+  } catch (e) {
+    /* logging must never break a sweep */
+  }
+});
+
 function emitVendorEvent(vendorObj, action = 'inserted') {
   try {
     const payload = { action, vendor: vendorObj };
-    const safe = JSON.stringify(payload).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: vendor\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    const data = JSON.stringify(payload).replace(/\n/g, '\\n');
+    vendorOutbox.push({ data, vendor: vendorObj });
+    if (vendorOutbox.length >= VENDOR_OUTBOX_MAX) {
+      flushVendorOutbox();
+      return;
+    }
+    if (!vendorFlushTimer) {
+      vendorFlushTimer = setTimeout(() => {
+        vendorFlushTimer = null;
+        flushVendorOutbox();
+      }, VENDOR_SSE_FLUSH_MS);
+      if (typeof vendorFlushTimer.unref === 'function') vendorFlushTimer.unref();
+    }
 
     // Website enrichment belongs to the post-scrape deep phase, not to the
     // discovery hot path. Queueing a Playwright crawl for every inserted
@@ -157,6 +300,9 @@ app.use('/api/public', publicUsersRoutes);
 app.use('/api/vendors', vendorsRoutes);
 app.use('/api/employees', employeesRoutes);
 app.use('/api/upload', uploadRoutes);
+// The upload route historically returned `/api/uploads/<file>` while being
+// mounted at `/api/upload`. Serve both so old avatars keep resolving.
+app.use('/api/uploads', uploadRoutes);
 app.use('/api/locations', locationsRoutes);
 app.use('/api/location', locationsRoutes);
 app.use('/api/automations', automationsRoutes);
@@ -164,18 +310,149 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/deep-profile', deepProfileRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/wa', whatsappRoutes);
+
+// Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)
+const { getTerritorySummary, searchTerritory } = require('./src/utils/territoryHelper');
+app.get(['/api/territory/summary', '/api/sessions/territory/summary', '/api/api/territory/summary'], (req, res) => {
+  try {
+    const summary = getTerritorySummary();
+    res.json({
+      success: true,
+      totalStates: summary.length,
+      totalDistricts: summary.reduce((acc, s) => acc + s.districtCount, 0),
+      totalMandals: 5920,
+      totalVillages: 619290,
+      states: summary
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve territory summary' });
+  }
+});
+
+app.get(['/api/territory/search', '/api/sessions/territory/search', '/api/api/territory/search'], (req, res) => {
+  try {
+    const q = req.query.q || '';
+    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
+    const results = searchTerritory(q, limit);
+    res.json({
+      success: true,
+      query: q,
+      count: results.length,
+      results
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Territory search failed' });
+  }
+});
+
+app.get(['/api/export/sample-excel', '/api/sessions/export/sample-excel', '/api/api/export/sample-excel'], async (req, res) => {
+  try {
+    const category = req.query.category || 'Dental Clinics';
+    const city = req.query.city || 'Guntur';
+    const { buildGodLevelExcelBuffer } = require('./src/utils/godLevelExcelGenerator');
+
+    const sampleLeads = [
+      {
+        name: 'Kalyani Multispeciality Dental Clinic',
+        owner: 'Dr. K. Srinivas Rao, MDS (Managing Director)',
+        phone: '+91 76750 71081',
+        secondaryPhone: '+91 98480 23145',
+        email: 'contact@kalyanidental.com',
+        address: '4th Line, Brodipet, Guntur - 522002',
+        rating: 4.9,
+        reviewsCount: 420,
+        socialProfile: 'https://instagram.com/kalyanidental',
+        waMessage: 'Hello Dr. Srinivas Rao, reaching out from Scraper.co.in regarding premium dental implants distribution in Guntur.'
+      },
+      {
+        name: 'Happy Dental Hospital & Implant Centre',
+        owner: 'Dr. P. Venkat Reddy (Chief Implantologist)',
+        phone: '+91 80084 91391',
+        secondaryPhone: '',
+        email: 'info@happydental.in',
+        address: 'Main Road, Arundelpet, Guntur - 522002',
+        rating: 4.8,
+        reviewsCount: 315,
+        socialProfile: '',
+        waMessage: 'Hi Dr. Venkat Reddy, connecting regarding dental digital imaging solutions and patient appointment CRM.'
+      },
+      {
+        name: 'Siri Super Speciality Dental Hospital',
+        owner: 'Dr. M. Chaitanya Kumar (Oral Surgeon)',
+        phone: '+91 70363 51100',
+        secondaryPhone: '+91 94401 55678',
+        email: 'support@siridental.com',
+        address: 'Opp. Hindu College, Guntur - 522003',
+        rating: 4.8,
+        reviewsCount: 260,
+        socialProfile: 'https://facebook.com/siridental',
+        waMessage: 'Hello Dr. Chaitanya, contacting you regarding specialized surgical tools and autoclave sterilization supplies.'
+      },
+      {
+        name: 'Guntur Dental Care & Laser Centre',
+        owner: 'Dr. Anusha Reddy (Owner & Cosmetologist)',
+        phone: '+91 99890 12344',
+        secondaryPhone: '',
+        email: 'care@gunturdental.com',
+        address: 'Lakshmipuram Main Road, Guntur - 522007',
+        rating: 4.7,
+        reviewsCount: 185,
+        socialProfile: '',
+        waMessage: 'Hello Dr. Anusha, reaching out regarding painless laser dentistry consumables and patient outreach.'
+      },
+      {
+        name: 'Venkateswara Dental Orthodontic Clinic',
+        owner: 'Dr. B. Prasad Rao (Consultant Orthodontist)',
+        phone: '+91 98495 67890',
+        secondaryPhone: '',
+        email: '',
+        address: 'Old Club Road, Kothapet, Guntur - 522001',
+        rating: 4.8,
+        reviewsCount: 220,
+        socialProfile: '',
+        waMessage: 'Namaste Dr. Prasad Rao, connecting regarding invisible aligners and orthodontic bracket wholesale pricing.'
+      }
+    ];
+
+    const buffer = await buildGodLevelExcelBuffer(sampleLeads, { city, category });
+    const cleanFilename = `God_Level_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${city.replace(/[^a-zA-Z0-9]/g, '_')}_Leads.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('Sample excel generation error:', err);
+    res.status(500).json({ error: 'Failed to generate sample Excel' });
+  }
+});
 
 // Robustness Fallback Aliases (in case frontend calls ${API_URL}/api/*)
+// The scrape alias must carry the exact same gates as the canonical mount;
+// otherwise /api/api/scrape would bypass the licence and client checks.
 app.use('/api/api/locations', locationsRoutes);
 app.use('/api/api/deep-profile', deepProfileRoutes);
 app.use('/api/api/location', locationsRoutes);
 app.use('/api/api/crm', crmRoutes);
 app.use('/api/api/vendors', vendorsRoutes);
-app.use('/api/api/scrape', scrapeRouter);
+app.use('/api/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/api/sessions', sessionRoutes);
 
 // Static PDF Downloads
-app.use('/downloads', express.static(paths.DOWNLOADS_DIR));
+app.use('/downloads', express.static(paths.DOWNLOADS_DIR, { index: false, dotfiles: 'deny', fallthrough: true }));
+
+// Ultra-fast lightweight health heartbeat consumed by Client & Master frontends (<1ms)
+app.get('/api/health', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.json({
+    ok: true,
+    status: 'live',
+    timestamp: Date.now(),
+    uptime: Math.round(process.uptime()),
+    pid: process.pid,
+    store: vendorStore.ownership()
+  });
+});
 
 // Runtime descriptor consumed by the desktop shell and the SPA.
 app.get('/api/app/info', (req, res) => {
@@ -238,6 +515,9 @@ app.get('/api/license/status', (req, res) => {
 
 // Log Streaming Route (supports both /logs/stream and /api/logs/stream)
 const handleLogStream = (req, res) => {
+  if (sseClients.length >= 25) {
+    return res.status(503).json({ error: 'too_many_streams', message: 'Close an old dashboard tab and retry.' });
+  }
   res.set({
     'Content-Type': 'text/event-stream; charset=utf-8',
     'Cache-Control': 'no-cache, no-transform',
@@ -271,6 +551,46 @@ const handleLogStream = (req, res) => {
 app.get('/api/logs/stream', handleLogStream);
 app.get('/logs/stream', handleLogStream);
 
+// Dedicated per-session vendor stream. The global log stream broadcasts every
+// lead to every workspace; this one sends only the leads that belong to the
+// requested session, which is what a run screen actually needs.
+app.get('/api/scrape/stream/:sessionId', (req, res) => {
+  const sessionId = String(req.params.sessionId || '').trim();
+  if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+  if (sessionStreams.size >= 50) {
+    return res.status(503).json({ error: 'too_many_streams' });
+  }
+  const existing = sessionStreams.get(sessionId);
+  if (existing && existing.size >= 10) {
+    return res.status(503).json({ error: 'too_many_streams', message: 'This run already has 10 live viewers.' });
+  }
+  res.set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, status: 'listening' })}\n\n`);
+
+  let clients = sessionStreams.get(sessionId);
+  if (!clients) {
+    clients = new Set();
+    sessionStreams.set(sessionId, clients);
+  }
+  clients.add(res);
+
+  const heartbeat = setInterval(() => {
+    try { res.write(':ping\n\n'); } catch (e) { clearInterval(heartbeat); }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    clients.delete(res);
+    if (!clients.size) sessionStreams.delete(sessionId);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Single-origin SPA hosting.
 //
@@ -303,9 +623,20 @@ app.use((err, req, res, next) => {
     console.warn('[BodyParser] Payload too large (413):', err.message);
     return res.status(413).json({ error: 'Payload too large', message: err.message });
   }
+  if (err.type === 'entity.parse.failed' || (err.status && err.status < 500)) {
+    return res.status(err.status || 400).json({ error: 'invalid_request', message: err.message });
+  }
   console.error('[Server Error]', err.stack || err.message);
   try {
-    fs.appendFileSync('error_crash.log', (err.stack || err.message) + '\n');
+    const crashFile = path.join(paths.DATA_DIR, 'error_crash.log');
+    fs.appendFileSync(crashFile, `${new Date().toISOString()} ${err.stack || err.message}\n`);
+    // Keep the crash log small enough to stay readable after months of use.
+    try {
+      if (fs.statSync(crashFile).size > 1_000_000) {
+        const tail = fs.readFileSync(crashFile, 'utf8').slice(-400_000);
+        fs.writeFileSync(crashFile, tail);
+      }
+    } catch (e) { /* ignore */ }
   } catch (e) {}
   if (!res.headersSent) {
     res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
@@ -334,9 +665,36 @@ const httpServer = app.listen(PORT, HOST, () => {
       console.warn('[warmup] suggestion warmup skipped:', error.message);
     }
   }, 350);
+
+  // Scheduled WhatsApp messages and chat-list sync. Nothing is sent unless the
+  // customer turned auto-send on and connected their own WhatsApp.
+  setTimeout(() => {
+    try {
+      require('./src/services/whatsapp/waScheduler').start();
+      console.log('[wa] scheduler started');
+    } catch (error) {
+      console.warn('[wa] scheduler skipped:', error.message);
+    }
+  }, 1200);
 });
 
 httpServer.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('[Server] Port temporarily in use.');
+    setTimeout(() => {
+      try {
+        httpServer.close();
+        httpServer.listen(PORT, HOST);
+      } catch (e) {
+        process.exit(1);
+      }
+    }, 1200);
+    return;
+  }
   console.error('[Server] Failed to bind:', err.message);
   process.exit(1);
 });
+
+// Timeouts and a bounded parser. This keeps a stuck client from holding a
+// socket forever and prevents slowloris-style local exhaustion.
+security.hardenHttpServer(httpServer);

@@ -1,0 +1,92 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   k3 tokens — the single source of depth, material and motion.
+
+   Light model: one key light from top-left 35°, one cool rim from bottom-right.
+   Every raised surface gets three shadows (contact + body + bloom). That
+   triplet is what reads as "real object" instead of "card with a border".
+   ──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── surfaces ─────────────────────────────────────────────────────────── */
+  --k3-ink-0: #04060b;
+  --k3-ink-1: #070b14;
+  --k3-ink-2: #0c1322;
+  --k3-ink-3: #111b2e;
+  --k3-ink-4: #17233b;
+
+  /* ── text ─────────────────────────────────────────────────────────────── */
+  --k3-text: #e9effa;
+  --k3-text-2: #a8b6cc;
+  --k3-text-3: #6f809a;
+
+  /* ── materials ────────────────────────────────────────────────────────── */
+  --k3-brass-1: #ffe7ab;
+  --k3-brass-2: #f0c274;
+  --k3-brass-3: #c8913a;
+  --k3-brass-4: #7d5512;
+  --k3-brass-ink: #2a1a02;
+
+  --k3-cyan: #38bdf8;
+  --k3-cyan-deep: #0b6f9c;
+  --k3-mint: #5eead4;
+  --k3-violet: #a78bfa;
+  --k3-amber: #fbbf24;
+  --k3-rose: #fb7185;
+  --k3-green: #34d399;
+
+  /* ── lines & rims ─────────────────────────────────────────────────────── */
+  --k3-line: rgba(148, 163, 184, 0.16);
+  --k3-line-strong: rgba(148, 163, 184, 0.30);
+  --k3-rim: rgba(255, 255, 255, 0.10);
+  --k3-rim-strong: rgba(255, 255, 255, 0.18);
+  --k3-occlusion: rgba(0, 0, 0, 0.55);
+
+  /* ── elevation ────────────────────────────────────────────────────────── */
+  --k3-e0: inset 0 1px 2px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --k3-e1: 0 1px 2px rgba(0, 0, 0, 0.6), 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+  --k3-e2: 0 2px 4px rgba(0, 0, 0, 0.55), 0 10px 20px -10px rgba(0, 0, 0, 0.85),
+           0 24px 48px -28px rgba(0, 0, 0, 0.6);
+  --k3-e3: 0 3px 6px rgba(0, 0, 0, 0.5), 0 16px 32px -12px rgba(0, 0, 0, 0.9),
+           0 32px 64px -32px rgba(0, 0, 0, 0.65);
+  --k3-e4: 0 6px 12px rgba(0, 0, 0, 0.5), 0 28px 56px -18px rgba(0, 0, 0, 0.9),
+           0 48px 96px -40px rgba(0, 0, 0, 0.7);
+  --k3-e5: 0 10px 20px rgba(0, 0, 0, 0.5), 0 44px 88px -24px rgba(0, 0, 0, 0.92),
+           0 80px 140px -50px rgba(0, 0, 0, 0.75);
+
+  /* ── shape ────────────────────────────────────────────────────────────── */
+  --k3-r-sm: 8px;
+  --k3-r-md: 12px;
+  --k3-r-lg: 18px;
+  --k3-r-xl: 26px;
+
+  /* ── motion ───────────────────────────────────────────────────────────── */
+  --k3-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --k3-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --k3-fast: 120ms;
+  --k3-base: 220ms;
+  --k3-slow: 520ms;
+
+  /* ── live pointer vars (written by JS, never animated) ─────────────────── */
+  --k3-mx: 30%;
+  --k3-my: 10%;
+  --k3-rx: 0deg;
+  --k3-ry: 0deg;
+  --k3-gx: 50%;
+  --k3-gy: 50%;
+}
+
+/* Global reduced-motion contract for the whole kit. */
+@media (prefers-reduced-motion: reduce) {
+  .k3-btn,
+  .k3-card,
+  .k3-tilt,
+  .k3-shelf,
+  .k3-orb,
+  .k3-radar__stage,
+  .k3-radar__sweep,
+  .k3-spark {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

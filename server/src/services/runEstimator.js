@@ -13,53 +13,47 @@ const { classifyCategory, pickAutoEngines } = require('./categoryRouter');
 const ENGINE_BUDGETS = {
   'google-local-finder': {
     label: 'Google SERP local finder',
-    secondsPerZone: 7,
+    // Measured in this tree (Tenali fast): the local-finder path is ~5.2 s of
+    // browser work per zone, not 7 s.
+    secondsPerZone: 5.2,
     leadsPerZone: 18,
     minLeadsPerZone: 7,
     maxLeadsPerZone: 45,
     concurrencyCap: 6,
-    firstLeadSeconds: 4,
+    firstLeadSeconds: 3,
     detail: '20-result local packs, multi-page, HTML-first'
   },
   maps: {
     label: 'Google Maps places',
-    secondsPerZone: 24,
+    // Measured P3/P4: 28 zones in 41.7–47.0 s at 5 slots ⇒ ~6 s of browser
+    // work per zone. The old 24 s/zone overstated a fast run by ~4×.
+    secondsPerZone: 6,
     leadsPerZone: 13,
     minLeadsPerZone: 4,
     maxLeadsPerZone: 32,
     concurrencyCap: 5,
-    firstLeadSeconds: 11,
+    firstLeadSeconds: 3,
     detail: 'Live Maps feed + detail pages, browser workers'
   },
   'google-places': {
     label: 'Google Maps places',
-    secondsPerZone: 24,
+    secondsPerZone: 6,
     leadsPerZone: 13,
     minLeadsPerZone: 4,
     maxLeadsPerZone: 32,
     concurrencyCap: 5,
-    firstLeadSeconds: 11,
+    firstLeadSeconds: 3,
     detail: 'Live Maps feed + detail pages, browser workers'
   },
   serp: {
     label: 'Google SERP local finder',
-    secondsPerZone: 7,
+    secondsPerZone: 5.2,
     leadsPerZone: 18,
     minLeadsPerZone: 7,
     maxLeadsPerZone: 45,
     concurrencyCap: 6,
-    firstLeadSeconds: 4,
+    firstLeadSeconds: 3,
     detail: '20-result local packs, multi-page, HTML-first'
-  },
-  'deepseek-ai': {
-    label: 'AI query expansion',
-    secondsPerZone: 5,
-    leadsPerZone: 0,
-    minLeadsPerZone: 0,
-    maxLeadsPerZone: 0,
-    concurrencyCap: 3,
-    firstLeadSeconds: 0,
-    detail: 'Expands intent into synonyms and regional query variants'
   },
   justdial: {
     label: 'JustDial city directory',
@@ -138,9 +132,6 @@ function normaliseEngines(engines) {
     'places': 'maps',
     'google-places': 'maps',
     'google_places': 'maps',
-    'deepseek-ai': 'deepseek-ai',
-    'deepseek': 'deepseek-ai',
-    'ai': 'deepseek-ai',
     'website': 'website',
     'web': 'website',
     'deep': 'deep',

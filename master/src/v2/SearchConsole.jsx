@@ -4,11 +4,12 @@ import {
   MapPin, Phone, Search, Sliders, SlidersHorizontal, Sparkles, Square, Target, Wand2, X, Zap,
   Compass, ShieldCheck
 } from 'lucide-react';
-import Mascot from './Mascot';
-import Mascot3D from './Mascot3D';
+import { SignalOrb } from '@ui3d';
 import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch } from './api';
 import { cx } from './ui';
+import { tokenizeQuery, matchesFolder } from '../utils/universalSearchEngine';
+
 
 const EXAMPLES = [
   'Wedding Album Printing in Guntur',
@@ -137,7 +138,7 @@ function useDebouncedSuggestion(query, onResolve) {
       try {
         const data = await suggestSearch({ q: text, isMaster: true }, { signal: controller.signal });
         if (requestRef.current !== requestId) return;
-        
+
         // Cache result for ultra-fast 0ms backspace & repeat keystrokes
         if (data) {
           localSuggestCache.set(cacheKey, data);
@@ -160,7 +161,7 @@ function useDebouncedSuggestion(query, onResolve) {
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 60);
+    }, 150);
 
     return () => {
       clearTimeout(timer.current);
@@ -211,7 +212,12 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                         )}
                         {item.type === 'location' && item.detail && (
                           <span className={cx('v2-geo-level-badge', `level-${item.detail.toLowerCase()}`)}>
-                            {item.detail === 'City' ? '🏙️ City' : item.detail === 'Mandal' ? '📍 Mandal' : item.detail === 'Village' ? '🏡 Village' : item.detail}
+                            {item.detail === 'District' ? '🗺️ District Sweep'
+                              : item.detail === 'State' ? '🏛️ State Swarm'
+                                : item.detail === 'Mandal' ? '📍 Mandal Swarm'
+                                  : item.detail === 'City' ? '🏙️ City Sweep'
+                                    : item.detail === 'Village' ? '🏡 Village'
+                                      : item.detail}
                           </span>
                         )}
                       </div>
@@ -235,7 +241,7 @@ function SuggestionList({ groups, active, onPick, onHover }) {
   );
 }
 
-export default function SearchConsole({
+function SearchConsole({
   value = '',
   onChange,
   category = '',
@@ -249,36 +255,77 @@ export default function SearchConsole({
   onStop,
   busy = false,
   running = false,
+  progress = null,
   compact = false,
   onResolve,
-  onMasterSweep
+  onMasterSweep,
+  eta = '',
+  runs = [],
+  onOpenFolder
 }) {
   const [draft, setDraft] = useState(value);
+  const deferredDraft = React.useDeferredValue(draft);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [showPrecisionDrawer, setShowPrecisionDrawer] = useState(false);
   const [activePreset, setActivePreset] = useState('auto');
   const [selectedEngines, setSelectedEngines] = useState(form.engines || ['auto']);
   const [radius, setRadius] = useState(form.radius || 5);
+  const [coverageMode, setCoverageMode] = useState(form.coverageMode === 'deep' ? 'deep' : 'fast');
   const [etaRemaining, setEtaRemaining] = useState(38);
 
   const inputRef = useRef(null);
   const wrapRef = useRef(null);
+  const isFocusedRef = useRef(false);
+  const lastEmittedValueRef = useRef(value);
 
-  // Sync draft with incoming value prop
-  useEffect(() => { setDraft(value || ''); }, [value]);
+  // Global / and Ctrl+K shortcut to focus search console
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if ((e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) &&
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
-  const { response, loading } = useDebouncedSuggestion(draft, onResolve);
+  // Sync draft with incoming value prop only when not actively typing
+  useEffect(() => {
+    if (!isFocusedRef.current || value !== lastEmittedValueRef.current) {
+      setDraft(value || '');
+      lastEmittedValueRef.current = value;
+    }
+  }, [value]);
+
+  const { response, loading } = useDebouncedSuggestion(deferredDraft, onResolve);
+
+  // Check if draft matches any saved vault folder for instant shortcut
+  const matchedSavedFolder = useMemo(() => {
+    if (!deferredDraft || deferredDraft.trim().length < 3 || !runs || !runs.length) return null;
+    const tokens = tokenizeQuery(deferredDraft);
+    if (!tokens.length) return null;
+    return runs.find(r => {
+      const match = matchesFolder(r, tokens, deferredDraft);
+      return match.matches && (r.leadCount || 0) > 0;
+    }) || null;
+  }, [deferredDraft, runs]);
 
   // Extract real-time semantic parsing output
   const parsed = response?.parsed || null;
-  const parsedCategory = parsed?.category || response?.category?.value || category || '';
+  const parsedCategory = parsed?.category || (response?.category && !response?.category?.corrected ? response.category.value : '') || category || '';
   const parsedLocation = parsed?.location || response?.location?.value || location || '';
   const parsedZones = parsed?.zonesCount || (response?.location ? 1 : 0);
   const expectedLeads = parsed?.expectedLeads || (parsedCategory && parsedLocation ? '120–240+ verified leads' : 'Type service & location');
 
   const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
   const autocorrectItem = useMemo(() => {
+    // Only surface auto-correction if server identified a true typo and provided didYouMean
+    if (!response?.didYouMean) return null;
     const list = response?.suggestions || [];
     return list.find(item => item.corrected) || null;
   }, [response]);
@@ -290,12 +337,6 @@ export default function SearchConsole({
     if (zones <= 15) return '~3–5 min';
     return '~8–12 min (Full Sweep)';
   }, [locClassification, parsedZones]);
-
-  // Push detected category & location back to parent form if available
-  useEffect(() => {
-    if (parsedCategory && parsedCategory !== category) onCategoryChange?.(parsedCategory);
-    if (parsedLocation && parsedLocation !== location) onLocationChange?.(parsedLocation);
-  }, [parsedCategory, parsedLocation]);
 
   // Dynamic Animated Favicon State Sync
   useEffect(() => {
@@ -320,23 +361,44 @@ export default function SearchConsole({
 
   const groups = useMemo(() => {
     const list = response?.suggestions || [];
+    const locationItems = list.filter(item => item.type === 'location');
+    const categoryItems = list.filter(item => item.type === 'category' || item.detail === 'VERIFIED' || item.detail === 'AC HALLS' || item.detail === 'HERITAGE' || item.detail === 'BANQUETS' || (!item.type && item.label));
+
+    // Also include territorial options from disambiguation (District, Mandal, State)
+    const disambiguationItems = (response?.disambiguation?.options || []).map(opt => ({
+      type: 'location',
+      value: opt.value,
+      label: opt.value,
+      display: `${opt.value}, ${opt.state || 'India'}`,
+      subtitle: `${opt.detail} · ${opt.state || ''}`,
+      detail: opt.detail,
+      level: opt.level
+    }));
+
+    const mergedLocations = [...locationItems];
+    for (const d of disambiguationItems) {
+      if (!mergedLocations.some(m => m.value.toLowerCase() === d.value.toLowerCase())) {
+        mergedLocations.push(d);
+      }
+    }
+
     return [
+      {
+        title: 'TERRITORIES, DISTRICTS & MANDALS',
+        icon: MapPin,
+        items: mergedLocations
+      },
       {
         title: 'SERVICES & SPECIALTIES',
         icon: Sparkles,
-        items: list.filter(item => item.type === 'category')
-      },
-      {
-        title: 'CITIES, MANDALS & WARDS',
-        icon: MapPin,
-        items: list.filter(item => item.type === 'location')
+        items: categoryItems
       }
     ];
   }, [response]);
 
   const visible = useMemo(() => groups.flatMap(group => group.items), [groups]);
 
-  useEffect(() => { setActive(0); }, [visible.length]);
+  useEffect(() => { setActive(-1); }, [visible.length]);
 
   // Click outside listener
   useEffect(() => {
@@ -353,14 +415,16 @@ export default function SearchConsole({
   useEffect(() => () => clearTimeout(parentTimerRef.current), []);
 
   const handleQuery = useCallback(text => {
+    isFocusedRef.current = true;
     setDraft(text);
     setOpen(true);
+    lastEmittedValueRef.current = text;
     clearTimeout(parentTimerRef.current);
     parentTimerRef.current = setTimeout(() => {
       startTransition(() => {
         onChange?.(text);
       });
-    }, 60);
+    }, 280);
   }, [onChange]);
 
   const toggleVector = useCallback(vectorId => {
@@ -398,6 +462,9 @@ export default function SearchConsole({
       setDraft(updated);
       onChange?.(updated);
       onLocationChange?.(item.value);
+    } else if (item.label) {
+      setDraft(item.label);
+      onChange?.(item.label);
     }
     setOpen(false);
     inputRef.current?.focus();
@@ -410,10 +477,15 @@ export default function SearchConsole({
       onStop?.();
       return;
     }
+    // Priority 1: Explicit override (from clicking suggestion or chip)
+    // Priority 2: User's exact typed draft!
     const currentDraft = typeof overrideQuery === 'string'
-      ? overrideQuery
-      : (response?.ready && response?.query ? response.query : draft);
-    if ((!canDeploy && !overrideQuery) || busy) return;
+      ? overrideQuery.trim()
+      : draft.trim();
+
+    if ((!canDeploy && !overrideQuery) || busy || !currentDraft) return;
+    if (parsedCategory) onCategoryChange?.(parsedCategory);
+    if (parsedLocation) onLocationChange?.(parsedLocation);
     setOpen(false);
     onDeploy?.({
       query: currentDraft,
@@ -421,9 +493,10 @@ export default function SearchConsole({
       location: parsedLocation,
       radius,
       engines: selectedEngines,
-      targetLeads
+      targetLeads,
+      coverageMode
     });
-  }, [running, canDeploy, busy, onStop, onDeploy, draft, response, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads]);
+  }, [running, canDeploy, busy, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads, coverageMode]);
 
   const onKeyDown = useCallback(event => {
     if (!open || !visible.length) {
@@ -444,7 +517,7 @@ export default function SearchConsole({
       setActive(prev => (prev - 1 + visible.length) % visible.length);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (visible[active]) {
+      if (active >= 0 && visible[active]) {
         choose(visible[active]);
       } else {
         setOpen(false);
@@ -453,12 +526,13 @@ export default function SearchConsole({
     } else if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
+      setActive(-1);
     }
   }, [open, visible, active, choose, submit]);
 
-  // Listen for Diggy mascot recommendation clicks
+  // Listen for suggestion clicks coming from other surfaces.
   useEffect(() => {
-    const handleMascotSearch = (e) => {
+    const handleSuggestionSearch = (e) => {
       const q = e?.detail?.query;
       if (q) {
         onChange?.(q);
@@ -468,8 +542,8 @@ export default function SearchConsole({
         }, 400);
       }
     };
-    window.addEventListener('leadharvest:search', handleMascotSearch);
-    return () => window.removeEventListener('leadharvest:search', handleMascotSearch);
+    window.addEventListener('leadharvest:search', handleSuggestionSearch);
+    return () => window.removeEventListener('leadharvest:search', handleSuggestionSearch);
   }, [onChange, submit]);
 
   return (
@@ -480,11 +554,11 @@ export default function SearchConsole({
       {/* Top Header Strip */}
       <div className="v2-console-head">
         <div className="v2-console-live">
-          <Mascot3D
-            mode={running ? 'dig' : 'idle'}
-            size={38}
-            className="v2-console-head-mascot"
-          />
+          <span className="v2-radar-pill-3d">
+            <span className={cx('v2-radar-pulse-dot', running && 'is-pulsing')} />
+            <Compass size={13} className="v2-radar-icon" />
+            <span>TERRITORY RADAR</span>
+          </span>
           <i />
           <span>AUTONOMOUS MULTI-VECTOR INTELLIGENCE CORE</span>
           <b>619,287 VILLAGES & MANDALS INDEXED</b>
@@ -497,7 +571,7 @@ export default function SearchConsole({
             title="Configure Precision Radius, Vectors & Target Speed"
           >
             <SlidersHorizontal size={12} />
-            <span>Precision & Tuning: <b>{radius}km Radius · {selectedEngines.includes('auto') ? 'Auto AI' : `${selectedEngines.length} Vectors`}</b></span>
+            <span>Precision & Tuning: <b>{radius}km Radius · {coverageMode === 'fast' ? '⚡ Fast' : '🗺️ Deep'} · {selectedEngines.includes('auto') ? 'Auto AI' : `${selectedEngines.length} Vectors`}</b></span>
             {showPrecisionDrawer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
           </button>
         </div>
@@ -589,6 +663,37 @@ export default function SearchConsole({
                 ))}
               </div>
             </div>
+
+            <div className="v2-tuning-control">
+              <span className="v2-tuning-label">
+                <Zap size={12} /> COVERAGE PASS: <b>{coverageMode === 'fast' ? 'FAST' : 'DEEP'}</b>
+              </span>
+              <div className="v2-adv-chips">
+                <button
+                  type="button"
+                  className={cx('v2-adv-chip', coverageMode === 'fast' && 'is-on')}
+                  onClick={() => setCoverageMode('fast')}
+                  title="Named localities and query vectors. About 97% of leads, usually under a minute."
+                >
+                  {coverageMode === 'fast' && <Check size={10} />}
+                  ⚡ Fast · named areas
+                </button>
+                <button
+                  type="button"
+                  className={cx('v2-adv-chip', coverageMode === 'deep' && 'is-on')}
+                  onClick={() => setCoverageMode('deep')}
+                  title="Adds the full coordinate grid for complete street-level coverage. Slower, but leaves no street unsearched."
+                >
+                  {coverageMode === 'deep' && <Check size={10} />}
+                  🗺️ Deep · full grid
+                </button>
+              </div>
+              <small className="v2-tuning-hint">
+                {coverageMode === 'fast'
+                  ? 'Fast finds the businesses that matter first. Switch to Deep for street-by-street coverage.'
+                  : 'Deep sweeps every grid cell. Best for complete coverage of a large city.'}
+              </small>
+            </div>
           </div>
         </div>
       )}
@@ -604,8 +709,12 @@ export default function SearchConsole({
             value={draft}
             onChange={event => handleQuery(event.target.value)}
             onFocus={() => {
-              setOpen(true);
+              isFocusedRef.current = true;
+              if (draft.trim().length >= 2) setOpen(true);
               window.dispatchEvent(new CustomEvent('leadharvest:search-focus'));
+            }}
+            onBlur={() => {
+              setTimeout(() => { isFocusedRef.current = false; }, 200);
             }}
             onKeyDown={onKeyDown}
             placeholder="Type anything (e.g. urgent wedding photographers near benz circle vijayawada under 5km with phone)..."
@@ -630,6 +739,7 @@ export default function SearchConsole({
             className={cx('v2-console-go', 'v2-btn-deploy-3d', running && 'is-stop', busy && 'is-busy')}
             onClick={submit}
             disabled={busy || (!running && !canDeploy)}
+            title={running ? 'Click to immediately stop the intelligence swarm' : 'Deploy autonomous swarm'}
           >
             <span className="v2-btn-shimmer" />
             {busy
@@ -637,13 +747,37 @@ export default function SearchConsole({
               : running
                 ? <Square size={14} />
                 : <Zap size={16} />}
-            <span>{busy ? 'STARTING...' : running ? 'STOP SWARM' : 'DEPLOY INTELLIGENCE SWARM'}</span>
+            <span>
+              {busy
+                ? 'STARTING SWARM...'
+                : running
+                  ? `STOP SWARM (${progress?.overallCompletedMandals ?? 0}/${progress?.totalMandalsAcrossAll || parsedZones || 1} ZONES)`
+                  : 'DEPLOY INTELLIGENCE SWARM'}
+            </span>
           </button>
         </div>
 
         {/* Suggestion Dropdown */}
-        {open && visible.length > 0 && (
+        {open && (visible.length > 0 || matchedSavedFolder) && (
           <div className="v2-suggest" role="listbox">
+            {matchedSavedFolder && (
+              <div
+                className="v2-suggest-vault-bridge"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenFolder?.(matchedSavedFolder);
+                }}
+              >
+                <div className="v2-vault-bridge-info">
+                  <span className="v2-vault-badge">📁 SAVED VAULT MATCH</span>
+                  <b>{matchedSavedFolder.name || `${matchedSavedFolder.category} in ${matchedSavedFolder.location}`}</b>
+                  <small>{matchedSavedFolder.leadCount || 0} leads ready ({matchedSavedFolder.phoneCount || 0} mobiles)</small>
+                </div>
+                <button type="button" className="v2-btn-open-vault">
+                  Open Folder <ArrowRight size={12} />
+                </button>
+              </div>
+            )}
             <SuggestionList
               groups={groups}
               active={active}
@@ -683,9 +817,14 @@ export default function SearchConsole({
 
           <div className={cx('v2-hud-chip chip-location', parsedLocation && 'is-locked')}>
             <MapPin size={11} className="v2-text-lime" />
-            <span>Locality:</span>
+            <span>Location:</span>
             <b>{parsedLocation || 'Type location...'}</b>
             {parsedZones > 1 && <span className="v2-hud-badge">{parsedZones} ZONES</span>}
+            {parsed?.coverageKind === 'whole-city' && (
+              <span className="v2-hud-badge is-ring" title="Searches the whole city plus a 5 km ring around it">
+                +5 KM RING
+              </span>
+            )}
           </div>
 
           <div className="v2-hud-chip chip-radius">
@@ -747,7 +886,7 @@ export default function SearchConsole({
 
           <div className="v2-hud-chip chip-time">
             <Clock size={11} className="v2-text-amber" />
-            <span>Est. Time:</span>
+            <span>Est. time:</span>
             <b>{estimatedTimeText}</b>
           </div>
 
@@ -763,11 +902,17 @@ export default function SearchConsole({
       {running && (
         <div className="v2-swarm-live-hud">
           <div className="v2-swarm-live-left">
-            <Mascot mode="sprint" size={50} className="v2-hud-mascot" />
+            <SignalOrb
+              size={40}
+              live
+              tone="#5eead4"
+              title="Live search running"
+              style={{ marginRight: 12 }}
+            />
             <span className="v2-swarm-pulse-ring" />
             <div className="v2-swarm-live-info">
               <span className="v2-swarm-live-title">
-                DIGGY INTELLIGENCE SWARM ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} CONSTITUENT RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
+                SEARCH ENGINE ACTIVE · SWEEPING {parsedZones > 1 ? `${parsedZones} RADAR ZONES` : 'GEOSPATIAL COORDINATES'}
               </span>
               <div className="v2-swarm-live-meta">
                 <span>📍 {parsedLocation || location || 'Target Locality'} ({radius}km radius per zone)</span>
@@ -780,7 +925,7 @@ export default function SearchConsole({
             <div className="v2-swarm-eta-chip">
               <Clock size={12} className="v2-text-amber" />
               <span>EST. HARVEST TIME:</span>
-              <b>~{etaRemaining}s remaining</b>
+              <b>{eta || (progress?.eta ? `${progress.eta}` : `~${etaRemaining}s remaining`)}</b>
             </div>
             <div className="v2-swarm-throughput-chip">
               <Zap size={12} className="v2-text-lime" />
@@ -809,3 +954,5 @@ export default function SearchConsole({
     </section>
   );
 }
+
+export default React.memo(SearchConsole);

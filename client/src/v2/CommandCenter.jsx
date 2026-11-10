@@ -12,7 +12,7 @@ import {
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
-import ScreenMascotCompanion from './ScreenMascotCompanion';
+import InstrumentPanel from './components/InstrumentPanel';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
@@ -33,6 +33,7 @@ import {
   copyImageToClipboard,
   exportLeadsToVcf
 } from '../utils/whatsappCatalog';
+import { productArt } from '../utils/productArt';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 const SORTS = [
@@ -1293,7 +1294,7 @@ function WhatsAppCampaignModal({ leads, onClose, onUpdateStage }) {
     price: '₹2,500',
     description: 'Exclusive business package with doorstep delivery & full guarantee.',
     link: 'https://scraper.co.in',
-    image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
+    image: productArt('custom'),
     category: 'Custom Offer'
   });
 
@@ -2426,6 +2427,22 @@ export default function CommandCenter() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef(null);
   const [selectedVendor, setSelectedVendor] = useState(null);
+
+  // Enforce natural vertical scrolling on Dashboard canvas
+  useEffect(() => {
+    document.documentElement.style.overflowY = 'auto';
+    document.documentElement.style.overflowX = 'hidden';
+    document.body.style.overflowY = 'auto';
+    document.body.style.overflowX = 'hidden';
+    document.body.style.height = 'auto';
+    return () => {
+      document.documentElement.style.overflowY = '';
+      document.documentElement.style.overflowX = '';
+      document.body.style.overflowY = '';
+      document.body.style.overflowX = '';
+      document.body.style.height = '';
+    };
+  }, []);
 
   // Tab state is mirrored to the URL. This keeps deep links, refreshes and the
   // browser back button working across the merged workspace.
@@ -3854,6 +3871,13 @@ export default function CommandCenter() {
             </div>
           )}
 
+          <InstrumentPanel
+            running={run?.status === 'running'}
+            leadCount={runLeadCount}
+            progress={progress}
+            compact={activeTab === 'cockpit'}
+          />
+
           {currentDeep && ['queued', 'running', 'stopping'].includes(currentDeep.status) && (
             <div className="v2-deep-banner">
               <span className="v2-deep-banner-pulse" />
@@ -4450,14 +4474,6 @@ export default function CommandCenter() {
           isMerging={isMerging}
         />
       )}
-
-      {/* Living 3D Screen Mascot Companion ("Diggy") */}
-      <ScreenMascotCompanion
-        scraping={scanning}
-        activeZone={activeZone?.name || activeZone?.zoneName || ''}
-        leadsFound={vendors.length}
-        alert={mascotAlert}
-      />
     </div>
   );
 }

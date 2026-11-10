@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const indiaTradeIntelligence = require('./indiaTradeIntelligence');
 
 // ── AUTHORITATIVE COMMERCIAL CLUSTERS FOR MAJOR INDIAN CITIES & METROS ──
 const AUTHORITATIVE_CLUSTERS = {
@@ -44,9 +45,52 @@ const AUTHORITATIVE_CLUSTERS = {
     'JP Nagar', 'Rajajinagar', 'Yelahanka', 'Banashankari', 'Bellandur'
   ],
   'hyderabad': [
-    'Banjara Hills', 'Jubilee Hills', 'Gachibowli', 'HITEC City', 'Madhapur', 
-    'Kondapur', 'Secunderabad', 'Ameerpet', 'Kukatpally', 'Begumpet', 
-    'Charminar', 'Himayatnagar', 'Dilsukhnagar', 'LB Nagar'
+    // West IT Corridor & High Growth
+    'HITEC City', 'Madhapur', 'Gachibowli', 'Kondapur', 'Financial District', 
+    'Nanakramguda', 'Kokapet', 'Gandipet', 'Manikonda', 'Puppalaguda', 
+    'Shaikpet', 'Rai Durg', 'Hafeezpet', 'Tellapur', 'Kollur',
+    
+    // North-West Commercial & High-Density Residential
+    'Kukatpally', 'KPHB Colony', 'Nizampet', 'Bachupally', 'Pragathi Nagar', 
+    'Miyapur', 'Chandanagar', 'Serilingampally', 'Lingampally', 'BHEL', 
+    'Patancheru', 'Beeramguda', 'Ameenpur',
+    
+    // Central Commercial, Dining & Healthcare
+    'Banjara Hills', 'Jubilee Hills', 'Somajiguda', 'Punjagutta', 'Begumpet', 
+    'Prakash Nagar', 'Ameerpet', 'SR Nagar', 'Sanath Nagar', 'Erragadda', 
+    'Balkampet', 'Khairatabad', 'Lakdikapul', 'Nampally', 'Abids', 
+    'Koti', 'Sultan Bazar', 'Basheerbagh', 'Himayatnagar', 'Chikkadpally', 
+    'Narayanguda', 'Domalguda', 'RTC X Roads', 'Ashok Nagar', 'Gandhi Nagar',
+    
+    // Secunderabad & Cantonment Belt
+    'Secunderabad', 'Paradise Secunderabad', 'MG Road Secunderabad', 'Marredpally', 
+    'East Marredpally', 'West Marredpally', 'Trimulgherry', 'Bowenpally', 
+    'Old Bowenpally', 'Karkhana', 'Gunrock', 'Alwal', 'Old Alwal', 
+    'Lothkunta', 'Bolarum', 'Yapral', 'Kowkoor', 'Hakimpet',
+    
+    // East Tech & Industrial Corridor
+    'Uppal', 'Ramanthapur', 'Habsiguda', 'Tarnaka', 'Nacharam', 
+    'Mallapur', 'ECIL', 'Kushaiguda', 'AS Rao Nagar', 'Sainikpuri', 
+    'Kapra', 'Moula Ali', 'Cherlapally', 'Peerzadiguda', 'Boduppal', 
+    'Medipally', 'Chengicherla', 'Ghatkesar',
+    
+    // South Heritage & Old City Commercial
+    'Charminar', 'Laad Bazaar', 'Chowmahalla', 'Madina', 'High Court', 
+    'City College', 'Nayapul', 'Pathergatti', 'Moghalpura', 'Falaknuma', 
+    'Chandrayangutta', 'Santoshnagar', 'Malakpet', 'Old Malakpet', 
+    'New Malakpet', 'Saidabad', 'Chanchalguda', 'Bahadurpura', 'Purana Pul', 
+    'Tadbun', 'Jahanuma',
+    
+    // South-East Residential & Transit Corridor
+    'Dilsukhnagar', 'Moosarambagh', 'Kothapet', 'Chaitanyapuri', 'LB Nagar', 
+    'Sagar Ring Road', 'Mansoorabad', 'Saroornagar', 'Karmanghat', 'Champapet', 
+    'Vanasthalipuram', 'Hastinapuram', 'Hayathnagar', 'Auto Nagar Hyderabad', 'BN Reddy Nagar',
+    
+    // South-West Transit & Airport Corridor
+    'Mehdipatnam', 'Gudimalkapur', 'Tolichowki', 'Paramount Hills', 'Attapur', 
+    'Hyderguda Attapur', 'Upperpally', 'Rajendranagar', 'Bandlaguda Jagir', 
+    'Sun City', 'Langer Houz', 'Shamshabad', 'Airport Road Hyderabad', 
+    'Aramghar', 'Mailardevpally', 'Kattedan'
   ],
   'secunderabad': [
     'Paradise Secunderabad', 'MG Road Secunderabad', 'Sainikpuri', 'Trimulgherry',
@@ -105,11 +149,16 @@ const AUTHORITATIVE_CLUSTERS = {
     'Wagholi & Kharadi IT Hub'
   ],
   'guntur': [
-    'Brodipet', 'Arundelpet', 'Lakshmipuram', 'Kothapet', 'Pattabhipuram', 
-    'Brindavan Gardens', 'Old Guntur', 'SVN Colony', 'Guvvalagutta', 'Collector Office Road Guntur'
+    'Brodipet', 'Arundelpet', 'Lalapet & Market Center', 'Kothapet', 'Pattabhipuram', 
+    'Brindavan Gardens', 'Lakshmipuram', 'Old Guntur', 'SVN Colony', 'Guvvalagutta', 
+    'Collector Office Road Guntur', 'Amaravathi Road', 'Gorantla & Inner Ring Road',
+    'Gujjanagundla', 'Syamala Nagar', 'Vidyanagar', 'Chandramouli Nagar',
+    'Autonagar Guntur', 'Nallapadu', 'Nallacheruvu', 'Stambhalagaruvu',
+    'Pedakakani Road Guntur', 'Etukuru Road Guntur', 'Chowdavaram & RVR Guntur'
   ],
   'tenali': [
-    'Tenali Central', 'Morrispet', 'Chenchupet', 'Ganga Mandiram', 'Chinaravuru', 
+    'Tenali Central', 'Morrispet', 'Chenchupet', 'Bose Road Tenali', 'Ganganammapet Tenali',
+    'Kothapet Tenali', 'Ithanagar Tenali', 'Ganga Mandiram', 'Chinaravuru', 
     'Nazarpet', 'Guntur Road Tenali', 'Gandhinagar Tenali'
   ],
   'mangalagiri': [
@@ -117,8 +166,8 @@ const AUTHORITATIVE_CLUSTERS = {
     'Old Bus Stand Mangalagiri', 'Tadepalle'
   ],
   'vijayawada': [
-    'Benz Circle', 'Governorpet', 'Moghalrajpuram', 'Patamata', 'Auto Nagar', 
-    'Bhavanipuram', 'Satyanarayanapuram', 'Gunadala', 'One Town Vijayawada', 'Machavaram'
+    'Suryaraopeta', 'Benz Circle', 'Governorpet', 'Labbipet', 'Moghalrajpuram', 'Patamata', 'Auto Nagar', 
+    'Bhavanipuram', 'Satyanarayanapuram', 'Gunadala', 'Gandhinagar Vijayawada', 'Kanuru', 'Poranki', 'One Town Vijayawada', 'Machavaram'
   ],
   'visakhapatnam': [
     'Siripuram', 'Dwaraka Nagar', 'MVP Colony', 'Gajuwaka', 'Rushikonda', 
@@ -269,7 +318,92 @@ function initIndiaGeoMemory() {
     }
 
     // Authoritative Post-2022 Andhra Pradesh District Reorganization Overrides
+    // Official 18 Mandals of Guntur District across Guntur Division (10) & Tenali Division (8)
+    const GUNTUR_18_MANDALS = [
+      'Guntur East', 'Guntur West', 'Medikonduru', 'Pedakakani', 'Pedanandipadu',
+      'Phirangipuram', 'Prathipadu', 'Tadikonda', 'Thullur', 'Vatticherukuru',
+      'Chebrolu', 'Duggirala', 'Kakumanu', 'Kollipara', 'Mangalagiri',
+      'Ponnur', 'Tadepalle', 'Tenali'
+    ];
+
+    districtIndex.set('guntur', {
+      district: 'Guntur',
+      state: 'Andhra Pradesh',
+      mandals: GUNTUR_18_MANDALS
+    });
+
+    districtIndex.set('palnadu', {
+      district: 'Palnadu',
+      state: 'Andhra Pradesh',
+      mandals: [
+        'Narasaraopet', 'Macherla', 'Vinukonda', 'Sattenapalle', 'Chilakaluripet',
+        'Piduguralla', 'Gurazala', 'Dachepalle', 'Rentachintala', 'Karempudi',
+        'Nadendla', 'Edlapadu', 'Rompicherla', 'Ipur', 'Savalyapuram',
+        'Bollapalle', 'Nekarikallu', 'Mupla', 'Atchampet', 'Krosuru',
+        'Amaravathi', 'Bellamkonda', 'Rajupalem', 'Pedakurapadu', 'Veldurthi',
+        'Durgi', 'Muppalla'
+      ]
+    });
+
+    districtIndex.set('bapatla', {
+      district: 'Bapatla',
+      state: 'Andhra Pradesh',
+      mandals: [
+        'Bapatla', 'Chirala', 'Vetapalem', 'Karamchedu', 'Inkollu',
+        'Chinaganjam', 'Parchur', 'Yeddanapudi', 'Martur', 'Santhamaguluru',
+        'Ballikurava', 'Korisapadu', 'Panguluru', 'Addanki', 'Jangamaheswarapuram',
+        'Repalle', 'Nizampatnam', 'Nagaram', 'Cherukupalle', 'Bhattiprolu',
+        'Tsundur', 'Amruthalur', 'Karlapalem', 'Pittalavanipalem', 'Kollur'
+      ]
+    });
+
+    districtIndex.set('ntr', {
+      district: 'NTR',
+      state: 'Andhra Pradesh',
+      mandals: [
+        'Vijayawada Urban', 'Vijayawada Rural', 'Jaggayyapeta', 'Nandigama', 'Tiruvuru',
+        'Mylavaram', 'G.Konduru', 'Ibrahimpatnam', 'Penamaluru', 'Kanchikacherla',
+        'Chandarlapadu', 'Veerullapadu', 'Vatsavai', 'Reddigudem', 'A.Konduru',
+        'Gampalagudem', 'Vissannapeta'
+      ]
+    });
+
+    const ALL_26_AP_DISTRICTS = [
+      'Srikakulam', 'Vizianagaram', 'Parvathipuram Manyam', 'Alluri Sitharama Raju',
+      'Visakhapatnam', 'Anakapalli', 'Kakinada', 'Dr. B. R. Ambedkar Konaseema',
+      'East Godavari', 'West Godavari', 'Eluru', 'Krishna', 'NTR', 'Guntur',
+      'Palnadu', 'Bapatla', 'Prakasam', 'Sri Potti Sriramulu Nellore', 'Kurnool',
+      'Nandyal', 'Ananthapuramu', 'Sri Sathya Sai', 'YSR Kadapa', 'Annamayya',
+      'Tirupati', 'Chittoor'
+    ];
+    const apState = stateIndex.get('andhrapradesh');
+    if (apState && Array.isArray(apState.districts)) {
+      ALL_26_AP_DISTRICTS.forEach(d => {
+        if (!apState.districts.some(x => x.toLowerCase().replace(/[^a-z0-9]/g, '') === d.toLowerCase().replace(/[^a-z0-9]/g, ''))) {
+          apState.districts.push(d);
+        }
+      });
+    }
+
     const AP_OVERRIDES = {
+      'guntur east': { subDistrict: 'Guntur East', district: 'Guntur', state: 'Andhra Pradesh' },
+      'guntur west': { subDistrict: 'Guntur West', district: 'Guntur', state: 'Andhra Pradesh' },
+      'medikonduru': { subDistrict: 'Medikonduru', district: 'Guntur', state: 'Andhra Pradesh' },
+      'pedakakani': { subDistrict: 'Pedakakani', district: 'Guntur', state: 'Andhra Pradesh' },
+      'pedanandipadu': { subDistrict: 'Pedanandipadu', district: 'Guntur', state: 'Andhra Pradesh' },
+      'phirangipuram': { subDistrict: 'Phirangipuram', district: 'Guntur', state: 'Andhra Pradesh' },
+      'prathipadu': { subDistrict: 'Prathipadu', district: 'Guntur', state: 'Andhra Pradesh' },
+      'tadikonda': { subDistrict: 'Tadikonda', district: 'Guntur', state: 'Andhra Pradesh' },
+      'thullur': { subDistrict: 'Thullur', district: 'Guntur', state: 'Andhra Pradesh' },
+      'tullur': { subDistrict: 'Thullur', district: 'Guntur', state: 'Andhra Pradesh' },
+      'vatticherukuru': { subDistrict: 'Vatticherukuru', district: 'Guntur', state: 'Andhra Pradesh' },
+      'chebrolu': { subDistrict: 'Chebrolu', district: 'Guntur', state: 'Andhra Pradesh' },
+      'duggirala': { subDistrict: 'Duggirala', district: 'Guntur', state: 'Andhra Pradesh' },
+      'kakumanu': { subDistrict: 'Kakumanu', district: 'Guntur', state: 'Andhra Pradesh' },
+      'kollipara': { subDistrict: 'Kollipara', district: 'Guntur', state: 'Andhra Pradesh' },
+      'mangalagiri': { subDistrict: 'Mangalagiri', district: 'Guntur', state: 'Andhra Pradesh' },
+      'ponnur': { subDistrict: 'Ponnur', district: 'Guntur', state: 'Andhra Pradesh' },
+      'tadepalle': { subDistrict: 'Tadepalle', district: 'Guntur', state: 'Andhra Pradesh' },
       'narasaraopet': { subDistrict: 'Narasaraopet', district: 'Palnadu', state: 'Andhra Pradesh' },
       'macherla': { subDistrict: 'Macherla', district: 'Palnadu', state: 'Andhra Pradesh' },
       'vinukonda': { subDistrict: 'Vinukonda', district: 'Palnadu', state: 'Andhra Pradesh' },
@@ -290,8 +424,22 @@ function initIndiaGeoMemory() {
       'gudivada': { subDistrict: 'Gudivada', district: 'Krishna', state: 'Andhra Pradesh' }
     };
 
-    for (const [key, val] of Object.entries(AP_OVERRIDES)) {
-      mandalIndex.set(key, val);
+    for (const [rawKey, val] of Object.entries(AP_OVERRIDES)) {
+      const cleanKey = rawKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const existing = mandalIndex.get(cleanKey) || mandalIndex.get(rawKey) || {};
+      let villages = Array.isArray(val.villages) && val.villages.length > 0
+        ? val.villages
+        : (Array.isArray(existing.villages) && existing.villages.length > 0 ? existing.villages : []);
+
+      if ((!villages || villages.length === 0) && cleanKey.includes('guntureast')) {
+        villages = ['Old Guntur', 'Kothapet', 'Collector Office Road', 'Autonagar', 'Etukur', 'Budampadu', 'Chowdavaram', 'Ankireddipalem'];
+      } else if ((!villages || villages.length === 0) && cleanKey.includes('gunturwest')) {
+        villages = ['Brodipet', 'Arundelpet', 'Lakshmipuram', 'Pattabhipuram', 'Brindavan Gardens', 'SVN Colony', 'Guvvalagutta', 'Gorantla', 'Pedapalakaluru', 'Nallapadu'];
+      }
+
+      const merged = { ...existing, ...val, villages };
+      mandalIndex.set(cleanKey, merged);
+      if (cleanKey !== rawKey) mandalIndex.set(rawKey, merged);
     }
 
     console.log(`[Universal Geo Engine] Indexed ${stateIndex.size} states, ${districtIndex.size} districts, ${mandalIndex.size} mandals, and ${villageIndex.size} villages from local database.`);
@@ -391,6 +539,24 @@ const ZONE_COORDINATES = {
   'guwahati': { lat: 26.1445, lng: 91.7362 },
 
   // Andhra Pradesh & Telangana
+  'hyderabad': { lat: 17.3850, lng: 78.4867 },
+  'banjara hills': { lat: 17.4156, lng: 78.4357 },
+  'banjara hills hyderabad': { lat: 17.4156, lng: 78.4357 },
+  'jubilee hills': { lat: 17.4319, lng: 78.4073 },
+  'gachibowli': { lat: 17.4401, lng: 78.3489 },
+  'madhapur': { lat: 17.4483, lng: 78.3915 },
+  'hitec city': { lat: 17.4435, lng: 78.3772 },
+  'kondapur': { lat: 17.4699, lng: 78.3578 },
+  'kukatpally': { lat: 17.4938, lng: 78.4018 },
+  'begumpet': { lat: 17.4448, lng: 78.4682 },
+  'secunderabad': { lat: 17.4399, lng: 78.4983 },
+  'somajiguda': { lat: 17.4260, lng: 78.4578 },
+  'himayatnagar': { lat: 17.4042, lng: 78.4891 },
+  'ameerpet': { lat: 17.4375, lng: 78.4482 },
+  'dilsukhnagar': { lat: 17.3688, lng: 78.5247 },
+  'uppal': { lat: 17.4057, lng: 78.5591 },
+  'mehdipatnam': { lat: 17.3916, lng: 78.4384 },
+  'manikonda': { lat: 17.3975, lng: 78.3776 },
   'guntur': { lat: 16.3067, lng: 80.4365 },
   'brodipet': { lat: 16.3115, lng: 80.4372 },
   'arundelpet': { lat: 16.3032, lng: 80.4418 },
@@ -401,11 +567,59 @@ const ZONE_COORDINATES = {
   'old guntur': { lat: 16.2920, lng: 80.4580 },
   'svn colony': { lat: 16.3220, lng: 80.4140 },
   'guvvalagutta': { lat: 16.3010, lng: 80.4450 },
+  'amaravathi road': { lat: 16.3210, lng: 80.4120 },
+  'gorantla': { lat: 16.3380, lng: 80.4050 },
+  'lalapet': { lat: 16.3015, lng: 80.4465 },
+  'syamala nagar': { lat: 16.3140, lng: 80.4280 },
+  'vidyanagar': { lat: 16.3180, lng: 80.4210 },
+  'gujjanagundla': { lat: 16.3120, lng: 80.4160 },
+  'autonagar guntur': { lat: 16.2950, lng: 80.4720 },
+  'chandramouli nagar': { lat: 16.3200, lng: 80.4180 },
+  'nallapadu': { lat: 16.2820, lng: 80.3980 },
+  'nallacheruvu': { lat: 16.2890, lng: 80.4410 },
+  'stambhalagaruvu': { lat: 16.3190, lng: 80.4270 },
+  'pedakakani road': { lat: 16.3320, lng: 80.4680 },
+  'etukuru road': { lat: 16.2810, lng: 80.4690 },
+  'chowdavaram': { lat: 16.2410, lng: 80.3420 },
+
+  // Guntur District Official 18 Mandals (Guntur Division & Tenali Division)
+  'guntur east': { lat: 16.3067, lng: 80.4480 },
+  'guntur west': { lat: 16.3115, lng: 80.4280 },
+  'medikonduru': { lat: 16.3312, lng: 80.2974 },
+  'pedakakani': { lat: 16.3458, lng: 80.4952 },
+  'pedanandipadu': { lat: 16.0373, lng: 80.3015 },
+  'phirangipuram': { lat: 16.3023, lng: 80.2608 },
+  'prathipadu': { lat: 16.1772, lng: 80.3725 },
+  'tadikonda': { lat: 16.4258, lng: 80.4486 },
+  'thullur': { lat: 16.5369, lng: 80.4722 },
+  'tullur': { lat: 16.5369, lng: 80.4722 },
+  'vatticherukuru': { lat: 16.1950, lng: 80.4410 },
+  'chebrolu': { lat: 16.2008, lng: 80.5312 },
+  'duggirala': { lat: 16.3262, lng: 80.6272 },
+  'kakumanu': { lat: 16.0380, lng: 80.4040 },
+  'kollipara': { lat: 16.2862, lng: 80.7228 },
+  'mangalagiri': { lat: 16.4326, lng: 80.5645 },
+  'ponnur': { lat: 16.0682, lng: 80.5542 },
+  'tadepalle': { lat: 16.4789, lng: 80.6014 },
   'tenali': { lat: 16.2435, lng: 80.6400 },
-  'mangalagiri': { lat: 16.4328, lng: 80.5694 },
-  'tadepalle': { lat: 16.4820, lng: 80.6030 },
-  'chebrolu': { lat: 16.1950, lng: 80.5280 },
+  'bose road tenali': { lat: 16.2428, lng: 80.6432 },
+  'morrispet': { lat: 16.2389, lng: 80.6355 },
+  'chenchupet': { lat: 16.2465, lng: 80.6480 },
+  'ganganammapet tenali': { lat: 16.2410, lng: 80.6415 },
+  'kothapet tenali': { lat: 16.2450, lng: 80.6370 },
+  'ithanagar tenali': { lat: 16.2480, lng: 80.6440 },
+  'chinaravuru': { lat: 16.2310, lng: 80.6550 },
   'vijayawada': { lat: 16.5062, lng: 80.6480 },
+  'suryaraopeta': { lat: 16.5132, lng: 80.6276 },
+  'suryaraopet': { lat: 16.5132, lng: 80.6276 },
+  'labbipet': { lat: 16.5050, lng: 80.6380 },
+  'benz circle': { lat: 16.4988, lng: 80.6558 },
+  'governorpet': { lat: 16.5140, lng: 80.6210 },
+  'patamata': { lat: 16.4920, lng: 80.6680 },
+  'moghalrajpuram': { lat: 16.5040, lng: 80.6480 },
+  'auto nagar': { lat: 16.4950, lng: 80.6850 },
+  'gunadala': { lat: 16.5250, lng: 80.6650 },
+  'bhavanipuram': { lat: 16.5280, lng: 80.5950 },
   'visakhapatnam': { lat: 17.6868, lng: 83.2185 },
   'narasaraopet': { lat: 16.2359, lng: 80.0499 },
   'bapatla': { lat: 15.9042, lng: 80.4673 },
@@ -423,8 +637,77 @@ const ZONE_COORDINATES = {
   'karimnagar': { lat: 18.4386, lng: 79.1288 },
   'khammam': { lat: 17.2473, lng: 80.1514 },
   'nizamabad': { lat: 18.6725, lng: 78.0941 },
-  'nalgonda': { lat: 17.0504, lng: 79.2669 }
+  'nalgonda': { lat: 17.0504, lng: 79.2669 },
+
+  // Commercial Village Nodes & Sub-Centres
+  'vadlamudi': { lat: 16.2378, lng: 80.5524 },
+  'nambur': { lat: 16.3680, lng: 80.5230 },
+  'perecherla': { lat: 16.3275, lng: 80.3270 },
+  'pericherla': { lat: 16.3275, lng: 80.3270 },
+  'undavalli': { lat: 16.4950, lng: 80.5820 },
+  'velagapudi': { lat: 16.5180, lng: 80.5050 },
+  'atmakur': { lat: 16.4210, lng: 80.5500 },
+  'navuluru': { lat: 16.4420, lng: 80.5750 },
+  'burripalem': { lat: 16.2750, lng: 80.6120 },
+  'chiluvuru': { lat: 16.3520, lng: 80.6450 },
+  'lam': { lat: 16.3980, lng: 80.4410 },
+  'angalakuduru': { lat: 16.2550, lng: 80.6150 },
+  'kolakaluru': { lat: 16.2820, lng: 80.6280 },
+  'chinakakani': { lat: 16.4150, lng: 80.5600 },
+  'kaza': { lat: 16.3900, lng: 80.5350 },
+  'narakodur': { lat: 16.2410, lng: 80.5050 },
+  'vejendla': { lat: 16.2720, lng: 80.4910 },
+  'sekuru': { lat: 16.2300, lng: 80.5100 },
+  'vaddeswaram': { lat: 16.4400, lng: 80.6180 },
+  'kunchanapalle': { lat: 16.4650, lng: 80.6120 },
+  'penumaka': { lat: 16.5050, lng: 80.5700 },
+  'mandadam': { lat: 16.5120, lng: 80.5350 },
+  'rayapudi': { lat: 16.5280, lng: 80.4850 },
+  'ainavolu': { lat: 16.5020, lng: 80.4950 }
 };
+
+const MANDAL_TYPOLOGY = {
+  // Urban: Dense clusters requiring 3.2 - 3.8 km to prevent 20-lead pagination truncations
+  'guntureast': { type: 'urban', radiusKm: 3.5 },
+  'gunturwest': { type: 'urban', radiusKm: 3.5 },
+  'guntur': { type: 'urban', radiusKm: 3.5 },
+  'tenali': { type: 'urban', radiusKm: 3.8 },
+  'vijayawadaurban': { type: 'urban', radiusKm: 3.5 },
+  'vijayawada': { type: 'urban', radiusKm: 3.5 },
+  'visakhapatnam': { type: 'urban', radiusKm: 3.8 },
+  
+  // Corridor: High-growth development corridors requiring 4.5 - 6.0 km
+  'mangalagiri': { type: 'corridor', radiusKm: 5.5 },
+  'tadepalle': { type: 'corridor', radiusKm: 5.0 },
+  'pedakakani': { type: 'corridor', radiusKm: 5.5 },
+  'chebrolu': { type: 'corridor', radiusKm: 5.5 },
+  
+  // Rural / Agricultural / Capital Region: Expansive territories requiring 6.5 - 8.0 km
+  'thullur': { type: 'rural', radiusKm: 7.5 },
+  'tullur': { type: 'rural', radiusKm: 7.5 },
+  'medikonduru': { type: 'rural', radiusKm: 7.5 },
+  'phirangipuram': { type: 'rural', radiusKm: 8.0 },
+  'pedanandipadu': { type: 'rural', radiusKm: 7.5 },
+  'prathipadu': { type: 'rural', radiusKm: 7.5 },
+  'tadikonda': { type: 'rural', radiusKm: 7.0 },
+  'vatticherukuru': { type: 'rural', radiusKm: 7.0 },
+  'kakumanu': { type: 'rural', radiusKm: 7.5 },
+  'kollipara': { type: 'rural', radiusKm: 7.0 },
+  'duggirala': { type: 'rural', radiusKm: 6.5 },
+  'ponnur': { type: 'rural', radiusKm: 7.0 }
+};
+
+function getMandalTypology(mandalName) {
+  if (!mandalName) return { type: 'corridor', radiusKm: 5.5 };
+  const clean = String(mandalName).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (MANDAL_TYPOLOGY[clean]) return MANDAL_TYPOLOGY[clean];
+  for (const [key, val] of Object.entries(MANDAL_TYPOLOGY)) {
+    if (clean.includes(key) || key.includes(clean)) {
+      return val;
+    }
+  }
+  return { type: 'corridor', radiusKm: 5.5 };
+}
 
 // State reference points used to spread state-wide sweeps on the map. These are
 // geographic anchors, not claims that every district sits at the capital.
@@ -502,6 +785,400 @@ function zoneCoordinates(name, district, index = 0, total = 1) {
   return spreadCoords(center, index, total, 0.075);
 }
 
+// ── WHOLE-CITY COVERAGE GRID ──
+// A city is not a handful of famous localities. Google only reveals ~120
+// results per query, so the only honest way to cover a whole city is to split
+// its true footprint into viewport-sized cells and let each cell return its own
+// slice. Cells are Maps-only (Local Finder cannot be area-biased) and are
+// skipped when a named locality already sits on top of them.
+
+const GRID_CELL_KM = 2.6;
+const GRID_KM_PER_DEG_LAT = 111.0;
+// Famous businesses often sit just outside the municipal core (highway
+// restaurants, resorts, function halls, industrial suppliers). A city run must
+// therefore search a ring *around* the city, not only inside it. 5 km is enough
+// to catch the highway/outskirt belt without turning every run into a district
+// sweep.
+const CITY_GRID_RING_KM = 5;
+const GRID_MAX_CELLS_PER_AXIS = 9;
+
+// ── CATEGORY SUB-VECTORS ──
+// Google's Maps list is capped at ~20 places per query ("limited view").
+// Coordinate cells alone keep returning the same top-20, so the honest way to
+// reach the long tail is to ask the *same city* for its real sub-categories:
+// a city with 40 restaurants for dinner has separate biryani, veg, dhaba,
+// bakery, cafe and military-hotel clusters. These are search vectors, not
+// invented businesses — every lead still comes from Google.
+const CATEGORY_SUBVECTORS = [
+  {
+    match: /restaurant|restaurent|dhaba|biryani|eatery|food court|dining|meals|mess|cafe|bakery|fast food/i,
+    labels: [
+      'Biryani restaurant', 'Veg restaurant', 'Non veg restaurant', 'Family restaurant',
+      'Dhaba', 'Cafe', 'Bakery', 'Fast food', 'Chinese restaurant', 'South Indian restaurant',
+      'North Indian restaurant', 'Bar and restaurant', 'Ice cream parlour', 'Pizza',
+      'Military hotel', 'Meals mess', 'Grill and BBQ', 'Seafood restaurant', 'Sweets shop'
+    ]
+  },
+  {
+    match: /hospital|clinic|doctor|medical|nursing home|diagnostic|dental|eye care/i,
+    labels: [
+      'Hospital', 'Multispeciality hospital', 'Clinic', 'Dental clinic', 'Eye hospital',
+      'Orthopaedic hospital', 'Children hospital', 'Diagnostic centre', 'Physiotherapy clinic',
+      'General physician', 'Gynaecologist', 'Dermatologist', 'ENT clinic', 'Ayurvedic clinic'
+    ]
+  },
+  {
+    match: /hotel|resort|lodge|guest house|banquet|function hall|marriage hall/i,
+    labels: [
+      'Hotel', 'Lodge', 'Resort', 'Guest house', 'Banquet hall', 'Function hall',
+      'Marriage hall', 'Convention centre', 'Budget hotel', 'Wedding venue'
+    ]
+  },
+  {
+    match: /school|college|coaching|tuition|institute|academy|training/i,
+    labels: [
+      'School', 'High school', 'College', 'Coaching centre', 'Tuition centre',
+      'IIT coaching', 'Spoken English institute', 'Computer training institute',
+      'Nursery school', 'Play school', 'Music academy', 'Dance academy'
+    ]
+  },
+  {
+    match: /gym|fitness|yoga|sports|swimming/i,
+    labels: [
+      'Gym', 'Fitness centre', 'Yoga centre', 'Crossfit gym', 'Ladies gym',
+      'Swimming pool', 'Sports academy', 'Badminton court', 'Cricket coaching'
+    ]
+  },
+  {
+    match: /salon|beauty|spa|parlour|parlor|hair|makeup/i,
+    labels: [
+      'Beauty parlour', 'Salon', 'Spa', 'Hair cutting salon', 'Bridal makeup',
+      'Nail art studio', 'Massage centre', 'Men salon', 'Ladies beauty parlour'
+    ]
+  },
+  {
+    match: /computer|laptop|printer|cctv|software|it service|mobile|electronics/i,
+    labels: [
+      'Computer shop', 'Laptop store', 'Computer repair', 'Printer dealer', 'CCTV dealer',
+      'Networking solutions', 'Software company', 'Mobile shop', 'Mobile repair',
+      'Electronics showroom', 'Computer accessories', 'UPS dealer'
+    ]
+  },
+  {
+    match: /real estate|property|builder|flat|apartment|land|plot/i,
+    labels: [
+      'Real estate agent', 'Property dealer', 'Builder', 'Apartment project',
+      'Open plots', 'Villa project', 'Rental flats', 'Commercial property', 'Land surveyor'
+    ]
+  },
+  {
+    match: /car|bike|automobile|vehicle|tyre|spare parts|service centre|service center/i,
+    labels: [
+      'Car showroom', 'Bike showroom', 'Car service centre', 'Bike service centre',
+      'Tyre shop', 'Spare parts shop', 'Car accessories', 'Car wash', 'Driving school'
+    ]
+  },
+  {
+    match: /shop|store|showroom|dealer|distributor|wholesaler|supplier|traders?|market|tiles?|cement|steel|hardware|paint|furniture|saree|clothes|garment|grocery|kirana|pharmacy|medical store|jewell?ery|footwear|fabric|pipe|sanitary/i,
+    labels: [
+      'Wholesale market', 'Wholesale shop', 'Distributor', 'Dealer', 'Retail shop',
+      'Showroom', 'Supplier', 'Supermarket', 'Main market', 'Brand showroom',
+      'Hardware shop', 'Building material shop', 'Traders', 'Stockist'
+    ]
+  },
+  {
+    match: /\b(photo|photographer|photographers|photography|photo studio|photo studios|studio|studios|videographer|videographers|videography|candid|digital lab)\b/i,
+    labels: [
+      'Wedding photographer', 'Photo studio', 'Digital photo lab', 'Candid photographer',
+      'Pre wedding photographer', 'Drone videography', 'Event photographer', 'Maternity photographer',
+      'Video editor', 'Portrait studio'
+    ]
+  },
+  {
+    match: /wedding|mandap|decorator|catering/i,
+    labels: [
+      'Wedding planner', 'Wedding decorator', 'Catering service',
+      'Mandap decoration', 'Banquet hall', 'Bridal makeup', 'Wedding cards', 'DJ service'
+    ]
+  },
+  {
+    match: /lawyer|advocate|legal|chartered accountant|ca |tax|consultant/i,
+    labels: [
+      'Lawyer', 'Advocate', 'Chartered accountant', 'Tax consultant', 'GST consultant',
+      'Company registration consultant', 'Notary', 'Legal advisor'
+    ]
+  },
+  {
+    match: /plumber|electrician|carpenter|painter|pest control|cleaning|packers|movers/i,
+    labels: [
+      'Plumber', 'Electrician', 'Carpenter', 'Painter', 'Pest control', 'Deep cleaning service',
+      'Packers and movers', 'AC repair', 'RO repair', 'Home appliance repair'
+    ]
+  },
+  {
+    match: /service|repair|install|maintenance|security|transport|courier|travel|tour|insurance|finance|printing|xerox|laundry|tailor|agency/i,
+    labels: [
+      'Service centre', 'Repair shop', 'Installation service', 'Maintenance service',
+      'Security service', 'Transport service', 'Courier service', 'Travel agency',
+      'Insurance agent', 'Printing press', 'Laundry service', 'Tailor', 'Agency'
+    ]
+  }
+];
+
+// Generic last-resort vectors that work for any category. They surface the
+// long tail (wholesale, 24-hour, service, famous) that a single ranked list
+// hides behind the top-20 cap.
+const GENERIC_SUBVECTORS = [
+  'best', 'famous', 'near railway station', 'near bus stand',
+  'near main road', '24 hours', 'wholesale', 'service centre'
+];
+
+function normalizeCategoryKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function buildCategorySubVectorZones(category, cityLabel, limit = 24) {
+  const cat = String(category || '').replace(/\s+/g, ' ').trim();
+  if (!cat) return [];
+  const city = String(cityLabel || '').replace(/,\s*$/, '').trim();
+  if (!city) return [];
+
+  const family = CATEGORY_SUBVECTORS.find(entry => entry.match.test(cat));
+  let labels = family ? [...family.labels] : [];
+  const tradeVectors = indiaTradeIntelligence.getSubvectorsForQuery(cat);
+  if (Array.isArray(tradeVectors) && tradeVectors.length) {
+    labels = [...tradeVectors, ...labels];
+  }
+  const catKey = normalizeCategoryKey(cat);
+
+  // Add a few generic modifiers when they make sense. For a specific category
+  // like "Wedding Photographer" the generic "best/famous" variants are useful;
+  // "wholesale" and "service centre" are not, so they are filtered out.
+  const generic = GENERIC_SUBVECTORS
+    .filter(mod => {
+      if (/wholesale|service centre/.test(mod)) return /shop|dealer|store|repair|computer|mobile|car|bike|electronics/i.test(catKey);
+      return true;
+    })
+    .map(mod => (mod === 'best' || mod === 'famous') ? `${mod} ${cat}` : `${cat} ${mod}`);
+
+  const seen = new Set();
+  const zones = [];
+  const base = ZONE_COORDINATES[String(city).toLowerCase().trim()] || null;
+  for (const label of [...labels, ...generic]) {
+    const key = label.toLowerCase().trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    zones.push({
+      zoneName: `${city} · ${label}`,
+      queryText: `${label} in ${city}`,
+      lat: base ? base.lat : null,
+      lng: base ? base.lng : null,
+      engines: ['local_finder', 'maps'],
+      coverageKind: 'vector',
+      isVectorQuery: true,
+      isSingle: false
+    });
+    if (zones.length >= limit) break;
+  }
+  return zones;
+}
+
+function distanceKm(a, b) {
+  if (!a || !b) return Infinity;
+  const dLat = (a.lat - b.lat) * Math.PI / 180;
+  const dLng = (a.lng - b.lng) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2
+    + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+function compassLabel(centerLat, centerLng, minLat, maxLat, minLng, maxLng) {
+  const vertical = centerLat < minLat + (maxLat - minLat) / 3 ? 'South'
+    : centerLat > maxLat - (maxLat - minLat) / 3 ? 'North' : '';
+  const horizontal = centerLng < minLng + (maxLng - minLng) / 3 ? 'West'
+    : centerLng > maxLng - (maxLng - minLng) / 3 ? 'East' : '';
+  if (vertical && horizontal) return `${vertical}-${horizontal}`;
+  return vertical || horizontal || 'Central';
+}
+
+/**
+ * Build viewport grid cells over a city footprint.
+ * @param {string} cityName display name ("Guntur")
+ * @param {string} category search category ("Restaurants")
+ * @param {Array<{lat:number,lng:number}>} anchors known locality coordinates
+ * @param {{cappedRadiusKm?:number}} options
+ * @returns {Array} grid zone objects
+ */
+function buildCityGridZones(cityName, category, anchors = [], options = {}) {
+  const coords = (anchors || []).filter(a => a && Number.isFinite(Number(a.lat)) && Number.isFinite(Number(a.lng)));
+  const center = ZONE_COORDINATES[String(cityName || '').toLowerCase().trim()]
+    || options.center
+    || (coords.length ? {
+      lat: coords.reduce((sum, c) => sum + Number(c.lat), 0) / coords.length,
+      lng: coords.reduce((sum, c) => sum + Number(c.lng), 0) / coords.length
+    } : null);
+  if (!center) return [];
+
+  // The searched footprint = the city's own extent (at least an 11 km core)
+  // plus a 5 km ring on every side. The ring is where highway restaurants,
+  // resorts, function halls, showrooms and out-of-town suppliers usually live,
+  // so a city run that stops at the municipal edge silently loses them.
+  const ringKm = Number.isFinite(Number(options.ringKm))
+    ? Math.max(0, Number(options.ringKm))
+    : CITY_GRID_RING_KM;
+  const cosLat = Math.max(0.2, Math.cos(center.lat * Math.PI / 180));
+
+  let halfLat;
+  let halfLng;
+  if (coords.length >= 3) {
+    let spanLat = 0;
+    let spanLng = 0;
+    for (const c of coords) {
+      spanLat = Math.max(spanLat, Math.abs(Number(c.lat) - Number(center.lat)) * 2);
+      spanLng = Math.max(spanLng, Math.abs(Number(c.lng) - Number(center.lng)) * 2);
+    }
+    // 15 % breathing room over the outermost known locality, never less than
+    // an 11 km core, then the ring.
+    halfLat = Math.max((spanLat / 2) * 1.15, 0.05);
+    halfLng = Math.max((spanLng / 2) * 1.15, 0.055);
+  } else {
+    const baseRadiusKm = Number(options.cappedRadiusKm) || 6;
+    halfLat = Math.max(baseRadiusKm / GRID_KM_PER_DEG_LAT, 0.05);
+    halfLng = Math.max(baseRadiusKm / (GRID_KM_PER_DEG_LAT * cosLat), 0.055);
+  }
+
+  halfLat += ringKm / GRID_KM_PER_DEG_LAT;
+  halfLng += ringKm / (GRID_KM_PER_DEG_LAT * cosLat);
+
+  const minLat = Number(center.lat) - halfLat;
+  const maxLat = Number(center.lat) + halfLat;
+  const minLng = Number(center.lng) - halfLng;
+  const maxLng = Number(center.lng) + halfLng;
+
+  const latMeters = Math.max(0.01, (maxLat - minLat) * GRID_KM_PER_DEG_LAT);
+  const lngMeters = Math.max(0.01, (maxLng - minLng) * GRID_KM_PER_DEG_LAT * cosLat);
+  const cols = Math.max(2, Math.min(GRID_MAX_CELLS_PER_AXIS, Math.round(lngMeters / GRID_CELL_KM)));
+  const rows = Math.max(2, Math.min(GRID_MAX_CELLS_PER_AXIS, Math.round(latMeters / GRID_CELL_KM)));
+
+  const prefix = category ? `${category} ` : '';
+  const city = String(cityName || '').trim() || 'City';
+  const cells = [];
+  const usedNames = new Set();
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const lat = minLat + (maxLat - minLat) * ((r + 0.5) / rows);
+      const lng = minLng + (maxLng - minLng) * ((c + 0.5) / cols);
+      const point = { lat: Number(lat.toFixed(5)), lng: Number(lng.toFixed(5)) };
+
+      // Skip cells already covered by a named locality query.
+      const nearest = coords.reduce((best, a) => {
+        const d = distanceKm(point, a);
+        return d < best.d ? { d, a } : best;
+      }, { d: Infinity, a: null });
+      if (nearest.a && nearest.d < 1.2) continue;
+
+      const area = nearest.a && nearest.d < 3.5
+        ? nearest.a.name || nearest.a.locality || ''
+        : '';
+      const dir = compassLabel(point.lat, point.lng, minLat, maxLat, minLng, maxLng);
+      let zoneName = area ? `${area} Area` : `${city} ${dir}`;
+      if (usedNames.has(zoneName.toLowerCase())) zoneName = `${city} ${dir} ${cells.length + 1}`;
+      usedNames.add(zoneName.toLowerCase());
+
+      cells.push({
+        zoneName,
+        // Google Maps ignores the @viewport for result selection, but it does
+        // understand coordinates in the query text: "Restaurants near
+        // 16.36,80.38" returns that pocket of the city. This is what makes a
+        // grid cell a genuinely different search instead of a duplicate feed.
+        queryText: `${prefix}near ${point.lat.toFixed(4)},${point.lng.toFixed(4)}`,
+        lat: point.lat,
+        lng: point.lng,
+        engines: ['maps'],
+        coverageKind: 'grid',
+        isVectorQuery: true,
+        isSingle: false,
+        isApproximate: false
+      });
+    }
+  }
+  return cells;
+}
+
+/**
+ * Merge named locality zones with whole-city grid cells.
+ * @param {string} cityName
+ * @param {string} category
+ * @param {string[]} localityNames
+ * @param {string} locationLabel location string used in locality queries
+ * @param {number} maxZones hard cap
+ */
+function buildCityCoverage(cityName, category, localityNames, locationLabel, maxZones = 32) {
+  const prefix = category ? `${category} in ` : '';
+  const named = (localityNames || []).map((name, idx) => {
+    let coord = ZONE_COORDINATES[String(name).toLowerCase().trim()] || null;
+    if (!coord) {
+      const list = localityNames || [];
+      const angle = (idx * 2 * Math.PI) / Math.max(1, list.length);
+      const base = ZONE_COORDINATES[String(cityName || '').toLowerCase().trim()];
+      if (base) {
+        coord = {
+          lat: Number((base.lat + 0.02 * Math.cos(angle)).toFixed(5)),
+          lng: Number((base.lng + 0.02 * Math.sin(angle)).toFixed(5))
+        };
+      }
+    }
+    return {
+      zoneName: name,
+      queryText: `${prefix}${name}, ${locationLabel}`,
+      lat: coord ? coord.lat : null,
+      lng: coord ? coord.lng : null,
+      engines: ['local_finder', 'maps'],
+      coverageKind: 'locality',
+      isVectorQuery: true,
+      isSingle: false
+    };
+  });
+
+  const anchors = named
+    .filter(z => z.lat && z.lng)
+    .map(z => ({ lat: z.lat, lng: z.lng, name: z.zoneName }));
+  const cityLabel = locationLabel || cityName;
+  const subVectors = buildCategorySubVectorZones(category, cityLabel);
+  const grid = buildCityGridZones(cityName || locationLabel, category, anchors);
+  const mustKeep = [...named, ...subVectors];
+  const merged = [...mustKeep, ...grid];
+
+  if (merged.length <= maxZones) return merged;
+
+  // Keep every locality and every category sub-vector, then sample the grid
+  // evenly by distance so the outer ring is represented too. Sub-vectors are
+  // the highest-yield zones because each one returns a different top-20 list.
+  const center = ZONE_COORDINATES[String(cityName || '').toLowerCase().trim()] || { lat: anchors[0]?.lat, lng: anchors[0]?.lng };
+  const slots = Math.max(0, maxZones - mustKeep.length);
+  const sortedGrid = grid
+    .map(z => ({ z, d: center && center.lat ? distanceKm(z, center) : 0 }))
+    .sort((a, b) => a.d - b.d);
+
+  // User mandate: Search all over the city not leaving one single lead/locality.
+  // Never truncate authentic named localities.
+  if (slots <= 0) return mustKeep;
+  if (slots >= sortedGrid.length) return [...mustKeep, ...sortedGrid.map(entry => entry.z)];
+
+  const picked = new Set();
+  for (let i = 0; i < slots; i++) {
+    const idx = Math.round((i * (sortedGrid.length - 1)) / Math.max(1, slots - 1));
+    picked.add(sortedGrid[idx].z);
+  }
+  // Rounding can collide at the edges; top up with any cell not yet picked.
+  for (const entry of sortedGrid) {
+    if (picked.size >= slots) break;
+    picked.add(entry.z);
+  }
+  return [...mustKeep, ...picked];
+}
+
 // ── UNIVERSAL CATEGORY & LOCALITY INTELLIGENCE ENGINE ──
 function getUniversalCategoryVectors(category, cleanLoc) {  let cat = (category || 'Business').trim();
   cat = cat.replace(new RegExp(`\\s+(in|near|at|around)\\s+.*$`, 'i'), '').trim();
@@ -557,27 +1234,12 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
   // Runs comprehensively across ALL localities of the city (NO arbitrary truncation)
   for (const [key, zones] of Object.entries(AUTHORITATIVE_CLUSTERS)) {
     if (!isExplicitDistrict && (lowerLoc === key || primaryName === key || strippedName === key) && !lowerLoc.includes('rural')) {
-      const targetList = zones; // Comprehensive search of ALL city wards
-      return targetList.map((z, idx) => {
-        let coords = ZONE_COORDINATES[z.toLowerCase()] || null;
-        if (!coords && (ZONE_COORDINATES[key] || ZONE_COORDINATES[strippedName])) {
-          const base = ZONE_COORDINATES[key] || ZONE_COORDINATES[strippedName];
-          const angle = (idx * 2 * Math.PI) / targetList.length;
-          coords = {
-            lat: Number((base.lat + 0.02 * Math.cos(angle)).toFixed(5)),
-            lng: Number((base.lng + 0.02 * Math.sin(angle)).toFixed(5))
-          };
-        }
-        const prefix = category ? `${category} in ` : '';
-        return {
-          zoneName: z,
-          queryText: `${prefix}${z}, ${cleanLoc}`,
-          lat: coords?.lat || null,
-          lng: coords?.lng || null,
-          isVectorQuery: true,
-          isSingle: false
-        };
-      });
+      // Whole-city coverage: every named locality plus viewport grid cells that
+      // fill the gaps between them. Without the grid, a city run can only ever
+      // see the businesses those few phrases happen to rank.
+      const cityLabel = cleanLoc.replace(/\b(city|town)\b/gi, '').replace(/\s+/g, ' ').trim() || cleanLoc;
+      const cityTitle = key.replace(/\b\w/g, ch => ch.toUpperCase());
+      return buildCityCoverage(cityTitle, category, zones, cityLabel, isMaster ? 400 : 250);
     }
   }
 
@@ -600,7 +1262,7 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       { name: cityName + ' South Sector', query: prefix + cityName + ' South' }
     ];
 
-    return citySectors.map((sector, idx) => {
+    const sectorZones = citySectors.map((sector, idx) => {
       let sCoords = null;
       if (cityCenter && cityCenter.lat && cityCenter.lng) {
         const angle = (idx * 2 * Math.PI) / citySectors.length;
@@ -616,10 +1278,17 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
         state: entry.state,
         lat: sCoords ? sCoords.lat : null,
         lng: sCoords ? sCoords.lng : null,
+        engines: ['local_finder', 'maps'],
+        coverageKind: 'locality',
         isVectorQuery: true,
         isSingle: false
       };
     });
+
+    // Fill the rest of the city with viewport grid cells so the sweep is not
+    // limited to eight hand-written sectors.
+    const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6 });
+    return [...sectorZones, ...grid].slice(0, isMaster ? 400 : 250);
   }
 
   // 3. Village Multi-Node Expansion Protocol
@@ -703,13 +1372,15 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       state: entry.state,
       lat: centerCoords?.lat || null,
       lng: centerCoords?.lng || null,
+      scope: 'mandal',
       isVectorQuery: true,
       isSingle: false
     });
 
     // Constituent commercial villages across mandal (top 8-10 villages)
     const villages = Array.isArray(entry.villages) ? entry.villages : [];
-    const selectedVillages = villages.slice(0, 8);
+    const maxVillages = isMaster ? 100 : 12;
+    const selectedVillages = villages.slice(0, maxVillages);
     selectedVillages.forEach((village, idx) => {
       let vCoords = null;
       if (centerCoords?.lat && centerCoords?.lng) {
@@ -726,6 +1397,7 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
         state: entry.state,
         lat: vCoords?.lat || null,
         lng: vCoords?.lng || null,
+        scope: 'mandal',
         isVectorQuery: true,
         isSingle: false
       });
@@ -734,11 +1406,11 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
     return zones;
   }
 
-  // 4. District Sweep: ONLY MASTER CAN DO DISTRICT-WIDE SWEEPS!
+    // 4. District Sweep: ONLY MASTER CAN DO DISTRICT-WIDE SWEEPS!
   if (isExplicitDistrict && isMaster) {
     const entry = districtIndex.get(strippedName) || districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
     if (entry && entry.mandals && entry.mandals.length > 0) {
-      const selected = entry.mandals.slice(0, 60);
+      const selected = entry.mandals.slice(0, 120);
       return selected.map((m, index) => {
         const coords = zoneCoordinates(m, entry.district, index, selected.length);
         const prefix = category ? `${category} in ` : '';
@@ -750,6 +1422,7 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
           lat: coords?.lat || null,
           lng: coords?.lng || null,
           isApproximate: Boolean(coords?.isApproximate),
+          scope: 'district',
           isVectorQuery: true,
           isSingle: false
         };
@@ -761,24 +1434,56 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
   if (isExplicitState && isMaster) {
     const entry = stateIndex.get(strippedName) || stateIndex.get(lowerLoc) || stateIndex.get(primaryName);
     if (entry && entry.districts && entry.districts.length > 0) {
-      const topDistricts = entry.districts.slice(0, 32);
+      const stateDistricts = entry.districts;
+      const zones = [];
       const center = STATE_CENTERS[entry.state.toLowerCase()] || STATE_CENTERS[strippedName] || null;
-      return topDistricts.map((d, index) => {
+      
+      for (let di = 0; di < stateDistricts.length && zones.length < 200; di++) {
+        const d = stateDistricts[di];
         const prefix = category ? `${category} in ` : '';
-        const coords = zoneCoordinates(d, d, index, topDistricts.length)
-          || (center ? spreadCoords(center, index, topDistricts.length, center.radius) : null);
-        return {
+        const distCoords = zoneCoordinates(d, d, di, stateDistricts.length)
+          || (center ? spreadCoords(center, di, stateDistricts.length, center.radius) : null);
+        
+        // District HQ City Zone
+        zones.push({
           zoneName: d,
           queryText: `${prefix}${d}, ${entry.state}`,
           district: d,
           state: entry.state,
-          lat: coords?.lat || null,
-          lng: coords?.lng || null,
-          isApproximate: Boolean(coords?.isApproximate),
+          lat: distCoords?.lat || null,
+          lng: distCoords?.lng || null,
+          isApproximate: Boolean(distCoords?.isApproximate),
+          scope: 'state',
           isVectorQuery: true,
           isSingle: false
-        };
-      });
+        });
+
+        // Add top 3 commercial mandals from each district
+        const cleanD = d.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const distEntry = districtIndex.get(cleanD);
+        if (distEntry && Array.isArray(distEntry.mandals)) {
+          const subMandals = distEntry.mandals
+            .filter(m => m.toLowerCase().replace(/[^a-z0-9]/g, '') !== cleanD)
+            .slice(0, 3);
+          for (let mi = 0; mi < subMandals.length && zones.length < 200; mi++) {
+            const sm = subMandals[mi];
+            const mCoords = zoneCoordinates(sm, d, mi, subMandals.length);
+            zones.push({
+              zoneName: sm,
+              queryText: `${prefix}${sm}, ${d}`,
+              district: d,
+              state: entry.state,
+              lat: mCoords?.lat || null,
+              lng: mCoords?.lng || null,
+              isApproximate: Boolean(mCoords?.isApproximate),
+              scope: 'state',
+              isVectorQuery: true,
+              isSingle: false
+            });
+          }
+        }
+      }
+      return zones;
     }
   }
 
@@ -800,7 +1505,7 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
     { name: `${cityName} South Sector`, query: `${prefix}${cityName} South`, offset: -0.022 }
   ];
 
-  return citySectors.map((sector, idx) => {
+  const sectorZones = citySectors.map((sector, idx) => {
     let sCoords = null;
     if (cityCenter?.lat && cityCenter?.lng) {
       const angle = (idx * 2 * Math.PI) / citySectors.length;
@@ -814,10 +1519,22 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       queryText: sector.query,
       lat: sCoords?.lat || null,
       lng: sCoords?.lng || null,
+      engines: ['local_finder', 'maps'],
+      coverageKind: 'locality',
       isVectorQuery: true,
       isSingle: false
     };
   });
+
+  // Any city not in the curated clusters still gets the full treatment:
+  // named sectors + real sub-category vectors + a grid that covers the city
+  // and its 5 km ring.
+  const subVectors = buildCategorySubVectorZones(category, cityName);
+  const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6 });
+  const mustKeep = [...sectorZones, ...subVectors];
+  const cap = isMaster ? 400 : 250;
+  const gridSlots = Math.max(0, cap - mustKeep.length);
+  return [...mustKeep, ...grid.slice(0, gridSlots)];
 }
 
 function classifyLocation(queryOrLoc) {
@@ -882,13 +1599,47 @@ function classifyLocation(queryOrLoc) {
   for (const c of cleanCandidates) {
     if (AUTHORITATIVE_CLUSTERS[c]) {
       const zones = AUTHORITATIVE_CLUSTERS[c];
+      const cityTitle = c.charAt(0).toUpperCase() + c.slice(1);
+      const coverage = buildCityCoverage(cityTitle, '', zones, cityTitle, 250);
       return {
         type: 'metro',
-        name: c.charAt(0).toUpperCase() + c.slice(1),
-        zoneCount: zones.length,
-        estimatedLeads: zones.length * 50,
+        name: cityTitle,
+        zoneCount: coverage.length,
+        estimatedLeads: coverage.length * 28,
         badge: '🏙️ METRO/CITY',
-        label: `City sweep: ${zones.length} urban wards`
+        label: `Whole-city sweep: ${coverage.length} zones`
+      };
+    }
+  }
+
+  // Check district headquarters / major cities (e.g. Nellore, Nalgonda, Kurnool, Solapur, Bareilly)
+  if (!explicitDistrict) {
+    for (const c of cleanCandidates) {
+      if (districtIndex.has(c)) {
+        const distObj = districtIndex.get(c);
+        return {
+          type: 'city',
+          name: distObj.district,
+          zoneCount: 8 + buildCityGridZones(distObj.district, '', [], { cappedRadiusKm: 6 }).length,
+          estimatedLeads: 240,
+          badge: '🏙️ CITY/TOWN',
+          label: `Whole-city sweep: ${distObj.district}`
+        };
+      }
+    }
+  }
+
+  // Check mandal
+  for (const c of cleanCandidates) {
+    if (mandalIndex.has(c)) {
+      const mObj = mandalIndex.get(c);
+      return {
+        type: 'mandal',
+        name: mObj.subDistrict,
+        zoneCount: 8,
+        estimatedLeads: 60,
+        badge: '📍 MANDAL/TOWN',
+        label: `Mandal sweep: ${mObj.subDistrict} (${mObj.district})`
       };
     }
   }
@@ -909,33 +1660,21 @@ function classifyLocation(queryOrLoc) {
     }
   }
 
-  // Check mandal
-  for (const c of cleanCandidates) {
-    if (mandalIndex.has(c)) {
-      const mObj = mandalIndex.get(c);
-      return {
-        type: 'mandal',
-        name: mObj.subDistrict,
-        zoneCount: 8,
-        estimatedLeads: 60,
-        badge: '📍 MANDAL/TOWN',
-        label: `Mandal sweep: ${mObj.subDistrict} (${mObj.district})`
-      };
-    }
-  }
-
   return {
     type: 'city',
     name: locCandidate,
-    zoneCount: 8,
-    estimatedLeads: 70,
+    zoneCount: 8 + buildCityGridZones(locCandidate, '', [], { cappedRadiusKm: 6 }).length,
+    estimatedLeads: 240,
     badge: '🏙️ CITY/TOWN',
-    label: `City sweep: ${locCandidate}`
+    label: `Whole-city sweep: ${locCandidate}`
   };
 }
 
 module.exports = {
   resolveUniversalZones,
+  buildCityGridZones,
+  buildCityCoverage,
+  buildCategorySubVectorZones,
   getUniversalCategoryVectors,
   classifyLocation,
   zoneCoordinates,
@@ -947,5 +1686,7 @@ module.exports = {
   mandalIndex,
   districtIndex,
   villageIndex,
-  stateIndex
+  stateIndex,
+  MANDAL_TYPOLOGY,
+  getMandalTypology
 };

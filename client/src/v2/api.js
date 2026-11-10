@@ -18,7 +18,35 @@ client.interceptors.request.use(config => {
   return config;
 });
 
+// Response interceptor: monitor connection health and dispatch recovery/offline events
+client.interceptors.response.use(
+  response => {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('leadharvest:server_online'));
+    }
+    return response;
+  },
+  error => {
+    if (typeof window !== 'undefined') {
+      const isOffline = !error.response || error.response?.status === 503 || error.code === 'ERR_NETWORK';
+      if (isOffline) {
+        window.dispatchEvent(new CustomEvent('leadharvest:server_offline', { detail: { error } }));
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const apiBase = API_URL;
+
+export async function pingHealth() {
+  try {
+    const { data } = await client.get('/health', { timeout: 2500 });
+    return data?.ok === true;
+  } catch (e) {
+    return false;
+  }
+}
 
 export async function getHealth() {
   const { data } = await client.get('/deep-profile/health');
@@ -73,8 +101,9 @@ export async function getGeoStats() {
   return data;
 }
 
-export async function getVendors() {
-  const { data } = await client.get('/vendors');
+export async function getVendors(params = {}) {
+  const query = typeof params === 'number' ? { limit: params } : (params || {});
+  const { data } = await client.get('/vendors', { params: query });
   return Array.isArray(data) ? data : [];
 }
 
@@ -103,8 +132,13 @@ export async function classifySearchLocation(q) {
   return data?.classification || null;
 }
 
-export async function stopAllScrapes() {
-  const { data } = await client.post('/scrape/jobs/stop-all');
+export async function stopAllScrapes(sessionId) {
+  const { data } = await client.post('/scrape/jobs/stop-all', sessionId ? { sessionId } : {});
+  return data;
+}
+
+export async function resumeScrape(sessionId) {
+  const { data } = await client.post('/scrape/resume', { sessionId });
   return data;
 }
 
@@ -183,8 +217,12 @@ export async function batchDeleteSessions(sessionIds) {
   return data;
 }
 
-export function sessionExportUrl(sessionId, format = 'csv') {
-  return `${API_URL}/sessions/export/${encodeURIComponent(sessionId)}?format=${format}`;
+export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
+  const actualFormat = format === 'area-csv' ? 'csv' : format;
+  let url = `${API_URL}/sessions/export/${encodeURIComponent(sessionId)}?format=${actualFormat}`;
+  if (format === 'area-csv' || options?.divided) url += '&divided=true';
+  if (options && options.area && options.area !== 'all') url += `&area=${encodeURIComponent(options.area)}`;
+  return url;
 }
 
 export function streamUrl() {
@@ -211,4 +249,113 @@ export async function markNotificationRead(id) {
 export async function getWorkspaceStatus() {
   const { data } = await client.get('/notifications/status');
   return data?.client || null;
+}
+
+/* ------------------------------------------------------ WhatsApp CRM (own account) */
+// Everything here talks to the customer's own WhatsApp Web session. There is no
+// API key anywhere: the only credential is the QR scan the customer performs.
+
+export async function getWaStatus() {
+  const { data } = await client.get('/wa/status');
+  return data;
+}
+
+export async function connectWa() {
+  const { data } = await client.post('/wa/connect');
+  return data;
+}
+
+export async function disconnectWa(wipe = false) {
+  const { data } = await client.post('/wa/disconnect', { wipe });
+  return data;
+}
+
+export async function syncWaChats() {
+  const { data } = await client.post('/wa/sync');
+  return data;
+}
+
+export async function getWaLeads(params = {}) {
+  const { data } = await client.get('/wa/leads', { params });
+  return data?.leads || [];
+}
+
+export async function getWaConversations(params = {}) {
+  const { data } = await client.get('/wa/conversations', { params });
+  return data?.conversations || [];
+}
+
+export async function createWaConversation(body) {
+  const { data } = await client.post('/wa/conversations', body);
+  return data?.conversation;
+}
+
+export async function getWaConversation(id) {
+  const { data } = await client.get(`/wa/conversations/${encodeURIComponent(id)}`);
+  return data;
+}
+
+export async function updateWaConversation(id, patch) {
+  const { data } = await client.patch(`/wa/conversations/${encodeURIComponent(id)}`, patch);
+  return data?.conversation;
+}
+
+export async function sendWaMessage(body) {
+  const { data } = await client.post('/wa/messages', body);
+  return data;
+}
+
+export async function sendWaBulk(body) {
+  const { data } = await client.post('/wa/bulk', body, { timeout: 120000 });
+  return data;
+}
+
+export async function getWaProducts() {
+  const { data } = await client.get('/wa/products');
+  return data?.products || [];
+}
+
+export async function saveWaProduct(body) {
+  const { data } = await client.post('/wa/products', body);
+  return data?.product;
+}
+
+export async function deleteWaProduct(id) {
+  const { data } = await client.delete(`/wa/products/${encodeURIComponent(id)}`);
+  return data;
+}
+
+export async function getWaSnippets() {
+  const { data } = await client.get('/wa/snippets');
+  return data?.snippets || [];
+}
+
+export async function saveWaSnippet(body) {
+  const { data } = await client.post('/wa/snippets', body);
+  return data?.snippet;
+}
+
+export async function deleteWaSnippet(id) {
+  const { data } = await client.delete(`/wa/snippets/${encodeURIComponent(id)}`);
+  return data;
+}
+
+export async function getWaAutomations() {
+  const { data } = await client.get('/wa/automations');
+  return data?.automations || [];
+}
+
+export async function saveWaAutomation(body) {
+  const { data } = await client.post('/wa/automations', body);
+  return data?.automation;
+}
+
+export async function getWaAnalytics() {
+  const { data } = await client.get('/wa/analytics');
+  return data?.analytics || {};
+}
+
+export async function updateWaSettings(patch) {
+  const { data } = await client.patch('/wa/settings', patch);
+  return data?.session;
 }

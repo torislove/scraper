@@ -12,6 +12,7 @@
     "build": "cd client && npm run build",
     "build:client": "cd client && npm run build",
     "build:master": "cd master && npm run build",
+    "benchmark": "node server/src/utils/benchmarkScraperFidelity.js",
     "bild": "npm run build",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix master install"
   },

@@ -5,11 +5,17 @@ import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
+import '@ui3d/tokens.css';
+import '@ui3d/kit.css';
 import './v2/v2.css';
+import './v2/ui3d.css';
 
 // scraper.co.in has exactly one workspace: the command center.
 const LandingV2 = lazy(() => import('./v2/LandingV2'));
 const CommandCenter = lazy(() => import('./v2/CommandCenter'));
+// Dev-only surface gallery. `import.meta.env.DEV` is statically false in every
+// build, so this import is removed from production and desktop bundles.
+const Lab = import.meta.env.DEV ? lazy(() => import('./v2/Lab')) : null;
 
 function PageLoader() {
   return (
@@ -130,6 +136,7 @@ export default function App() {
           {/* The Windows build has no marketing site: it opens the workspace. */}
           <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
           <Route path="/command" element={<CommandCenter />} />
+          {import.meta.env.DEV && Lab ? <Route path="/lab" element={<Lab />} /> : null}
 
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<Terms />} />

@@ -7,6 +7,8 @@
  * - vCard 3.0 (.vcf) mobile phonebook contact generation
  */
 
+import { productArt } from './productArt';
+
 export const DEFAULT_PRODUCTS = [
   {
     id: 'album_premium',
@@ -14,7 +16,7 @@ export const DEFAULT_PRODUCTS = [
     price: '₹3,500',
     description: 'Ultra HD non-tearable velvet matte photobook with luxury metallic briefcase & UV embossing.',
     link: 'https://scraper.co.in/catalog/wedding-albums',
-    image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
+    image: productArt('album'),
     category: 'Printing & Digital Press'
   },
   {
@@ -23,7 +25,7 @@ export const DEFAULT_PRODUCTS = [
     price: 'Tier-1 B2B Rates',
     description: 'Direct manufacturer supply with 30-day credit terms, GST billing, and guaranteed doorstep freight.',
     link: 'https://scraper.co.in/catalog/wholesale-rates',
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80',
+    image: productArt('b2b'),
     category: 'Wholesale & Distribution'
   },
   {
@@ -32,7 +34,7 @@ export const DEFAULT_PRODUCTS = [
     price: '₹14,999',
     description: 'Ultra-fast mobile website, Google Maps local SEO ranking & 1-click WhatsApp lead capture widget.',
     link: 'https://scraper.co.in/services/digital-growth',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80',
+    image: productArt('web'),
     category: 'Agencies & Software'
   },
   {
@@ -41,7 +43,7 @@ export const DEFAULT_PRODUCTS = [
     price: 'Custom Quote',
     description: 'Licensed certified technicians with same-day emergency dispatch, genuine parts & 6-month warranty.',
     link: 'https://scraper.co.in/services/commercial',
-    image: 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=600&auto=format&fit=crop&q=80',
+    image: productArt('service'),
     category: 'Local Services'
   }
 ];

@@ -13,6 +13,7 @@ import {
   sendMasterNotification, updateMasterClient
 } from './api';
 import './masterClients.css';
+import { BrandIcon } from './components/BrandLogo';
 
 const PLAN_ORDER = ['free', 'starter', 'pro', 'agency', 'custom'];
 const PLAN_LABEL = {
@@ -88,10 +89,9 @@ export default function MasterClients() {
       setClients(list.clients);
       setNotifications(messages);
     } catch (error) {
-      const message = error?.response?.status === 403
-        ? 'Master key required. Set it with localStorage.scraper_master_key.'
-        : error.message || 'Could not reach the engine.';
-      if (!quiet) toast.error(message);
+      if (!quiet && error?.response?.status !== 403) {
+        toast.error(error.message || 'Could not reach the engine.');
+      }
     } finally {
       setLoading(false);
     }
@@ -287,10 +287,13 @@ export default function MasterClients() {
           <button type="button" className="v2-desk-back" onClick={() => navigate('/command')}>
             <ArrowLeft size={15} /> Command Center
           </button>
-          <span className="v2-desk-title">
-            <b>Client Desk</b>
-            <em>Master workspace</em>
-          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <BrandIcon size={26} />
+            <span className="v2-desk-title">
+              <b>Client Desk</b>
+              <em>Master workspace</em>
+            </span>
+          </div>
         </div>
 
         <div className="v2-desk-tabs" role="tablist">

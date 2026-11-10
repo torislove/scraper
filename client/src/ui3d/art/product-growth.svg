@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 220" width="600" height="220" role="img" aria-label="Business website and Google Maps growth package">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07101f"/>
+      <stop offset="0.5" stop-color="#0b1730"/>
+      <stop offset="1" stop-color="#060d18"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.72" cy="0.1" r="0.9">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#6366f1" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#132239"/>
+      <stop offset="1" stop-color="#0a1526"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#0ea5e9" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#7dd3fc"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="pin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fda4af"/>
+      <stop offset="1" stop-color="#e11d48"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <rect width="600" height="220" fill="url(#bg)"/>
+  <rect width="600" height="220" fill="url(#halo)"/>
+
+  <!-- glow under panel -->
+  <ellipse cx="300" cy="196" rx="210" ry="16" fill="#0ea5e9" opacity="0.12" filter="url(#soft)"/>
+
+  <!-- browser chrome -->
+  <g>
+    <rect x="58" y="36" width="360" height="158" rx="10" fill="#0a1526" stroke="#1d3350" stroke-width="1.2"/>
+    <rect x="58" y="36" width="360" height="24" rx="10" fill="#101f36"/>
+    <rect x="58" y="50" width="360" height="10" fill="#101f36"/>
+    <circle cx="72" cy="48" r="3.2" fill="#f87171" opacity="0.8"/>
+    <circle cx="83" cy="48" r="3.2" fill="#fbbf24" opacity="0.8"/>
+    <circle cx="94" cy="48" r="3.2" fill="#34d399" opacity="0.8"/>
+    <rect x="112" y="43" width="150" height="10" rx="5" fill="#0a1526" stroke="#1d3350" stroke-width="0.8"/>
+    <text x="120" y="51" font-family="Segoe UI, Arial, sans-serif" font-size="6.5" fill="#64748b">yourbusiness.in</text>
+  </g>
+
+  <!-- analytics panel -->
+  <g>
+    <rect x="76" y="72" width="324" height="108" rx="7" fill="url(#panel)" stroke="#193049" stroke-width="1"/>
+
+    <!-- header -->
+    <rect x="90" y="84" width="52" height="6" rx="3" fill="#334e6b"/>
+    <rect x="90" y="95" width="30" height="4" rx="2" fill="#22384f"/>
+
+    <!-- bars -->
+    <g>
+      <rect x="94" y="146" width="16" height="24" rx="2" fill="url(#bar)" opacity="0.55"/>
+      <rect x="118" y="134" width="16" height="36" rx="2" fill="url(#bar)" opacity="0.7"/>
+      <rect x="142" y="140" width="16" height="30" rx="2" fill="url(#bar)" opacity="0.6"/>
+      <rect x="166" y="120" width="16" height="50" rx="2" fill="url(#bar)" opacity="0.85"/>
+      <rect x="190" y="112" width="16" height="58" rx="2" fill="url(#bar)" opacity="0.95"/>
+    </g>
+    <line x1="90" y1="170" x2="218" y2="170" stroke="#1d3350" stroke-width="1"/>
+
+    <!-- trend line -->
+    <path d="M92 158 L118 148 L144 152 L170 132 L196 138 L222 116 L248 122 L274 100 L300 108 L326 88"
+          fill="none" stroke="url(#line)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M92 158 L118 148 L144 152 L170 132 L196 138 L222 116 L248 122 L274 100 L300 108 L326 88 L326 170 L92 170 Z"
+          fill="url(#line)" opacity="0.07"/>
+    <g fill="#5eead4">
+      <circle cx="170" cy="132" r="2.4"/>
+      <circle cx="274" cy="100" r="2.4"/>
+      <circle cx="326" cy="88" r="3"/>
+    </g>
+
+    <!-- KPI chips -->
+    <g>
+      <rect x="244" y="84" width="66" height="22" rx="5" fill="#0d1c30" stroke="#1d3a58" stroke-width="0.8"/>
+      <text x="252" y="94" font-family="Segoe UI, Arial, sans-serif" font-size="5.5" fill="#64748b">LEADS / MONTH</text>
+      <text x="252" y="102" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="700" fill="#7dd3fc">1,284</text>
+      <rect x="318" y="84" width="66" height="22" rx="5" fill="#0d1c30" stroke="#1d3a58" stroke-width="0.8"/>
+      <text x="326" y="94" font-family="Segoe UI, Arial, sans-serif" font-size="5.5" fill="#64748b">GROWTH</text>
+      <text x="326" y="102" font-family="Segoe UI, Arial, sans-serif" font-size="8" font-weight="700" fill="#5eead4">+38%</text>
+    </g>
+  </g>
+
+  <!-- map pin card -->
+  <g transform="translate(392 60)">
+    <rect x="0" y="0" width="150" height="106" rx="10" fill="#0b1830" stroke="#1e3a5f" stroke-width="1.2"/>
+    <rect x="0" y="0" width="150" height="106" rx="10" fill="none" stroke="#7dd3fc" stroke-width="0.6" opacity="0.35"/>
+    <!-- mini map -->
+    <g opacity="0.85">
+      <rect x="12" y="12" width="126" height="64" rx="6" fill="#0e2239"/>
+      <path d="M12 44 L46 34 L74 48 L100 36 L138 50" stroke="#1c3f5e" stroke-width="2" fill="none"/>
+      <path d="M40 12 L52 40 L44 76" stroke="#173350" stroke-width="2" fill="none"/>
+      <path d="M96 12 L88 44 L104 76" stroke="#173350" stroke-width="2" fill="none"/>
+      <circle cx="74" cy="42" r="12" fill="#38bdf8" opacity="0.14"/>
+      <path d="M74 30 c-5 0-9 4-9 9 0 6.6 9 15 9 15 s9-8.4 9-15 c0-5-4-9-9-9 z" fill="url(#pin)"/>
+      <circle cx="74" cy="39" r="3.2" fill="#fff" opacity="0.9"/>
+    </g>
+    <text x="12" y="92" font-family="Segoe UI, Arial, sans-serif" font-size="7" font-weight="600" fill="#cbd5e1">Google Maps verified</text>
+    <text x="12" y="101" font-family="Segoe UI, Arial, sans-serif" font-size="5.5" fill="#64748b">website · reviews · directions</text>
+  </g>
+
+  <!-- floating sparkline chip -->
+  <g transform="translate(430 148)">
+    <rect width="108" height="44" rx="9" fill="#0b1830" stroke="#1e3a5f" stroke-width="1"/>
+    <text x="10" y="14" font-family="Segoe UI, Arial, sans-serif" font-size="5.5" fill="#64748b">CALLS</text>
+    <text x="10" y="27" font-family="Segoe UI, Arial, sans-serif" font-size="10" font-weight="700" fill="#e6edf7">326</text>
+    <path d="M58 32 L68 26 L78 29 L88 18 L98 22" stroke="#5eead4" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- cursor -->
+  <g transform="translate(360 172)">
+    <path d="M0 0 L3.4 13 L6.6 8.6 L12 7 Z" fill="#e6edf7"/>
+  </g>
+</svg>

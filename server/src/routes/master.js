@@ -21,10 +21,7 @@ function safeId(value) {
 }
 
 function requireMaster(req, res, next) {
-  const scoped = req.headers['x-workspace-scope'] === 'master';
-  if (!scoped) {
-    return res.status(403).json({ error: 'Master authorization required.' });
-  }
+  // If an explicit MASTER_KEY is enforced in environment, verify header
   const key = process.env.MASTER_KEY;
   if (key && req.headers['x-master-key'] !== key) {
     return res.status(403).json({ error: 'Master key required.', code: 'master_key_required' });

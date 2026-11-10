@@ -9,6 +9,99 @@ const { verifyWithAI } = require('../utils/aiParser');
 const { normalizePhone } = require('../utils/phoneUtils');
 const fidelity = require('../services/categoryFidelity');
 
+/**
+ * Zone context pool.
+ *
+ * A fresh Chromium context per zone costs ~0.4–0.6 s warm and ~5.5 s when five
+ * are created at once on a cold browser. Reusing a small pool also keeps the
+ * Maps JS bundle in the HTTP cache, so the next zone's navigation is cheaper.
+ * Contexts are recycled after a fixed number of zones so cookies, memory and
+ * any accumulated state cannot grow without bound.
+ */
+const ZONE_CONTEXT_POOL_SIZE = Math.max(1, Math.min(8, Number(process.env.SCRAPER_CONTEXT_POOL) || 6));
+const ZONE_CONTEXT_MAX_USES = Math.max(1, Number(process.env.SCRAPER_CONTEXT_USES) || 25);
+const zoneContextPool = [];
+
+function makeZoneContext(browser) {
+  return browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    viewport: { width: 1280, height: 800 }
+  }).then(context => {
+    const slot = { context, browser, uses: 0, dead: false };
+    try {
+      context.on('close', () => { slot.dead = true; });
+    } catch (e) {}
+    return slot;
+  });
+}
+
+/**
+ * Build the pool before the first wave.
+ *
+ * Creating five contexts at once on a cold browser costs ~5 s of wall time
+ * (they contend for the same CPU). Creating them one after another costs a
+ * fraction of that, and the first wave then starts with a warm pool. Called
+ * by the orchestrator before it dispatches zones.
+ */
+async function warmZoneContextPool(browser, count = ZONE_CONTEXT_POOL_SIZE) {
+  if (!browser) return 0;
+  const started = Date.now();
+  let made = 0;
+  const target = Math.min(count, ZONE_CONTEXT_POOL_SIZE);
+  for (let i = 0; i < target; i++) {
+    if (zoneContextPool.length >= ZONE_CONTEXT_POOL_SIZE) break;
+    try {
+      zoneContextPool.push(await makeZoneContext(browser));
+      made++;
+    } catch (e) {
+      break;
+    }
+  }
+  if (process.env.SCRAPER_TRACE_ZONE === '1') {
+    addLog(`[Zone Timing] pool warm · ${made} context(s) in ${Date.now() - started}ms`);
+  }
+  return made;
+}
+
+async function acquireZoneContext(browser) {
+  while (zoneContextPool.length) {
+    const slot = zoneContextPool.pop();
+    const reusable = slot
+      && slot.browser === browser
+      && !slot.dead
+      && slot.uses < ZONE_CONTEXT_MAX_USES;
+    if (reusable) {
+      slot.uses++;
+      return slot;
+    }
+    try { await slot.context.close(); } catch (e) {}
+  }
+
+  const slot = await makeZoneContext(browser);
+  slot.uses = 1;
+  return slot;
+}
+
+async function releaseZoneContext(slot, { recycle = false } = {}) {
+  if (!slot || !slot.context) return;
+  const keep = !recycle
+    && !slot.dead
+    && slot.uses < ZONE_CONTEXT_MAX_USES
+    && zoneContextPool.length < ZONE_CONTEXT_POOL_SIZE;
+  if (keep) {
+    zoneContextPool.push(slot);
+    return;
+  }
+  try { await slot.context.close(); } catch (e) {}
+}
+
+async function closeZoneContextPool() {
+  const slots = zoneContextPool.splice(0, zoneContextPool.length);
+  for (const slot of slots) {
+    try { await slot.context.close(); } catch (e) {}
+  }
+}
+
 // Lead Quality Scoring Algorithm (0 - 100)
 function calculateLeadScore(vendor) {
   let score = 0;
@@ -327,12 +420,13 @@ async function extractStorefrontMediaAndLogo(page, websiteUrl, businessName) {
 // ──────────────────────────────────────────────────────────────────────────────
 // STRICT MULTI-LAYER GEOGRAPHIC CONTAINMENT GUARD (ZERO BLEED)
 // ──────────────────────────────────────────────────────────────────────────────
-function isListingRelevantToQuery(name, address, district, stateName, mandal, location, coords = null, boundingbox = null, parentCity = null) {
+function isListingRelevantToQuery(name, address, district, stateName, mandal, location, coords = null, boundingbox = null, parentCity = null, isMaster = false, scope = null) {
   if (!address && !coords) return { relevant: true }; // Insufficient data to reject
 
   const addrLower = (address || '').toLowerCase();
   const nameLower = (name || '').toLowerCase();
   const fullText = `${nameLower} ${addrLower}`;
+  const isTerritorialSweep = Boolean(isMaster || scope === 'district' || scope === 'state' || scope === 'mandal');
 
   // 1. Precise State Filter: Address must NOT belong to a different state
   const knownStates = [
@@ -379,12 +473,23 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
     'narasaraopet', 'sattenapalle', 'chilakaluripet', 'machilipatnam', 'gudivada'
   ];
 
-  if (townToken.length >= 3) {
+  if (!isTerritorialSweep && townToken.length >= 3) {
     // A locality inside a city is still inside that city. If the run's parent
     // city matches the hub, listings anywhere in the hub are in-bounds even when
     // they do not repeat the locality name.
     const parentToken = String(parentCity || '').toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const hub of majorMetros) {
+      // Twin Cities Conurbation Exception:
+      // Hyderabad & Secunderabad are the same Greater Hyderabad (GHMC) twin city.
+      const isHydSec = (townToken.includes('hyderabad') || townToken.includes('secunderabad') || parentToken.includes('hyderabad') || parentToken.includes('secunderabad'));
+      if (isHydSec && (hub === 'hyderabad' || hub === 'secunderabad')) {
+        continue;
+      }
+      const isBlr = (townToken.includes('bangalore') || townToken.includes('bengaluru') || parentToken.includes('bangalore') || parentToken.includes('bengaluru'));
+      if (isBlr && (hub === 'bangalore' || hub === 'bengaluru')) {
+        continue;
+      }
+
       const insideParentCity = parentToken.length >= 3
         && (hub === parentToken || (hub.length >= 5 && parentToken.includes(hub)));
       // If target town is NOT the metro hub itself (e.g. target is 'narasaraopet', hub is 'guntur')
@@ -431,6 +536,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
   }
 
   // 4. Urban Pincode Range Checks
+  if (!isTerritorialSweep) {
   // Guntur City urban core: 522001 - 522007
   // Vijayawada / Krishna: 520001 - 521999
   // Prakasam / Ongole: 523001 - 523999
@@ -448,6 +554,8 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
         return { relevant: false, reason: `Postal code ${pin} belongs to Krishna / Vijayawada district` };
       }
     }
+  }
+
   }
 
   // 5. GPS Anchor Distance Check (Ultra-Precise Radius Clamping)
@@ -471,18 +579,28 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
       const distKm = getDistanceKm(coords.lat, coords.lng, anchorCoords.lat, anchorCoords.lng);
       const isMetro = /pune|mumbai|bombay|delhi|bangalore|bengaluru|hyderabad|chennai|kolkata/i.test(district || cleanTargetTown);
       const isSpecificZone = anchorCoords !== ZONE_COORDINATES[district?.toLowerCase()];
-      const maxAllowedDist = isSpecificZone ? 18.0 : (isMetro ? 38.0 : 25.0);
-      if (distKm > maxAllowedDist) {
-        return {
-          relevant: false,
-          reason: `Coordinates (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}) are ${distKm.toFixed(1)}km away from ${cleanTargetTown} center (max ${maxAllowedDist}km)`
-        };
+      if (isTerritorialSweep) {
+        const maxTerritorialDist = scope === 'state' ? 800.0 : 140.0;
+        if (distKm > maxTerritorialDist) {
+          return {
+            relevant: false,
+            reason: `Coordinates (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}) exceed territorial perimeter (${distKm.toFixed(1)}km > ${maxTerritorialDist}km)`
+          };
+        }
+      } else {
+        const maxAllowedDist = isSpecificZone ? 18.0 : (isMetro ? 38.0 : 25.0);
+        if (distKm > maxAllowedDist) {
+          return {
+            relevant: false,
+            reason: `Coordinates (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}) are ${distKm.toFixed(1)}km away from ${cleanTargetTown} center (max ${maxAllowedDist}km)`
+          };
+        }
       }
 
     }
 
     // Also check boundingbox if supplied
-    if (boundingbox && boundingbox.length === 4) {
+    if (!isTerritorialSweep && boundingbox && boundingbox.length === 4) {
       const minLat = parseFloat(boundingbox[0]);
       const maxLat = parseFloat(boundingbox[1]);
       const minLng = parseFloat(boundingbox[2]);
@@ -521,6 +639,26 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+/**
+ * A zone query is centred on one point. Google can still return a branch or a
+ * competitor far outside that pocket (we measured a 25 km lead in a 5 km Guntur
+ * run). Anything farther than the searched radius plus a small tolerance is not
+ * part of this zone and must not enter the leads.
+ */
+function zoneDistanceReject(coords, centerLat, centerLng, radiusKm, toleranceKm = 1.5, isMaster = false, scope = null) {
+  if (isMaster || scope === 'district' || scope === 'state' || scope === 'mandal' || (radiusKm && Number(radiusKm) >= 20)) {
+    return null; // Master territorial swarms bypass radial circle truncation
+  }
+  if (!coords || !Number.isFinite(Number(coords.lat)) || !Number.isFinite(Number(coords.lng))) return null;
+  if (centerLat == null || centerLng == null) return null;
+  const cLat = Number(centerLat);
+  const cLng = Number(centerLng);
+  if (!Number.isFinite(cLat) || !Number.isFinite(cLng) || (cLat === 0 && cLng === 0)) return null;
+  const maxKm = Math.max(3, (Number(radiusKm) || 5) + toleranceKm);
+  const distanceKm = getDistanceKm(coords.lat, coords.lng, cLat, cLng);
+  return distanceKm > maxKm ? { distanceKm, maxKm } : null;
+}
+
 function isWithinBounds(lat, lng, bbox, toleranceKm = 2.5) {
   if (!bbox || bbox.length !== 4) return true; // No bounds provided
   
@@ -538,11 +676,23 @@ function isWithinBounds(lat, lng, bbox, toleranceKm = 2.5) {
   return true;
 }
 
-async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "legacy", centerLat = null, centerLng = null, radiusKm = null, strategy = 'broad', district = null, stateName = null, boundingbox = null, cityHint = null) {
+async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "legacy", centerLat = null, centerLng = null, radiusKm = null, strategy = 'broad', district = null, stateName = null, boundingbox = null, cityHint = null, isMaster = false, scope = null, mandal = null) {
+  // Opt-in phase timing. Set SCRAPER_TRACE_ZONE=1 to see where a zone's
+  // wall-clock time actually goes. Off by default so normal logs stay readable.
+  const zoneTrace = process.env.SCRAPER_TRACE_ZONE === '1';
+  const zoneT0 = Date.now();
+  let zonePhase = zoneT0;
+  const markZone = (label) => {
+    if (!zoneTrace) return;
+    const now = Date.now();
+    addLog(`[Zone Timing] ${String(exactQuery).slice(0, 48)} · ${label} ${now - zonePhase}ms (total ${now - zoneT0}ms)`);
+    zonePhase = now;
+  };
   // `location` can be a synthetic coverage-zone label ("MG Road Vijayawada",
   // "Gunur Central Commercial"). The city stored on a vendor must stay the
   // real base location, never that generated zone phrase.
   const vendorCity = cityHint || location || 'Global';
+  const resolvedMandal = mandal || (scope === 'mandal' ? location : '') || (location && !location.toLowerCase().includes('district') ? location.replace(/\b(mandal|taluk|tehsil|block)\b/gi, '').trim() : '');
   addLog(`[Cyber Core] Dispatching autonomous stealth crawler for query: "${exactQuery}"`);
 
   // If Playwright not available (production/Render), skip browser scraping
@@ -559,30 +709,49 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
   let context = null;
   let page = null;
+  let zoneSlot = null;
+  let zoneFailed = false;
 
   try {
-    context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 }
-    });
+    zoneSlot = await acquireZoneContext(browser);
+    context = zoneSlot.context;
     page = await context.newPage();
+    page.setDefaultTimeout(8000);
     await applyAdvancedStealth(page);
 
     // Optimize page for ultra-fast scraping (aborts media, fonts, and tracking scripts)
     await optimizePageForSpeed(page);
+    markZone('context+page');
 
     const searchUrl = exactQuery.startsWith('http')
       ? exactQuery
-      : `https://www.google.com/maps/search/${encodeURIComponent(exactQuery)}`;
+      : `https://www.google.com/maps/search/${encodeURIComponent(exactQuery)}${(() => {
+          // Area-bias the search. Without a viewport every zone with the same
+          // text query returns the identical Google feed, which is exactly why
+          // a city run could never see more than the first ~120 places.
+          const lat = Number(centerLat);
+          const lng = Number(centerLng);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return '';
+          const km = Number(radiusKm) || 5;
+          const zoom = Math.max(11, Math.min(16, Math.round(14 - Math.log2(Math.max(0.5, km / 2)))));
+          return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
+        })()}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
     // Wait for load with rapid timeout
-    await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
+    // Measured: 'domcontentloaded' returns ~1.3 s earlier but the feed then
+    // takes ~2.5 s longer to appear, for a net loss of ~1.2 s per zone. Media
+    // and fonts are already aborted by optimizePageForSpeed, so 'load' is
+    // genuinely cheap here and the feed is ready sooner.
+    await page.goto(searchUrl, { waitUntil: 'load', timeout: 20000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
+    markZone('goto(load)');
 
     const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
     try {
       if (await consentBtn.count() > 0) {
         await consentBtn.first().click({ timeout: 5000 }).catch(()=>{});
-        await page.waitForTimeout(1000);
+        // The feed wait below is the real readiness signal; the old fixed
+        // 1000 ms sleep after the click was pure dead time.
+        markZone('consent');
       }
     } catch(e) {}
 
@@ -594,6 +763,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     } catch (e) {
       addLog("[Cyber Core] Waiting for listing feed timed out, extracting visible nodes...");
     }
+    markZone('feed-wait');
 
     let scrapedResults = [];
 
@@ -616,9 +786,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         const rawPhone = await phoneEl.getAttribute('aria-label');
         phone = rawPhone ? rawPhone.replace(/^Phone:\s*/i, '') : '';
       }
+      let parsedPhone = null;
       if (phone) {
-        const parsedPhone = normalizePhone(phone, { context: 'phone tel' });
-        phone = parsedPhone ? parsedPhone.e164 : '';
+        parsedPhone = normalizePhone(phone, { context: 'phone tel' });
+        phone = parsedPhone ? parsedPhone.displayPhone : phone;
       }
 
       let rating = null;
@@ -650,9 +821,15 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       const finalPhoto = mediaData.photo;
 
       const coords = extractCoords(page.url());
-      
+
+      const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope);
+      if (zoneReject) {
+        addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
+        return scrapedResults;
+      }
+
       // Strict Containment Guard Check
-      const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox, cityHint);
+      const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox, cityHint, isMaster, scope);
       if (!containment.relevant) {
         addLog(`[Containment Guard] Discarded "${name}" - ${containment.reason}`);
         const oobLead = {
@@ -667,7 +844,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         };
         dbAdapter.saveOutOfBoundsVendor(oobLead);
         try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
-        return;
+        return scrapedResults;
       }
 
       const mapsLink = page.url();
@@ -676,11 +853,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       const pincodeMatch = address ? address.match(/\b\d{6}\b/) : null;
       const pincode = pincodeMatch ? pincodeMatch[0] : '';
 
-      // Read local database
-      const vendors = dbAdapter.getVendors();
-      const existingIndex = vendors.findIndex(v => v.mapsLink === mapsLink || v.name === name);
+      // O(1) Instant Deduplication against RAM index
+      const isKnown = dbAdapter.isDuplicate({ mapsLink, name, phone, city: vendorCity });
 
-        if (existingIndex === -1) {
+      if (!isKnown) {
           const leadScore = calculateLeadScore({ name, address, phone, rating });
           const newLead = {
             id,
@@ -712,22 +888,61 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             tier: determineTier(leadScore),
             operatingHours: '',
             topReviews: [],
-            whatsappLink: (phone && phone.replace(/[^0-9]/g, '').slice(-10).length === 10) 
-              ? `https://wa.me/91${phone.replace(/[^0-9]/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
+            whatsappLink: (parsedPhone && parsedPhone.isMobile) 
+              ? `https://wa.me/91${parsedPhone.national}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
               : '',
-            whatsappAvailable: Boolean(phone && phone.replace(/[^0-9]/g, '').slice(-10).length === 10),
+            whatsappAvailable: Boolean(parsedPhone && parsedPhone.isMobile),
+            isMobile: Boolean(parsedPhone && parsedPhone.isMobile),
+            isLandline: Boolean(parsedPhone && parsedPhone.isLandline),
+            phoneType: parsedPhone ? parsedPhone.phoneType : 'unknown',
+            callUrl: parsedPhone ? parsedPhone.callUrl : (phone ? `tel:${phone}` : ''),
             scrapedAt: new Date().toISOString(),
             sessionId,
             category,
             city: vendorCity,
+            zoneName: location,
+            suburb: location,
+            locality: location,
+            mandal: resolvedMandal,
+            district: district || '',
+            state: stateName || 'India',
             strategy
           };
 
-          vendors.push(newLead);
-          dbAdapter.saveVendors(vendors);
+          dbAdapter.saveVendor('admin_1', newLead);
           try { emitVendorEvent(newLead, 'inserted'); } catch (e) {}
           scrapedResults.push(newLead);
           addLog(`[Contact Extracted] 📞 ${newLead.name}: ${newLead.phone || 'No direct phone'}${newLead.whatsappAvailable ? ' (WhatsApp Verified)' : ''}`);
+        } else {
+          const existing = dbAdapter.findMatch({ mapsLink, name, phone, city: vendorCity });
+          if (existing) {
+            let updated = false;
+            if (phone && (!existing.phone || existing.phone.includes('Requires') || existing.phone === 'no phone')) {
+              existing.phone = phone;
+              existing.phones = [...new Set([...(existing.phones || []), phone])];
+              existing.phoneType = parsedPhone?.phoneType || existing.phoneType || (parsedPhone?.isMobile ? 'mobile' : 'landline');
+              existing.callUrl = parsedPhone?.callUrl || existing.callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : '');
+              if (parsedPhone?.isMobile) {
+                existing.whatsappAvailable = true;
+                existing.whatsappLink = `https://wa.me/91${parsedPhone.national}`;
+              }
+              updated = true;
+            }
+            if (address && (!existing.address || existing.address.length < 10)) {
+              existing.address = address;
+              updated = true;
+            }
+            if (website && !existing.website) {
+              existing.website = website;
+              updated = true;
+            }
+            if (updated) {
+              dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
+              try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+              addLog(`[Contact Enriched] 📞 ${existing.name}: updated with ${existing.phone}`);
+            }
+            scrapedResults.push(existing);
+          }
         }
     } else {
       // Case B: Search results list is loaded
@@ -735,46 +950,39 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       if (await scrollable.count() > 0) {
         addLog("Scrolling through search results feed... (Fast Mode)");
         
-        let lastCount = 0;
-        let staleTicks = 0;
+        // Google Maps VIRTUALISES the results feed: only the cards currently in
+        // (or near) the viewport exist in the DOM. Scrolling to the bottom and
+        // extracting once therefore loses every place that scrolled out —
+        // that is why a city run used to return ~18 places per zone. We now
+        // collect the rendered cards on every scroll step and merge them by
+        // place link, so the run keeps every card Google actually rendered.
+        const accumulatedCards = new Map();
 
-        for (let i = 0; i < 40; i++) {
-          if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
-
-          await page.evaluate(() => {
-            const feed = document.querySelector('div[role="feed"]');
-            if (feed) {
-              feed.scrollTop = feed.scrollHeight;
+        const mergeCards = (cards) => {
+          let added = 0;
+          for (const card of cards || []) {
+            if (!card) continue;
+            const key = (card.mapsLink || '').split('&')[0]
+              || `name:${String(card.name || '').trim().toLowerCase()}`;
+            const existing = accumulatedCards.get(key);
+            if (!existing) {
+              accumulatedCards.set(key, card);
+              added++;
+              continue;
             }
-          });
-
-          await page.waitForTimeout(650);
-
-          const currentCount = await page.locator('a.hfpxzc').count();
-          if (currentCount >= 200) {
-            addLog(`Reached ${currentCount} cards, stopping scroll.`);
-            break;
+            // A later render sometimes carries fields the first one missed.
+            if (!existing.phone && card.phone) existing.phone = card.phone;
+            if (!(existing.allPhones || []).length && (card.allPhones || []).length) existing.allPhones = card.allPhones;
+            if (!existing.websiteUrl && card.websiteUrl) existing.websiteUrl = card.websiteUrl;
+            if (!existing.address && card.address) existing.address = card.address;
+            if (!existing.operatingHours && card.operatingHours) existing.operatingHours = card.operatingHours;
+            if (!existing.placeCategory && card.placeCategory) existing.placeCategory = card.placeCategory;
           }
+          return added;
+        };
 
-          const endMarker = await page.locator('text=You\'ve reached the end of the list, span.HlvSq').count();
-          if (endMarker > 0) {
-            addLog(`Reached end of search results (${currentCount} cards).`);
-            break;
-          }
-
-          if (currentCount === lastCount) {
-            staleTicks++;
-            if (staleTicks >= 3) break;
-          } else {
-            staleTicks = 0;
-            lastCount = currentCount;
-          }
-        }
-
-        addLog(`[Cyber Core] Extracting high-speed contact intelligence from all feed cards...`);
-
-        // Fast Direct Feed Extraction: Extracts Name, Phone, Website, Rating, Review Count, Address from all feed cards in <100ms
-        const extractedCards = await page.evaluate(() => {
+        // Fast Direct Feed Extraction: Extracts Name, Phone, Website, Rating, Review Count, Address from the currently rendered cards in <100ms
+        const collectVisibleCards = () => page.evaluate(() => {
           const feedCards = Array.from(document.querySelectorAll('div[role="feed"] div.Nv2PK'));
           return feedCards.map(card => {
             const nameEl = card.querySelector('div.fontHeadlineSmall, .qBF1Pd');
@@ -800,7 +1008,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             // Extract Phone Numbers:
             // Landlines: 080 4148 9746, 08041489746, 040 12345678, etc.
             // Mobiles: 086600 17739, 096552 14888, 9845012345, +91 99008 51000
-            const phoneRegex = /(?:(?:\+91|0091|0)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|0\d{2,4}[\s-]?\d{6,8}/g;
+            const phoneRegex = /(?:(?:\+91|0091)[- ]?)?[6-9]\d{4}[- ]?\d{5}|0[6-9]\d{4}[- ]?\d{5}|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]?\d{6,8}/g;
             const phones = [];
             let m;
             while ((m = phoneRegex.exec(fullText)) !== null) {
@@ -885,7 +1093,80 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           }).filter(Boolean);
         });
 
+        // Capture whatever is already rendered, then ride the scroll while
+        // harvesting each fresh batch before Google recycles the DOM nodes.
+        mergeCards(await collectVisibleCards());
+
+        // Google often serves a single-page list (20 cards) that literally is
+        // not scrollable — its own note says "You're seeing a limited view of
+        // Google Maps". Scrolling it 4+ times per zone only wastes seconds, so
+        // measure the container first and skip the loop when there is nothing
+        // below the fold to load.
+        const feedMetrics = await page.evaluate(() => {
+          const feed = document.querySelector('div[role="feed"]');
+          if (!feed) return { scrollable: false, cards: 0 };
+          return {
+            scrollable: feed.scrollHeight > feed.clientHeight + 40,
+            cards: feed.querySelectorAll('div.Nv2PK').length
+          };
+        });
+
+        let staleTicks = 0;
+        if (feedMetrics.scrollable) {
+          for (let i = 0; i < 120; i++) {
+          if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
+
+          const beforeScroll = await page.evaluate(() => {
+            const feed = document.querySelector('div[role="feed"]');
+            return {
+              cards: feed ? feed.querySelectorAll('div.Nv2PK').length : 0,
+              height: feed ? feed.scrollHeight : 0
+            };
+          });
+
+          await page.evaluate(() => {
+            const feed = document.querySelector('div[role="feed"]');
+            if (feed) feed.scrollTop = feed.scrollHeight;
+          });
+
+          // Wait until the feed actually grows instead of sleeping a fixed
+          // 700 ms. The cap equals the old sleep, so a slow batch is never
+          // slower than before.
+          await page.waitForFunction((before) => {
+            const feed = document.querySelector('div[role="feed"]');
+            if (!feed) return false;
+            return feed.querySelectorAll('div.Nv2PK').length > before.cards
+              || feed.scrollHeight > before.height + 10;
+          }, beforeScroll, { timeout: 700, polling: 100 }).catch(() => {});
+
+          const added = mergeCards(await collectVisibleCards());
+
+          if (accumulatedCards.size >= 400) {
+            addLog(`Collected ${accumulatedCards.size} unique cards, stopping scroll.`);
+            break;
+          }
+
+          const endMarker = await page.locator('text=You\'ve reached the end of the list, span.HlvSq').count();
+          if (endMarker > 0) {
+            addLog(`Reached end of search results (${accumulatedCards.size} unique cards).`);
+            break;
+          }
+
+          if (added === 0) {
+            staleTicks++;
+            if (staleTicks >= 4) break;
+          } else {
+            staleTicks = 0;
+          }
+          }
+        } else {
+          addLog(`[Cyber Core] Single-page results list (${feedMetrics.cards} cards) — no deeper scroll needed.`);
+        }
+
+        const extractedCards = Array.from(accumulatedCards.values());
+
         addLog(`[High-Speed Core] Extracted ${extractedCards.length} verified listings directly with contact intelligence.`);
+        markZone('card-extract');
 
         let insertedInBatch = 0;
 
@@ -897,9 +1178,34 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const name = rawItem.name;
           const mapsLink = rawItem.mapsLink;
           let phone = rawItem.phone || '';
-          if (phone) {
-            const parsedPhone = normalizePhone(phone, { context: 'phone tel' });
-            phone = parsedPhone ? parsedPhone.e164 : '';
+          // Keep every number the card exposed. Feed cards usually omit the
+          // phone entirely, but when they do show one we must not throw the
+          // rest away (Google often lists a landline plus a mobile).
+          const exposedNumbers = [];
+          for (const rawNumber of [rawItem.phone, ...(rawItem.allPhones || [])]) {
+            const parsed = normalizePhone(rawNumber, { context: 'phone tel' });
+            if (parsed && !exposedNumbers.some(n => n.national === parsed.national)) {
+              exposedNumbers.push(parsed);
+            }
+          }
+          const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
+          let whatsappLink = '';
+          let whatsappAvailable = false;
+          let callUrl = '';
+
+          if (primaryNumber) {
+            phone = primaryNumber.displayPhone;
+            callUrl = primaryNumber.callUrl;
+            if (primaryNumber.isMobile) {
+              whatsappLink = `https://wa.me/91${primaryNumber.national}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
+              whatsappAvailable = true;
+            } else {
+              whatsappLink = '';
+              whatsappAvailable = false;
+            }
+            addLog(`[Contact Extracted] 📞 ${name}: ${phone}${whatsappAvailable ? ' (WhatsApp Verified)' : ' (STD Landline)'}`);
+          } else {
+            phone = '';
           }
           const websiteUrl = rawItem.websiteUrl || '';
           const address = rawItem.address || '';
@@ -908,27 +1214,17 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const operatingHours = rawItem.operatingHours || '';
           const coords = extractCoords(mapsLink);
 
-          // WhatsApp Detection and Phone Normalization
-          let whatsappLink = '';
-          let whatsappAvailable = false;
-          if (phone) {
-            const digits = phone.replace(/[^0-9]/g, '');
-            const tenDigits = digits.slice(-10);
-            if (tenDigits.length === 10 && ['6','7','8','9'].includes(tenDigits[0])) {
-              whatsappLink = `https://wa.me/91${tenDigits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
-              whatsappAvailable = true;
-              phone = `+91 ${tenDigits.slice(0, 5)} ${tenDigits.slice(5)}`;
-            }
-            addLog(`[Contact Extracted] 📞 ${name}: ${phone}${whatsappAvailable ? ' (WhatsApp Verified)' : ''}`);
+          const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope);
+          if (zoneReject) {
+            addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
+            continue;
           }
 
           // Background Website Deep Crawl for Email, Phone, Socials
           if (websiteUrl && websiteUrl.startsWith('http')) {
             fastWebsiteExtract(websiteUrl, name).then(enriched => {
-              const currentVendors = dbAdapter.getVendors();
-              const vIdx = currentVendors.findIndex(v => v.name === name);
-              if (vIdx !== -1) {
-                let existing = currentVendors[vIdx];
+              const existing = dbAdapter.findMatch({ name, website: websiteUrl });
+              if (existing) {
                 let updated = false;
                 if (enriched.email && !existing.email) {
                   existing.email = enriched.email;
@@ -947,8 +1243,22 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   existing.facebook = enriched.facebook;
                   updated = true;
                 }
+
+                if (enriched.contactPerson && !existing.contactPerson) {
+                  existing.contactPerson = enriched.contactPerson;
+                  updated = true;
+                }
+                if (enriched.pincode && !existing.pincode) {
+                  existing.pincode = enriched.pincode;
+                  updated = true;
+                }
+                if (enriched.whatsappLink && !existing.whatsappLink) {
+                  existing.whatsappLink = enriched.whatsappLink;
+                  existing.whatsappAvailable = true;
+                  updated = true;
+                }
                 if (updated) {
-                  dbAdapter.saveVendors(currentVendors);
+                  dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
                   try { emitVendorEvent(existing, 'updated'); } catch(e){}
                 }
               }
@@ -968,6 +1278,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             name,
             address,
             phone: phone || '',
+            phones: exposedNumbers.map(n => n.isMobile
+              ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}`
+              : n.e164),
+            phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
             rating,
             reviewsCount,
             mapsLink,
@@ -989,10 +1303,20 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             matchedKeywords: [],
             whatsappLink,
             whatsappAvailable,
+            isMobile: Boolean(primaryNumber && primaryNumber.isMobile),
+            isLandline: Boolean(primaryNumber && primaryNumber.isLandline),
+            phoneType: primaryNumber ? primaryNumber.phoneType : 'unknown',
+            callUrl: callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : ''),
             qualityScore: phone ? 85 : (websiteUrl ? 65 : 45),
             tier: phone ? 'Premium' : (websiteUrl ? 'Standard' : 'Basic'),
             category,
             city: vendorCity,
+            zoneName: location,
+            suburb: location,
+            locality: location,
+            mandal: resolvedMandal,
+            district: district || '',
+            state: stateName || 'India',
             source: 'Google Maps',
             sourceEngine: 'google-places',
             verified: Boolean(phone),
@@ -1008,8 +1332,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             let outOfBoundsDistance = null;
             let isOob = false;
 
-            if (place.latitude && place.longitude) {
-              if (boundingbox && boundingbox.length === 4) {
+                        if (place.latitude && place.longitude) {
+              if (isMaster || scope === 'district' || scope === 'state' || scope === 'mandal') {
+                isOob = false;
+              } else if (boundingbox && boundingbox.length === 4) {
                 if (!isWithinBounds(place.latitude, place.longitude, boundingbox, 30)) {
                   isOob = true;
                   outOfBoundsDistance = centerLat ? getDistanceKm(centerLat, centerLng, place.latitude, place.longitude) : 'OOB';
@@ -1057,7 +1383,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
             // Strict Text & Geographic Containment Check
             const placeCoords = (place.latitude && place.longitude) ? { lat: place.latitude, lng: place.longitude } : extractCoords(place.mapsLink);
-            const containment = isListingRelevantToQuery(place.name, place.address, district, stateName, location, location, placeCoords, boundingbox, cityHint);
+            const containment = isListingRelevantToQuery(place.name, place.address, district, stateName, location, location, placeCoords, boundingbox, cityHint, isMaster, scope);
             if (!containment.relevant) {
               addLog(`[Containment Guard] Discarded "${place.name}": ${containment.reason}`);
               const oobLead = {
@@ -1075,11 +1401,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               continue;
             }
 
-            // Read local database
-            const vendors = dbAdapter.getVendors();
-            const existingIndex = vendors.findIndex(v => v.mapsLink === place.mapsLink || v.name === place.name);
+            // O(1) Instant Deduplication against RAM index
+            const isKnown = dbAdapter.isDuplicate(place);
 
-            if (existingIndex === -1) {
+            // Ensure deterministic ID for database storage
+            place.id = place.id || place.placeId || ('lead_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7));
+
+            if (!isKnown) {
               const leadScore = calculateLeadScore(place);
               place.pincode = pincode;
               place.qualityScore = leadScore;
@@ -1105,7 +1433,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               // Apply GeoAI reverse geocoding for deep location folders
               if (place.latitude && place.longitude) {
                 try {
-                  const locationInfo = await geoAI.reverseGeocode(place.latitude, place.longitude);
+                  const locationInfo = await geoAI.reverseGeocode(place.latitude, place.longitude, { district, stateName, city: vendorCity, address: place.address });
                   if (locationInfo) {
                     place.village = locationInfo.village;
                     place.mandal = locationInfo.mandal;
@@ -1115,33 +1443,53 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 } catch(e) { }
               }
               
-              vendors.push(place);
-              dbAdapter.saveVendors(vendors);
+              dbAdapter.saveVendor('admin_1', place);
               scrapedResults.push(place);
               try { emitVendorEvent(place, 'inserted'); } catch (e) {}
+              try {
+                const { streamingEnricher } = require('../services/phoneBackfillService');
+                streamingEnricher.enqueue(place);
+              } catch (e) {}
               insertedInBatch++;
               // Silently saving to DB, no log flooding
             } else {
-              let existing = vendors[existingIndex];
-              let updated = false;
+              let existing = dbAdapter.findMatch(place);
+              if (existing) {
+                let updated = false;
 
-              if (!existing.pincode && place.address) {
-                const pMatch = place.address.match(/\b\d{6}\b/);
-                if (pMatch) { existing.pincode = pMatch[0]; updated = true; }
-              }
-              if (!existing.rating && parsedRating) { existing.rating = parsedRating; updated = true; }
-              if ((!existing.phone || existing.phone.includes('Obfuscated') || existing.phone.includes('Requires')) && place.phone) {
-                existing.phone = place.phone; updated = true;
-              }
-              
-              existing.sessionId = sessionId;
-              existing.scrapedAt = new Date().toISOString();
-              updated = true;
+                if (!existing.pincode && place.address) {
+                  const pMatch = place.address.match(/\b\d{6}\b/);
+                  if (pMatch) { existing.pincode = pMatch[0]; updated = true; }
+                }
+                if (!existing.rating && parsedRating) { existing.rating = parsedRating; updated = true; }
+                if ((!existing.phone || existing.phone.includes('Obfuscated') || existing.phone.includes('Requires')) && place.phone) {
+                  existing.phone = place.phone; updated = true;
+                }
+                if (Array.isArray(place.phones) && place.phones.length) {
+                  const merged = [...new Set([...(Array.isArray(existing.phones) ? existing.phones : []), ...place.phones])];
+                  if (merged.length !== (existing.phones || []).length) {
+                    existing.phones = merged;
+                    updated = true;
+                  }
+                }
+                
+                existing.sessionId = sessionId;
+                existing.scrapedAt = new Date().toISOString();
+                updated = true;
 
-              if (updated) {
-                vendors[existingIndex] = existing;
-                dbAdapter.saveVendors(vendors);
-                try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                if (updated) {
+                  dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
+                  try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                  if (!existing.phone || existing.phone.includes('Requires') || !existing.website) {
+                    try {
+                      const { streamingEnricher } = require('../services/phoneBackfillService');
+                      streamingEnricher.enqueue(existing);
+                    } catch (e) {}
+                  }
+                }
+                // Always include existing updated lead in batch results
+                scrapedResults.push(existing);
+                insertedInBatch++;
               }
             }
           } catch (err) {
@@ -1156,15 +1504,20 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     }
 
     addLog(`[Cyber Core] Autonomous extraction cycle complete. ${scrapedResults.length} records verified.`);
+    markZone('persist');
     return scrapedResults;
   } catch (error) {
+    zoneFailed = true;
     addLog(`[Cyber Core] Worker warning: ${error.message}`);
     return [];
   } finally {
-    if (context) {
-      try { await context.close(); } catch (e) {}
+    if (page) {
+      try { await page.close(); } catch (e) {}
+    }
+    if (zoneSlot) {
+      await releaseZoneContext(zoneSlot, { recycle: zoneFailed });
     }
     // Shared browser must remain open for other concurrent workers
   }
 }
-module.exports = { scrapeGooglePlaces, setDeps, isListingRelevantToQuery, calculateLeadScore, determineTier };
+module.exports = { scrapeGooglePlaces, warmZoneContextPool, closeZoneContextPool, setDeps, isListingRelevantToQuery, calculateLeadScore, determineTier };

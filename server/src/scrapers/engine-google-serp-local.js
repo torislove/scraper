@@ -6,6 +6,7 @@ const fidelity = require('../services/categoryFidelity');
 const { getBrowser, chromium, applyAdvancedStealth, optimizePageForSpeed } = require('./browserFactory');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const { normalizePhone } = require('../utils/phoneUtils');
+const { fetchGoogleLocalHttp } = require('../utils/fastGoogleHttp');
 const serpBreaker = require('../services/serpBreaker');
 
 // Global dependencies passed from scrape router
@@ -21,10 +22,273 @@ function setDeps({ logger, abortSignal, emitVendorEvent: evt }) {
 
 const { isListingRelevantToQuery, calculateLeadScore, determineTier } = require('./engine-google-places');
 
+function isIndianMobileNumber(val) {
+  if (!val) return false;
+  const digits = String(val).replace(/\D/g, '').slice(-10);
+  return digits.length === 10 && /^[6-9]/.test(digits);
+}
+
 /**
- * Ultra-Fast Google Search Local Finder Scraper Engine
- * Targets: https://www.google.com/search?q={query}&tbm=lcl&start={N}&hl=en&gl=in
- * Extracts 20 leads per page batch directly from pre-rendered HTML without WebGL or single-card clicks!
+ * Scrapes a single page of Google Local Finder in an isolated, ultra-fast tab.
+ */
+async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) {
+  const startIndex = pageIndex * 20;
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=in`;
+
+  let tab = null;
+  try {
+    tab = await context.newPage();
+    await applyAdvancedStealth(tab);
+    await optimizePageForSpeed(tab);
+
+    try {
+      await tab.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 14000 });
+    } catch (e) {
+      // Allow partial DOM evaluation on timeout
+    }
+
+    if (tab.url().includes('/sorry') || tab.url().includes('google.com/sorry')) {
+      return { leads: [], captcha: true, pageIndex };
+    }
+
+    // Bypass consent if present
+    try {
+      const consentBtn = tab.locator('button:has-text("Accept all"), button:has-text("I agree"), #L2AGLb, button:has-text("Reject all")');
+      if (await consentBtn.count() > 0) {
+        await consentBtn.first().click({ timeout: 1500 }).catch(() => {});
+      }
+    } catch (e) {}
+
+    await tab.waitForSelector('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"], div.rllt__details, #rso', { timeout: 3000 }).catch(() => {});
+
+    const pageLeads = await tab.evaluate(({ categoryFallback }) => {
+      const items = [];
+      const cardElements = document.querySelectorAll('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"]');
+
+      cardElements.forEach(card => {
+        try {
+          const nameEl = card.querySelector('div.dbg0pd, div[role="heading"] span, .OSrXXb, span.LrzXr, h3');
+          const name = nameEl ? nameEl.innerText.trim() : '';
+          if (!name || name.length < 2) return;
+
+          let rating = null;
+          let reviewsCount = null;
+          const ratingEl = card.querySelector('span.yi40Hd, span.z3HNkc');
+          if (ratingEl) {
+            const rMatch = ratingEl.innerText.trim().match(/^([0-9.]+)/);
+            if (rMatch) rating = parseFloat(rMatch[1]);
+          }
+
+          const reviewsEl = card.querySelector('span.RDApEe');
+          if (reviewsEl) {
+            const revMatch = reviewsEl.innerText.trim().match(/([0-9,]+)/);
+            if (revMatch) reviewsCount = parseInt(revMatch[1].replace(/,/g, ''), 10);
+          }
+
+          let category = categoryFallback;
+          let address = '';
+          let operatingHours = '';
+          const detailsContainer = card.querySelector('.rllt__details');
+          if (detailsContainer) {
+            const lines = detailsContainer.innerText.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length > 0) {
+              const parts = lines[0].split('·').map(p => p.trim());
+              if (parts.length > 1) category = parts[parts.length - 1];
+            }
+            if (lines.length > 1) address = lines[1];
+          }
+
+          let phone = '';
+          const telLink = card.querySelector('a[href^="tel:"], a[data-phone-number], [data-item-id*="phone"]');
+          if (telLink) {
+            phone = telLink.getAttribute('data-phone-number') || telLink.getAttribute('href')?.replace('tel:', '') || '';
+          }
+          if (!phone) {
+            const callEl = card.querySelector('[aria-label*="Call" i], button[aria-label*="Call" i]');
+            if (callEl) {
+              const label = callEl.getAttribute('aria-label') || '';
+              const m = label.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+              if (m) phone = m[0].trim();
+            }
+          }
+          if (!phone) {
+            const cardText = (card.innerText || '') + ' ' + (card.getAttribute('aria-label') || '');
+            const phoneMatch = cardText.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+            if (phoneMatch) phone = phoneMatch[0].trim();
+          }
+
+          let email = '';
+          const mailto = card.querySelector('a[href^="mailto:"]');
+          if (mailto) {
+            email = (mailto.getAttribute('href') || '').replace(/^mailto:/i, '').split('?')[0].trim();
+          }
+          if (!email) {
+            const cardText = card.innerText || '';
+            const em = cardText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+            if (em && !/google|sentry|wixpress|example/i.test(em[0])) {
+              email = em[0].trim();
+            }
+          }
+
+          let website = '';
+          const webLink = card.querySelector('a.yY1duf[href^="http"], a[data-website]');
+          if (webLink) {
+            const href = webLink.getAttribute('href');
+            if (href && !href.includes('google.com')) website = href;
+          }
+
+          let mapsLink = '';
+          let lat = null;
+          let lng = null;
+          const mapAnchor = card.querySelector('a[data-cid], a[href*="maps.google"], a[href*="/maps/"]');
+          if (mapAnchor) {
+            mapsLink = mapAnchor.getAttribute('href') || '';
+            const cid = mapAnchor.getAttribute('data-cid');
+            if (cid) mapsLink = `https://www.google.com/maps?cid=${cid}`;
+          }
+
+          const latAttr = card.getAttribute('data-lat');
+          const lngAttr = card.getAttribute('data-lng');
+          if (latAttr && lngAttr) {
+            lat = parseFloat(latAttr);
+            lng = parseFloat(lngAttr);
+          }
+
+          // Build direct high-accuracy Google Maps pin link
+          if (!mapsLink && name) {
+            mapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + ', ' + (address || ''))}`;
+          }
+
+          let photo = '';
+          const imgEl = card.querySelector('img[id^="dimg_"], img');
+          if (imgEl) {
+            const src = imgEl.getAttribute('src');
+            if (src && !src.includes('data:image/gif') && !src.includes('default_avatar')) photo = src;
+          }
+
+          items.push({
+            name,
+            category,
+            rating,
+            reviewsCount,
+            address: address || '',
+            phone: phone || '',
+            email: email || '',
+            website: website || '',
+            mapsLink: mapsLink || '',
+            latitude: lat,
+            longitude: lng,
+            photo: photo || '',
+            operatingHours
+          });
+        } catch (e) {}
+      });
+
+      // Google Knowledge Graph / Direct Place Panel (e.g. 'Terrace Grill', individual queries)
+      try {
+        const kgTitle = document.querySelector('[data-attrid="title"], h2[data-attrid="title"], div.SPZz6b h2, div.SPZz6b');
+        if (kgTitle && kgTitle.innerText.trim().length > 1) {
+          const kgName = kgTitle.innerText.trim();
+          if (!items.some(it => it.name && it.name.toLowerCase() === kgName.toLowerCase())) {
+            let kgPhone = '';
+            const phoneContainer = document.querySelector('[data-attrid*="phone"], [data-item-id*="phone"], a[href^="tel:"]');
+            if (phoneContainer) {
+              const pText = phoneContainer.innerText || phoneContainer.getAttribute('aria-label') || phoneContainer.getAttribute('href') || '';
+              const pm = pText.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+              if (pm) kgPhone = pm[0].trim();
+            }
+            if (!kgPhone) {
+              const fullKgText = document.querySelector('div.kp-wholepage, div.xpdopen, #rhs, #rso')?.innerText || '';
+              const pm = fullKgText.match(/(?:Phone|Mobile|Tel)[:\s]*([0-9\s+-]+)/i) || fullKgText.match(/\b0[6-9]\d{4}[\s-]?\d{5}\b/);
+              if (pm) kgPhone = (pm[1] || pm[0]).trim();
+            }
+
+            let kgAddress = '';
+            const addrContainer = document.querySelector('[data-attrid*="address"], span.LrzXr');
+            if (addrContainer) {
+              kgAddress = addrContainer.innerText.trim().replace(/^Address[:\s]*/i, '');
+            }
+
+            let kgRating = null;
+            let kgReviews = null;
+            const ratingEl = document.querySelector('span.Aq14fc, [data-attrid*="review"] span[aria-label*="stars"]');
+            if (ratingEl) {
+              const rm = ratingEl.innerText.trim().match(/^([0-9.]+)/);
+              if (rm) kgRating = parseFloat(rm[1]);
+            }
+            const revEl = document.querySelector('a[data-attrid*="review"] span, span[aria-label*="reviews"]');
+            if (revEl) {
+              const revm = revEl.innerText.trim().match(/([0-9,]+)/);
+              if (revm) kgReviews = parseInt(revm[1].replace(/,/g, ''), 10);
+            }
+
+            let kgWebsite = '';
+            const webEl = document.querySelector('a[data-attrid="visit_website"], a.ab_button[href^="http"]:not([href*="google.com"])');
+            if (webEl) kgWebsite = webEl.getAttribute('href') || '';
+
+            let kgEmail = '';
+            const kgMailto = document.querySelector('a[href^="mailto:"]');
+            if (kgMailto) {
+              kgEmail = (kgMailto.getAttribute('href') || '').replace(/^mailto:/i, '').split('?')[0].trim();
+            }
+            if (!kgEmail) {
+              const fullKgText = document.querySelector('div.kp-wholepage, div.xpdopen, #rhs, #rso')?.innerText || '';
+              const em = fullKgText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+              if (em && !/google|sentry|wixpress|example/i.test(em[0])) {
+                kgEmail = em[0].trim();
+              }
+            }
+
+            let kgCategory = categoryFallback;
+            const catEl = document.querySelector('span[data-attrid="subtitle"], div.wwUB2c');
+            if (catEl) kgCategory = catEl.innerText.trim();
+
+            const reservations = [];
+            document.querySelectorAll('a[href*="swiggy.com"], a[href*="zomato.com"], a[href*="district.in"]').forEach(rLink => {
+              reservations.push({
+                provider: rLink.innerText.trim() || 'Reserve',
+                url: rLink.href
+              });
+            });
+
+            const serviceEl = document.querySelector('[data-attrid*="service_options"], [data-attrid*="dine_in"], div.E5qFLb');
+            const serviceOptions = serviceEl ? serviceEl.innerText.trim().replace(/^Service options[:\s]*/i, '') : '';
+
+            const directMapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(kgName + ', ' + (kgAddress || ''))}`;
+
+            items.push({
+              name: kgName,
+              category: kgCategory,
+              rating: kgRating,
+              reviewsCount: kgReviews,
+              address: kgAddress,
+              phone: kgPhone,
+              email: kgEmail,
+              website: kgWebsite,
+              mapsLink: directMapsLink,
+              reservations,
+              serviceOptions,
+              operatingHours: '',
+              isKnowledgeGraph: true
+            });
+          }
+        }
+      } catch (kgErr) {}
+
+      return items;
+    }, { categoryFallback: defaultCategory });
+
+    return { leads: pageLeads, captcha: false, pageIndex };
+  } catch (err) {
+    return { leads: [], captcha: false, pageIndex, error: err.message };
+  } finally {
+    if (tab) await tab.close().catch(() => {});
+  }
+}
+
+/**
+ * Ultra-Fast Google Search Local Finder Scraper Engine (Parallel Multi-Page Harvester)
+ * Extracts multiple Google Local Finder pages in parallel batches, cutting pagination time to <8s!
  */
 async function scrapeGoogleLocalFinder(
   query,
@@ -36,12 +300,12 @@ async function scrapeGoogleLocalFinder(
   stateName = null,
   centerCoords = null,
   cityHint = null,
-  mapsBackup = false
+  mapsBackup = false,
+  isMaster = false,
+  scope = null
 ) {
-  addLog(`[Local Finder Core] ⚡ Launching ultra-fast surface harvest for: "${query}" (Target: up to ${maxPages * 20} leads)`);
+  addLog(`[Local Finder Core] ⚡ Launching ultra-fast parallel surface harvest for: "${query}" (Target: up to ${maxPages * 20} leads)`);
 
-  // `location` may be a synthetic zone label. Keep the real base city separately
-  // for the vendor record and for Maps fallbacks.
   const vendorCity = cityHint || location || 'India';
 
   if (!chromium) {
@@ -49,8 +313,6 @@ async function scrapeGoogleLocalFinder(
     return [];
   }
 
-  // When Google has already served CAPTCHAs for this surface, skip the browser
-  // page load entirely and let the Maps engine do the work directly.
   const fallbackToMaps = async reason => {
     addLog(`[Local Finder Core] ${reason} Sending "${query}" straight to the Google Maps engine.`);
     try {
@@ -66,7 +328,9 @@ async function scrapeGoogleLocalFinder(
         district,
         stateName,
         null,
-        cityHint
+        cityHint,
+        isMaster,
+        scope
       );
     } catch (error) {
       addLog(`[Local Finder Core] Maps fallback failed: ${error.message}`);
@@ -75,10 +339,6 @@ async function scrapeGoogleLocalFinder(
   };
 
   if (serpBreaker.isBlocked()) {
-    if (mapsBackup) {
-      addLog(`[Local Finder Core] Cooldown active. The Maps job for "${query}" already covers this zone, so skipping the duplicate pass.`);
-      return [];
-    }
     return await fallbackToMaps('Local Finder is in a cooldown window.');
   }
 
@@ -89,7 +349,6 @@ async function scrapeGoogleLocalFinder(
   }
 
   let context = null;
-  let page = null;
   const scrapedResults = [];
 
   try {
@@ -105,324 +364,149 @@ async function scrapeGoogleLocalFinder(
       }
     });
 
-    page = await context.newPage();
-    await applyAdvancedStealth(page);
+    const seenNames = new Set();
+    const seenPhones = new Set();
 
-    // Ultra-Fast page optimization: abort images, fonts, styles, tracking to drop load time to <400ms
-    await optimizePageForSpeed(page);
+    const processPageResult = (res) => {
+      if (!res) return 0;
+      const { leads: pageLeads, captcha, pageIndex } = res;
 
-    let consecutiveEmptyPages = 0;
-
-    for (let pageIndex = 0; pageIndex < maxPages; pageIndex++) {
-      if (globalAbortSignal.aborted) {
-        addLog(`[Local Finder Core] Abort signal received. Stopping page iteration.`);
-        break;
+      if (captcha) {
+        serpBreaker.recordCaptcha();
+        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA detected on Page ${pageIndex + 1}.`);
+        return -1;
       }
 
-      const startIndex = pageIndex * 20;
-      // Google Local Finder URL protocol with English & Indian region locks
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=in`;
+      if (!pageLeads || pageLeads.length === 0) return 0;
 
-      addLog(`[Local Finder Core] Fetching Page ${pageIndex + 1}/${maxPages} (start=${startIndex})...`);
-
-      try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      } catch (err) {
-        addLog(`[Local Finder Core] Page navigation timed out, extracting partial DOM: ${err.message}`);
-      }
-
-      // Check for Google Search CAPTCHA / Rate-Limit challenge
-      if (page.url().includes('/sorry') || page.url().includes('google.com/sorry')) {
-        const tripped = serpBreaker.recordCaptcha();
-        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA detected. Gracefully pivoting to Google Maps Stealth Engine for "${query}"...${tripped ? ' (Local Finder cooling down for 8 minutes)' : ''}`);
-        try { await page.close().catch(() => {}); } catch (e) {}
-        try { await context.close().catch(() => {}); } catch (e) {}
-        if (tripped && mapsBackup) {
-          addLog(`[Local Finder Core] Maps job already queued for "${query}" — skipping the duplicate fallback.`);
-          return [];
-        }
-        return await fallbackToMaps('CAPTCHA pivot.');
-      }
-
-      // Bypass Google Consent modal if present
-      try {
-        const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("I agree"), #L2AGLb, button:has-text("Reject all")');
-        if (await consentBtn.count() > 0) {
-          await consentBtn.first().click({ timeout: 2000 }).catch(() => {});
-          await page.waitForTimeout(400);
-        }
-      } catch (e) {}
-
-      // Wait briefly for local items container or fallback to body
-      await page.waitForSelector('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"], div.rllt__details, #rso', { timeout: 3500 }).catch(() => {});
-
-      // Batch evaluate all 20 leads in one single DOM execution pass
-      const pageLeads = await page.evaluate(({ defaultCategory }) => {
-        const items = [];
-        // Google Local Finder cards selector candidates
-        const cardElements = document.querySelectorAll('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"]');
-
-        cardElements.forEach(card => {
-          try {
-            // Business Name
-            const nameEl = card.querySelector('div.dbg0pd, div[role="heading"] span, .OSrXXb, span.LrzXr, h3');
-            const name = nameEl ? nameEl.innerText.trim() : '';
-            if (!name || name.length < 2) return;
-
-            // Rating & Review Count
-            let rating = null;
-            let reviewsCount = null;
-            const ratingEl = card.querySelector('span.yi40Hd, span.z3HNkc');
-            if (ratingEl) {
-              const rText = ratingEl.innerText.trim();
-              const rMatch = rText.match(/^([0-9.]+)/);
-              if (rMatch) rating = parseFloat(rMatch[1]);
-            }
-
-            const reviewsEl = card.querySelector('span.RDApEe');
-            if (reviewsEl) {
-              const revText = reviewsEl.innerText.trim();
-              const revMatch = revText.match(/([0-9,]+)/);
-              if (revMatch) reviewsCount = parseInt(revMatch[1].replace(/,/g, ''), 10);
-            }
-
-            // Category & Details snippet
-            const detailsDivs = card.querySelectorAll('.rllt__details > div, .rllt__details span');
-            let category = defaultCategory;
-            let address = '';
-            let operatingHours = '';
-            let rawSnippetText = '';
-
-            const detailsContainer = card.querySelector('.rllt__details');
-            if (detailsContainer) {
-              rawSnippetText = detailsContainer.innerText;
-              const lines = detailsContainer.innerText.split('\n').map(l => l.trim()).filter(Boolean);
-              if (lines.length > 0) {
-                // First line often has: "₹200–400 · Cafe" or "4.2 (283) · Cafe"
-                const line1 = lines[0];
-                const parts = line1.split('·').map(p => p.trim());
-                if (parts.length > 1) {
-                  category = parts[parts.length - 1];
-                }
-              }
-              if (lines.length > 1) {
-                // Address is usually line 2 or 3
-                address = lines[1];
-              }
-            }
-
-            // Extract Phone Number directly from card
-            let phone = '';
-            // 1. Direct tel link
-            const telLink = card.querySelector('a[href^="tel:"], a[data-phone-number]');
-            if (telLink) {
-              phone = telLink.getAttribute('data-phone-number') || telLink.getAttribute('href').replace('tel:', '');
-            }
-            // 2. Text regex fallback
-            if (!phone && rawSnippetText) {
-              const phoneMatch = rawSnippetText.match(/(?:\+91|0)?[ -]?[6-9]\d{4}[ -]?\d{5}|(?:\+91|0)?[ -]?\d{3,4}[ -]?\d{6,7}/);
-              if (phoneMatch) {
-                phone = phoneMatch[0].trim();
-              }
-            }
-
-            // Extract Website URL
-            let website = '';
-            const webLink = card.querySelector('a.yY1duf[href^="http"], a[data-website]');
-            if (webLink) {
-              const href = webLink.getAttribute('href');
-              if (href && !href.includes('google.com')) {
-                website = href;
-              }
-            }
-
-            // Extract Google CID / Coordinates from card links or attributes
-            let mapsLink = '';
-            let lat = null;
-            let lng = null;
-
-            const mapAnchor = card.querySelector('a[data-cid], a[href*="maps.google"], a[href*="/maps/"]');
-            if (mapAnchor) {
-              mapsLink = mapAnchor.getAttribute('href') || '';
-              const cid = mapAnchor.getAttribute('data-cid');
-              if (cid) mapsLink = `https://www.google.com/maps?cid=${cid}`;
-            }
-
-            // Parse GPS coordinates if encoded in URL or attributes
-            const latAttr = card.getAttribute('data-lat');
-            const lngAttr = card.getAttribute('data-lng');
-            if (latAttr && lngAttr) {
-              lat = parseFloat(latAttr);
-              lng = parseFloat(lngAttr);
-            }
-
-            // Extract Storefront Thumbnail photo
-            let photo = '';
-            const imgEl = card.querySelector('img[id^="dimg_"], img');
-            if (imgEl) {
-              const src = imgEl.getAttribute('src');
-              if (src && !src.includes('data:image/gif') && !src.includes('default_avatar')) {
-                photo = src;
-              }
-            }
-
-            items.push({
-              name,
-              category: category || defaultCategory,
-              rating,
-              reviewsCount,
-              address: address || '',
-              phone: phone || '',
-              website: website || '',
-              mapsLink: mapsLink || '',
-              latitude: lat,
-              longitude: lng,
-              photo: photo || '',
-              operatingHours
-            });
-          } catch (e) {
-            // skip malformed card
-          }
-        });
-
-        return items;
-      }, { defaultCategory: category || 'Business' });
-
-      addLog(`[Local Finder Core] Page ${pageIndex + 1}: Discovered ${pageLeads.length} leads in batch.`);
-
-      if (pageLeads.length > 0) serpBreaker.recordSuccess();
-
-      if (pageLeads.length === 0) {
-        if (pageIndex === 0) {
-          addLog(`[Local Finder Core] 0 leads found on Google Search Page 1 for "${query}". Pivoting to Google Maps Stealth Engine...`);
-          try { await page.close().catch(() => {}); } catch (e) {}
-          try { await context.close().catch(() => {}); } catch (e) {}
-          return await fallbackToMaps('Empty Local Finder page.');
-        }
-        consecutiveEmptyPages++;
-        if (consecutiveEmptyPages >= 2) {
-          addLog(`[Local Finder Core] Reached end of Google Search Local Finder pagination.`);
-          break;
-        }
-      } else {
-        consecutiveEmptyPages = 0;
-      }
-
-      // Read existing local database to prevent duplicates
-      const vendors = dbAdapter.getVendors();
+      serpBreaker.recordSuccess();
       let newLeadsInPage = 0;
 
       for (const lead of pageLeads) {
-        // 0. Strict Geographic Zero-Bleed Containment Check
         const leadCoords = (lead.latitude && lead.longitude) ? { lat: lead.latitude, lng: lead.longitude } : null;
-        const containment = isListingRelevantToQuery(lead.name, lead.address, district, stateName, location, location, leadCoords, null, cityHint);
-        if (!containment.relevant) {
-          addLog(`[Local Finder Guard] Discarded "${lead.name}": ${containment.reason}`);
-          const oobLead = {
-            id: 'lead_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7),
-            name: lead.name,
-            category: lead.category || category,
-            city: vendorCity,
-            address: lead.address || '',
-            phone: lead.phone || '',
-            rating: lead.rating || '',
-            mapsLink: lead.mapsLink || '',
-            latitude: lead.latitude || null,
-            longitude: lead.longitude || null,
-            source: 'Local Finder Guard (Out of Bounds)',
-            outOfBoundsDistance: containment.reason,
-            scrapedAt: new Date().toISOString(),
-            sessionId
-          };
-          dbAdapter.saveOutOfBoundsVendor(oobLead);
-          try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
-          continue;
-        }
+        const containment = isListingRelevantToQuery(lead.name, lead.address, district, stateName, location, location, leadCoords, null, cityHint, isMaster, scope);
+        if (!containment.relevant) continue;
 
         const cleanName = lead.name.toLowerCase().trim();
-        if (!fidelity.isVendorRelevant(lead, category)) {
-          addLog(`[Category Guard] Discarded "${lead.name}": does not match "${category}".`);
-          continue;
-        }
-        const parsedLeadPhone = lead.phone ? normalizePhone(lead.phone, { context: 'phone tel' }) : null;
-        const leadPhone = parsedLeadPhone ? parsedLeadPhone.e164 : '';
-        const cleanPhone = leadPhone ? leadPhone.replace(/\D/g, '') : '';
+        if (!fidelity.isVendorRelevant(lead, category)) continue;
 
-        // Duplicate Check: compare against already scraped in this run + local DB
-        const isDuplicate = vendors.some(v => 
-          (v.name && v.name.toLowerCase().trim() === cleanName) ||
-          (cleanPhone && v.phone && v.phone.replace(/\D/g, '') === cleanPhone)
-        ) || scrapedResults.some(s => s.name.toLowerCase().trim() === cleanName);
+        const parsedLeadPhone = lead.phone ? normalizePhone(lead.phone, { context: 'phone tel' }) : null;
+        const isLandline = Boolean(parsedLeadPhone && parsedLeadPhone.isLandline);
+        const isMobile = Boolean(parsedLeadPhone && parsedLeadPhone.isMobile);
+        const displayPhone = parsedLeadPhone ? parsedLeadPhone.displayPhone : (lead.phone || '');
+        const cleanPhone = parsedLeadPhone ? parsedLeadPhone.digits : (lead.phone ? lead.phone.replace(/\D/g, '') : '');
+
+        // O(1) Instant Deduplication against RAM index & current batch
+        const isDuplicate = dbAdapter.isDuplicate(lead) ||
+          seenNames.has(cleanName) ||
+          (cleanPhone && seenPhones.has(cleanPhone));
 
         if (!isDuplicate) {
+          seenNames.add(cleanName);
+          if (cleanPhone) seenPhones.add(cleanPhone);
           const leadScore = calculateLeadScore(lead);
           const vendorId = 'lead_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+
+          // Extract locality/neighborhood from address (e.g. AS Rao Nagar, HITEC City, etc.)
+          let leadLocality = lead.locality || '';
+          if (!leadLocality && lead.address) {
+            const segs = lead.address.split(',').map(s => s.trim()).filter(Boolean);
+            const cleanSegs = segs.filter(s => !/^\d{6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
+            if (cleanSegs.length >= 2) {
+              const cand = cleanSegs[cleanSegs.length - 2];
+              if (cand && cand.length >= 3 && cand.length <= 45 && !/^(near|opp|behind|plot|door|flat|shop|floor|no\.)/i.test(cand)) {
+                leadLocality = cand;
+              }
+            }
+            if (!leadLocality && cleanSegs.length >= 1) {
+              const cand = cleanSegs[cleanSegs.length - 1];
+              if (cand.toLowerCase() !== vendorCity.toLowerCase()) {
+                leadLocality = cand;
+              }
+            }
+          }
 
           const formattedLead = {
             id: vendorId,
             name: lead.name,
             category: lead.category || category,
             city: vendorCity,
+            locality: leadLocality,
+            suburb: leadLocality,
             mandal: district || location || '',
             district: district || location || '',
             state: stateName || 'India',
             address: lead.address || `${district || location}, India`,
-            phone: leadPhone,
+            phone: displayPhone,
+            phoneType: isMobile ? 'mobile' : (isLandline ? 'landline' : 'unknown'),
+            isMobile,
+            isLandline,
+            callUrl: parsedLeadPhone ? parsedLeadPhone.callUrl : (displayPhone ? `tel:${displayPhone.replace(/\s+/g, '')}` : ''),
+            email: lead.email || '',
+            emails: lead.emails || (lead.email ? [lead.email] : []),
             rating: lead.rating || '',
             reviewsCount: lead.reviewsCount || '',
             website: lead.website || '',
-            mapsLink: lead.mapsLink || `https://www.google.com/maps/search/${encodeURIComponent(lead.name + ' ' + (location || ''))}`,
+            mapsLink: lead.mapsLink || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.name + ', ' + (lead.address || location || ''))}`,
             latitude: lead.latitude || centerCoords?.lat || null,
             longitude: lead.longitude || centerCoords?.lng || null,
             photo: lead.photo || '',
             logo: lead.website ? `https://www.google.com/s2/favicons?domain=${lead.website}&sz=128` : '',
             avatar: lead.photo || '',
-            source: 'Google Search Local Finder (Ultra-Fast 2-Min Engine)',
+            source: 'Google Search Local Finder (Ultra-Fast Parallel Engine)',
             qualityScore: leadScore,
             tier: determineTier(leadScore),
             operatingHours: lead.operatingHours || '',
-            whatsappLink: cleanPhone && cleanPhone.slice(-10).length === 10
-              ? `https://wa.me/91${cleanPhone.slice(-10)}?text=Hi%20${encodeURIComponent(lead.name)}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.`
+            reservations: lead.reservations || [],
+            serviceOptions: lead.serviceOptions || '',
+            whatsappLink: isMobile && parsedLeadPhone
+              ? `https://wa.me/91${parsedLeadPhone.national}?text=Hi%20${encodeURIComponent(lead.name)}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.`
               : '',
-            whatsappAvailable: Boolean(cleanPhone && cleanPhone.slice(-10).length === 10),
+            whatsappAvailable: isMobile,
+            zoneName: location || district || cityHint || '',
             scrapedAt: new Date().toISOString(),
             sessionId
           };
 
-          vendors.push(formattedLead);
+          dbAdapter.saveVendor('admin_1', formattedLead);
           scrapedResults.push(formattedLead);
           newLeadsInPage++;
 
-          // Emit live SSE event so radar map and vaults update instantaneously
+          try { emitVendorEvent(formattedLead, 'inserted'); } catch (e) {}
+
           try {
-            emitVendorEvent(formattedLead, 'inserted');
+            const { streamingEnricher } = require('../services/phoneBackfillService');
+            streamingEnricher.enqueue(formattedLead);
           } catch (e) {}
 
-          // Automatically extract all emails, phones, and social links if website is available
+          // Immediate parallel website enrichment (<600ms multi-page crawler)
           if (formattedLead.website && formattedLead.website.startsWith('http')) {
             fastWebsiteExtract(formattedLead.website, formattedLead.name)
               .then(webData => {
-                if (webData.emails.length > 0 || webData.instagram || webData.facebook || webData.phones.length > 0 || webData.logo) {
-                  const currentVendors = dbAdapter.getVendors();
-                  const targetIndex = currentVendors.findIndex(v => v.id === formattedLead.id);
-                  if (targetIndex !== -1) {
-                    const target = currentVendors[targetIndex];
-                    target.emails = webData.emails;
-                    target.email = webData.emails[0] || target.email || '';
-                    if (webData.instagram) target.instagram = webData.instagram;
-                    if (webData.facebook) target.facebook = webData.facebook;
-                    if (webData.logo) target.logo = webData.logo;
-                    if ((!target.phone || target.phone.includes('Requires')) && webData.phones.length > 0) {
-                      target.phone = webData.phones[0];
-                    }
-                    target.qualityScore = calculateLeadScore(target);
-                    target.tier = determineTier(target.qualityScore);
-                    currentVendors[targetIndex] = target;
-                    dbAdapter.saveVendors(currentVendors);
-                    try {
-                      emitVendorEvent(target, 'updated');
-                    } catch (e) {}
+                if (webData.emails.length > 0 || webData.instagram || webData.facebook || webData.phones.length > 0 || webData.mobiles.length > 0 || webData.logo) {
+                  formattedLead.emails = webData.emails;
+                  formattedLead.email = webData.emails[0] || formattedLead.email || '';
+                  if (webData.instagram) formattedLead.instagram = webData.instagram;
+                  if (webData.facebook) formattedLead.facebook = webData.facebook;
+                  if (webData.logo) formattedLead.logo = webData.logo;
+                  if (webData.gstin && !formattedLead.gstin) formattedLead.gstin = webData.gstin;
+                  if (webData.contactPerson && !formattedLead.contactPerson) formattedLead.contactPerson = webData.contactPerson;
+                  if (webData.pincode && !formattedLead.pincode) formattedLead.pincode = webData.pincode;
+                  
+                  if (webData.mobiles.length > 0 && !isIndianMobileNumber(formattedLead.phone)) {
+                    const m10 = webData.mobiles[0];
+                    formattedLead.phone = `+91 ${m10.slice(0, 5)} ${m10.slice(5)}`;
+                    formattedLead.whatsappLink = `https://wa.me/91${m10}`;
+                    formattedLead.whatsappAvailable = true;
+                  } else if (webData.whatsappLink && !formattedLead.whatsappLink) {
+                    formattedLead.whatsappLink = webData.whatsappLink;
+                    formattedLead.whatsappAvailable = true;
                   }
+
+                  formattedLead.qualityScore = calculateLeadScore(formattedLead);
+                  formattedLead.tier = determineTier(formattedLead.qualityScore);
+                  dbAdapter.saveVendor(formattedLead.userId || 'admin_1', formattedLead);
+                  try { emitVendorEvent(formattedLead, 'updated'); } catch (e) {}
                 }
               })
               .catch(() => {});
@@ -430,27 +514,72 @@ async function scrapeGoogleLocalFinder(
         }
       }
 
-      dbAdapter.saveVendors(vendors);
-      addLog(`[Local Finder Core] Page ${pageIndex + 1}: +${newLeadsInPage} unique leads indexed (Cumulative: ${scrapedResults.length})`);
+      addLog(`[Local Finder Core] ⚡ Page ${pageIndex + 1}: +${newLeadsInPage} unique leads indexed (Total: ${scrapedResults.length})`);
+      return newLeadsInPage;
+    };
 
-      // If page had fewer than 15 cards, Google has exhausted results for this zone
-      if (pageLeads.length < 15) {
-        addLog(`[Local Finder Core] Reached end of result stream for this zone.`);
-        break;
+    // Step 0: Tier-1 Direct Stealth HTTP harvest (~400ms, 0MB Playwright RAM)
+    let p0Count = 0;
+    try {
+      const httpRes = await fetchGoogleLocalHttp(query, 0, category || 'Business');
+      if (httpRes && Array.isArray(httpRes.leads) && httpRes.leads.length >= 6) {
+        addLog(`[Local Finder Core] ⚡ Tier-1 direct HTTP pre-flight retrieved ${httpRes.leads.length} leads in <400ms!`);
+        p0Count = processPageResult({ leads: httpRes.leads, captcha: false, pageIndex: 0 });
+      }
+    } catch (httpErr) {}
+
+    // Step 1: If HTTP yielded < 6 leads, harvest Page 0 via stealth Playwright tab
+    let page0Yield = p0Count;
+    if (page0Yield < 6) {
+      addLog(`[Local Finder Core] 🚀 Fetching Page 1 via stealth tab for full surface coverage...`);
+      const page0Result = await fetchSingleLocalPage(context, query, 0, category || 'Business');
+
+      if (page0Result.captcha) {
+        const tripped = serpBreaker.recordCaptcha();
+        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA on Page 1. Pivoting to Maps...`);
+        if (tripped && mapsBackup) return scrapedResults;
+        return await fallbackToMaps('CAPTCHA pivot.');
       }
 
-      // Micro-pause between pages for anti-bot stealth
-      await page.waitForTimeout(300 + Math.random() * 250);
+      if (!page0Result.leads || page0Result.leads.length === 0) {
+        if (scrapedResults.length === 0) {
+          addLog(`[Local Finder Core] 0 leads on Page 1 for "${query}". Pivoting to Google Maps...`);
+          return await fallbackToMaps('Empty Local Finder page.');
+        }
+      } else {
+        page0Yield = processPageResult(page0Result);
+      }
+    }
+
+    // Step 2: If Page 0 had high yield, stream next pages concurrently with instant per-page emission
+    const totalPagesToScrape = Math.min(6, Math.max(1, maxPages));
+    if (page0Yield >= 10 && totalPagesToScrape > 1 && !globalAbortSignal.aborted) {
+      const nextPages = [];
+      for (let p = 1; p < Math.min(totalPagesToScrape, 4); p++) {
+        nextPages.push(p);
+      }
+
+      addLog(`[Local Finder Core] ⚡ Streaming Pages ${nextPages.map(p => p + 1).join(', ')} in parallel for deep yield...`);
+      const pagePromises = nextPages.map(pageIdx => 
+        fetchSingleLocalPage(context, query, pageIdx, category || 'Business')
+          .then(res => {
+            if (res && !res.captcha && res.leads && res.leads.length) {
+              processPageResult(res);
+            }
+            return res;
+          })
+          .catch(() => null)
+      );
+
+      await Promise.allSettled(pagePromises);
     }
   } catch (err) {
     addLog(`[Local Finder Core] Scraping exception: ${err.message}`);
   } finally {
-    if (context) {
-      await context.close().catch(() => {});
-    }
+    if (context) await context.close().catch(() => {});
   }
 
-  addLog(`[Local Finder Core] ✅ Finished harvest for "${query}". Total fresh leads: ${scrapedResults.length}`);
+  addLog(`[Local Finder Core] ✅ Finished parallel harvest for "${query}". Total fresh leads: ${scrapedResults.length}`);
   return scrapedResults;
 }
 

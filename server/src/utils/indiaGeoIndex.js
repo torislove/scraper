@@ -24,11 +24,24 @@ const KNOWN_COORDS = {
   
   // Andhra Pradesh (Post-2022 Districts & Hubs)
   'guntur': { lat: 16.3067, lng: 80.4365, district: 'Guntur', mandal: 'Guntur', state: 'Andhra Pradesh', isDual: true },
+  'guntur east': { lat: 16.3067, lng: 80.4480, district: 'Guntur', mandal: 'Guntur East', state: 'Andhra Pradesh', isDual: false },
+  'guntur west': { lat: 16.3115, lng: 80.4280, district: 'Guntur', mandal: 'Guntur West', state: 'Andhra Pradesh', isDual: false },
+  'medikonduru': { lat: 16.3312, lng: 80.2974, district: 'Guntur', mandal: 'Medikonduru', state: 'Andhra Pradesh', isDual: false },
+  'pedanandipadu': { lat: 16.0373, lng: 80.3015, district: 'Guntur', mandal: 'Pedanandipadu', state: 'Andhra Pradesh', isDual: false },
+  'phirangipuram': { lat: 16.3023, lng: 80.2608, district: 'Guntur', mandal: 'Phirangipuram', state: 'Andhra Pradesh', isDual: false },
+  'prathipadu': { lat: 16.1772, lng: 80.3725, district: 'Guntur', mandal: 'Prathipadu', state: 'Andhra Pradesh', isDual: false },
+  'tadikonda': { lat: 16.4258, lng: 80.4486, district: 'Guntur', mandal: 'Tadikonda', state: 'Andhra Pradesh', isDual: false },
+  'thullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false },
+  'tullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false },
+  'vatticherukuru': { lat: 16.1950, lng: 80.4410, district: 'Guntur', mandal: 'Vatticherukuru', state: 'Andhra Pradesh', isDual: false },
   'chebrolu': { lat: 16.2008, lng: 80.5312, district: 'Guntur', mandal: 'Chebrolu', state: 'Andhra Pradesh', isDual: false },
-  'tenali': { lat: 16.2435, lng: 80.6400, district: 'Guntur', mandal: 'Tenali', state: 'Andhra Pradesh', isDual: false },
+  'duggirala': { lat: 16.3262, lng: 80.6272, district: 'Guntur', mandal: 'Duggirala', state: 'Andhra Pradesh', isDual: false },
+  'kakumanu': { lat: 16.0380, lng: 80.4040, district: 'Guntur', mandal: 'Kakumanu', state: 'Andhra Pradesh', isDual: false },
+  'kollipara': { lat: 16.2862, lng: 80.7228, district: 'Guntur', mandal: 'Kollipara', state: 'Andhra Pradesh', isDual: false },
   'mangalagiri': { lat: 16.4326, lng: 80.5645, district: 'Guntur', mandal: 'Mangalagiri', state: 'Andhra Pradesh', isDual: false },
-  'tadepalle': { lat: 16.4789, lng: 80.6014, district: 'Guntur', mandal: 'Tadepalle', state: 'Andhra Pradesh', isDual: false },
   'ponnur': { lat: 16.0682, lng: 80.5542, district: 'Guntur', mandal: 'Ponnur', state: 'Andhra Pradesh', isDual: false },
+  'tadepalle': { lat: 16.4789, lng: 80.6014, district: 'Guntur', mandal: 'Tadepalle', state: 'Andhra Pradesh', isDual: false },
+  'tenali': { lat: 16.2435, lng: 80.6400, district: 'Guntur', mandal: 'Tenali', state: 'Andhra Pradesh', isDual: false },
   'pedakakani': { lat: 16.3458, lng: 80.4952, district: 'Guntur', mandal: 'Pedakakani', state: 'Andhra Pradesh', isDual: false },
   'vijayawada': { lat: 16.5062, lng: 80.6480, district: 'NTR', mandal: 'Vijayawada', state: 'Andhra Pradesh', isDual: true },
   'chirala': { lat: 15.8281, lng: 80.3524, district: 'Bapatla', mandal: 'Chirala', state: 'Andhra Pradesh', isDual: false },
@@ -175,6 +188,29 @@ class IndiaGeoIndex {
             });
           }
         }
+
+        // Authoritative Post-2022 Andhra Pradesh Reorganization Overrides
+        this.districtsMap.set('guntur', {
+          district: 'Guntur',
+          state: 'Andhra Pradesh',
+          subDistricts: AUTHORITATIVE_DISTRICT_MANDALS['guntur']
+        });
+        this.districtsMap.set('palnadu', {
+          district: 'Palnadu',
+          state: 'Andhra Pradesh',
+          subDistricts: AUTHORITATIVE_DISTRICT_MANDALS['palnadu']
+        });
+        this.districtsMap.set('bapatla', {
+          district: 'Bapatla',
+          state: 'Andhra Pradesh',
+          subDistricts: AUTHORITATIVE_DISTRICT_MANDALS['bapatla']
+        });
+        this.districtsMap.set('ntr', {
+          district: 'NTR',
+          state: 'Andhra Pradesh',
+          subDistricts: AUTHORITATIVE_DISTRICT_MANDALS['ntr']
+        });
+
         this.isLoaded = true;
         console.log(`[IndiaGeoIndex] Indexed ${this.stats.states} states, ${this.stats.districts} districts, ${this.stats.subDistricts} mandals/tehsils, ${this.stats.villages} villages.`);
       }
@@ -278,11 +314,17 @@ class IndiaGeoIndex {
   /**
    * Instant, network-free location autocomplete across states, districts,
    * mandals/tehsils and all 619k Indian villages.
+   * In Master mode (isMaster: true), Districts, States and Mandals are given priority
+   * so operators can deploy multi-zone territorial swarms in 1 click.
    */
-  searchLocations(query, limit = 10) {
+  searchLocations(query, limit = 10, isMaster = false) {
     if (!this.isLoaded) this.load();
     const q = this._norm(query);
     if (!q) return [];
+
+    const qParts = q.split(',');
+    const primaryQ = qParts[0].trim();
+    const qualifierQ = qParts.slice(1).join(' ').trim();
 
     const max = Math.max(1, Math.min(25, Number(limit) || 10));
     const seen = new Set();
@@ -295,18 +337,62 @@ class IndiaGeoIndex {
       results.push({ ...item, _score: score });
     };
 
-    const matches = (value, weight) => {
+    const matches = (value, weight, itemDistrict = '', itemState = '') => {
       const v = this._norm(value);
       if (!v) return 0;
-      if (v === q) return weight + 60;
-      if (v.startsWith(q)) return weight + 30 - Math.min(20, v.length - q.length);
-      if (q.length >= 3 && v.includes(q)) return weight;
-      return 0;
+      let score = 0;
+      if (v === q || v === primaryQ) score = weight + 60;
+      else if (v.startsWith(q) || v.startsWith(primaryQ)) score = weight + 30 - Math.min(20, Math.abs(v.length - (primaryQ || q).length));
+      else if ((q.length >= 3 && v.includes(q)) || (primaryQ.length >= 3 && v.includes(primaryQ))) score = weight;
+      
+      if (score > 0 && qualifierQ) {
+        const dNorm = this._norm(itemDistrict);
+        const sNorm = this._norm(itemState);
+        if ((dNorm && (dNorm.includes(qualifierQ) || qualifierQ.includes(dNorm))) ||
+            (sNorm && (sNorm.includes(qualifierQ) || qualifierQ.includes(sNorm)))) {
+          score += 120;
+        }
+      }
+      return score;
     };
 
+    // Districts (Top priority in Master mode for 1-click District Sweeps)
+    const districtBaseWeight = isMaster ? 220 : 100;
+    for (const [key, dist] of this.districtsMap.entries()) {
+      const score = matches(key, districtBaseWeight, dist.district, dist.state);
+      if (!score) continue;
+      add({
+        name: `${dist.district} District`,
+        type: 'district',
+        district: dist.district,
+        state: dist.state,
+        detail: 'District',
+        scope: 'district',
+        display: `${dist.district} District, ${dist.state}`,
+        source: 'india_villages'
+      }, score);
+    }
+
+    // States (Top priority in Master mode for State Swarms)
+    const stateBaseWeight = isMaster ? 210 : 80;
+    for (const [key, stateObj] of this.statesMap.entries()) {
+      const score = matches(key, stateBaseWeight, '', stateObj.state);
+      if (!score) continue;
+      add({
+        name: stateObj.state,
+        type: 'state',
+        state: stateObj.state,
+        detail: 'State',
+        scope: 'state',
+        display: `${stateObj.state} (State)`,
+        source: 'india_villages'
+      }, score);
+    }
+
     // Known cities with precise coordinates
+    const cityBaseWeight = isMaster ? 180 : 190;
     for (const [key, known] of Object.entries(KNOWN_COORDS)) {
-      const score = matches(key, 180);
+      const score = matches(key, cityBaseWeight, known.district, known.state);
       if (!score) continue;
       add({
         name: known.mandal === known.district ? known.district : known.mandal,
@@ -315,6 +401,8 @@ class IndiaGeoIndex {
         subDistrict: known.mandal,
         district: known.district,
         state: known.state,
+        detail: known.isDual ? 'City' : 'Town',
+        scope: 'city',
         lat: known.lat,
         lng: known.lng,
         display: `${known.mandal === known.district ? known.district : `${known.mandal}, ${known.district}`}, ${known.state}`,
@@ -322,56 +410,47 @@ class IndiaGeoIndex {
       }, score + 5);
     }
 
-    // States
-    for (const [key, stateObj] of this.statesMap.entries()) {
-      const score = matches(key, 80);
-      if (!score) continue;
-      add({
-        name: stateObj.state,
-        type: 'state',
-        state: stateObj.state,
-        display: `${stateObj.state} (State)`,
-        source: 'india_villages'
-      }, score);
-    }
-
-    // Districts
-    for (const [key, dist] of this.districtsMap.entries()) {
-      const score = matches(key, 100);
-      if (!score) continue;
-      add({
-        name: dist.district,
-        type: 'district',
-        district: dist.district,
-        state: dist.state,
-        display: `${dist.district} District, ${dist.state}`,
-        source: 'india_villages'
-      }, score);
-    }
-
     // Mandals / tehsils / sub-districts
+    const mandalBaseWeight = isMaster ? 195 : 160;
     for (const [key, list] of this.subDistrictsMap.entries()) {
-      const score = matches(key, 105);
+      const score = matches(key, mandalBaseWeight, list[0]?.district || '', list[0]?.state || '');
       if (!score) continue;
       for (const sub of list.slice(0, 3)) {
         add({
-          name: sub.subDistrict,
+          name: `${sub.subDistrict} Mandal`,
           type: 'subdistrict',
           subDistrict: sub.subDistrict,
           district: sub.district,
           state: sub.state,
-          display: `${sub.subDistrict}, ${sub.district}, ${sub.state}`,
+          detail: 'Mandal',
+          scope: 'mandal',
+          display: `${sub.subDistrict} Mandal, ${sub.district}, ${sub.state}`,
           source: 'india_villages'
         }, score);
       }
     }
 
-    // Villages (prefix only, highest priority for exact name matches)
-    const villageQuery = q.split(',')[0].trim();
-    if (villageQuery.length >= 2) {
+    // Villages (prefix only, reduced priority in Master so territorial swarms aren't crowded out)
+    const villageQuery = primaryQ;
+    if (villageQuery.length >= 3) {
       for (const village of this._searchVillages(villageQuery, Math.max(4, max))) {
-        const nameScore = this._norm(village.name) === villageQuery ? 190 : 125 - village.name.length;
-        add(village, nameScore);
+        const isExact = this._norm(village.name) === villageQuery;
+        let nameScore = isMaster
+          ? (isExact ? 140 : 90 - village.name.length)
+          : (isExact ? 180 : 125 - village.name.length);
+        if (qualifierQ) {
+          const vD = this._norm(village.district || '');
+          const vS = this._norm(village.state || '');
+          if ((vD && (vD.includes(qualifierQ) || qualifierQ.includes(vD))) ||
+              (vS && (vS.includes(qualifierQ) || qualifierQ.includes(vS)))) {
+            nameScore += 100;
+          }
+        }
+        add({
+          ...village,
+          detail: 'Village',
+          scope: 'city'
+        }, nameScore);
       }
     }
 

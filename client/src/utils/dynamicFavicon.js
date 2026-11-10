@@ -40,9 +40,8 @@ export function setDynamicFaviconState(state = 'idle', count = 0) {
   }
 
   if (state === 'idle') {
-    // Render static crisp emerald radar
-    drawRadar(ctx, 0, false, 0);
-    link.href = canvas.toDataURL('image/png');
+    // Reset to crisp unified SVG favicon
+    link.href = '/favicon.svg';
     return;
   }
 

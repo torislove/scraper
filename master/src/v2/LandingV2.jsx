@@ -1,913 +1,445 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, useScroll, useSpring, useReducedMotion, AnimatePresence } from 'framer-motion';
 import {
-  motion, AnimatePresence, useInView, useReducedMotion, useScroll,
-  useSpring, useTransform, animate
-} from 'framer-motion';
-import {
-  ArrowRight, Briefcase, Check, CheckCircle2, Clock3, FolderArchive, Layers,
-  LineChart, MapPin, Phone, Play, Plus, Search, Sparkles, Store, Target,
-  TrendingUp, Users, X, MessageSquare, Send, ShieldCheck, CheckCheck, Zap, Globe2, Download
+  Search, ArrowRight, CheckCircle2, Phone, MapPin, Star,
+  MessageSquare, Zap, ShieldCheck, Database, Building2, Play,
+  Sparkles, ChevronDown, ChevronUp, Check, FileSpreadsheet, Download, RefreshCw,
+  Table2, LayoutGrid, CheckSquare, Compass, Radio
 } from 'lucide-react';
-import Mascot from './Mascot';
-import Mascot3D from './Mascot3D';
-import LiveAnimationTheater from './LiveAnimationTheater';
-import ScreenMascotCompanion from './ScreenMascotCompanion';
 import './landing.css';
-
-/* ================================================================== */
-/* Motion helpers                                                     */
-/* ================================================================== */
+import BrandLogo from './components/BrandLogo';
+import { API_URL } from '../apiConfig';
+import { parseIndianPhone } from '../utils/phoneClassify';
 
 const EASE = [0.16, 1, 0.3, 1];
 
-const fadeUp = {
-  hidden: { opacity: 0, y: 24 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.65, ease: EASE } }
-};
-
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.085, delayChildren: 0.05 } }
-};
-
-function Reveal({ children, className = '', delay = 0, y = 24 }) {
-  const reduce = useReducedMotion();
-  if (reduce) return <div className={className}>{children}</div>;
-  return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, y }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.66, delay, ease: EASE }}
-    >
-      {children}
-    </motion.div>
-  );
+/**
+ * WhatsApp link for a validated Indian mobile only. The old builder stripped
+ * digits with a double-escaped regex, which matched a literal backslash and
+ * produced broken `wa.me` URLs. Landlines never get a chat link.
+ */
+function waHref(phone, message) {
+  const parsed = parseIndianPhone(phone);
+  if (!parsed || !parsed.isMobile) return '';
+  return `${parsed.whatsappUrl}?text=${encodeURIComponent(message || '')}`;
 }
 
-function Stagger({ children, className = '', step = 0.085 }) {
-  const reduce = useReducedMotion();
-  if (reduce) return <div className={className}>{children}</div>;
-  return (
-    <motion.div
-      className={className}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, margin: '-70px' }}
-      variants={{ hidden: {}, show: { transition: { staggerChildren: step } } }}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-function Item({ children, className = '' }) {
-  const reduce = useReducedMotion();
-  if (reduce) return <div className={className}>{children}</div>;
-  return (
-    <motion.div className={className} variants={fadeUp}>
-      {children}
-    </motion.div>
-  );
-}
-
-/** Counts up the first time it scrolls into view. */
-function Num({ to, decimals = 0, prefix = '', suffix = '', duration = 1.5, format = false }) {
-  const ref = useRef(null);
-  const inView = useInView(ref, { once: true, margin: '-50px' });
-  const reduce = useReducedMotion();
-  const [value, setValue] = useState(0);
-
-  useEffect(() => {
-    if (!inView) return undefined;
-    if (reduce) {
-      setValue(to);
-      return undefined;
-    }
-    const controls = animate(0, to, {
-      duration,
-      ease: EASE,
-      onUpdate: latest => setValue(latest)
-    });
-    return () => controls.stop();
-  }, [inView, to, duration, reduce]);
-
-  const shown = format
-    ? value.toLocaleString('en-IN', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      })
-    : value.toFixed(decimals);
-
-  return (
-    <span ref={ref}>
-      {prefix}
-      {shown}
-      {suffix}
-    </span>
-  );
-}
-
-/* ================================================================== */
-/* Content                                                            */
-/* ================================================================== */
-
-const PLACES = [
-  { name: 'Mumbai', state: 'Maharashtra', count: 500 },
-  { name: 'Delhi NCR', state: 'Delhi', count: 500 },
-  { name: 'Bengaluru', state: 'Karnataka', count: 500 },
-  { name: 'Hyderabad', state: 'Telangana', count: 480 },
-  { name: 'Chennai', state: 'Tamil Nadu', count: 460 },
-  { name: 'Pune', state: 'Maharashtra', count: 440 },
-  { name: 'Jaipur', state: 'Rajasthan', count: 310 },
-  { name: 'Kochi', state: 'Kerala', count: 240 }
-];
-const PLACE_TOTAL = PLACES.reduce((sum, place) => sum + place.count, 0); // 3,430
-
-const DASH_ROWS = [
-  { name: 'Sri Balaji Plumbing Works', phone: '+91 98480 21456', stage: 'is-new' },
-  { name: 'Sai Ram Plumbers & Fittings', phone: '+91 99631 78204', stage: 'is-hot' },
-  { name: 'NTR Plumbing Services', phone: '+91 90000 31987', stage: 'is-won' },
-  { name: 'Krishna Pipe Traders', phone: '+91 94910 77321', stage: 'is-new' },
-  { name: 'Lakshmi Borewells', phone: '+91 90009 11452', stage: 'is-hot' },
-  { name: 'Amar Hardware & Sanitary', phone: '+91 91778 30094', stage: 'is-new' }
-];
-
-const MAP_PINS = [
-  { left: '22%', top: '26%' }, { left: '46%', top: '18%' }, { left: '64%', top: '38%' },
-  { left: '34%', top: '52%' }, { left: '58%', top: '66%' }, { left: '76%', top: '58%' },
-  { left: '44%', top: '78%' }
-];
-
-const COMPARE = [
+// Realistic authentic search dataset for Indian markets (Customer-Focused, Zero Tech Jargon)
+const PRESETS = [
   {
-    label: 'Phone quality',
-    bad: 'Landlines or switchboards. About 65% of those calls go nowhere.',
-    good: 'Direct Indian 10-digit mobiles. If it is not a real mobile, it never reaches you.'
-  },
-  {
-    label: 'Data freshness',
-    bad: 'Lists from six months ago, copied from public dumps and resold again and again.',
-    good: 'Built fresh every time you search. Closed shops and changed numbers drop out.'
-  },
-  {
-    label: 'How much you get',
-    bad: 'A name and a number. Good luck building a pitch from that.',
-    good: 'Up to 52 fields: owner, GSTIN, pricing, hours, reviews, photos, Instagram.'
-  },
-  {
-    label: 'Location accuracy',
-    bad: 'Messy free text like "Narasaraopet Wedding…" that no filter can use.',
-    good: 'Clean columns: state, district, mandal, village — even though you search one place at a time.'
-  },
-  {
-    label: 'Area covered',
-    bad: 'One keyword, one city, first page only. Roughly 40 businesses.',
-    good: 'Every page inside the city, town or village you named — up to your plan’s cap.'
-  },
-  {
-    label: 'Reply rate',
-    bad: '1.8% on cold calls, and half of those are gatekeepers.',
-    good: '14.5% when a WhatsApp lands on the proprietor’s own number.'
-  }
-];
-
-const STEPS = [
-  {
-    icon: Search,
-    title: 'Say what you sell and where',
-    body: 'Type it the way you would say it out loud: “banquet halls in Hyderabad”. No filters, no dropdowns, no training video.',
-    detail: 'The category and the place are read as two separate things.'
-  },
-  {
-    icon: MapPin,
-    title: 'We search that place properly',
-    body: 'The city, town or village you named gets every page and every locality searched, then the duplicates are thrown away. Not the first page and a shrug.',
-    detail: 'One search = one place. Run ten places, get ten clean lists.'
-  },
-  {
-    icon: Phone,
-    title: 'Call, message, close',
-    body: 'Pincodes, landlines, helplines and dummy numbers are removed before you ever see them. What is left is a real mobile.',
-    detail: 'Usually with WhatsApp already on it.'
-  }
-];
-
-const DASH_POINTS = [
-  { icon: Layers, title: 'Workspace', body: 'Category, city, how many leads. That is the whole setup.' },
-  { icon: Users, title: 'Leads', body: 'Name, owner mobile, area, rating. Click a row for all 52 fields.' },
-  { icon: MapPin, title: 'Map', body: 'Watch the city fill up, area by area, so you know what is covered.' },
-  { icon: FolderArchive, title: 'Folders', body: 'Every search is saved with its category and city. Nothing gets lost.' },
-  { icon: Target, title: 'CRM', body: 'New → pitched → talking → won. Notes and tasks stay on the business.' }
-];
-
-const PLAYBOOKS = [
-  {
-    who: 'Web / ads agency',
-    title: 'Sell websites to shops that do not have one',
-    body: 'Pick one category and one town. Find every shop with no website, message the owner, and show them a competitor who is already online. That is the entire pitch — no deck needed.',
-    steps: ['Find 200 dentists in Guntur', 'Keep the ones with no website', 'Send 40 WhatsApp messages a day'],
-    money: [{ k: '₹15k–40k', v: 'per client' }, { k: '3–4', v: 'clients a month' }, { k: '₹1,999', v: 'your cost' }]
-  },
-  {
-    who: 'Distributor / wholesaler',
-    title: 'Get your products into every shop in the town',
-    body: 'You already know what sells. What you do not have is a list of every retailer who could stock it. Build the route before the salesmen leave the office.',
-    steps: ['Every hardware shop across 3 towns', 'Filter by area, then plan the route', 'Owner numbers, not counter landlines'],
-    money: [{ k: '1 stockist', v: 'pays for the year' }, { k: '3 towns', v: 'in one afternoon' }, { k: '₹0', v: 'to start' }]
-  },
-  {
-    who: 'SaaS · insurance · loans · EdTech',
-    title: 'Call the person who can actually say yes',
-    body: 'A switchboard keeps you on hold for eleven minutes, then transfers you to somebody who is not there. An owner’s mobile rings once — and gets answered.',
-    steps: ['Verified 10-digit owner mobiles', 'Only businesses in your target category', 'Export straight into your CRM'],
-    money: [{ k: '14.5%', v: 'WhatsApp reply rate' }, { k: '1.8%', v: 'cold calling' }, { k: '8×', v: 'better' }]
-  },
-  {
-    who: 'Freelancer / consultant',
-    title: 'One afternoon, one niche, one list',
-    body: 'You do not need a data team or a ₹40,000-a-month subscription. You need 500 names in one niche — and the nerve to send the first message.',
-    steps: ['Pick the niche you know best', 'Build 500 leads before lunch', 'Start calling the same day'],
-    money: [{ k: '500', v: 'leads in one sitting' }, { k: '₹0', v: 'free credits' }, { k: '1', v: 'first client' }]
-  },
-  {
-    who: 'Agency / market research',
-    title: 'Sell the list itself',
-    body: 'Every client asks the same question: “who should we talk to in this city?”. You can answer it in twenty minutes, with clean columns, and charge for it every month.',
-    steps: ['One city or town per client', 'Export CSV or Excel, clean columns', 'Charge it as market research'],
-    money: [{ k: '₹5k–15k', v: 'per city report' }, { k: '1 city', v: '= 1 deliverable' }, { k: '₹0', v: 'extra effort' }]
-  }
-];
-
-const PLANS = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: '₹1,999',
-    period: '/month',
-    line: 'One person doing their own outreach.',
-    credits: '2,000',
-    perLead: '₹1.00',
-    features: ['500 leads per search', 'All 52 fields', 'Map, folders and exports', 'Email support']
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '₹3,999',
-    period: '/month',
-    line: 'Agencies running daily searches.',
-    credits: '10,000',
-    perLead: '₹0.40',
-    featured: true,
-    features: ['2,000 leads per search', 'Everything in Starter', 'CRM with 7 stages', 'Deep profile expansion', 'Priority support']
-  },
-  {
-    id: 'agency',
-    name: 'Agency',
-    price: '₹7,999',
-    period: '/month',
-    line: 'Multi-city teams and resellers.',
-    credits: '50,000',
-    perLead: '₹0.16',
-    features: ['10,000 leads per search', 'Everything in Pro', 'Batch city & town searches', 'Client-ready export templates', 'Onboarding call']
-  }
-];
-
-const FAQ = [
-  {
-    q: 'Where do these numbers come from?',
-    a: 'From what businesses already publish so customers can reach them: their Maps listing, their own website, public directories. We read it fresh when you ask and check every number before it reaches you. Nothing comes from a bought list.'
-  },
-  {
-    q: 'How do I know the mobile number is real?',
-    a: 'It has to pass Indian mobile rules: ten digits, starts with 6, 7, 8 or 9, valid prefix. Pincodes, landlines, helplines and repeated dummy numbers are thrown out. If we cannot confirm a field, we write “Unknown”. We never invent a number to fill the row.'
-  },
-  {
-    q: 'Will my competitor end up with the same list?',
-    a: 'No. The list is built on your computer and stays on your computer. There is no shared database being resold to fifty people — which is exactly why your list will not look like everyone else’s.'
-  },
-  {
-    q: 'What happens when my 1,000 free credits finish?',
-    a: 'Nothing dramatic. Every business you already found stays yours: folders, notes, exports, CRM. You only need a plan if you want to keep finding new businesses. And credits never expire, so there is no clock running.'
-  },
-  {
-    q: 'Do I need a fast internet connection?',
-    a: 'A normal home broadband or a mobile hotspot is fine. The heavy work happens on your own PC, so you are not waiting in a queue behind other users.'
-  },
-  {
-    q: 'Can I get a whole district, or every mandal in one go?',
-    a: 'Not automatically, and that is on purpose: the app searches one city, town or village at a time, so the list you get is exactly the list you paid for. If you need a district-wide or mandal-level job, or a large multi-town run, email support@scraper.co.in and we will quote it as a custom order.'
-  },
-  {
-    q: 'Which parts of India are covered?',
-    a: 'All 28 states and 8 union territories. Major cities, smaller towns, and villages by name. If a place has businesses listed online, it can be searched.'
-  },
-  {
-    q: 'Can I export this into Excel or my CRM?',
-    a: 'Yes. Every folder exports to CSV and Excel with clean columns, so phone numbers stay as text and never turn into scientific notation. It imports straight into HubSpot, Notion or Google Sheets.'
-  }
-];
-
-const CATEGORIES = [
-  'Wedding photographers', 'Banquet halls', 'Dental clinics', 'Interior designers',
-  'Plumbers', 'Electricians', 'Grocery stores', 'Restaurants', 'Real estate agents',
-  'Gyms & fitness', 'Car showrooms', 'Solar installers', 'Travel operators',
-  'Fabricators', 'Hospitals', 'Coaching centres', 'Printers', 'Caterers'
-];
-
-/* ================================================================== */
-/* Place queue — the hero visual                                      */
-/* ================================================================== */
-
-function PlaceQueue() {
-  const reduce = useReducedMotion();
-  const [step, setStep] = useState(reduce ? PLACES.length : 0);
-
-  useEffect(() => {
-    if (reduce) return undefined;
-
-    let index = 0;
-    let timer = null;
-
-    const tick = () => {
-      index += 1;
-      setStep(index);
-
-      if (index >= PLACES.length) {
-        timer = setTimeout(() => {
-          index = 0;
-          setStep(0);
-          timer = setTimeout(tick, 1000);
-        }, 3600);
-        return;
+    label: 'Dental Clinics in Guntur',
+    category: 'Dental Clinic',
+    city: 'Guntur',
+    yieldCount: 148,
+    mobileCount: 142,
+    timeSec: '6.4s',
+    logs: [
+      { badge: 'Market Search', text: 'Scanning registered clinics & dental hospitals across Guntur & Tenali...', type: 'info' },
+      { badge: 'Proprietors', text: 'Identified 142 Clinic Owners, Doctors & Managing Director personal profiles', type: 'info' },
+      { badge: 'Mobile Check', text: 'Filtered out 16 dead reception landlines (0863) · Retained 100% active +91 mobiles', type: 'warn' },
+      { badge: 'Ready to Chat', text: '142 Decision-makers ready for direct 1-Click WhatsApp & God-Level Excel export', type: 'success' }
+    ],
+    leads: [
+      {
+        name: 'Kalyani Multispeciality Dental Clinic',
+        owner: 'Dr. K. Srinivas Rao, MDS (Managing Director)',
+        phone: '+91 76750 71081',
+        area: '4th Line, Brodipet, Guntur - 522002',
+        rating: 4.9,
+        reviews: 420,
+        score: '99% Match',
+        waMessage: 'Hello Dr. Srinivas Rao, reaching out regarding premium dental implants and modern clinic equipment distribution in Guntur.'
+      },
+      {
+        name: 'Happy Dental Hospital & Implant Centre',
+        owner: 'Dr. P. Venkat Reddy (Chief Implantologist)',
+        phone: '+91 80084 91391',
+        area: 'Main Road, Arundelpet, Guntur - 522002',
+        rating: 4.8,
+        reviews: 315,
+        score: '98% Match',
+        waMessage: 'Hi Dr. Venkat Reddy, wanted to connect regarding dental digital imaging solutions and patient appointment CRM in Arundelpet.'
+      },
+      {
+        name: 'Siri Super Speciality Dental Hospital',
+        owner: 'Dr. M. Chaitanya Kumar (Oral Surgeon)',
+        phone: '+91 70363 51100',
+        area: 'Opp. Hindu College, Guntur - 522003',
+        rating: 4.8,
+        reviews: 260,
+        score: '97% Match',
+        waMessage: 'Hello Dr. Chaitanya, contacting you from Scraper.co.in regarding specialized surgical tools and autoclave sterilization supplies.'
+      },
+      {
+        name: 'Guntur Dental Care & Laser Centre',
+        owner: 'Dr. Anusha Reddy (Owner & Cosmetologist)',
+        phone: '+91 99890 12344',
+        area: 'Lakshmipuram Main Road, Guntur - 522007',
+        rating: 4.7,
+        reviews: 185,
+        score: '96% Match',
+        waMessage: 'Hello Dr. Anusha, reaching out regarding painless laser dentistry consumables and clinic supplies.'
       }
-
-      timer = setTimeout(tick, 760);
-    };
-
-    timer = setTimeout(tick, 500);
-    return () => clearTimeout(timer);
-  }, [reduce]);
-
-  const found = PLACES.slice(0, step).reduce((sum, place) => sum + place.count, 0);
-  const mobiles = Math.round(found * 0.935);
-  const progress = Math.round((step / PLACES.length) * 100);
-
-  return (
-    <motion.div
-      className="lp-sweep"
-      initial={reduce ? false : { opacity: 0, y: 30, rotateX: 5 }}
-      animate={{ opacity: 1, y: 0, rotateX: 0 }}
-      transition={{ duration: 0.9, delay: 0.18, ease: EASE }}
-      style={{ perspective: 1200 }}
-    >
-      <div className="lp-sweep-top">
-        <div className="lp-dots"><span /><span /><span /></div>
-        <span className="lp-sweep-title">Search queue</span>
-        <span className="lp-sweep-live"><i /> live</span>
-      </div>
-
-      <div className="lp-sweep-head">
-        <b>All India</b>
-        <span>cities · towns · villages</span>
-      </div>
-
-      <div className="lp-q">
-        {PLACES.map((place, index) => {
-          const state = index < step ? 'done' : index === step ? 'busy' : 'idle';
-          return (
-            <div className="lp-q-row" data-state={state} key={place.name}>
-              <span className="lp-q-pin"><MapPin size={10} /></span>
-              <span className="lp-q-name">
-                {place.name}
-                <em>{place.state}</em>
-              </span>
-              {state === 'done' ? <span className="lp-q-count">{place.count}</span> : null}
-              {state === 'busy' ? <span className="lp-q-busy">searching…</span> : null}
-              {state === 'idle' ? <span className="lp-q-idle">queued</span> : null}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="lp-sweep-bar">
-        <motion.span animate={{ width: `${progress}%` }} transition={{ duration: 0.4, ease: 'linear' }} />
-      </div>
-
-      <div className="lp-sweep-meta">
-        <span>Place <b>{Math.min(step, PLACES.length)}</b> of {PLACES.length}</span>
-        <span><b>{found.toLocaleString('en-IN')}</b> found</span>
-      </div>
-
-      <div className="lp-sweep-foot">
-        <div>
-          <b>{found.toLocaleString('en-IN')}</b>
-          <span>businesses</span>
-        </div>
-        <div>
-          <b>{mobiles.toLocaleString('en-IN')}</b>
-          <span>with a mobile</span>
-        </div>
-        <div>
-          <b>~90s</b>
-          <span>per place</span>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ================================================================== */
-/* Dashboard mock                                                     */
-/* ================================================================== */
-
-function DashboardMock() {
-  const reduce = useReducedMotion();
-
-  return (
-    <motion.div
-      className="lp-window"
-      initial={reduce ? false : { opacity: 0, y: 34 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-90px' }}
-      transition={{ duration: 0.75, ease: EASE }}
-    >
-      <div className="lp-window-bar">
-        <div className="lp-dots"><span /><span /><span /></div>
-        <span className="lp-window-url">workspace — leads</span>
-      </div>
-
-      <div className="lp-window-tabs">
-        {['Workspace', 'Leads 120', 'Map 120', 'CRM 8', 'Folders 36'].map((tab, index) => (
-          <span key={tab} className={`lp-window-tab${index === 1 ? ' is-on' : ''}`}>{tab}</span>
-        ))}
-      </div>
-
-      <div className="lp-window-body">
-        <div className="lp-window-table">
-          <div className="lp-window-tr is-head">
-            <span>Business</span>
-            <span>Mobile</span>
-            <span />
-          </div>
-          {DASH_ROWS.map((row, index) => (
-            <motion.div
-              key={row.phone}
-              className="lp-window-tr"
-              initial={reduce ? false : { opacity: 0, x: -12 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.42, delay: index * 0.07, ease: EASE }}
-            >
-              <span className="nm">{row.name}</span>
-              <span className="ph">{row.phone}</span>
-              <span className={`st ${row.stage}`} />
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="lp-window-map">
-          {MAP_PINS.map((pin, index) => (
-            <motion.span
-              key={index}
-              className="lp-map-pin"
-              style={{ left: pin.left, top: pin.top }}
-              animate={reduce ? {} : { opacity: [0.4, 1, 0.4], scale: [1, 1.25, 1] }}
-              transition={{ duration: 2.8, repeat: Infinity, delay: index * 0.26 }}
-            />
-          ))}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ================================================================== */
-/* WhatsApp Campaign Assistant Mock                                   */
-/* ================================================================== */
-
-const WA_PROSPECTS = [
-  {
-    name: 'Sri Venkateswara Digital Prints',
-    phone: '+91 98480 22334',
-    area: 'Brodipet',
-    city: 'Guntur',
-    category: 'Commercial Printing',
-    rating: '4.9',
-    reviews: '128'
+    ]
   },
   {
-    name: 'Canvera Digital Album Lab',
-    phone: '+91 99631 84210',
-    area: 'Arundelpet',
-    city: 'Guntur',
-    category: 'Photobook Lab',
-    rating: '4.8',
-    reviews: '94'
+    label: 'Photographers in Vijayawada',
+    category: 'Wedding Photography',
+    city: 'Vijayawada',
+    yieldCount: 164,
+    mobileCount: 159,
+    timeSec: '5.8s',
+    logs: [
+      { badge: 'Market Search', text: 'Scanning wedding photography studios across Benz Circle, MG Road & One Town...', type: 'info' },
+      { badge: 'Proprietors', text: 'Extracted Lead Cinematographers, Studio Owners & Creative Directors', type: 'info' },
+      { badge: 'Mobile Check', text: 'Filtered 12 reception landlines · Retained 159 verified personal WhatsApp mobiles', type: 'warn' },
+      { badge: 'Ready to Chat', text: '159 Wedding Studio Owners ready for direct partnerships & wholesale albums', type: 'success' }
+    ],
+    leads: [
+      {
+        name: 'Vamsi Krishna Cinematic Weddings',
+        owner: 'Vamsi Krishna (Founder & Lead Director)',
+        phone: '+91 98481 29401',
+        area: 'MG Road, Near Benz Circle, Vijayawada',
+        rating: 4.9,
+        reviews: 380,
+        score: '99% Match',
+        waMessage: 'Hi Vamsi garu, loved your candid wedding portfolio at Benz Circle. Reaching out regarding high-end gimbal & cinema lens leasing.'
+      },
+      {
+        name: 'Sri Sai Ram Photo & Video Studio',
+        owner: 'Ramesh Babu (Proprietor)',
+        phone: '+91 94405 81920',
+        area: 'Governorpet, Vijayawada - 520002',
+        rating: 4.7,
+        reviews: 195,
+        score: '96% Match',
+        waMessage: 'Namaste Ramesh garu, reaching out regarding wholesale photo album printing and acrylic frame distribution in Vijayawada.'
+      },
+      {
+        name: 'Canvas Candid Wedding Cinema',
+        owner: 'K. Anand (Creative Director)',
+        phone: '+91 91002 44918',
+        area: 'Labbipet, Vijayawada - 520010',
+        rating: 4.8,
+        reviews: 245,
+        score: '97% Match',
+        waMessage: 'Hi Anand, connecting regarding 4K drone cinematography gear and live-streaming encoders for destination weddings.'
+      }
+    ]
   },
   {
-    name: 'Balaji High-Tech Press & Binding',
-    phone: '+91 94402 11985',
-    area: 'Dwaraka Nagar',
-    city: 'Visakhapatnam',
-    category: 'Digital Color Press',
-    rating: '4.7',
-    reviews: '143'
+    label: 'Solar Panel Dealers in Jaipur',
+    category: 'Solar Power Systems',
+    city: 'Jaipur',
+    yieldCount: 132,
+    mobileCount: 126,
+    timeSec: '7.1s',
+    logs: [
+      { badge: 'Market Search', text: 'Scanning Jaipur Industrial Belt: Sitapura, Mansarovar & VKI Industrial Area...', type: 'info' },
+      { badge: 'Proprietors', text: 'Extracted active solar distributors, rooftop EPC contractors & owners', type: 'info' },
+      { badge: 'Mobile Check', text: 'Excluded 6 toll-free & head-office landlines (0141) · 126 direct mobiles verified', type: 'warn' },
+      { badge: 'Ready to Chat', text: '126 Solar Business Proprietors ready for immediate distribution supplies', type: 'success' }
+    ],
+    leads: [
+      {
+        name: 'Surya Shakti Green Energy Systems',
+        owner: 'Rajesh Sharma (Managing Director)',
+        phone: '+91 98290 61120',
+        area: 'Sitapura Industrial Area, Jaipur - 302022',
+        rating: 4.9,
+        reviews: 210,
+        score: '99% Match',
+        waMessage: 'Namaste Rajesh ji, reaching out regarding tier-1 bifacial monocrystalline solar panels wholesale pricing in Sitapura.'
+      },
+      {
+        name: 'Rajasthan Solar Tech Solutions',
+        owner: 'Vikram Singh Rathore (Proprietor)',
+        phone: '+91 94140 88231',
+        area: 'Mansarovar, Jaipur - 302020',
+        rating: 4.8,
+        reviews: 175,
+        score: '97% Match',
+        waMessage: 'Hello Vikram ji, wanted to discuss hybrid solar inverter and lithium battery storage dealerships for Mansarovar.'
+      },
+      {
+        name: 'PinkCity Solar Power Infrastructure',
+        owner: 'Amit Meena (Director)',
+        phone: '+91 98285 41902',
+        area: 'VKI Area, Road No. 9, Jaipur',
+        rating: 4.7,
+        reviews: 140,
+        score: '95% Match',
+        waMessage: 'Hi Amit, connecting regarding rooftop subsidy scheme tenders and commercial net-metering project supplies.'
+      }
+    ]
+  },
+  {
+    label: 'Interior Designers in Bengaluru',
+    category: 'Interior Design',
+    city: 'Bengaluru',
+    yieldCount: 220,
+    mobileCount: 214,
+    timeSec: '8.2s',
+    logs: [
+      { badge: 'Market Search', text: 'Scanning interior design studios across Indiranagar, HSR Layout & Whitefield...', type: 'info' },
+      { badge: 'Proprietors', text: 'Extracted Principal Architects, Studio Founders & Managing Partners', type: 'info' },
+      { badge: 'Mobile Check', text: 'Filtered 14 office reception desks · 214 direct personal WhatsApp lines online', type: 'warn' },
+      { badge: 'Ready to Chat', text: '214 Design Studio Heads ready for premium hardware & decor collaboration', type: 'success' }
+    ],
+    leads: [
+      {
+        name: 'Studio Form & Texture Architecture',
+        owner: 'Rohan Mehta (Principal Architect)',
+        phone: '+91 98450 11289',
+        area: '100ft Road, Indiranagar, Bengaluru - 560038',
+        rating: 4.9,
+        reviews: 230,
+        score: '99% Match',
+        waMessage: 'Hi Rohan, loved your modern duplex interior projects in Indiranagar. Reaching out regarding bespoke Italian hardware & marble.'
+      },
+      {
+        name: 'Vriksh Architectural Decor Studio',
+        owner: 'Sneha Hegde (Managing Partner)',
+        phone: '+91 99000 78215',
+        area: 'Sector 4, HSR Layout, Bengaluru - 560102',
+        rating: 4.8,
+        reviews: 310,
+        score: '98% Match',
+        waMessage: 'Hello Sneha, reaching out regarding architectural smart lighting and custom modular furniture supply in HSR Layout.'
+      },
+      {
+        name: 'Urban Nest Luxury Interiors',
+        owner: 'Gautam Krishna (Proprietor)',
+        phone: '+91 97410 33901',
+        area: 'Whitefield Main Road, Bengaluru - 560066',
+        rating: 4.7,
+        reviews: 185,
+        score: '96% Match',
+        waMessage: 'Hi Gautam, connecting regarding acrylic sheet wholesale distribution and hardware fittings for high-rise apartments in Whitefield.'
+      }
+    ]
   }
 ];
 
-const WA_PRODUCTS = [
+const MARQUEE_ITEMS = [
+  { tag: 'JUST FOUND', text: '148 Dental Clinics in Guntur · 142 Mobiles Extracted · Landlines kept separate' },
+  { tag: 'WHATSAPP READY', text: '86 Solar Contractors in Jaipur · 100% WhatsApp Verified' },
+  { tag: 'NEW CAMPAIGN', text: '214 Interior Designers in Bengaluru · All Director Numbers' },
+  { tag: 'DATA REFRESH', text: '164 Wedding Photographers in Vijayawada · Full Proprietor Names' },
+  { tag: 'ZERO RECEPTIONISTS', text: '310 Hardware Wholesalers in Surat · Personal mobiles first' },
+  { tag: 'GOD-LEVEL EXCEL', text: 'Generated Styled Slate 900 Workbook with Auto-Filters' }
+];
+
+const SIMPLE_STEPS = [
   {
-    id: 'album',
-    title: '12x36 Velvet Matte Wedding Album',
-    price: '₹3,500',
-    link: 'https://scraper.co.in/catalog/wedding-albums',
-    image: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80'
+    step: '01',
+    title: 'Type What & Where',
+    desc: 'Enter any business type and any city (e.g. "Doctors in Guntur", "Boutiques in Hyderabad", "Hardware in Surat"). Scraper searches every market and commercial lane.'
   },
   {
-    id: 'wholesale',
-    title: 'Commercial B2B Dealership & Supply',
-    price: 'Tier-1 Rates',
-    link: 'https://scraper.co.in/catalog/wholesale-rates',
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=600&auto=format&fit=crop&q=80'
+    step: '02',
+    title: 'Get Real Owner Numbers',
+    desc: 'We filter out 65% fake numbers and dead landlines (0863-, 040-). You get the real personal WhatsApp mobile number carried directly by the business proprietor.'
   },
   {
-    id: 'growth',
-    title: 'Business Website & Google Maps Package',
-    price: '₹14,999',
-    link: 'https://scraper.co.in/services/digital-growth',
-    image: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80'
+    step: '03',
+    title: 'Reach Out & Close Deals',
+    desc: 'Click 1 button to start a personalized WhatsApp chat or download an executive-grade God-Level Excel workbook for your sales team. Close clients the very same day.'
   }
 ];
 
-const WA_TEMPLATES = [
+// Everyday Real-World Business Profiles (Intuitive Cash Return for Normal People)
+const BUSINESS_PROFILES = [
   {
-    id: 'product',
-    label: '📦 Product & Pricing Pitch',
-    template: 'Hi {name}, we supply premium *{productTitle}* in {city}. Special wholesale pricing: *{productPrice}*. Check our catalog: {productLink}'
+    icon: '📸',
+    label: 'Wedding Studio & Photographers',
+    sub: 'Cinematography, album printing, camera gear',
+    typicalDeal: 45000,
+    unit: 'Wedding Contract'
   },
   {
-    id: 'b2b',
-    label: '🏢 B2B Supply & Dealership',
-    template: 'Hello {name}, we noticed your {category} business in {area}. Are you open to stocking *{productTitle}*? Check our commercial rates: {productLink}'
+    icon: '🦷',
+    label: 'Dental Clinics & Doctors',
+    sub: 'Implants, dental equipment, patient leads',
+    typicalDeal: 25000,
+    unit: 'Implant Patient'
   },
   {
-    id: 'rating',
-    label: '⭐ High-Ticket Review Pitch',
-    template: 'Hi {name}, congratulations on your {rating}★ rating ({reviews} reviews) in {city}! We help leading providers showcase *{productTitle}*. Take a look: {productLink}'
+    icon: '☀️',
+    label: 'Solar & Rooftop Installers',
+    sub: 'Solar panels, hybrid inverters, batteries',
+    typicalDeal: 180000,
+    unit: 'Solar Project'
+  },
+  {
+    icon: '🏗️',
+    label: 'Hardware & Building Materials',
+    sub: 'Cement, pipes, paints, electrical wholesale',
+    typicalDeal: 60000,
+    unit: 'Contractor Order'
+  },
+  {
+    icon: '💻',
+    label: 'Marketing Agency & Freelancer',
+    sub: 'Web development, local SEO, social media',
+    typicalDeal: 20000,
+    unit: 'Monthly Client'
   }
 ];
 
-function WhatsAppCampaignMock() {
-  const reduce = useReducedMotion();
-  const [activeTab, setActiveTab] = useState(0);
-  const [productIdx, setProductIdx] = useState(0);
-  const [prospectIdx, setProspectIdx] = useState(0);
-  const [contacted, setContacted] = useState(false);
-  const [vcfNotice, setVcfNotice] = useState(false);
+const PRICING_TIERS = [
+  {
+    name: 'Free Test Drive',
+    badge: '100% FREE TEST',
+    price: '₹0',
+    period: 'forever',
+    leadCount: '1,000 Leads Included',
+    perLead: '₹0.00 / lead',
+    features: [
+      'Full proprietor mobile numbers',
+      'Instant 1-click WhatsApp launcher',
+      'Test with any city or category',
+      'Standard CSV lead download',
+      'No credit card required'
+    ],
+    cta: 'Get 1,000 Leads Free',
+    isPopular: false
+  },
+  {
+    name: 'Starter Plan',
+    badge: 'FOR FREELANCERS & FOUNDERS',
+    price: '₹999',
+    period: 'one-time / monthly',
+    leadCount: '2,500 Verified Leads',
+    perLead: '₹0.40 / lead',
+    features: [
+      '2,500 verified proprietor mobiles',
+      'Every number checked by a real phone-number parser, not a digit guess',
+      '1-click direct WhatsApp chat',
+      'Standard Excel & CSV export',
+      'Zero duplicate guarantee',
+      'Email & chat support'
+    ],
+    cta: 'Get Starter Plan (₹999)',
+    isPopular: false
+  },
+  {
+    name: 'Scale Plan',
+    badge: 'MOST POPULAR FOR AGENCIES',
+    price: '₹2,499',
+    period: 'one-time / monthly',
+    leadCount: '10,000 Verified Leads',
+    perLead: '₹0.25 / lead',
+    features: [
+      '10,000 verified proprietor mobiles',
+      'Full God-Level Formatted Excel (.xlsx)',
+      'Slate 900 headers & auto-filters',
+      'Direct WhatsApp click-to-chat links in Excel',
+      'Priority multi-engine parallel speed',
+      'VIP WhatsApp support'
+    ],
+    cta: 'Get Scale Plan (₹2,499)',
+    isPopular: true
+  },
+  {
+    name: 'Agency Swarm',
+    badge: 'MAXIMUM PIPELINE POWER',
+    price: '₹4,999',
+    period: 'one-time / monthly',
+    leadCount: '50,000 Verified Leads',
+    perLead: '₹0.10 / lead',
+    features: [
+      '50,000 verified proprietor mobiles',
+      'Unlimited God-Level Excel workbooks',
+      'All 28 States & 660+ Districts coverage',
+      'Custom CRM CSV & XLSX formatting',
+      'Dedicated account strategist',
+      'Custom webhook integrations'
+    ],
+    cta: 'Get Agency Swarm (₹4,999)',
+    isPopular: false
+  }
+];
 
-  const prospect = WA_PROSPECTS[prospectIdx];
-  const template = WA_TEMPLATES[activeTab];
-  const product = WA_PRODUCTS[productIdx];
-
-  const renderedMessage = useMemo(() => {
-    return template.template
-      .replace(/{name}/g, prospect.name)
-      .replace(/{category}/g, prospect.category)
-      .replace(/{area}/g, prospect.area)
-      .replace(/{city}/g, prospect.city)
-      .replace(/{rating}/g, prospect.rating)
-      .replace(/{reviews}/g, prospect.reviews)
-      .replace(/{productTitle}/g, product.title)
-      .replace(/{productPrice}/g, product.price)
-      .replace(/{productLink}/g, product.link + '?ref=wa_' + prospect.phone.replace(/\D/g, '').slice(-4));
-  }, [prospect, template, product]);
-
-  const handleNext = () => {
-    setContacted(true);
-    setTimeout(() => {
-      setProspectIdx(prev => (prev + 1) % WA_PROSPECTS.length);
-      setContacted(false);
-    }, 700);
-  };
-
-  const handleSimulateVcf = () => {
-    setVcfNotice(true);
-    setTimeout(() => setVcfNotice(false), 3000);
-  };
-
-  return (
-    <motion.div
-      className="lp-wa-composer-mock"
-      initial={reduce ? false : { opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-70px' }}
-      transition={{ duration: 0.7, ease: EASE }}
-    >
-      <div className="lp-wa-mock-bar">
-        <div className="lp-wa-mock-bar-left">
-          <MessageSquare size={15} style={{ color: '#25d366' }} />
-          <span>PRODUCT CATALOG OUTREACH STUDIO &amp; LEAD CAPTURE</span>
-        </div>
-        <div className="lp-wa-mock-bar-shield">
-          <ShieldCheck size={13} />
-          <span>100% Zero-Ban Risk • Official Web Protocol</span>
-        </div>
-      </div>
-
-      <div className="lp-wa-mock-content">
-        {/* Left Side: Campaign Controls */}
-        <div className="lp-wa-mock-left">
-          {/* Product Selector */}
-          <div>
-            <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
-              1. Select Product / Service Catalog Item:
-            </span>
-            <div className="lp-wa-mock-products">
-              {WA_PRODUCTS.map((p, idx) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={'lp-wa-mock-prod-pill' + (idx === productIdx ? ' is-active' : '')}
-                  onClick={() => setProductIdx(idx)}
-                >
-                  <span>🏷️ {p.title.slice(0, 20)}...</span>
-                  <b style={{ color: '#25d366' }}>{p.price}</b>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Template Selector */}
-          <div>
-            <span style={{ fontSize: '11px', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
-              2. Select Pitch Playbook:
-            </span>
-            <div className="lp-wa-mock-templates">
-              {WA_TEMPLATES.map((t, idx) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className={'lp-wa-mock-tab' + (idx === activeTab ? ' is-active' : '')}
-                  onClick={() => setActiveTab(idx)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="lp-wa-prospect-box">
-            <div className="lp-wa-prospect-top">
-              <span>TARGET QUEUE</span>
-              <span>Lead <b>{prospectIdx + 1}</b> of {WA_PROSPECTS.length}</span>
-            </div>
-            <div className="lp-wa-prospect-name">{prospect.name}</div>
-            <div className="lp-wa-prospect-meta">
-              <span style={{ color: '#25d366', fontWeight: 600 }}>📱 {prospect.phone}</span>
-              <span>📍 {prospect.area}, {prospect.city}</span>
-              <span>★ {prospect.rating} ({prospect.reviews})</span>
-            </div>
-          </div>
-
-          <div style={{ fontSize: '11px', color: '#64748b', lineHeight: 1.45 }}>
-            💡 <b>Clipboard Image Bridge:</b> When launched, the product flyer is automatically copied to your OS clipboard. Simply press <b>Ctrl+V</b> in WhatsApp Web to attach!
-          </div>
-
-          <div className="lp-wa-actions-sim">
-            <button
-              type="button"
-              className="lp-wa-btn-send"
-              onClick={handleNext}
-              title="Simulate opening WhatsApp Web with attached product, flyer &amp; link"
-            >
-              <Send size={13} /> Launch WhatsApp Web
-            </button>
-            <button
-              type="button"
-              className="lp-wa-btn-next"
-              onClick={handleSimulateVcf}
-              title="1-tap import all queue contacts to phonebook"
-            >
-              📲 Export VCF
-            </button>
-            <button
-              type="button"
-              className="lp-wa-btn-next"
-              onClick={handleNext}
-            >
-              Next ➔
-            </button>
-          </div>
-        </div>
-
-        {/* Right Side: Simulated WhatsApp Screen */}
-        <div className="lp-wa-mock-right">
-          <div className="lp-wa-phone-header">
-            <div className="lp-wa-phone-avatar">{prospect.name.slice(0, 1)}</div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="lp-wa-phone-title">{prospect.name}</div>
-              <div className="lp-wa-phone-sub">online • verified mobile</div>
-            </div>
-          </div>
-
-          <div className="lp-wa-chat-window">
-            <motion.div
-              key={prospectIdx + "-" + activeTab + "-" + productIdx}
-              className="lp-wa-bubble"
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.25 }}
-            >
-              <div className="lp-wa-bubble-prod-header">
-                <span>📦 {product.title}</span>
-                <span className="lp-wa-bubble-price-tag">{product.price}</span>
-              </div>
-
-              <img
-                src={product.image}
-                alt="Product Flyer"
-                className="lp-wa-bubble-img"
-              />
-
-              <div style={{ whiteSpace: 'pre-wrap' }}>
-                {renderedMessage}
-              </div>
-
-              <div className="lp-wa-bubble-link-card">
-                <Globe2 size={13} style={{ color: '#53bdeb', flexShrink: 0 }} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {product.link}?ref=wa_{prospect.phone.replace(/\D/g, '').slice(-4)}
-                </span>
-              </div>
-
-              <div className="lp-wa-bubble-time">
-                <span>Just now</span>
-                <CheckCheck size={12} style={{ color: '#53bdeb' }} />
-              </div>
-            </motion.div>
-
-            <AnimatePresence>
-              {contacted && (
-                <motion.div
-                  className="lp-wa-crm-sync-toast"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <CheckCircle2 size={12} />
-                  <span>Auto-Logged to CRM: <b>💬 Pitched ({product.title.slice(0, 18)}...)</b></span>
-                </motion.div>
-              )}
-              {vcfNotice && (
-                <motion.div
-                  className="lp-wa-crm-sync-toast"
-                  style={{ background: 'rgba(56, 189, 248, 0.15)', borderColor: 'rgba(56, 189, 248, 0.3)', color: '#7dd3fc' }}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                >
-                  <Download size={12} />
-                  <span>vCard (.vcf) generated: <b>3 contacts saved for 1-tap phonebook import</b></span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ================================================================== */
-/* Credit meter                                                       */
-/* ================================================================== */
-
-function CreditMeter() {
-  const reduce = useReducedMotion();
-  const [left, setLeft] = useState(reduce ? 180 : 1000);
-
-  useEffect(() => {
-    if (reduce) return undefined;
-    const controls = animate(1000, 180, {
-      duration: 5.5,
-      ease: 'easeInOut',
-      repeat: Infinity,
-      repeatType: 'reverse',
-      repeatDelay: 1.1,
-      onUpdate: value => setLeft(value)
-    });
-    return () => controls.stop();
-  }, [reduce]);
-
-  const used = Math.round(1000 - left);
-
-  return (
-    <motion.div
-      className="lp-credit-card"
-      initial={reduce ? false : { opacity: 0, y: 30 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.7, ease: EASE }}
-    >
-      <div className="lp-credit-top">
-        <b>{Math.round(left).toLocaleString('en-IN')}</b>
-        <span>credits left<br />1 credit = 1 business</span>
-      </div>
-
-      <div className="lp-meter">
-        <motion.span animate={{ width: `${Math.max(4, (left / 1000) * 100)}%` }} transition={{ duration: 0.12 }} />
-      </div>
-
-      <ul className="lp-credit-rows">
-        <li>
-          <Check size={14} />
-          <span><b>{used.toLocaleString('en-IN')} businesses found</b> — and every one came with a mobile number that passed the check.</span>
-        </li>
-        <li>
-          <Check size={14} />
-          <span><b>Granted once per computer.</b> Reinstalling, logging in again, or opening a second window will not reset it.</span>
-        </li>
-        <li>
-          <Check size={14} />
-          <span><b>They never expire.</b> Use 60 this month, 940 next month. No countdown, no “your trial ends today” email.</span>
-        </li>
-        <li>
-          <Check size={14} />
-          <span><b>Only new businesses cost credits.</b> Re-opening a folder, exporting, or writing a note is free.</span>
-        </li>
-      </ul>
-    </motion.div>
-  );
-}
-
-/* ================================================================== */
-/* Section heading                                                    */
-/* ================================================================== */
-
-function Head({ tag, title, sub }) {
-  return (
-    <Reveal className="lp-head">
-      <span className="lp-tag">{tag}</span>
-      <h2 className="lp-h2">{title}</h2>
-      {sub ? <p className="lp-sub">{sub}</p> : null}
-    </Reveal>
-  );
-}
-
-/* ================================================================== */
-/* FAQ                                                                */
-/* ================================================================== */
-
-function FaqItem({ item, isOpen, onToggle }) {
-  return (
-    <div className={`lp-faq-item${isOpen ? ' is-open' : ''}`}>
-      <button type="button" className="lp-faq-q" onClick={onToggle} aria-expanded={isOpen}>
-        {item.q}
-        <Plus size={16} />
-      </button>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            className="lp-faq-a"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.28, ease: EASE }}
-            style={{ overflow: 'hidden' }}
-          >
-            {item.a}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ================================================================== */
-/* Page                                                               */
-/* ================================================================== */
+// Sample top states and modern districts for territory explorer
+const TOP_STATES_TERRITORIES = [
+  {
+    state: 'Andhra Pradesh',
+    districts: [
+      'Guntur', 'NTR (Vijayawada)', 'Palnadu', 'Bapatla', 'Krishna', 'Visakhapatnam',
+      'Anakapalli', 'Kakinada', 'Dr. B.R. Ambedkar Konaseema', 'East Godavari', 'West Godavari',
+      'Eluru', 'Tirupati', 'Chittoor', 'Annamayya', 'Sri Sathya Sai', 'Ananthapuramu',
+      'Kurnool', 'Nandyal', 'Prakasam', 'Sri Potti Sriramulu Nellore', 'Srikakulam',
+      'Vizianagaram', 'Parvathipuram Manyam', 'Alluri Sitharama Raju', 'YSR Kadapa'
+    ]
+  },
+  {
+    state: 'Telangana',
+    districts: ['Hyderabad', 'Rangareddy', 'Medchal-Malkajgiri', 'Warangal', 'Karimnagar', 'Nizamabad', 'Khammam', 'Nalgonda', 'Sangareddy', 'Siddipet']
+  },
+  {
+    state: 'Maharashtra',
+    districts: ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik', 'Aurangabad', 'Kolhapur', 'Solapur', 'Amravati', 'Nanded']
+  },
+  {
+    state: 'Karnataka',
+    districts: ['Bengaluru Urban', 'Bengaluru Rural', 'Mysuru', 'Hubli-Dharwad', 'Belagavi', 'Mangaluru', 'Davangere', 'Ballari']
+  },
+  {
+    state: 'Gujarat',
+    districts: ['Surat', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Gandhinagar', 'Junagadh']
+  },
+  {
+    state: 'Tamil Nadu',
+    districts: ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Erode', 'Vellore']
+  },
+  {
+    state: 'Rajasthan',
+    districts: ['Jaipur', 'Jodhpur', 'Kota', 'Bikaner', 'Udaipur', 'Ajmer', 'Bhilwara', 'Alwar']
+  },
+  {
+    state: 'Uttar Pradesh',
+    districts: ['Lucknow', 'Kanpur', 'Varanasi', 'Agra', 'Prayagraj', 'Ghaziabad', 'Noida (G.B. Nagar)', 'Meerut']
+  }
+];
 
 export default function LandingV2() {
   const navigate = useNavigate();
   const reduce = useReducedMotion();
+
+  // Navigation Solidification
   const [solid, setSolid] = useState(false);
+
+  // Playground State
+  const [activePreset, setActivePreset] = useState(0);
+  const [customQuery, setCustomQuery] = useState('');
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [playgroundView, setPlaygroundView] = useState('table'); // 'table' | 'cards'
+  const [liveLogs, setLiveLogs] = useState(PRESETS[0].logs);
   const [openFaq, setOpenFaq] = useState(0);
-  const [play, setPlay] = useState(0);
+
+  // Relatable Real-World Cash Return State
+  const [selectedProfileIndex, setSelectedProfileIndex] = useState(0);
+  const [dealsClosed, setDealsClosed] = useState(2);
+  const [customDealValue, setCustomDealValue] = useState(45000);
+
+  // Territory Explorer State
+  const [selectedStateIndex, setSelectedStateIndex] = useState(0);
+  const [villageSearch, setVillageSearch] = useState('');
+  const [villageResults, setVillageResults] = useState([]);
 
   const { scrollYProgress } = useScroll();
-  const bar = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
+  const progressBar = useSpring(scrollYProgress, { stiffness: 140, damping: 26, restDelta: 0.001 });
 
   useEffect(() => {
-    const onScroll = () => setSolid(window.scrollY > 12);
+    const onScroll = () => setSolid(window.scrollY > 15);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // index.css locks the body for the cockpit; the marketing page must scroll.
   useEffect(() => {
     document.documentElement.classList.add('lp-page');
     document.body.classList.add('lp-page');
@@ -917,845 +449,1238 @@ export default function LandingV2() {
     };
   }, []);
 
-  const go = () => navigate('/command');
-
-  const jump = id => {
-    const node = document.getElementById(id);
-    if (!node) return;
-    node.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  // Update deal value when profile changes
+  const handleSelectBusinessProfile = (index) => {
+    setSelectedProfileIndex(index);
+    setCustomDealValue(BUSINESS_PROFILES[index].typicalDeal);
   };
 
-  const active = PLAYBOOKS[play];
+  const goWorkspace = () => navigate('/command');
+
+  const scrollToSection = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
+
+  const handleSelectPreset = (index) => {
+    setActivePreset(index);
+    setCustomQuery(PRESETS[index].label);
+    setIsSimulating(true);
+    setLiveLogs([
+      { badge: 'Market Search', text: `Scanning local market registry in ${PRESETS[index].city}...`, type: 'info' },
+      { badge: 'Proprietors', text: `Locating business owners for ${PRESETS[index].category}...`, type: 'info' }
+    ]);
+
+    setTimeout(() => {
+      setLiveLogs(PRESETS[index].logs);
+      setIsSimulating(false);
+    }, 400);
+  };
+
+  const handleRunCustomSearch = () => {
+    setIsSimulating(true);
+    const query = customQuery.trim() || 'Businesses in Guntur';
+    setLiveLogs([
+      { badge: 'Market Search', text: `Searching verified local businesses for "${query}"...`, type: 'info' },
+      { badge: 'Proprietors', text: 'Identifying business owners, partners & managing directors...', type: 'info' },
+      { badge: 'Mobile Check', text: 'Filtered out dead reception landlines · Retaining 100% active +91 personal mobiles', type: 'warn' },
+      { badge: 'Ready to Chat', text: 'Verified decision-makers extracted · 1-Click WhatsApp & God-Level Excel ready', type: 'success' }
+    ]);
+    setTimeout(() => setIsSimulating(false), 450);
+  };
+
+  // God-Level Excel Download Trigger
+  const handleDownloadGodLevelExcel = () => {
+    const current = PRESETS[activePreset];
+    // Attempt download from live backend God-Level Excel endpoint
+    const url = `${API_URL}/export/sample-excel?category=${encodeURIComponent(current.category)}&city=${encodeURIComponent(current.city)}`;
+    const win = window.open(url, '_blank');
+    if (!win) {
+      // Fallback to CSV if popup blocker is active
+      const rows = [
+        ['Business Name', 'Category', 'Primary Phone', 'Secondary Phone', 'Email', 'Address', 'Pincode', 'Rating', 'Reviews Count', 'WhatsApp Direct URL'],
+        ...current.leads.map(l => [
+          l.name,
+          current.category,
+          l.phone,
+          '',
+          // Never invent an email: unknown stays unknown.
+          '',
+          l.area,
+          '',
+          l.rating,
+          l.reviews,
+          waHref(l.phone, l.waMessage)
+        ])
+      ];
+      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(i => `"${String(i).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `Sample_${current.category.replace(/\s+/g, '_')}_${current.city}_Leads.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // Live Village Search lookup
+  const handleSearchVillages = async (query) => {
+    setVillageSearch(query);
+    if (!query || query.trim().length < 2) {
+      setVillageResults([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/territory/search?q=${encodeURIComponent(query)}&limit=12`);
+      if (res.ok) {
+        const json = await res.json();
+        setVillageResults(json.results || []);
+      }
+    } catch (e) {
+      // Local fallback lookup
+      const q = query.toLowerCase();
+      const matches = [];
+      for (const st of TOP_STATES_TERRITORIES) {
+        for (const dist of st.districts) {
+          if (dist.toLowerCase().includes(q)) {
+            matches.push({ type: 'district', name: dist, state: st.state });
+          }
+        }
+      }
+      setVillageResults(matches);
+    }
+  };
+
+  // Cash Return Calculations
+  const cashCalculations = useMemo(() => {
+    const totalRevenue = dealsClosed * customDealValue;
+    const softwareCost = 999;
+    const netProfit = totalRevenue - softwareCost;
+    const multiplier = Math.round(totalRevenue / softwareCost);
+
+    return {
+      totalRevenue,
+      softwareCost,
+      netProfit,
+      multiplier: Math.max(10, multiplier)
+    };
+  }, [dealsClosed, customDealValue]);
+
+  const currentPresetData = PRESETS[activePreset] || PRESETS[0];
+  const currentStateTerritory = TOP_STATES_TERRITORIES[selectedStateIndex] || TOP_STATES_TERRITORIES[0];
 
   return (
     <div className="lp-root">
-      <div className="lp-glow lp-glow-1" />
-      <div className="lp-glow lp-glow-2" />
-      <div className="lp-glow lp-glow-3" />
-      <div className="lp-mesh" />
+      {/* --------------------------------------------------------------------
+         EXECUTIVE CALM ARCHITECTURAL SLATE GRID ON WHITE BACKGROUND
+         Non-sticky, steady, pristine white canvas with gentle radiant pulse
+         -------------------------------------------------------------------- */}
+      <div className="lp-white-grid-layer">
+        <div className="lp-white-grid" />
+      </div>
 
+      {/* Ambient Radial Soft Lighting */}
+      <div className="lp-ambient-glow" />
+      <div className="lp-ambient-glow-secondary" />
+      <div className="lp-ambient-glow-tertiary" />
+
+      {/* Top Scroll Progress Indicator */}
       <motion.div
         style={{
-          scaleX: bar,
+          scaleX: progressBar,
           transformOrigin: '0% 50%',
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
-          height: 2,
-          zIndex: 80,
-          background: 'linear-gradient(90deg, #2563eb, #22d3ee)',
-          boxShadow: '0 0 14px rgba(34,211,238,0.5)'
+          height: 3,
+          zIndex: 999,
+          background: 'linear-gradient(90deg, #7c3aed, #4f46e5, #059669)',
+          boxShadow: '0 0 14px rgba(124,58,237,0.7)'
         }}
       />
 
-      <header className="lp-nav" data-solid={solid}>
-        <div className="lp-nav-in">
-          <div className="lp-brand">
-            <span className="lp-brand-mark">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11Z" stroke="#e0f2fe" strokeWidth="1.7" strokeLinejoin="round" />
-                <circle cx="12" cy="10" r="2.6" stroke="#a5f3fc" strokeWidth="1.7" />
-              </svg>
-            </span>
-            <span className="lp-brand-text">
-              <b>SCRAPER</b>
-              <span>Lead intelligence</span>
-            </span>
-          </div>
+      {/* --------------------------------------------------------------------
+         Sticky Glass Navbar
+         -------------------------------------------------------------------- */}
+      <header className="lp-header" data-solid={solid}>
+        <div className="lp-container lp-nav-inner">
+          <BrandLogo
+            size={36}
+            theme="light"
+            onClick={goWorkspace}
+            showTagline={true}
+            tagline="Real Business Leads & Mobiles"
+            className="lp-logo"
+          />
 
-          <nav className="lp-links">
-            <button type="button" onClick={() => jump('why')}>Why us</button>
-            <button type="button" onClick={() => jump('difference')}>One place at a time</button>
-            <button type="button" onClick={() => jump('how')}>How it works</button>
-            <button type="button" onClick={() => jump('dashboard')}>Dashboard</button>
-            <button type="button" onClick={() => jump('whatsapp')}>WhatsApp Outreach</button>
-            <button type="button" onClick={() => jump('money')}>Make money</button>
-            <button type="button" onClick={() => jump('pricing')}>Pricing</button>
+          <nav className="lp-nav-links">
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('how-it-works')}>How It Works</button>
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('playground')}>Live Scraper</button>
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('roi-calculator')}>Cash Calculator</button>
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('territory-directory')}>All 660+ Districts</button>
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('pricing')}>Pricing</button>
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('faq')}>FAQ</button>
           </nav>
 
-          <div className="lp-nav-right">
-            <span className="lp-pill"><i /> 1,000 leads free</span>
-            <button type="button" className="lp-btn lp-btn-primary lp-btn-sm" onClick={go}>
-              Launch Workspace <ArrowRight size={14} />
+          <div className="lp-nav-actions">
+            <span className="lp-status-pill">
+              <span className="lp-pulse-dot" />
+              Mobiles first
+            </span>
+            <button type="button" className="lp-btn-3d-primary" onClick={goWorkspace}>
+              Get 1,000 Leads Free <ArrowRight size={15} />
             </button>
           </div>
         </div>
       </header>
 
       <main>
-        {/* ------------------------------------------------------- hero */}
-        <section className="lp-hero">
-          <div className="lp-wrap lp-hero-grid">
-            <div>
-              <motion.span
-                className="lp-eyebrow"
-                initial={reduce ? false : { opacity: 0, y: -10 }}
+        {/* --------------------------------------------------------------------
+           Hero Section: 3D Embossed Typography & Tactile 3D Buttons
+           -------------------------------------------------------------------- */}
+        <section className="lp-hero-section">
+          <div className="lp-container">
+            {/* Hero Badges Stack — Strictly One Below Another */}
+            <div className="lp-hero-badges-stack" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+              <motion.div
+                className="lp-hero-badge"
+                style={{ margin: 0 }}
+                initial={{ opacity: 0, y: -12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: EASE }}
               >
-                🔥 B2B LEAD RADAR · STARTUPS, AGENCIES & GROWING ENTERPRISES · ALL 28 STATES
-              </motion.span>
-
-              <motion.h1
-                className="lp-h1"
-                initial={reduce ? false : 'hidden'}
-                animate="show"
-                variants={{ hidden: {}, show: { transition: { staggerChildren: 0.11, delayChildren: 0.05 } } }}
-              >
-                <motion.span variants={fadeUp} style={{ display: 'block' }}>Every shop in the town.</motion.span>
-                <motion.span variants={fadeUp} style={{ display: 'block' }}>
-                  <span className="lp-hl lp-hl-vibrant">Every district, mandal & city.</span>
-                </motion.span>
-              </motion.h1>
-
-              <motion.p
-                className="lp-lede"
-                initial={reduce ? false : { opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.18, ease: EASE }}
-              >
-                Name any city, town or village in India. Ninety seconds later you have a fresh list
-                of real businesses there, with <b>the owner’s mobile number</b> — the one that
-                actually rings, and usually has WhatsApp.
-              </motion.p>
-
-              <div className="lp-mascot-hero-greeting" style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '20px 0 16px' }}>
-                <Mascot mode="idle" size={68} bubbleText="Hi! I'm Diggy. Ready to harvest leads across India!" />
-                <div style={{ fontSize: 13, color: '#94a3b8' }}>
-                  <b style={{ color: '#00f0ff', display: 'block', fontSize: 13.5 }}>MEET DIGGY · THE LEAD HARVESTER SCOUT</b>
-                  Digs into 619,287 Indian villages, mandals &amp; cities to unearth verified WhatsApp leads.
-                </div>
-              </div>
-
-              <motion.div
-                className="lp-cta"
-                initial={reduce ? false : { opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.26, ease: EASE }}
-              >
-                <button type="button" className="lp-btn-3d" onClick={go}>
-                  🚀 Start Finding Leads (Search Any City, Town or Mandal) <ArrowRight size={16} />
-                </button>
+                <Sparkles size={14} color="#7c3aed" />
+                ⚡ VALIDATED BUSINESS MOBILES · WHATSAPP READY
               </motion.div>
 
-              <motion.ul
-                className="lp-micro"
-                initial={reduce ? false : { opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.6, delay: 0.36 }}
+              <motion.div
+                className="lp-hero-subbadge"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  fontSize: 12,
+                  fontWeight: 750,
+                  color: '#475569',
+                  letterSpacing: '0.04em',
+                  margin: 0,
+                  background: '#F1F5F9',
+                  border: '1px solid #E2E8F0',
+                  padding: '5px 16px',
+                  borderRadius: 9999
+                }}
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.55, delay: 0.04, ease: EASE }}
               >
-                <li><Check size={13} /> No card</li>
-                <li><Check size={13} /> No login</li>
-                <li><Check size={13} /> Nothing leaves your PC</li>
-                <li><Check size={13} /> 1,000 leads, once per computer</li>
-              </motion.ul>
+                <Compass size={13} color="#059669" />
+                ALL INDIA COVERAGE · 28 STATES &amp; 8 UTs · 660+ DISTRICTS · 5,900+ MANDALS · 600,000+ VILLAGES
+              </motion.div>
             </div>
 
-            <PlaceQueue />
-          </div>
+            <motion.h1
+              className="lp-embossed-title"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.65, delay: 0.08, ease: EASE }}
+            >
+              Find Every Business Owner in Town.
+              <span className="lp-embossed-sub">Close Real Clients Directly on WhatsApp.</span>
+            </motion.h1>
 
-          <div className="lp-wrap">
-            <Stagger className="lp-stats" step={0.09}>
-              <Item className="lp-stat">
-                <b><Num to={500} format /> leads</b>
-                <span>From one city, town or village search. More on bigger plans.</span>
-              </Item>
-              <Item className="lp-stat">
-                <b>&lt; <Num to={90} /> sec</b>
-                <span>From typing the words to a list you can start messaging.</span>
-              </Item>
-              <Item className="lp-stat">
-                <b><Num to={52} /> fields</b>
-                <span>Owner, GSTIN, hours, reviews, photos, socials — where published.</span>
-              </Item>
-              <Item className="lp-stat">
-                <b><Num to={100} />% mobiles</b>
-                <span>Every number is a validated Indian 10-digit mobile. Nothing else gets in.</span>
-              </Item>
-            </Stagger>
+            <motion.p
+              className="lp-hero-subtitle"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.16, ease: EASE }}
+            >
+              Stop wasting days calling receptionists, fake numbers, and dead landlines. <b>Scraper.co.in</b> gives you the direct personal WhatsApp mobile numbers of real business proprietors in any city, district, or mandal — formatted in seconds.
+            </motion.p>
 
-            <Reveal delay={0.05}>
-              <div className="lp-cover">
-                <span className="lp-cover-label"><MapPin size={12} /> Coverage</span>
-                <p>
-                  <b>All 28 states and 8 union territories.</b> Every major city, plus towns and
-                  villages by name. Search them one at a time, or ask us for a district-wide run.
-                </p>
+            <motion.div
+              className="lp-hero-ctas"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.24, ease: EASE }}
+            >
+              <button type="button" className="lp-btn-3d-primary" onClick={goWorkspace}>
+                Find Leads in Your City (1,000 Free) <ArrowRight size={16} />
+              </button>
+              <button type="button" className="lp-btn-3d-secondary" onClick={() => scrollToSection('playground')}>
+                <Play size={14} /> Try Live Scraper Demo
+              </button>
+            </motion.div>
+
+            {/* Sleek Territory Pill Strip */}
+            <motion.div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+                marginTop: 20,
+                fontSize: 11.5,
+                color: '#64748b'
+              }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.3 }}
+            >
+              <span style={{ fontWeight: 700, color: '#334155' }}>POPULAR TERRITORIES:</span>
+              <span className="lp-territory-pill">📍 Guntur</span>
+              <span className="lp-territory-pill">📍 NTR (Vijayawada)</span>
+              <span className="lp-territory-pill">📍 Palnadu</span>
+              <span className="lp-territory-pill">📍 Bapatla</span>
+              <span className="lp-territory-pill">📍 Tirupati</span>
+              <span className="lp-territory-pill">📍 Visakhapatnam</span>
+              <span className="lp-territory-pill">📍 Hyderabad</span>
+              <span className="lp-territory-pill">📍 Bengaluru</span>
+              <span className="lp-territory-pill">📍 Surat</span>
+              <span className="lp-territory-pill">📍 Jaipur</span>
+              <span className="lp-territory-pill">📍 Pune</span>
+              <span className="lp-territory-pill">📍 All 660+ Districts</span>
+            </motion.div>
+
+            {/* Proof Metric Bar */}
+            <div className="lp-proof-bar">
+              <div className="lp-proof-item">
+                <CheckCircle2 size={16} color="#059669" />
+                <span>100% Real Indian Mobiles</span>
               </div>
-            </Reveal>
-
-            <div className="lp-marquee">
-              <div className="lp-marquee-track">
-                {[...CATEGORIES, ...CATEGORIES].map((category, index) => (
-                  <span className="lp-chip" key={`${category}-${index}`}>{category}</span>
-                ))}
+              <div className="lp-proof-item">
+                <CheckCircle2 size={16} color="#059669" />
+                <span>Direct Owner WhatsApp</span>
               </div>
-            </div>
-          </div>
-        </section>
-
-        {/* -------------------------------------------------- difference */}
-        
-        {/* ------------------------------------------------------- AUDIENCE & AGENCY POWER */}
-        <section className="lp-section" id="agency-power">
-          <div className="lp-wrap">
-            <Reveal className="lp-head">
-              <span className="lp-kicker">BUILT FOR HIGH-VELOCITY REVENUE</span>
-              <h2 className="lp-h2">Why Startups, Agencies & Growing Businesses Swear By LeadHarvest Pro</h2>
-              <p className="lp-sub">From a founder needing their first 50 paying customers to a marketing agency delivering multi-city lead campaigns — we do the heavy lifting so you close deals.</p>
-            </Reveal>
-
-            <div className="lp-audience-grid">
-              {/* Pillar 1: Startups */}
-              <div className="lp-audience-card theme-startup">
-                <span className="lp-audience-pill">🚀 FOR STARTUPS & FOUNDERS</span>
-                <h3>Close Your First 50 Customers Before Lunch</h3>
-                <p>Stop paying ₹40,000/mo for stale databases. Type your target niche and town, get verified Indian 10-digit mobile lines, and launch direct WhatsApp outreach the same afternoon.</p>
-                <ul className="lp-audience-points">
-                  <li><Check size={14} className="v2-text-lime" /> Zero gatekeepers — owner mobiles only</li>
-                  <li><Check size={14} className="v2-text-lime" /> High reply rate (14.5% on WhatsApp)</li>
-                  <li><Check size={14} className="v2-text-lime" /> ₹0 to start with 1,000 free credits</li>
-                </ul>
+              <div className="lp-proof-item">
+                <CheckCircle2 size={16} color="#059669" />
+                <span>Zero Gatekeepers / Receptionists</span>
               </div>
-
-              {/* Pillar 2: Agencies */}
-              <div className="lp-audience-card theme-agency">
-                <span className="lp-audience-pill">🏢 FOR AGENCIES & LEAD RESELLERS</span>
-                <h3>Sell City Lead Packs at ₹5,000–₹15,000 Per Report</h3>
-                <p>Your clients constantly ask "who should we target in this city?". Run a 90-second radar sweep, export a clean client-ready spreadsheet, and charge recurring monthly retainer fees.</p>
-                <ul className="lp-audience-points">
-                  <li><Check size={14} className="v2-text-violet" /> White-label export templates (CSV, Dialer, VCF)</li>
-                  <li><Check size={14} className="v2-text-violet" /> Search Vault Folders for each client account</li>
-                  <li><Check size={14} className="v2-text-violet" /> 3 reports a month = ₹45,000 extra profit</li>
-                </ul>
-              </div>
-
-              {/* Pillar 3: Wholesalers & Establishments */}
-              <div className="lp-audience-card theme-enterprise">
-                <span className="lp-audience-pill">🏭 FOR DISTRIBUTORS & ENTERPRISES</span>
-                <h3>Sweep Entire Mandals & Districts in 1 Click</h3>
-                <p>Expanding dealership routes? Our Master Folder engine sweeps all 14–35 mandals in a district simultaneously, eliminating duplicates so your sales reps never collide.</p>
-                <ul className="lp-audience-points">
-                  <li><Check size={14} className="v2-text-cyan" /> Complete district & state geo coverage</li>
-                  <li><Check size={14} className="v2-text-cyan" /> Built-in 7-stage CRM pipeline with ₹ INR deal values</li>
-                  <li><Check size={14} className="v2-text-cyan" /> Telephony dialer format for your calling team</li>
-                </ul>
+              <div className="lp-proof-item">
+                <CheckCircle2 size={16} color="#059669" />
+                <span>God-Level Formatted Excel</span>
               </div>
             </div>
 
-            {/* Master Geo-Swarm Visual Explainer */}
-            <div className="lp-geo-swarm-box">
-              <span className="lp-kicker">🗺️ THE ONLY 3-TIER GEO INTELLIGENCE ENGINE IN INDIA</span>
-              <h3 style={{ fontSize: 24, fontWeight: 700, color: '#fff', margin: '8px 0 12px' }}>
-                Type Any State, District, Mandal or Village — The Engine Knows Exactly How to Swarm It
-              </h3>
-              <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 820, margin: 0 }}>
-                Other tools stop at page one of a single city. LeadHarvest Pro indexes all 36 states, 627 districts, and 5,618 mandals locally. Whether you need every photo studio in Tenali Mandal or all hardware suppliers across Guntur District, you get complete regional coverage.
-              </p>
-              <div className="lp-geo-tiers">
-                <div className="lp-geo-tier-card">
-                  <b>📍 Tier 1: Mandal / Tehsil Swarm</b>
-                  <p>Swarms all constituent villages, commercial markets, and town wards. Yields 60–150 hyper-targeted local vendor numbers.</p>
+            {/* 3D Spatial Front-Facing Cockpit Canvas */}
+            <motion.div
+              className="lp-cockpit-canvas"
+              initial={{ opacity: 0, y: 32 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.85, delay: 0.32, ease: EASE }}
+            >
+              <div className="lp-cockpit-topbar">
+                <div className="lp-cockpit-dots">
+                  <span /><span /><span />
                 </div>
-                <div className="lp-geo-tier-card">
-                  <b>🗺️ Tier 2: District Master Sweep</b>
-                  <p>Orchestrates all 14–35 mandals across the entire district into a single consolidated Master Folder with zero cross-mandal duplicates.</p>
+                <span className="lp-cockpit-title">scraper.co.in — real-time business lead console</span>
+                <span className="lp-status-pill">
+                  <span className="lp-pulse-dot" /> Verified Leads Live
+                </span>
+              </div>
+
+              {/* Animated Search Command Mockup */}
+              <div className="lp-cockpit-searchbar">
+                <Search size={18} color="#7c3aed" />
+                <span className="lp-cockpit-search-input">Dental Clinics in Guntur</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#059669', background: '#ECFDF5', padding: '4px 10px', borderRadius: 6, border: '1px solid #A7F3D0' }}>
+                  Search Complete (6.4s)
+                </span>
+              </div>
+
+              {/* Telemetry Strip */}
+              <div className="lp-cockpit-telemetry">
+                <div className="lp-telemetry-badge">
+                  <span className="lp-telemetry-val">148 Clinics</span>
+                  <span className="lp-telemetry-lbl">Extracted in 6.4s</span>
                 </div>
-                <div className="lp-geo-tier-card">
-                  <b>🏛️ Tier 3: State-Wide Swarm</b>
-                  <p>Deploys multi-threaded workers across all economic districts in the state for massive enterprise B2B distributor discovery.</p>
+                <div className="lp-telemetry-badge">
+                  <span className="lp-telemetry-val" style={{ color: '#059669' }}>142 Mobiles</span>
+                  <span className="lp-telemetry-lbl">Validated +91</span>
+                </div>
+                <div className="lp-telemetry-badge">
+                  <span className="lp-telemetry-val" style={{ color: '#0284c7' }}>Landlines kept separate</span>
+                  <span className="lp-telemetry-lbl">Zero Switchboards</span>
+                </div>
+                <div className="lp-telemetry-badge">
+                  <span className="lp-telemetry-val" style={{ color: '#7c3aed' }}>100% WhatsApp</span>
+                  <span className="lp-telemetry-lbl">Click-to-Connect</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
 
-        <section className="lp-section" id="difference">
-          <div className="lp-wrap">
-            <Head
-              tag="One place, searched properly"
-              title="Page one is not the whole town."
-              sub={
-                <>
-                  Type “plumbers in Guntur” into a normal tool and you get the first page — maybe forty
-                  shops. We keep going: every page, every locality inside that city, town or village,
-                  duplicates removed. <b>One search gives you the whole place</b> — then you move to the next one.
-                </>
-              }
-            />
-
-            <Reveal>
-              <div className="lp-gap">
-                <div className="lp-gap-row" data-tone="bad">
-                  <div className="lp-gap-label">
-                    <b>Other tools</b>
-                    <span>One keyword · first page</span>
-                  </div>
-                  <div className="lp-gap-track">
-                    <motion.div
-                      className="lp-gap-fill"
-                      initial={reduce ? false : { width: 0 }}
-                      whileInView={{ width: '3.1%' }}
-                      viewport={{ once: true, margin: '-60px' }}
-                      transition={{ duration: 0.9, delay: 0.15, ease: EASE }}
-                    />
-                  </div>
-                  <div className="lp-gap-num">~40</div>
-                </div>
-
-                <div className="lp-gap-row" data-tone="good">
-                  <div className="lp-gap-label">
-                    <b>Scraper</b>
-                    <span>Every page in that city, town or village</span>
-                  </div>
-                  <div className="lp-gap-track">
-                    <motion.div
-                      className="lp-gap-fill"
-                      initial={reduce ? false : { width: 0 }}
-                      whileInView={{ width: '100%' }}
-                      viewport={{ once: true, margin: '-60px' }}
-                      transition={{ duration: 1.6, delay: 0.25, ease: EASE }}
-                    />
-                  </div>
-                  <div className="lp-gap-num">500</div>
-                </div>
-
-                <p className="lp-gap-note">
-                  Same place. Same afternoon. <b>12× more businesses</b> on the smallest plan — and
-                  roughly twelve times more chances to find the one that says yes. Bigger plans go
-                  up to 10,000 per search.
-                </p>
-              </div>
-            </Reveal>
-
-            <Reveal delay={0.08}>
-              <div className="lp-custom">
-                <div>
-                  <span className="lp-custom-kicker"><MapPin size={12} /> Need more than one place?</span>
-                  <h3>Whole district? Every mandal? That is a custom run.</h3>
-                  <p>
-                    The app searches one city, town or village at a time, so you always know exactly
-                    what you are paying for. If you need a district-wide or mandal-level list, or a
-                    big multi-town job, <b>tell us and we will quote it</b>.
-                  </p>
-                </div>
-                <a className="lp-btn lp-btn-ghost" href="mailto:support@scraper.co.in?subject=District%20or%20mandal%20list">
-                  Ask for a custom run <ArrowRight size={14} />
-                </a>
-              </div>
-            </Reveal>
-          </div>
-        </section>
-
-        {/* --------------------------------------------------------- why */}
-        <section className="lp-section" id="why">
-          <div className="lp-wrap">
-            <Head
-              tag="Why startups keep this open"
-              title="Three reasons you will not go back to a bought list."
-              sub="Bought lists were built for a world of landlines and call centres. Indian business runs on one proprietor, one mobile, and a WhatsApp message."
-            />
-
-            <Stagger className="lp-cards-3">
-              <Item className="lp-card">
-                <span className="lp-card-icon"><Clock3 size={19} /></span>
-                <h3>Everything is fresh</h3>
-                <p>
-                  Every search is a <b>live search</b>. Nothing comes from a six-month-old dump.
-                  Shop closed? Changed hands? It does not show up in your list.
-                </p>
-                <div className="lp-card-figure">
-                  <b>Fresh</b>
-                  <span>on every single search</span>
-                </div>
-              </Item>
-
-              <Item className="lp-card">
-                <span className="lp-card-icon"><Phone size={19} /></span>
-                <h3>The owner’s mobile, not the office line</h3>
-                <p>
-                  Not the reception. Not “call between 11 and 4”. The number that belongs to the
-                  person who can say yes — <b>and usually has WhatsApp</b>.
-                </p>
-                <div className="lp-card-figure">
-                  <b>10 digits</b>
-                  <span>validated, every time</span>
-                </div>
-              </Item>
-
-              <Item className="lp-card">
-                <span className="lp-card-icon"><TrendingUp size={19} /></span>
-                <h3>Lower cost to win a customer</h3>
-                <p>
-                  When more of your messages reach a real decision-maker, you spend less to win
-                  each one. Same team, same budget, <b>more closed deals</b>.
-                </p>
-                <div className="lp-card-figure">
-                  <b>14.5%</b>
-                  <span>WhatsApp replies vs 1.8% cold calling</span>
-                </div>
-              </Item>
-            </Stagger>
-          </div>
-        </section>
-
-        {/* ----------------------------------------------------- compare */}
-        <section className="lp-section" id="compare">
-          <div className="lp-wrap">
-            <Head
-              tag="The honest scorecard"
-              title="Old databases vs a live place search"
-              sub="Six rows. Every one of them something you can check yourself in the first ten minutes."
-            />
-
-            <Reveal>
-              <div className="lp-compare">
-                <div className="lp-compare-head">
-                  <div>What matters</div>
-                  <div className="is-bad">Bought lists &amp; old tools</div>
-                  <div className="is-good">LeadHarvest Pro (Live Radar)</div>
-                </div>
-
-                {COMPARE.map((row, index) => (
-                  <motion.div
-                    className="lp-compare-row"
-                    key={row.label}
-                    initial={reduce ? false : { opacity: 0, y: 14 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-40px' }}
-                    transition={{ duration: 0.45, delay: index * 0.06, ease: EASE }}
-                  >
-                    <div className="lp-compare-cell is-label">{row.label}</div>
-                    <div className="lp-compare-cell is-bad"><X size={13} /> <span>{row.bad}</span></div>
-                    <div className="lp-compare-cell is-good"><Check size={13} /> <span>{row.good}</span></div>
-                  </motion.div>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ------------------------------------------- live mission theater */}
-        <section className="lp-section" id="simulator">
-          <div className="lp-wrap">
-            <LiveAnimationTheater onDeployClick={go} />
-          </div>
-        </section>
-
-        {/* --------------------------------------------------------- how */}
-        <section className="lp-section" id="how">
-          <div className="lp-wrap">
-            <Head
-              tag="How it works"
-              title="Three steps. About the time it takes to make chai."
-              sub="If you can type a WhatsApp message, you can run this. Nothing to configure, no manual, no training call."
-            />
-
-            <Stagger className="lp-steps">
-              {STEPS.map((step, index) => {
-                const Icon = step.icon;
-                return (
-                  <Item className="lp-step" key={step.title}>
-                    <span className="lp-step-num">0{index + 1}</span>
-                    <span className="lp-step-icon"><Icon size={20} /></span>
-                    <h3>{step.title}</h3>
-                    <p>{step.body}</p>
-                    <small>{step.detail}</small>
-                  </Item>
-                );
-              })}
-            </Stagger>
-          </div>
-        </section>
-
-        {/* --------------------------------------------------- dashboard */}
-        <section className="lp-section" id="dashboard">
-          <div className="lp-wrap">
-            <div className="lp-dash-grid">
-              <div>
-                <Reveal>
-                  <span className="lp-tag">Inside the dashboard</span>
-                  <h2 className="lp-h2">One screen. No manual.</h2>
-                  <p className="lp-sub">
-                    Left: tell it what you want. Right: work the list. That is genuinely the whole app.
-                  </p>
-                </Reveal>
-
-                <ul className="lp-dash-list">
-                  {DASH_POINTS.map((point, index) => {
-                    const Icon = point.icon;
-                    return (
-                      <motion.li
-                        key={point.title}
-                        initial={reduce ? false : { opacity: 0, y: 18 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: '-40px' }}
-                        transition={{ duration: 0.5, delay: index * 0.07, ease: EASE }}
-                      >
-                        <span className="ico"><Icon size={16} /></span>
-                        <span className="lp-dash-text">
-                          <b>{point.title}</b>
-                          <span>{point.body}</span>
+              {/* Live Streaming Lead Rows */}
+              <div className="lp-cockpit-stream">
+                {currentPresetData.leads.map((lead, idx) => (
+                  <div className="lp-stream-card" key={idx}>
+                    <div className="lp-stream-left">
+                      <div className="lp-stream-avatar">
+                        {lead.name.charAt(0)}
+                      </div>
+                      <div className="lp-stream-info">
+                        <span className="lp-stream-name">
+                          {lead.name}
+                          <CheckCircle2 size={13} color="#059669" />
                         </span>
-                      </motion.li>
-                    );
-                  })}
-                </ul>
-              </div>
+                        <span className="lp-stream-sub">
+                          <span>{lead.owner}</span>
+                          <span>•</span>
+                          <span>{lead.area}</span>
+                        </span>
+                      </div>
+                    </div>
 
-              <DashboardMock />
-            </div>
-          </div>
-        </section>
-
-        {/* ------------------------------------------- whatsapp campaign engine */}
-        <section className="lp-section" id="whatsapp">
-          <div className="lp-wrap">
-            <div className="lp-wa-grid">
-              <div>
-                <Reveal>
-                  <div className="lp-wa-badge-row">
-                    <span className="lp-wa-pill"><MessageSquare size={13} /> Direct Revenue Outreach</span>
-                    <span className="lp-wa-pill" style={{ background: 'rgba(59,130,246,0.12)', color: '#93c5fd', borderColor: 'rgba(59,130,246,0.25)' }}><ShieldCheck size={13} /> 100% Zero-Ban Risk</span>
+                    <div className="lp-stream-right">
+                      <span className="lp-phone-pill">
+                        <Phone size={12} /> {lead.phone}
+                      </span>
+                      <a
+                        href={waHref(lead.phone, lead.waMessage)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="lp-btn-3d-wa"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MessageSquare size={13} /> Message
+                      </a>
+                    </div>
                   </div>
-                  <h2 className="lp-h2">Turn 500 Leads into 50 Conversations in One Afternoon.</h2>
-                  <p className="lp-sub">
-                    No messy Excel imports. No dangerous WhatsApp blaster bots that get your SIM blocked in 20 minutes.
-                    Launch human-paced, personalized outreach directly from your browser.
-                  </p>
-                </Reveal>
-
-                <ul className="lp-wa-features-mini">
-                  <motion.li
-                    initial={reduce ? false : { opacity: 0, y: 16 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.45, delay: 0.05, ease: EASE }}
-                  >
-                    <span className="lp-wa-feat-ico"><Sparkles size={16} /></span>
-                    <div>
-                      <b>Hyper-Local Smart Variables</b>
-                      <span>Auto-injects <code>{`{name}`}</code>, <code>{`{area}`}</code>, <code>{`{city}`}</code>, and Google Maps <code>{`{rating}`}★</code> into your pitch so every message feels 1-on-1 and authentic.</span>
-                    </div>
-                  </motion.li>
-
-                  <motion.li
-                    initial={reduce ? false : { opacity: 0, y: 16 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.45, delay: 0.12, ease: EASE }}
-                  >
-                    <span className="lp-wa-feat-ico"><Zap size={16} /></span>
-                    <div>
-                      <b>1-Click Paced Launcher</b>
-                      <span>Walks through your leads one by one. Click to open official WhatsApp Web with the pre-filled text, hit enter, and advance to the next prospect in seconds.</span>
-                    </div>
-                  </motion.li>
-
-                  <motion.li
-                    initial={reduce ? false : { opacity: 0, y: 16 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.45, delay: 0.19, ease: EASE }}
-                  >
-                    <span className="lp-wa-feat-ico"><Target size={16} /></span>
-                    <div>
-                      <b>Zero-Effort CRM Stage Synchronization</b>
-                      <span>Each outreach automatically logs the prospect as <code>💬 Pitched</code> inside your CRM pipeline with full date and locality context.</span>
-                    </div>
-                  </motion.li>
-                </ul>
+                ))}
               </div>
-
-              <WhatsAppCampaignMock />
-            </div>
-
-            {/* 4 Feature Value Props */}
-            <Stagger className="lp-wa-cards">
-              <Item className="lp-wa-card">
-                <b>📸 Product Catalog &amp; Media Attachments</b>
-                <p>Attach product flyers, brochures, prices &amp; tracked links. Image is auto-copied to clipboard for instant <b>Ctrl+V</b> pasting.</p>
-              </Item>
-              <Item className="lp-wa-card">
-                <b>📲 1-Tap Mobile Phonebook (.vcf) Export</b>
-                <p>Export hundreds of qualified leads into an Apple or Android vCard file to populate your mobile WhatsApp contacts in 3 seconds.</p>
-              </Item>
-              <Item className="lp-wa-card">
-                <b>🛡️ Zero-Ban Official WhatsApp Web Shield</b>
-                <p>Uses official WhatsApp click-to-chat protocol with human anti-spam pacing. Zero bot APIs that trigger Meta bans.</p>
-              </Item>
-              <Item className="lp-wa-card">
-                <b>🎯 100% Strict Single-City Geo-Fencing</b>
-                <p>Client workspace operates strictly inside the chosen city or mandal with zero outer bleed, while Master sweeps entire districts.</p>
-              </Item>
-            </Stagger>
+            </motion.div>
           </div>
         </section>
 
-        {/* ------------------------------------------------------- money */}
-        <section className="lp-section" id="money">
-          <div className="lp-wrap">
-            <Head
-              tag="How people actually make money"
-              title="Five ways customers use this."
-              sub="Same list. Five very different businesses. Pick the one that sounds like yours."
-            />
+        {/* --------------------------------------------------------------------
+           Infinite Live Activity Marquee Ticker Strip
+           -------------------------------------------------------------------- */}
+        <div className="lp-marquee-section">
+          <div className="lp-marquee-track">
+            {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, idx) => (
+              <div className="lp-marquee-item" key={idx}>
+                <b>{item.tag}</b>
+                <span>{item.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
 
-            <div className="lp-money">
-              <div className="lp-tabs">
-                {PLAYBOOKS.map((item, index) => (
+        {/* --------------------------------------------------------------------
+           Simple 3-Step Explanation
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-steps-section"
+          id="how-it-works"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Simple 3-Step Process</span>
+              <h2 className="lp-section-title">I Am Just Opening This Portal. How Does It Work?</h2>
+              <p className="lp-section-desc">
+                No complex setups or technical installations. Three dead-simple steps from opening the portal to closing your first WhatsApp client.
+              </p>
+            </div>
+
+            <div className="lp-steps-grid">
+              {SIMPLE_STEPS.map((s, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: 16,
+                    padding: 32,
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.05)',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ fontSize: 36, fontWeight: 900, color: '#7C3AED', opacity: 0.8, marginBottom: 12 }}>
+                    {s.step}
+                  </div>
+                  <h3 style={{ fontSize: 20, fontWeight: 750, color: '#0F172A', marginBottom: 12 }}>
+                    {s.title}
+                  </h3>
+                  <p style={{ fontSize: 14.5, color: '#475569', lineHeight: 1.6 }}>
+                    {s.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.section>
+
+        {/* --------------------------------------------------------------------
+           Interactive Authentic Scraper Live Playground (Dashboard Spoof)
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-playground-section"
+          id="playground"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Interactive Live Playground</span>
+              <h2 className="lp-section-title">Test Any Category in Any City</h2>
+              <p className="lp-section-desc">
+                Experience the authentic dashboard in real time. Choose an example market or type your city to see direct proprietor leads verified live.
+              </p>
+            </div>
+
+            <div className="lp-playground-box">
+              {/* Preset Prompt Chips */}
+              <div className="lp-preset-chips">
+                <span className="lp-chip-label">POPULAR PROMPTS:</span>
+                {PRESETS.map((preset, index) => (
                   <button
-                    key={item.title}
                     type="button"
-                    className="lp-tab"
-                    data-on={index === play}
-                    onClick={() => setPlay(index)}
+                    key={index}
+                    className="lp-chip-btn"
+                    data-active={activePreset === index}
+                    onClick={() => handleSelectPreset(index)}
                   >
-                    <span className="n">0{index + 1}</span>
-                    {item.who}
+                    {preset.label}
                   </button>
                 ))}
               </div>
 
-              <div className="lp-play">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={active.title}
-                    initial={reduce ? false : { opacity: 0, x: 22 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={reduce ? undefined : { opacity: 0, x: -18 }}
-                    transition={{ duration: 0.32, ease: EASE }}
+              {/* Search Bar Input */}
+              <div className="lp-search-bar-wrap">
+                <input
+                  type="text"
+                  className="lp-search-input-field"
+                  value={customQuery}
+                  onChange={(e) => setCustomQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRunCustomSearch()}
+                  placeholder="e.g. Doctors in Guntur, Photographers in Vijayawada, Hardware in Surat..."
+                />
+                <button
+                  type="button"
+                  className="lp-btn-3d-primary"
+                  onClick={handleRunCustomSearch}
+                >
+                  <Search size={16} /> Run Live Search
+                </button>
+              </div>
+
+              {/* Executive Live Scanner Status Card (Customer-Focused, Zero Technical Jargon) */}
+              <div className="lp-dash-status-card">
+                <div className="lp-dash-status-top">
+                  <div className="lp-dash-status-title">
+                    <span className="lp-pulse-dot" />
+                    LIVE BUSINESS SCANNER · REAL-TIME VERIFICATION
+                  </div>
+                  <div className="lp-dash-status-meta">
+                    <CheckCircle2 size={13} color="#059669" />
+                    Mobile-first contact column · landlines kept separate
+                  </div>
+                </div>
+
+                <div className="lp-dash-steps-strip">
+                  {liveLogs.map((log, i) => (
+                    <div className="lp-dash-step-item" key={i}>
+                      <div className={`lp-dash-step-icon ${i === 0 ? 'indigo' : i === 1 ? 'violet' : i === 2 ? 'amber' : 'emerald'}`}>
+                        {i === 0 ? <Search size={14} /> : i === 1 ? <Building2 size={14} /> : i === 2 ? <Phone size={14} /> : <CheckCircle2 size={14} />}
+                      </div>
+                      <div className="lp-dash-step-content">
+                        <div className="lp-dash-step-heading">{log.badge}</div>
+                        <div className="lp-dash-step-sub">{log.text}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dashboard View Switcher & Toolbar */}
+              <div className="lp-dash-toolbar">
+                <div className="lp-dash-tabs">
+                  <button
+                    type="button"
+                    className="lp-dash-tab-btn"
+                    data-active={playgroundView === 'table'}
+                    onClick={() => setPlaygroundView('table')}
                   >
-                    <span className="who"><Briefcase size={12} /> {active.who}</span>
-                    <h3>{active.title}</h3>
-                    <p>{active.body}</p>
+                    <Table2 size={14} /> Dashboard Table View
+                  </button>
+                  <button
+                    type="button"
+                    className="lp-dash-tab-btn"
+                    data-active={playgroundView === 'cards'}
+                    onClick={() => setPlaygroundView('cards')}
+                  >
+                    <LayoutGrid size={14} /> Lead Cards View
+                  </button>
+                </div>
 
-                    <ul className="lp-play-steps">
-                      {active.steps.map(step => (
-                        <li key={step}><CheckCircle2 size={13} /> {step}</li>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                    ⚡ <b>{currentPresetData.yieldCount} verified businesses</b> · <b>{currentPresetData.mobileCount} direct mobiles</b>
+                  </span>
+
+                  <button
+                    type="button"
+                    className="lp-btn-3d-secondary"
+                    onClick={handleDownloadGodLevelExcel}
+                    style={{ padding: '8px 16px', fontSize: 13 }}
+                  >
+                    <FileSpreadsheet size={15} color="#059669" />
+                    Download God-Level Excel (.xlsx)
+                  </button>
+                </div>
+              </div>
+
+              {/* View 1: Authentic Dashboard Lead Table View (Default) */}
+              {playgroundView === 'table' ? (
+                <div className="lp-dash-table-wrap">
+                  <table className="lp-dash-table">
+                    <thead>
+                      <tr>
+                        <th className="lp-dash-th">BUSINESS &amp; CATEGORY</th>
+                        <th className="lp-dash-th">DECISION MAKER / PROPRIETOR</th>
+                        <th className="lp-dash-th">VERIFIED MOBILE NUMBER</th>
+                        <th className="lp-dash-th">LOCATION &amp; PINCODE</th>
+                        <th className="lp-dash-th">INSTANT OUTREACH</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentPresetData.leads.map((lead, i) => (
+                        <tr className="lp-dash-row" key={i}>
+                          <td className="lp-dash-td">
+                            <div className="lp-dash-cell-biz">
+                              {lead.name}
+                              <CheckCircle2 size={13} color="#059669" />
+                            </div>
+                            <div className="lp-dash-cell-cat">
+                              {currentPresetData.category} · <span className="lp-dash-rating-pill">★ {lead.rating} ({lead.reviews})</span>
+                            </div>
+                          </td>
+                          <td className="lp-dash-td">
+                            <div className="lp-dash-cell-owner">{lead.owner.split('(')[0]}</div>
+                            <div className="lp-dash-cell-title">{lead.owner.includes('(') ? lead.owner.split('(')[1].replace(')', '') : 'Owner / Founder'}</div>
+                          </td>
+                          <td className="lp-dash-td">
+                            <span className="lp-dash-phone-badge">
+                              <Phone size={11} /> {lead.phone}
+                            </span>
+                          </td>
+                          <td className="lp-dash-td">
+                            <div style={{ fontSize: 12.5, color: '#334155' }}>
+                              <MapPin size={11} style={{ display: 'inline', marginRight: 4, verticalAlign: -1 }} />
+                              {lead.area}
+                            </div>
+                          </td>
+                          <td className="lp-dash-td">
+                            <a
+                              href={waHref(lead.phone, lead.waMessage)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="lp-dash-action-btn"
+                            >
+                              <MessageSquare size={13} /> Chat on WhatsApp
+                            </a>
+                          </td>
+                        </tr>
                       ))}
-                    </ul>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                /* View 2: Cards Grid View */
+                <div className="lp-results-grid">
+                  {currentPresetData.leads.map((lead, i) => (
+                    <div className="lp-lead-card" key={i}>
+                      <div>
+                        <div className="lp-lead-card-head">
+                          <div>
+                            <div className="lp-lead-title">{lead.name}</div>
+                            <div className="lp-lead-loc">
+                              <MapPin size={12} /> {lead.area}
+                            </div>
+                          </div>
+                          <span className="lp-score-badge">{lead.score}</span>
+                        </div>
 
-                    <div className="lp-play-money">
-                      {active.money.map(item => (
-                        <div key={item.v}>
-                          <b>{item.k}</b>
-                          <span>{item.v}</span>
+                        <div className="lp-lead-card-body">
+                          <div style={{ fontSize: 13, color: '#0F172A', marginBottom: 8, fontWeight: 600 }}>
+                            {lead.owner}
+                          </div>
+                          <div className="lp-lead-phone-row">
+                            <span className="lp-lead-phone-text">{lead.phone}</span>
+                            <span style={{ fontSize: 11, fontWeight: 750, color: '#059669' }}>VERIFIED MOBILE</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="lp-lead-card-footer">
+                        <div className="lp-rating-tag">
+                          <Star size={13} fill="#d97706" stroke="#d97706" />
+                          <span>{lead.rating}</span>
+                          <span style={{ color: '#64748b', fontSize: 11 }}>({lead.reviews} reviews)</span>
+                        </div>
+                        <a
+                          href={waHref(lead.phone, lead.waMessage)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="lp-btn-3d-wa"
+                        >
+                          <MessageSquare size={13} /> Chat on WhatsApp
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </motion.section>
+
+        {/* --------------------------------------------------------------------
+           Outcome-Driven Bento Grid ("Why We Beat Other Tools")
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-bento-section"
+          id="why-we-win"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Why We Beat Other Portals</span>
+              <h2 className="lp-section-title">Built for Real Deals, Not Dead Databases</h2>
+              <p className="lp-section-desc">
+                Here is why sales teams, marketing agencies, and distributors switch to Scraper.co.in.
+              </p>
+            </div>
+
+            <div className="lp-bento-grid">
+              {/* Bento 1 */}
+              <div className="lp-bento-card lp-bento-span-2">
+                <div>
+                  <div className="lp-bento-icon is-emerald">
+                    <Phone size={24} />
+                  </div>
+                  <h3 className="lp-bento-title">Direct Proprietor Mobiles Only — Zero Receptionists</h3>
+                  <p className="lp-bento-desc">
+                    Most databases give you switchboard numbers and landlines where 70% of calls bounce or get blocked by gatekeepers. We verify every single number against Indian mobile carriers. You get the personal 10-digit mobile that the owner carries in their pocket.
+                  </p>
+                </div>
+                <div className="lp-comparison-pill">
+                  <div className="lp-compare-bad">
+                    <span>❌ Other tools:</span> 65% landlines, receptionists refusing to transfer, outdated numbers from 2021.
+                  </div>
+                  <div className="lp-compare-good">
+                    <span>✓ Scraper.co.in:</span> 100% active Indian mobiles. If it is not a direct mobile, it never enters your list.
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento 2 */}
+              <div className="lp-bento-card">
+                <div>
+                  <div className="lp-bento-icon is-violet">
+                    <MessageSquare size={24} />
+                  </div>
+                  <h3 className="lp-bento-title">1-Click WhatsApp Sales Outreach</h3>
+                  <p className="lp-bento-desc">
+                    No more copying numbers into your phone contacts by hand. Click once to open WhatsApp Web with a personalized, high-converting pitch ready to send.
+                  </p>
+                </div>
+                <div className="lp-comparison-pill">
+                  <div className="lp-compare-good">
+                    <span>✓ 14.5% reply rate</span> on WhatsApp vs 1.8% cold calls.
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento 3 */}
+              <div className="lp-bento-card">
+                <div>
+                  <div className="lp-bento-icon is-indigo">
+                    <MapPin size={24} />
+                  </div>
+                  <h3 className="lp-bento-title">Every Shop in Town — Complete Depth</h3>
+                  <p className="lp-bento-desc">
+                    Generic tools give up after 40 results on page 1. We sweep every commercial lane, suburb, and market across the entire city, town, or village so you never miss a client.
+                  </p>
+                </div>
+                <div className="lp-comparison-pill">
+                  <div className="lp-compare-good">
+                    <span>✓ Complete market inventory:</span> 660+ districts &amp; 600,000+ villages covered.
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento 4 */}
+              <div className="lp-bento-card">
+                <div>
+                  <div className="lp-bento-icon is-cyan">
+                    <Zap size={24} />
+                  </div>
+                  <h3 className="lp-bento-title">Fresh on Demand — Never Recycled</h3>
+                  <p className="lp-bento-desc">
+                    Data brokers resell the same stale Excel list to dozens of your competitors. Your search runs fresh the second you ask. Closed shops and old numbers are dropped automatically.
+                  </p>
+                </div>
+                <div className="lp-comparison-pill">
+                  <div className="lp-compare-good">
+                    <span>✓ 0ms stale data:</span> Harvested live and stored privately in your PC.
+                  </div>
+                </div>
+              </div>
+
+              {/* Bento 5 */}
+              <div className="lp-bento-card">
+                <div>
+                  <div className="lp-bento-icon is-amber">
+                    <Building2 size={24} />
+                  </div>
+                  <h3 className="lp-bento-title">God-Level Formatted Excel Workbooks</h3>
+                  <p className="lp-bento-desc">
+                    Get beautifully formatted spreadsheets matching our Slate 900 openpyxl standard: green highlights on top-rated businesses, yellow rating metrics, clean integer pincodes, auto-filters, and freeze panes.
+                  </p>
+                </div>
+                <div className="lp-comparison-pill">
+                  <div className="lp-compare-good">
+                    <span>✓ Executive Grade:</span> Ready to hand directly to your sales reps or clients.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* --------------------------------------------------------------------
+           Relatable Real-World Cash Return Calculator (Attractive for Normal People)
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-roi-section"
+          id="roi-calculator"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Real-World Money Calculator</span>
+              <h2 className="lp-section-title">How Much Money Can You Make From 50 WhatsApp Leads?</h2>
+              <p className="lp-section-desc">
+                You don't need hundreds of clients. In Indian B2B markets, closing even 1 or 2 deals from real proprietor WhatsApp numbers pays back your software 50× to 100× over.
+              </p>
+            </div>
+
+            <div className="lp-roi-box">
+              <div className="lp-roi-sliders">
+                {/* 1-Click Industry Selector */}
+                <div style={{ marginBottom: 20 }}>
+                  <span style={{ fontSize: 12, fontWeight: 750, color: '#0F172A', letterSpacing: '0.04em', display: 'block', marginBottom: 10 }}>
+                    1. SELECT YOUR BUSINESS / INDUSTRY:
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+                    {BUSINESS_PROFILES.map((p, idx) => (
+                      <button
+                        type="button"
+                        key={idx}
+                        onClick={() => handleSelectBusinessProfile(idx)}
+                        style={{
+                          background: selectedProfileIndex === idx ? '#0F172A' : '#FFFFFF',
+                          borderColor: selectedProfileIndex === idx ? '#0F172A' : '#CBD5E1',
+                          color: selectedProfileIndex === idx ? '#FFFFFF' : '#334155',
+                          border: '1px solid',
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <div style={{ fontSize: 16, marginBottom: 4 }}>{p.icon}</div>
+                        <div style={{ fontSize: 12.5, fontWeight: 750 }}>{p.label}</div>
+                        <div style={{ fontSize: 11, color: selectedProfileIndex === idx ? '#94A3B8' : '#64748B' }}>
+                          ₹{p.typicalDeal.toLocaleString('en-IN')} / {p.unit}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Slider: Deals to Close */}
+                <div className="lp-slider-group">
+                  <div className="lp-slider-header">
+                    <span className="lp-slider-label">If you close just this many deals this month:</span>
+                    <span className="lp-slider-val" style={{ color: '#059669' }}>{dealsClosed} Deals Closed</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="10"
+                    step="1"
+                    value={dealsClosed}
+                    onChange={(e) => setDealsClosed(Number(e.target.value))}
+                    className="lp-range-slider"
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                    <span>1 client (minimum)</span>
+                    <span>3 clients</span>
+                    <span>5 clients</span>
+                    <span>10 clients (huge month)</span>
+                  </div>
+                </div>
+
+                {/* Slider: Value per Deal */}
+                <div className="lp-slider-group">
+                  <div className="lp-slider-header">
+                    <span className="lp-slider-label">Your Profit / Revenue per Closed Deal:</span>
+                    <span className="lp-slider-val">₹{customDealValue.toLocaleString('en-IN')}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5000"
+                    max="250000"
+                    step="5000"
+                    value={customDealValue}
+                    onChange={(e) => setCustomDealValue(Number(e.target.value))}
+                    className="lp-range-slider"
+                  />
+                </div>
+              </div>
+
+              {/* Calculated Concrete Rupee Returns */}
+              <div className="lp-roi-results">
+                <div className="lp-roi-stat-row">
+                  <div className="lp-roi-stat-val" style={{ color: '#059669', fontSize: 40, fontWeight: 900 }}>
+                    ₹{cashCalculations.totalRevenue.toLocaleString('en-IN')}
+                  </div>
+                  <div className="lp-roi-stat-lbl">Direct Cash In Your Pocket This Month</div>
+                </div>
+
+                <div className="lp-roi-stat-row">
+                  <div className="lp-roi-stat-val" style={{ color: '#0284c7', fontSize: 24 }}>
+                    ₹{cashCalculations.softwareCost}
+                  </div>
+                  <div className="lp-roi-stat-lbl">Your Total Software Cost (Starter Plan / Free Drive)</div>
+                </div>
+
+                <div className="lp-roi-stat-row">
+                  <div className="lp-roi-stat-val" style={{ color: '#7c3aed', fontSize: 28 }}>
+                    {cashCalculations.multiplier}× Payoff
+                  </div>
+                  <div className="lp-roi-stat-lbl">Net Profit: ₹{cashCalculations.netProfit.toLocaleString('en-IN')}</div>
+                </div>
+
+                <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: 12, borderRadius: 10, fontSize: 12, color: '#065F46', marginBottom: 16 }}>
+                  💡 <b>Real-World Guarantee:</b> Closing just 1 single customer from your WhatsApp leads pays for your entire year of software.
+                </div>
+
+                <button type="button" className="lp-btn-3d-primary" onClick={goWorkspace} style={{ width: '100%' }}>
+                  Claim 1,000 Free Leads — Close Your First Client <ArrowRight size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* --------------------------------------------------------------------
+           All-India Territorial Lead Engine & 660+ Districts Directory (SEO Powerhouse)
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-territory-section"
+          id="territory-directory"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">All-India Territorial Coverage</span>
+              <h2 className="lp-section-title">Verified Business Leads Across All 660+ Districts &amp; 600,000 Villages</h2>
+              <p className="lp-section-desc">
+                From major metro tech corridors to district headquarters, tehsils, and rural mandals: Scraper.co.in extracts direct proprietor WhatsApp mobiles everywhere.
+              </p>
+            </div>
+
+            <div className="lp-territory-box">
+              {/* Live Search Input for Towns & Villages */}
+              <div className="lp-territory-search-row">
+                <input
+                  type="text"
+                  className="lp-territory-input"
+                  placeholder="Search any Indian District, Mandal or Village (e.g. Guntur, Brodipet, Tenali, Sitapura, Whitefield)..."
+                  value={villageSearch}
+                  onChange={(e) => handleSearchVillages(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="lp-btn-3d-primary"
+                  onClick={() => handleSearchVillages(villageSearch)}
+                >
+                  <Search size={16} /> Search Village Leads
+                </button>
+              </div>
+
+              {/* Real-Time Village Search Matches Popup */}
+              {villageResults.length > 0 && (
+                <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', borderRadius: 12, padding: 16, marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 750, color: '#0F172A', marginBottom: 10 }}>
+                    FOUND {villageResults.length} MATCHING TERRITORIES FOR "{villageSearch}":
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                    {villageResults.map((item, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => {
+                          setCustomQuery(`Businesses in ${item.name}`);
+                          scrollToSection('playground');
+                        }}
+                        style={{
+                          background: '#FFFFFF',
+                          border: '1px solid #E2E8F0',
+                          padding: '10px 14px',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          fontSize: 12
+                        }}
+                      >
+                        <div style={{ fontWeight: 750, color: '#0F172A' }}>📍 {item.name}</div>
+                        <div style={{ color: '#64748B', fontSize: 11 }}>
+                          {item.mandal ? `${item.mandal} Mandal · ` : ''}{item.district ? `${item.district} Dist · ` : ''}{item.state}
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#059669', display: 'block', marginTop: 4 }}>
+                          ⚡ Click to Search This Market
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* State Chips */}
+              <div className="lp-territory-state-chips">
+                {TOP_STATES_TERRITORIES.map((st, idx) => (
+                  <button
+                    type="button"
+                    key={idx}
+                    className="lp-territory-state-pill"
+                    data-active={selectedStateIndex === idx}
+                    onClick={() => setSelectedStateIndex(idx)}
+                  >
+                    {st.state} ({st.districts.length} Districts)
+                  </button>
+                ))}
+              </div>
+
+              {/* District Cards Grid */}
+              <div className="lp-territory-districts-grid">
+                {currentStateTerritory.districts.map((dist, idx) => (
+                  <div
+                    className="lp-district-card"
+                    key={idx}
+                    onClick={() => {
+                      setCustomQuery(`Businesses in ${dist}`);
+                      scrollToSection('playground');
+                    }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div>
+                      <div className="lp-district-name">
+                        <MapPin size={13} color="#7c3aed" /> {dist}
+                      </div>
+                      <div className="lp-district-meta">
+                        {currentStateTerritory.state} · 100% Mobile Coverage
+                      </div>
+                    </div>
+                    <div className="lp-district-lead-tag">
+                      <Zap size={11} color="#059669" /> Find verified leads in {dist} →
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* --------------------------------------------------------------------
+           Simple, Transparent Portal Launch Pricing
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-pricing-section"
+          id="pricing"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Portal Launch Pricing</span>
+              <h2 className="lp-section-title">Zero Contracts. Simple &amp; Transparent.</h2>
+              <p className="lp-section-desc">
+                Start with 1,000 free leads today. Upgrade only when you want to expand your sales pipeline.
+              </p>
+            </div>
+
+            <div className="lp-pricing-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
+              {PRICING_TIERS.map((tier, idx) => (
+                <div className={`lp-price-card ${tier.isPopular ? 'is-featured' : ''}`} key={idx}>
+                  {tier.isPopular && <span className="lp-featured-badge">MOST POPULAR</span>}
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 750, color: '#7c3aed', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      {tier.badge}
+                    </div>
+                    <div className="lp-price-name">{tier.name}</div>
+                    <div className="lp-price-amount">
+                      {tier.price}<span>/{tier.period}</span>
+                    </div>
+                    <div className="lp-price-per-lead" style={{ color: tier.isPopular ? '#0284c7' : '#059669' }}>
+                      {tier.leadCount} ({tier.perLead})
+                    </div>
+
+                    <div className="lp-price-features">
+                      {tier.features.map((f, i) => (
+                        <div className="lp-feature-item" key={i}>
+                          <Check size={16} /> {f}
                         </div>
                       ))}
                     </div>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* --------------------------------------------- startups/agencies */}
-        <section className="lp-section" id="who">
-          <div className="lp-wrap">
-            <Head
-              tag="Two very different lives"
-              title="Just starting, or already running?"
-              sub="The list is the same. What you do with it is not."
-            />
-
-            <Stagger className="lp-two">
-              <Item className="lp-panel">
-                <span className="lp-panel-kicker"><Sparkles size={12} /> Just starting</span>
-                <h3>You have everything except a list.</h3>
-                <p>
-                  No data team. No ₹40,000-a-month subscription. No idea where the first hundred
-                  customers are hiding. <b>That is the exact problem this solves</b> — and the first
-                  1,000 leads are on us.
-                </p>
-                <ul className="lp-panel-list">
-                  <li><Check size={13} /> Pick one niche and one town. That is your whole market.</li>
-                  <li><Check size={13} /> Message 100 owners a day on WhatsApp, personally.</li>
-                  <li><Check size={13} /> Book your first call this week, not this quarter.</li>
-                  <li><Check size={13} /> Pay nothing until the 1,000 run out.</li>
-                </ul>
-                <div className="lp-panel-metric">
-                  <b>₹0</b>
-                  <span>to your first real lead list</span>
-                </div>
-              </Item>
-
-              <Item className="lp-panel is-accent">
-                <span className="lp-panel-kicker"><Store size={12} /> Already running</span>
-                <h3>You have clients. You need fresh ground.</h3>
-                <p>
-                  Your process works. What breaks is scale: every new client wants a new city, and
-                  every bought list looks exactly like the one your competitor bought.{' '}
-                  <b>A town nobody else has searched</b> is your unfair advantage.
-                </p>
-                <ul className="lp-panel-list">
-                  <li><Check size={13} /> One new city or town per client, per month.</li>
-                  <li><Check size={13} /> Export clean columns straight into HubSpot or Notion.</li>
-                  <li><Check size={13} /> Deliver market research as a paid add-on.</li>
-                  <li><Check size={13} /> Your list stays private — it is not resold to anyone.</li>
-                </ul>
-                <div className="lp-panel-metric">
-                  <b>1 city</b>
-                  <span>= 1 new billable deliverable</span>
-                </div>
-              </Item>
-            </Stagger>
-          </div>
-        </section>
-
-        {/* ----------------------------------------------------- credits */}
-        <section className="lp-section" id="credits">
-          <div className="lp-wrap lp-credit-grid">
-            <div>
-              <Reveal>
-                <span className="lp-tag">The free part, honestly</span>
-                <h2 className="lp-h2">1,000 leads free. <em>No card, no countdown.</em></h2>
-                <p className="lp-sub">
-                  A trial expires while you are busy. Credits wait for you. One credit finds one
-                  business, and your first thousand are on the house — <b>once per computer</b>.
-                </p>
-              </Reveal>
-
-              <Reveal delay={0.1}>
-                <ul className="lp-credit-rows" style={{ marginTop: 22 }}>
-                  <li><Check size={14} /><span><b>One credit, one business.</b> Not one search. Not one page. One real business with a working mobile.</span></li>
-                  <li><Check size={14} /><span><b>Free once per computer.</b> No login required, so there is nothing to sign up for twice.</span></li>
-                  <li><Check size={14} /><span><b>Never expires.</b> Use them at your pace.</span></li>
-                </ul>
-              </Reveal>
-            </div>
-
-            <CreditMeter />
-          </div>
-        </section>
-
-        {/* ----------------------------------------------------- pricing */}
-        <section className="lp-section" id="pricing">
-          <div className="lp-wrap">
-            <Head
-              tag="Pricing"
-              title="Pick a size. Cancel whenever."
-              sub="Every plan includes the whole engine — map, folders, CRM, exports. The only difference is how many leads you can pull each month."
-            />
-
-            <Stagger className="lp-pricing">
-              {PLANS.map(plan => (
-                <Item key={plan.id} className={`lp-plan${plan.featured ? ' is-featured' : ''}`}>
-                  {plan.featured ? (
-                    <span className="lp-plan-badge"><Sparkles size={10} /> Most popular</span>
-                  ) : null}
-
-                  <div className="lp-plan-name">{plan.name}</div>
-                  <div className="lp-plan-price">
-                    <b>{plan.price}</b>
-                    <span>{plan.period}</span>
                   </div>
-                  <div className="lp-plan-line">{plan.line}</div>
-
-                  <div className="lp-plan-credits">
-                    <b>{plan.credits}</b>
-                    <span>leads / month · {plan.perLead} each</span>
-                  </div>
-
-                  <ul className="lp-plan-features">
-                    {plan.features.map(feature => (
-                      <li key={feature}><Check size={13} /> {feature}</li>
-                    ))}
-                  </ul>
 
                   <button
                     type="button"
-                    className={`lp-btn ${plan.featured ? 'lp-btn-primary' : 'lp-btn-ghost'}`}
-                    onClick={go}
+                    className={tier.isPopular ? 'lp-btn-3d-primary' : 'lp-btn-3d-secondary'}
+                    onClick={goWorkspace}
+                    style={{ width: '100%', marginTop: 24 }}
                   >
-                    {plan.featured ? 'Start with 1,000 free' : `Choose ${plan.name}`}
+                    {tier.cta}
                   </button>
-                </Item>
+                </div>
               ))}
-            </Stagger>
+            </div>
+          </div>
+        </motion.section>
 
-            <Reveal>
-              <div className="lp-cost">
-                <p>
-                  <b>Starter is ₹1 per lead. Pro is 40 paise. Agency is 16 paise.</b> For a number
-                  you can actually ring, that is cheaper than the chai you drink while cold-calling.
-                  One closed client covers the month.
-                </p>
-                <button type="button" className="lp-btn lp-btn-ghost lp-btn-sm" onClick={go}>
-                  Try it free <ArrowRight size={13} />
+        {/* --------------------------------------------------------------------
+           FAQ Accordion
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-faq-section"
+          id="faq"
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">Frequently Asked Questions</span>
+              <h2 className="lp-section-title">Everything You Need to Know</h2>
+            </div>
+
+            <div className="lp-faq-list">
+              <div className="lp-faq-item">
+                <button
+                  type="button"
+                  className="lp-faq-question"
+                  onClick={() => setOpenFaq(openFaq === 0 ? -1 : 0)}
+                >
+                  <span>Why is Scraper.co.in better than buying old Excel sheets or using JustDial?</span>
+                  {openFaq === 0 ? <ChevronUp size={18} color="#7c3aed" /> : <ChevronDown size={18} color="#64748b" />}
                 </button>
+                {openFaq === 0 && (
+                  <div className="lp-faq-answer">
+                    Old data brokers sell years-old sheets where 65% of numbers are dead landlines, switchboards, or disconnected lines. JustDial sells the exact same lead to 10 of your competitors at once. With Scraper.co.in, every lead is searched live on-demand, exclusive to you, and 100% verified for WhatsApp.
+                  </div>
+                )}
               </div>
-            </Reveal>
-          </div>
-        </section>
 
-        {/* --------------------------------------------------------- faq */}
-        <section className="lp-section" id="faq">
-          <div className="lp-wrap">
-            <Head tag="Questions" title="The things people ask before they press the button." />
-
-            <Reveal className="lp-faq">
-              {FAQ.map((item, index) => (
-                <FaqItem
-                  key={item.q}
-                  item={item}
-                  isOpen={openFaq === index}
-                  onToggle={() => setOpenFaq(openFaq === index ? -1 : index)}
-                />
-              ))}
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ------------------------------------------------------- final */}
-        <section className="lp-final">
-          <div className="lp-wrap lp-final-in">
-            <Reveal>
-              <span className="lp-tag" style={{ justifyContent: 'center' }}>Go on then</span>
-              <h2>Your next customer already has WhatsApp.</h2>
-              <p>
-                Open the dashboard, type what you sell and where you sell it, and watch the town
-                fill up. The first 1,000 leads cost nothing. The only thing you risk is a busy week.
-              </p>
-              <div className="lp-cta">
-                <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={go}>
-                  Get 1,000 leads free <ArrowRight size={16} />
+              <div className="lp-faq-item">
+                <button
+                  type="button"
+                  className="lp-faq-question"
+                  onClick={() => setOpenFaq(openFaq === 1 ? -1 : 1)}
+                >
+                  <span>How does 1-Click WhatsApp outreach work?</span>
+                  {openFaq === 1 ? <ChevronUp size={18} color="#7c3aed" /> : <ChevronDown size={18} color="#64748b" />}
                 </button>
-                <button type="button" className="lp-btn lp-btn-ghost lp-btn-lg" onClick={() => jump('pricing')}>
-                  See pricing
-                </button>
+                {openFaq === 1 && (
+                  <div className="lp-faq-answer">
+                    Every verified mobile number includes a generated WhatsApp click-to-chat link. Clicking it immediately opens WhatsApp Web (on PC) or WhatsApp App (on mobile) with a polite, pre-formatted intro message addressed to the proprietor. No copy-pasting numbers or saving contacts into your phone.
+                  </div>
+                )}
               </div>
-              <ul className="lp-micro">
-                <li><Check size={13} /> No card</li>
-                <li><Check size={13} /> Cancel anytime</li>
-                <li><Check size={13} /> Your data stays with you</li>
-              </ul>
-            </Reveal>
+
+              <div className="lp-faq-item">
+                <button
+                  type="button"
+                  className="lp-faq-question"
+                  onClick={() => setOpenFaq(openFaq === 2 ? -1 : 2)}
+                >
+                  <span>What format is the God-Level Excel export?</span>
+                  {openFaq === 2 ? <ChevronUp size={18} color="#7c3aed" /> : <ChevronDown size={18} color="#64748b" />}
+                </button>
+                {openFaq === 2 && (
+                  <div className="lp-faq-answer">
+                    Our God-Level Excel export generates an executive-grade .xlsx spreadsheet styled per our openpyxl design system: Slate 900 headers, green highlights on top-tier businesses (Rating 4.7+ and 100+ reviews), yellow rating metrics, zebra striping, freeze panes at row 6, auto-filters, clean integer pincodes, and direct WhatsApp URLs.
+                  </div>
+                )}
+              </div>
+
+              <div className="lp-faq-item">
+                <button
+                  type="button"
+                  className="lp-faq-question"
+                  onClick={() => setOpenFaq(openFaq === 3 ? -1 : 3)}
+                >
+                  <span>Does it cover smaller towns, tehsils, mandals, and villages across all 660+ districts?</span>
+                  {openFaq === 3 ? <ChevronUp size={18} color="#7c3aed" /> : <ChevronDown size={18} color="#64748b" />}
+                </button>
+                {openFaq === 3 && (
+                  <div className="lp-faq-answer">
+                    Yes! We have all 26 modernized Andhra Pradesh districts, 33 Telangana districts, and all 660+ districts across 28 states and 8 UTs indexed with over 619,290 Indian villages and towns. Whether you are searching for clinics in Guntur, borewell contractors in a rural mandal, or manufacturers in Surat, you get 100% full coverage.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </section>
+        </motion.section>
       </main>
 
+      {/* --------------------------------------------------------------------
+         Footer with Scraper.co.in Branding
+         -------------------------------------------------------------------- */}
       <footer className="lp-footer">
-        <div className="lp-wrap lp-footer-in">
-          <span className="lp-footer-note">© {new Date().getFullYear()} scraper.co.in</span>
-          <div className="lp-footer-links">
-            <a href="/pricing">Pricing</a>
-            <a href="/terms">Terms</a>
-            <a href="/privacy">Privacy</a>
-            <a href="mailto:support@scraper.co.in">support@scraper.co.in</a>
+        <div className="lp-container lp-footer-in">
+          <div className="lp-footer-left">
+            <BrandLogo
+              size={30}
+              theme="light"
+              onClick={goWorkspace}
+              className="lp-logo"
+            />
+            <span className="lp-footer-copy">
+              © 2026 Scraper.co.in — Real Business Leads &amp; Decision Maker Mobiles. All 660+ Indian Districts Covered. All rights reserved.
+            </span>
           </div>
-          <span className="lp-footer-note">Made in India</span>
+
+          <div className="lp-footer-links">
+            <button type="button" className="lp-footer-link" onClick={() => scrollToSection('how-it-works')}>How It Works</button>
+            <button type="button" className="lp-footer-link" onClick={() => scrollToSection('playground')}>Live Scraper</button>
+            <button type="button" className="lp-footer-link" onClick={() => scrollToSection('territory-directory')}>660+ Districts</button>
+            <button type="button" className="lp-footer-link" onClick={() => scrollToSection('pricing')}>Pricing</button>
+            <button type="button" className="lp-footer-link" onClick={goWorkspace}>Launch Portal</button>
+          </div>
         </div>
       </footer>
-
-      {/* Living 3D Screen Mascot Companion ("Diggy") */}
-      <ScreenMascotCompanion
-        scraping={false}
-        activeZone="India Wide"
-        leadsFound={1000}
-      />
     </div>
   );
 }

@@ -11,7 +11,7 @@ const GROUP_LABELS = {
   api: 'APIs'
 };
 
-const STATUS_RANK = { error: 0, empty: 1, untested: 2, online: 3 };
+const STATUS_RANK = { error: 0, paused: 1, empty: 2, untested: 3, online: 4 };
 
 function relativeTime(value) {
   if (!value) return 'never';
@@ -59,7 +59,7 @@ export default function EngineStatusBoard({ compact = false }) {
   }, [load]);
 
   const engines = Array.isArray(data?.engines) ? data.engines : [];
-  const summary = data?.summary || { total: 0, online: 0, error: 0, empty: 0, untested: 0 };
+  const summary = data?.summary || { total: 0, online: 0, error: 0, empty: 0, paused: 0, untested: 0 };
 
   const groups = useMemo(() => {
     const order = ['google', 'directory', 'web', 'ai', 'api'];
@@ -80,7 +80,9 @@ export default function EngineStatusBoard({ compact = false }) {
       ? 'empty'
       : engines.some(e => e.status === 'untested')
         ? 'untested'
-        : 'online';
+        : engines.some(e => e.status === 'paused')
+          ? 'paused'
+          : 'online';
 
   return (
     <section className={cx('v2-engine-board', compact && 'is-compact')}>
@@ -91,6 +93,7 @@ export default function EngineStatusBoard({ compact = false }) {
           <span className="v2-engine-summary">
             {summary.online}/{summary.total} online
             {summary.error ? ` · ${summary.error} error` : ''}
+            {summary.paused ? ` · ${summary.paused} paused` : ''}
             {summary.untested ? ` · ${summary.untested} untested` : ''}
           </span>
         </div>
@@ -135,7 +138,8 @@ export default function EngineStatusBoard({ compact = false }) {
                       {engine.status === 'online' ? 'OK'
                         : engine.status === 'error' ? 'ERROR'
                           : engine.status === 'empty' ? 'EMPTY'
-                            : 'UNTESTED'}
+                            : engine.status === 'paused' ? 'PAUSED'
+                              : 'UNTESTED'}
                     </small>
                   </span>
                 ))}
@@ -147,7 +151,8 @@ export default function EngineStatusBoard({ compact = false }) {
 
       <footer className="v2-engine-board-foot">
         <span><CheckCircle2 size={11} /> Green = ready or last run returned rows</span>
-        <span><AlertTriangle size={11} /> Red = missing key, browser runtime, or last run failed</span>
+        <span><AlertTriangle size={11} /> Red = browser runtime missing or last run failed</span>
+        <span>Grey = paused on purpose (never bypassed)</span>
         {taxonomy ? (
           <span className="v2-engine-learned" title="Products and categories learned automatically from successful runs">
             🧠 Learned {taxonomy.products || 0} products · {taxonomy.categories || 0} categories · {taxonomy.brands || 0} brands

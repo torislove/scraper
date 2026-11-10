@@ -50,6 +50,8 @@ const ENGINES = [
     group: 'google',
     taskNames: ['scrapeGoogleSerp'],
     requires: ['playwright'],
+    paused: true,
+    pauseReason: 'Paused: Google answers automated organic searches with a consent/verify page, so this source returns nothing. Google Maps and Google Local Finder already cover the same places, so nothing is lost.',
     detail: 'Organic result pages for dealer queries'
   },
   {
@@ -68,7 +70,29 @@ const ENGINES = [
     group: 'directory',
     taskNames: ['scrapePuppeteerIndiaMart'],
     requires: ['playwright'],
+    paused: true,
+    pauseReason: 'Paused: IndiaMART answers automated visits with a bot page. We will not bypass it, so this source stays off until they offer a public feed.',
     detail: 'City-indexed B2B supplier marketplace'
+  },
+  {
+    key: 'openstreetmap',
+    label: 'OpenStreetMap',
+    kind: 'http',
+    group: 'open-data',
+    taskNames: ['scrapeOpenStreetMap'],
+    requires: [],
+    detail: 'Free ODbL open data: shops, clinics, workshops, small lodges',
+    note: 'Public Overpass/Nominatim endpoints. Requests are serialised and cached for a day out of respect for the volunteer-run servers.'
+  },
+  {
+    key: 'web-contact',
+    label: 'Business Websites',
+    kind: 'http',
+    group: 'enrichment',
+    taskNames: ['scrapeWebContact'],
+    requires: [],
+    detail: 'Emails, extra numbers, Instagram/Facebook handles from each lead’s own site',
+    note: 'Reads only the public site already linked to the lead. robots.txt is obeyed for every host; no CAPTCHA or login is ever bypassed.'
   },
   {
     key: 'weddingbazaar',
@@ -116,31 +140,13 @@ const ENGINES = [
     detail: 'Independent web index fallback'
   },
   {
-    key: 'deepseek',
-    label: 'NVIDIA DeepSeek AI',
-    kind: 'api',
-    group: 'ai',
-    taskNames: ['scrapeDeepseekAI'],
-    requires: ['NVIDIA_API_KEY'],
-    detail: 'AI extraction and enrichment layer'
-  },
-  {
-    key: 'scrapy',
-    label: 'Scrapy Spider',
-    kind: 'python',
-    group: 'web',
-    taskNames: ['scrapeScrapySpider'],
-    requires: [],
-    detail: 'Python spider for deep site crawls'
-  },
-  {
-    key: 'ola-maps',
-    label: 'OLA Maps Geocoder',
-    kind: 'api',
+    key: 'geocoder',
+    label: 'Free Geocoder',
+    kind: 'http',
     group: 'api',
     taskNames: [],
-    requires: ['OLA_MAPS_API_KEY'],
-    detail: 'Offline-first gazetteer fallback geocoding'
+    requires: [],
+    detail: 'OpenStreetMap Nominatim city lookup, with OLA Maps only if you already had a key'
   }
 ];
 
@@ -165,20 +171,35 @@ function load() {
   }
 }
 
+function writeNow() {
+  try {
+    fs.mkdirSync(path.dirname(HEALTH_FILE), { recursive: true });
+    fs.writeFileSync(
+      HEALTH_FILE,
+      JSON.stringify({ updatedAt: new Date().toISOString(), engines: stats }, null, 2)
+    );
+    return true;
+  } catch (err) {
+    /* health must never break a sweep */
+    return false;
+  }
+}
+
 function saveSoon() {
   clearTimeout(writeTimer);
-  writeTimer = setTimeout(() => {
-    try {
-      fs.mkdirSync(path.dirname(HEALTH_FILE), { recursive: true });
-      fs.writeFileSync(
-        HEALTH_FILE,
-        JSON.stringify({ updatedAt: new Date().toISOString(), engines: stats }, null, 2)
-      );
-    } catch (err) {
-      /* health must never break a sweep */
-    }
-  }, WRITE_DEBOUNCE_MS);
+  writeTimer = setTimeout(writeNow, WRITE_DEBOUNCE_MS);
   if (typeof writeTimer.unref === 'function') writeTimer.unref();
+}
+
+/**
+ * Write pending health immediately. Long-running server code never needs this
+ * (the debounce fires on its own), but short scripts that call process.exit()
+ * do: an unref'd timer never runs and the entry would be silently lost.
+ */
+function flushNow() {
+  clearTimeout(writeTimer);
+  writeTimer = null;
+  return writeNow();
 }
 
 function playwrightReady() {
@@ -224,7 +245,7 @@ function countFromResult(result) {
 /**
  * Record one engine execution. Called by the task queue after every job.
  */
-function recordRun(key, { ok = true, error = '', ms = 0, count = null, taskName = '' } = {}) {
+function recordRun(key, { ok = true, error = '', ms = 0, count = null, taskName = '', note = '' } = {}) {
   if (!key) return;
   const now = new Date().toISOString();
   const entry = entryFor(key);
@@ -238,6 +259,7 @@ function recordRun(key, { ok = true, error = '', ms = 0, count = null, taskName 
     entry.lastError = '';
     entry.lastErrorAt = '';
     entry.lastCount = count;
+    entry.lastNote = String(note || '').slice(0, 300);
   } else {
     entry.failures = Number(entry.failures || 0) + 1;
     entry.consecutiveFailures = Number(entry.consecutiveFailures || 0) + 1;
@@ -260,7 +282,10 @@ function buildEngineStatus(definition) {
   let status = 'untested';
   let message = 'No run recorded yet';
 
-  if (!requirement.ok) {
+  if (definition.paused) {
+    status = 'paused';
+    message = definition.pauseReason || 'Paused';
+  } else if (!requirement.ok) {
     status = 'error';
     message = `Missing: ${requirement.missing.join(', ')}`;
   } else if (entry.lastError) {
@@ -269,7 +294,7 @@ function buildEngineStatus(definition) {
   } else if (entry.lastSuccessAt) {
     if (entry.lastCount === 0) {
       status = 'empty';
-      message = 'Last run returned 0 rows';
+      message = entry.lastNote || 'Last run returned 0 rows';
     } else {
       status = 'online';
       message = entry.lastCount == null ? 'Last run OK' : `Last run returned ${entry.lastCount} rows`;
@@ -289,6 +314,7 @@ function buildEngineStatus(definition) {
     missing: requirement.missing,
     status,
     message,
+    paused: Boolean(definition.paused),
     runs: Number(entry.runs || 0),
     failures: Number(entry.failures || 0),
     consecutiveFailures: Number(entry.consecutiveFailures || 0),
@@ -307,6 +333,7 @@ function getStatus() {
     online: engines.filter(e => e.status === 'online').length,
     empty: engines.filter(e => e.status === 'empty').length,
     error: engines.filter(e => e.status === 'error').length,
+    paused: engines.filter(e => e.status === 'paused').length,
     untested: engines.filter(e => e.status === 'untested').length
   };
 
@@ -345,5 +372,6 @@ module.exports = {
   recordTask,
   getStatus,
   resetEngine,
+  flushNow,
   healthFile: HEALTH_FILE
 };

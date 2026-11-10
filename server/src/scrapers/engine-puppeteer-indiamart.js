@@ -259,6 +259,20 @@ async function scrapePuppeteerIndiaMart(category, location, sessionId = 'legacy'
     );
     if (duplicate) continue;
 
+    const gstinMatch = String(card.text || '').match(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})\b/);
+    const gstin = gstinMatch ? gstinMatch[1] : '';
+
+    const primaryMobile = (phones || []).find(p => p && (p.isMobile || /^[6-9]\d{9}$/.test(String(p).replace(/\D/g, '').slice(-10))));
+    let whatsappLink = '';
+    let whatsappAvailable = false;
+    if (primaryMobile) {
+      const digits = String(primaryMobile.national || primaryMobile.e164 || primaryMobile).replace(/\D/g, '').slice(-10);
+      if (digits.length === 10) {
+        whatsappLink = `https://wa.me/91${digits}?text=Hi%20${encodeURIComponent(card.supplierName || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
+        whatsappAvailable = true;
+      }
+    }
+
     const vendor = dv.buildDirectoryVendor({
       prefix: 'im',
       sessionId,
@@ -277,6 +291,10 @@ async function scrapePuppeteerIndiaMart(category, location, sessionId = 'legacy'
       district: supplierCity && supplierCity.toLowerCase() !== targetCity ? supplierCity : parsedLocation.district,
       state: card.state || parsedLocation.state,
       pincode: dv.extractPincode(card.text),
+      gstin,
+      whatsappLink,
+      whatsappAvailable,
+      whatsapp: whatsappLink,
       rating,
       reviewCount,
       priceRange: parsePrice(card.text),
@@ -285,11 +303,12 @@ async function scrapePuppeteerIndiaMart(category, location, sessionId = 'legacy'
       profileUrl: dv.ensureAbsolute(card.supplierUrl, 'https://www.indiamart.com'),
       phones,
       tags: [
-        card.hasGst ? 'GST' : '',
+        gstin ? `GSTIN: ${gstin}` : (card.hasGst ? 'GST' : ''),
         card.hasTrustSeal ? 'TrustSEAL' : '',
         card.memberYears ? `Member ${card.memberYears} yrs` : ''
       ].filter(Boolean),
       otherInfo: {
+        gstin,
         productName: card.productName,
         productUrl: card.productUrl,
         supplierSlug: card.tscode,
@@ -305,10 +324,20 @@ async function scrapePuppeteerIndiaMart(category, location, sessionId = 'legacy'
       }]
     });
 
+    if (gstin) vendor.gstin = gstin;
+    if (whatsappLink) {
+      vendor.whatsappLink = whatsappLink;
+      vendor.whatsappAvailable = true;
+    }
+
     if (!vendor.name) continue;
     const result = dv.saveDirectoryVendor(vendor, sessionId);
     inserted.push(result.vendor);
     try { deps.emitVendorEvent(result.vendor, result.created ? 'inserted' : 'updated'); } catch (e) {}
+    try {
+      const { streamingEnricher } = require('../services/phoneBackfillService');
+      streamingEnricher.enqueue(result.vendor);
+    } catch (e) {}
   }
 
   deps.logger(`[IndiaMART] Complete. ${rawCards.length} live supplier cards, ${inserted.length} stored/refreshed (${inserted.filter(v => v.phone).length} with validated phones).`);

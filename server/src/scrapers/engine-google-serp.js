@@ -1,10 +1,18 @@
 const axios = require('axios');
 const axiosRetry = require('axios-retry').default;
-const { HttpsProxyAgent } = require('https-proxy-agent');
 const cheerio = require('cheerio');
 const { getBrowser } = require('./browserFactory');
-const { getProxyList } = require('./proxyManager');
-const db = require('../config/localDb');
+const dbAdapter = require('../config/dbAdapter');
+const fidelity = require('../services/categoryFidelity');
+const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
+
+const AGGREGATOR_DOMAINS = [
+  'google.', 'justdial.com', 'indiamart.com', 'sulekha.com', 'weddingwire.in',
+  'weddingbazaar.com', 'mandap.com', 'tripadvisor.', 'makemytrip.com',
+  'booking.com', 'wikipedia.org', 'youtube.com', 'quikr.com', 'olx.in',
+  'facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com', 'x.com',
+  'pinterest.com', 'reddit.com', 'yellowpages', 'magicbricks.com', '99acres.com', 'housing.com'
+];
 
 // Configure robust retry logic for Cheerio
 axiosRetry(axios, { 
@@ -54,7 +62,7 @@ function extractContactInfo(text) {
   return { emails, phones };
 }
 
-async function scrapeGoogleSerp(query, category, location) {
+async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy') {
   addLog(`[Cyber Search Matrix] Starting index scan for: "${query}"`);
   
   let browser = null;
@@ -79,12 +87,13 @@ async function scrapeGoogleSerp(query, category, location) {
     // Wait for search results with fallback selector
     try {
       await page.waitForSelector('#search, #rso, div[role="main"]', { timeout: 8000 });
+      await page.waitForSelector('div.MjjYud, #rso div.g', { timeout: 6000 });
     } catch (e) {
       // Continue even if selector wait timed out
     }
     
     // Extract organic results
-    const results = await page.evaluate(() => {
+    const results = await page.evaluate((blockedDomains) => {
       const links = [];
       const resultDivs = document.querySelectorAll('#search div.g, #rso div.g, div.MjjYud');
       
@@ -95,18 +104,23 @@ async function scrapeGoogleSerp(query, category, location) {
         
         if (aTag && h3) {
           const href = aTag.getAttribute('href');
-          // Filter out google's own links or irrelevant links
-          if (href && href.startsWith('http') && !href.includes('google.com')) {
-            links.push({
-              title: h3.innerText,
-              url: href,
-              description: descDiv ? descDiv.innerText : ''
-            });
+          if (href && href.startsWith('http')) {
+            const lowerHref = href.toLowerCase();
+            const isBlocked = blockedDomains.some(d => lowerHref.includes(d));
+            if (!isBlocked) {
+              const rawTitle = (h3.innerText || '').trim();
+              const cleanTitle = rawTitle.replace(/\s*[-–|•]\s*(official\s*(?:website|site)|home|about\s*us|welcome|contact\s*us|index).*$/i, '').trim();
+              links.push({
+                title: cleanTitle || rawTitle,
+                url: href,
+                description: descDiv ? descDiv.innerText : ''
+              });
+            }
           }
         }
       });
       return links;
-    });
+    }, AGGREGATOR_DOMAINS);
     
     addLog(`[Cyber Search Matrix] Identified ${results.length} organic nodes for "${query}". Extracting contact telemetry...`);
     
@@ -116,83 +130,69 @@ async function scrapeGoogleSerp(query, category, location) {
     }
     
     // Concurrently fetch and scan websites
-    const proxyList = getProxyList();
+    let inserted = 0;
     
     const scanPromises = results.map(async (result) => {
       try {
-        const USER_AGENTS = [
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0'
-        ];
-        const randomUA = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-        
-        let axiosConfig = { 
-          timeout: 15000,
-          headers: { 
-            'User-Agent': randomUA,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-            'Sec-Ch-Ua-Mobile': '?0',
-            'Sec-Ch-Ua-Platform': '"Windows"',
-            'Upgrade-Insecure-Requests': '1',
-            'DNT': '1'
-          }
-        };
+        const webData = await fastWebsiteExtract(result.url, result.title);
+        const hasMobile = webData.mobiles && webData.mobiles.length > 0;
+        const mobile10 = hasMobile ? webData.mobiles[0] : null;
 
-        if (proxyList && proxyList.length > 0) {
-          const rawProxy = proxyList[Math.floor(Math.random() * proxyList.length)];
-          try {
-            axiosConfig.httpsAgent = new HttpsProxyAgent(rawProxy);
-          } catch(e) {}
-        }
-
-        const response = await axios.get(result.url, axiosConfig);
-        
-        const $ = cheerio.load(response.data);
-        // Remove scripts and styles before extracting text to reduce noise
-        $('script, style, noscript').remove();
-        const bodyText = $('body').text();
-        const { emails, phones } = extractContactInfo(bodyText);
-        const clean10 = phones.length > 0 ? phones[0].slice(-10) : null;
         const vendorObj = {
+          id: `serp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: 'admin_1',
+          sessionId,
           name: result.title,
           category: category,
           city: location || 'Unknown',
           address: result.description,
-          phone: clean10 ? `+91 ${clean10}` : null,
-          secondaryPhone: phones.length > 1 ? `+91 ${phones[1].slice(-10)}` : null,
-          email: emails.length > 0 ? emails[0] : null,
+          phone: mobile10 ? `+91 ${mobile10.slice(0, 5)} ${mobile10.slice(5)}` : (webData.phone || null),
+          phones: webData.phones || [],
+          secondaryPhone: webData.mobiles.length > 1 ? `+91 ${webData.mobiles[1].slice(0, 5)} ${webData.mobiles[1].slice(5)}` : null,
+          email: webData.email || (webData.emails && webData.emails[0]) || null,
+          emails: webData.emails || [],
           website: result.url,
+          logo: webData.logo || `https://www.google.com/s2/favicons?domain=${new URL(result.url).hostname}&sz=128`,
+          contactPerson: webData.contactPerson || '',
+          gstin: webData.gstin || '',
+          pincode: webData.pincode || '',
           source: 'Cyber Intelligence Matrix',
-          verified: false,
+          verified: Boolean(hasMobile),
           pushed: false,
-          qualityScore: clean10 ? 85 : 60,
-          whatsappLink: clean10 ? `https://wa.me/91${clean10}?text=Hi%20${encodeURIComponent(result.title || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.` : null,
-          whatsappAvailable: Boolean(clean10),
+          qualityScore: hasMobile ? 90 : 60,
+          whatsappLink: mobile10 ? `https://wa.me/91${mobile10}?text=Hi%20${encodeURIComponent(result.title || '')}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.` : null,
+          whatsappAvailable: Boolean(hasMobile),
           scrapedAt: new Date().toISOString()
         };
         
-        if (vendorObj.phone || vendorObj.email) {
-          db.addVendor(vendorObj);
-          if (typeof emitVendorEvent === 'function') emitVendorEvent(vendorObj);
-          addLog(`[Cyber Search Matrix] Extracted contact telemetry from ${result.url}: ${vendorObj.phone || 'No Phone'}, ${vendorObj.email || 'No Email'}`);
+        if (fidelity.isVendorRelevant(vendorObj, category)) {
+          try {
+            const isDup = dbAdapter.isDuplicate(vendorObj);
+            dbAdapter.saveVendor('admin_1', vendorObj);
+            inserted++;
+            if (typeof emitVendorEvent === 'function') emitVendorEvent(vendorObj, isDup ? 'updated' : 'inserted');
+            try {
+              const { streamingEnricher } = require('../services/phoneBackfillService');
+              streamingEnricher.enqueue(vendorObj);
+            } catch (e) {}
+          } catch (saveErr) {}
+          addLog(`[Cyber Search Matrix] Extracted multi-page contacts from ${result.url}: ${vendorObj.phone || 'No Mobile'}, ${vendorObj.email || 'No Email'}`);
         }
-        
       } catch (err) {
-        // Many sites will block axios or timeout, we just ignore and continue
+        // Skip failed site
       }
     });
     
     await Promise.allSettled(scanPromises);
     addLog(`[Cyber Search Matrix] Finished processing organic nodes for "${query}"`);
+    return { totalScraped: inserted, found: results.length };
     
   } catch (error) {
     addLog(`[Cyber Search Matrix Notice] Scan completed or deferred: ${error.message}`);
     if (context) {
       try { await context.close(); } catch (e) {}
     }
+    return { totalScraped: 0, found: 0 };
   }
 }
 

@@ -125,12 +125,18 @@ function normalizePhone(raw, opts = {}) {
   if (isObviousSequence(national)) return null;
 
   const indianMobileShape = country === 'IN' && national.length === 10 && INDIAN_MOBILE_RE.test(national);
-  const isLandline = type === 'FIXED_LINE';
+  const rawTrimmed = String(original || '').trim();
+  const startsWithZeroTrunk = rawTrimmed.startsWith('0') || rawTrimmed.startsWith('+910') || rawTrimmed.startsWith('(0');
+
+  const isLandline = type === 'FIXED_LINE' || (
+    type === 'FIXED_LINE_OR_MOBILE' && (startsWithZeroTrunk || !indianMobileShape || national.startsWith('8644') || national.startsWith('891'))
+  ) || (startsWithZeroTrunk && type !== 'MOBILE');
+
   const isMobile =
     !isLandline &&
     (type === 'MOBILE' ||
-      (type === 'FIXED_LINE_OR_MOBILE' && indianMobileShape) ||
-      (type === 'UNKNOWN' && indianMobileShape));
+      (type === 'FIXED_LINE_OR_MOBILE' && indianMobileShape && !startsWithZeroTrunk) ||
+      (type === 'UNKNOWN' && indianMobileShape && !startsWithZeroTrunk));
   const isTollFree = type === 'TOLL_FREE';
 
   if (country === 'IN' && !isMobile && !isLandline && !isTollFree) return null;
@@ -139,19 +145,36 @@ function normalizePhone(raw, opts = {}) {
   // This is the main guard against 10-digit order ids being promoted to leads.
   if (isLandline && opts.trusted === false) {
     const context = String(opts.context || '');
-    const hasPhoneFormat = /(?:tel:|ph:|mob:|\+91|\(0\d{2,4}\)|0\d{2,4}[-\s]\d{5,8})/i.test(original);
+    const hasPhoneFormat = /(?:tel:|ph:|mob:|\+91|\(0\d{2,4}\)|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]\d{5,8})/i.test(original);
     if (!hasPhoneFormat && !CONTEXT_PHONE_RE.test(context)) {
       return null;
     }
+  }
+
+  let displayPhone = '';
+  let callUrl = '';
+  if (isLandline) {
+    const nationalFmt = parsed.formatNational ? parsed.formatNational() : '';
+    displayPhone = (nationalFmt && nationalFmt.startsWith('0')) ? nationalFmt : ('0' + national);
+    callUrl = `tel:0${national}`;
+  } else if (isMobile) {
+    displayPhone = `+91 ${national.slice(0, 5)} ${national.slice(5)}`;
+    callUrl = `tel:+91${national}`;
+  } else {
+    displayPhone = original;
+    callUrl = `tel:${compact}`;
   }
 
   return {
     raw: original,
     e164: parsed.number,
     national,
+    displayPhone,
+    callUrl,
     international: parsed.formatInternational(),
     country,
     type,
+    phoneType: isMobile ? 'mobile' : (isLandline ? 'landline' : 'toll_free'),
     isMobile,
     isLandline,
     isTollFree,
@@ -165,6 +188,12 @@ function isIndianMobile(phoneStr) {
   if (!phoneStr) return false;
   const parsed = normalizePhone(phoneStr);
   return Boolean(parsed && parsed.isMobile);
+}
+
+function isIndianLandline(phoneStr) {
+  if (!phoneStr) return false;
+  const parsed = normalizePhone(phoneStr);
+  return Boolean(parsed && parsed.isLandline);
 }
 
 /**
@@ -450,6 +479,7 @@ function splitIndianAddress(address) {
 module.exports = {
   INDIAN_MOBILE_RE,
   isIndianMobile,
+  isIndianLandline,
   normalizePhone,
   extractPhones,
   pickBestPhone,

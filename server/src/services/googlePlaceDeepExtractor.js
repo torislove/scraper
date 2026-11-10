@@ -140,7 +140,14 @@ async function extractPageData(page, vendor) {
       '';
 
     const address = (aria('[data-item-id="address"]') || '').replace(/^Address:\s*/i, '');
-    const phone = (aria('[data-item-id^="phone:tel:"]') || '').replace(/^Phone:\s*/i, '');
+    let phone = (aria('[data-item-id^="phone:tel:"]') || '').replace(/^Phone:\s*/i, '');
+    if (!phone) {
+      const telEl = document.querySelector('a[href^="tel:"], button[data-item-id*="phone"], button[aria-label*="Phone" i], button[aria-label*="Call" i]');
+      if (telEl) {
+        phone = (telEl.getAttribute('aria-label') || telEl.getAttribute('href') || telEl.textContent || '')
+          .replace(/^tel:/i, '').replace(/^Phone:\s*/i, '').replace(/^Call\s*/i, '').trim();
+      }
+    }
     const website = attr('a[data-item-id="authority"]', 'href');
     const plusCode = (aria('[data-item-id="oloc"]') || '').replace(/^Plus code:\s*/i, '');
     const mapsUrl = location.href;
@@ -283,8 +290,9 @@ async function extractPageData(page, vendor) {
 
   const phones = uniqueBy(
     [dom.phone, ...extractPhones(dom.phone)].map(value => normalizePhone(value)).filter(Boolean),
-    p => p.e164
+    p => p.e164 || p.national
   );
+  const bestPhone = phones.find(p => p.isMobile) || phones.find(p => p.isLandline) || phones[0] || null;
 
   const addressComponents = splitIndianAddress(dom.address);
   const pincode = addressComponents.pincode || extractPincode(dom.address, phones);
@@ -310,7 +318,9 @@ async function extractPageData(page, vendor) {
     addressComponents: { ...addressComponents, pincode },
     pincode,
     plusCode: cleanText(dom.plusCode, 80),
-    phone: phones.find(p => p.isMobile) || phones[0] || null,
+    phone: bestPhone ? (bestPhone.displayPhone || bestPhone.e164) : null,
+    phoneType: bestPhone ? (bestPhone.isMobile ? 'mobile' : (bestPhone.isLandline ? 'landline' : 'unknown')) : '',
+    callUrl: bestPhone ? (bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`) : '',
     phones,
     website: cleanText(dom.website, 800),
     rating: ratingBlock.rating,

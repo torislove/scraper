@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, RotateCcw, MapPin, Phone, CheckCircle, Sparkles, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
-import Mascot from './Mascot';
-import Mascot3D from './Mascot3D';
+import { OrbitalRadar } from '@ui3d';
 import './theater.css';
 
 const SIMULATION_PRESETS = [
@@ -70,8 +69,8 @@ const SIMULATION_PRESETS = [
 
 const STAGES = [
   { num: 1, label: 'Radar Target Lock', desc: 'Geospatial mesh locks GPS coordinates' },
-  { num: 2, label: 'Diggy Infiltration', desc: 'Mascot parachutes to coordinate epicenter' },
-  { num: 3, label: 'Seismic Matrix Dig', desc: 'Golden pickaxe penetrates 5 proprietary vectors' },
+  { num: 2, label: 'Locality Mapping', desc: 'Street grid and 5 km ring are drawn' },
+  { num: 3, label: 'Five-Vector Sweep', desc: 'Five independent source vectors run in parallel' },
   { num: 4, label: 'Lead Extraction', desc: 'Direct +91 WhatsApp mobile lines emerge' },
   { num: 5, label: 'CRM Vault Ready', desc: 'Clean, verified records loaded for 1-click dialer' }
 ];
@@ -116,7 +115,7 @@ export default function LiveAnimationTheater({ onDeployClick }) {
             <span className="theater-pulse-dot" />
             LIVE HARVEST SIMULATOR
           </span>
-          <h3 className="theater-heading">Watch Diggy Dig &amp; Extract Real Leads in Real Time</h3>
+          <h3 className="theater-heading">Watch a real search happen, step by step</h3>
           <p className="theater-sub">Select an Indian city below to see the 5-vector matrix uncover verified +91 numbers in seconds.</p>
         </div>
 
@@ -160,15 +159,15 @@ export default function LiveAnimationTheater({ onDeployClick }) {
             <span className="telemetry-label">ACTIVE STATUS:</span>
             <b className="telemetry-val text-emerald">
               {stage === 1 && 'LOCKING RADAR GRID...'}
-              {stage === 2 && 'DEPLOYING HARVESTER SCOUT...'}
-              {stage === 3 && 'PENETRATING 5-VECTOR MATRIX...'}
+              {stage === 2 && 'MAPPING LOCALITY GRID...'}
+              {stage === 3 && 'SWEEPING 5 SOURCE VECTORS...'}
               {stage === 4 && 'EXTRACTING VERIFIED MOBILES...'}
-              {stage === 5 && 'SWARM MISSION COMPLETE!'}
+              {stage === 5 && 'SEARCH COMPLETE — READY TO EXPORT'}
             </b>
           </div>
         </div>
 
-        {/* Center Stage: Diggy and Ground Animation */}
+        {/* Center Stage: interactive radar + target rings */}
         <div className="theater-center-stage">
           {/* Ground Target Rings */}
           <div className="theater-target-rings">
@@ -177,25 +176,18 @@ export default function LiveAnimationTheater({ onDeployClick }) {
             <div className={`radar-ring ring-3 ${stage >= 3 ? 'is-active' : ''}`} />
           </div>
 
-          {/* Diggy Mascot with Dynamic 3D Articulation */}
-          <div className="theater-mascot-wrap">
-            <Mascot3D
-              mode={
-                stage === 1 ? 'idle' :
-                stage === 2 ? 'fly' :
-                stage === 3 ? 'dig' :
-                stage === 4 ? 'dig' :
-                'dance'
-              }
-              size={180}
-              rotationY={stage === 2 ? -25 : 0}
-              bubbleText={
-                stage === 1 ? `Targeting ${activePreset.city}!` :
-                stage === 2 ? `Rocketing to ${activePreset.city}...` :
-                stage === 3 ? `Striking subsoil telecom data!` :
-                stage === 4 ? `Found WhatsApp Verified Lead!` :
-                `Captured ${activePreset.leadsCount} Verified Leads!`
-              }
+          <div
+            className="theater-radar-wrap"
+            style={{ position: 'relative', zIndex: 2, display: 'grid', placeItems: 'center' }}
+          >
+            <OrbitalRadar
+              size={250}
+              pins={18}
+              hint=""
+              floats={[
+                { value: activePreset.city, label: activePreset.coords, left: '-12%', top: '14%' },
+                { value: `${vaultCount}`, label: 'leads captured', left: '62%', top: '70%' },
+              ]}
             />
           </div>
 

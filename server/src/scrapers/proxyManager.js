@@ -39,10 +39,11 @@ async function fetchProxies() {
   }
 }
 
-// Public proxy rotation is a server-side trick. On a customer's own machine we
-// deliberately use their residential IP: it is faster and far less likely to be
-// captcha-blocked than a random open proxy.
-const PROXY_ROTATION_ENABLED = process.env.SCRAPER_PROXY !== 'off';
+// Public proxy rotation is opted in, never on by default. On a customer's own
+// machine we deliberately use their own IP: random open proxies are slower,
+// routinely dead, and see every page we fetch — which is not acceptable for a
+// paid product. Set SCRAPER_PROXY=on only if you knowingly want rotation.
+const PROXY_ROTATION_ENABLED = process.env.SCRAPER_PROXY === 'on';
 
 // Fetch proxies on startup and every 30 mins
 if (PROXY_ROTATION_ENABLED) {

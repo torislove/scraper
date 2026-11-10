@@ -5,6 +5,7 @@ import {
   Search, Sparkles, Trophy, UserCheck, Users, X
 } from 'lucide-react';
 import { cx, formatNumber } from './ui';
+import { parseIndianPhone } from '../utils/phoneClassify';
 
 export const CRM_STAGES = [
   { id: 'new', label: 'New', hint: 'Fresh lead', tone: 'blue', icon: Sparkles },
@@ -58,8 +59,9 @@ function CrmCard({ vendor, stage, onOpen, onStageChange, onValueChange, saving }
   const prevStage = stageIndex > 0 ? CRM_STAGES[stageIndex - 1] : null;
   const nextStage = stageIndex < CRM_STAGES.length - 1 ? CRM_STAGES[stageIndex + 1] : null;
 
-  const phoneDigits = vendor.phone ? String(vendor.phone).replace(/\D/g, '').slice(-10) : '';
-  const hasPhone = phoneDigits.length === 10;
+  const parsedMobile = vendor.phone ? parseIndianPhone(vendor.phone) : null;
+  const phoneDigits = parsedMobile && parsedMobile.isMobile ? parsedMobile.national : '';
+  const hasPhone = Boolean(phoneDigits);
   const outcomeInfo = vendor.callOutcome ? CALL_OUTCOMES[vendor.callOutcome] : null;
 
   const handleValueBlur = () => {

@@ -14,7 +14,7 @@ function setDeps(newDeps) {
 }
 
 async function scrapeBraveDork(domain, query, category, location, sessionId = 'legacy') {
-  const dorkQuery = `site:${domain} "${category}" "${location}"`;
+  const dorkQuery = `site:${domain} ${category} ${location}`;
   const url = `https://search.brave.com/search?q=${encodeURIComponent(dorkQuery)}`;
 
   deps.logger(`[Brave Dork Engine] Starting scrape for ${domain} - Query: ${dorkQuery}`);
@@ -23,7 +23,7 @@ async function scrapeBraveDork(domain, query, category, location, sessionId = 'l
   let context = null;
 
   try {
-    const launched = await launchBraveBrowser(true); // use proxy
+    const launched = await launchBraveBrowser(true); // use proxy only if the operator opted in
     browser = launched.browser;
 
     context = await browser.newContext({
@@ -31,10 +31,23 @@ async function scrapeBraveDork(domain, query, category, location, sessionId = 'l
     });
     const page = await context.newPage();
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(3000);
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2500);
 
-    if (deps.abortSignal.aborted) return;
+    // Brave answers automated queries with 429 long before it shows a page. That
+    // is a rate limit, not an empty result: say so instead of pretending the
+    // engine found nothing.
+    const status = response ? response.status() : 0;
+    if (status === 429) {
+      deps.logger('[Brave Dork Engine] Brave answered HTTP 429 (rate limit). Skipping this pass honestly.');
+      return {
+        totalScraped: 0,
+        found: 0,
+        note: 'Brave is rate-limiting automated searches from this network (HTTP 429). Other engines still run; Brave retries on the next search.'
+      };
+    }
+
+    if (deps.abortSignal.aborted) return { totalScraped: 0, found: 0 };
 
     const results = await page.$$eval('.snippet', nodes => {
       return nodes.map(node => {
@@ -90,8 +103,14 @@ async function scrapeBraveDork(domain, query, category, location, sessionId = 'l
       }
     }
     deps.logger(`[Brave Dork Engine] Complete for ${domain}. Inserted ${newCount} new vendors.`);
+    return { totalScraped: newCount, found: results.length };
   } catch (error) {
     deps.logger(`[Brave Dork Error] ${error.message}`);
+    return {
+      totalScraped: 0,
+      found: 0,
+      note: `Brave pass could not finish: ${String(error.message).slice(0, 160)}`
+    };
   } finally {
     try { if (context) await context.close(); } catch(e){}
     try { if (browser) await browser.close(); } catch(e){}

@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  BrainCircuit, RefreshCw, Search, Loader2, Package, Layers, Wrench, Tag, History
+  BrainCircuit, RefreshCw, Search, Loader2, Package, Layers, Wrench, Tag, History, MapPin
 } from 'lucide-react';
 import { getLearnedCatalog } from './api';
 import { cx, formatNumber, relativeTime } from './ui';
@@ -17,6 +17,7 @@ const TABS = [
   { key: 'categories', label: 'Categories', icon: Layers },
   { key: 'services', label: 'Services', icon: Wrench },
   { key: 'brands', label: 'Brands', icon: Tag },
+  { key: 'localities', label: 'Localities & Zones', icon: MapPin },
   { key: 'queries', label: 'Searches', icon: History }
 ];
 
@@ -58,11 +59,28 @@ export default function LearningCenter() {
 
   const totals = data?.totals || {};
   const rows = useMemo(() => {
-    const list = data?.[tab] || [];
+    let list = [];
+    if (tab === 'localities') {
+      const cityList = data?.localities || [];
+      for (const c of cityList) {
+        for (const loc of (c.localities || [])) {
+          list.push({
+            key: `${c.city}-${loc.name}`,
+            name: loc.name,
+            lastLocation: String(c.city || '').toUpperCase(),
+            runs: loc.count,
+            samples: loc.samples,
+            lastAt: loc.lastSeenAt
+          });
+        }
+      }
+    } else {
+      list = data?.[tab] || [];
+    }
     const needle = query.trim().toLowerCase();
     if (!needle) return list;
     return list.filter(row => [
-      row.name, row.query, row.product, ...(row.samples || []), ...(row.expansions || [])
+      row.name, row.query, row.product, row.lastLocation, ...(row.samples || []), ...(row.expansions || [])
     ].filter(Boolean).join(' ').toLowerCase().includes(needle));
   }, [data, tab, query]);
 

@@ -24,9 +24,19 @@ const saveUpdatedVendor = (vendors, updated) => {
 // API: Get all staging leads (vendors)
 router.get('/', (req, res) => {
   try {
-    const { userId, since } = req.query;
-    let data = dbAdapter.getVendors() || [];
-    
+    const { userId, since, sessionId } = req.query;
+    let data = (dbAdapter.getVendors() || []).slice();
+
+    // Session-scoped view. The live store is append-only, so the panel asks for
+    // exactly the run it is showing instead of inferring from a timestamp.
+    if (sessionId) {
+      data = data.filter(v =>
+        v.sessionId === sessionId
+        || v.lastSessionId === sessionId
+        || (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
+      );
+    }
+
     if (since && Number(since) > 0) {
       const sinceTime = new Date(Number(since)).getTime();
       data = data.filter(v => v.scrapedAt && new Date(v.scrapedAt).getTime() > sinceTime);
@@ -34,6 +44,14 @@ router.get('/', (req, res) => {
     
     // Sort descending by scrapedAt
     data.sort((a, b) => new Date(b.scrapedAt) - new Date(a.scrapedAt));
+
+    // Category fidelity filtering if category query parameter is supplied
+    if (req.query.category) {
+      try {
+        const { isVendorRelevant } = require('../services/categoryFidelity');
+        data = data.filter(v => isVendorRelevant(v, req.query.category));
+      } catch (e) {}
+    }
 
     // SaaS Data Partitioning / Masking
     if (userId && userId !== 'admin' && userId !== 'admin_1' && userId !== 'anonymous' && req.query.maskContacts === 'true') {
@@ -54,6 +72,10 @@ router.get('/', (req, res) => {
         }
         return { ...v, isLocked: false };
       });
+    }
+
+    if (req.query.limit && Number(req.query.limit) > 0) {
+      data = data.slice(0, Number(req.query.limit));
     }
 
     res.json(data);
@@ -103,7 +125,7 @@ router.delete('/:id', (req, res) => {
     const filtered = vendors.filter(v => v.id !== req.params.id);
     
     if (filtered.length !== vendors.length) {
-      dbAdapter.saveVendors(filtered);
+      dbAdapter.replaceVendors(filtered);
       res.json({ success: true, message: 'Deleted' });
     } else {
       res.status(404).json({ error: 'Not found' });
@@ -118,7 +140,7 @@ router.post('/clear-unverified', (req, res) => {
   try {
     const vendors = dbAdapter.getVendors();
     const verifiedOnly = vendors.filter(v => v.verified === true);
-    dbAdapter.saveVendors(verifiedOnly);
+    dbAdapter.replaceVendors(verifiedOnly);
     res.json({ success: true, message: 'Unverified vendors cleared' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -128,7 +150,7 @@ router.post('/clear-unverified', (req, res) => {
 // API: Clear all leads completely
 router.post('/clear-all', (req, res) => {
   try {
-    dbAdapter.saveVendors([]);
+    dbAdapter.replaceVendors([]);
     dbAdapter.saveOutOfBounds([]);
     if (typeof dbAdapter.flushSync === 'function') {
       dbAdapter.flushSync();
@@ -141,7 +163,7 @@ router.post('/clear-all', (req, res) => {
 
 router.delete('/', (req, res) => {
   try {
-    dbAdapter.saveVendors([]);
+    dbAdapter.replaceVendors([]);
     dbAdapter.saveOutOfBounds([]);
     if (typeof dbAdapter.flushSync === 'function') {
       dbAdapter.flushSync();
@@ -361,7 +383,7 @@ router.post('/push', (req, res) => {
 // API: Clear all vendors (scraped data)
 router.post('/clear-all', (req, res) => {
   try {
-    dbAdapter.saveVendors([]);
+    dbAdapter.replaceVendors([]);
     res.json({ success: true, message: 'All scraped vendors cleared' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });

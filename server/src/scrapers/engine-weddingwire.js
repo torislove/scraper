@@ -435,6 +435,11 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
         updated++;
         try { deps.emitVendorEvent(result.vendor, 'updated'); } catch (e) {}
       }
+
+      try {
+        const { streamingEnricher } = require('../services/phoneBackfillService');
+        streamingEnricher.enqueue(result.vendor);
+      } catch (e) {}
     }
 
     deps.logger(`[WeddingWire] Complete. ${cards.length} live venues, ${created} new, ${updated} refreshed, ${details.size} detailed.`);

@@ -15,7 +15,7 @@
  *    rejection when there is no evidence.
  */
 
-const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me)$/i;
+const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me|top\s+\d+.*|best\s+\d+.*|\d+\s+best.*|list\s+of\s+.*)$/i;
 
 function clean(value) {
   return String(value == null ? '' : value)
@@ -31,7 +31,22 @@ function norm(value) {
 }
 
 function hasAny(text, words) {
-  return words.some(word => text.includes(word));
+  if (!text || !Array.isArray(words)) return false;
+  const lower = text.toLowerCase();
+  return words.some(word => {
+    if (!word) return false;
+    const w = word.toLowerCase().trim();
+    if (!w) return false;
+    const escaped = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Every token must start on a word boundary. Suffixes are still allowed so
+    // "dentist" matches "dentists" and "decor" matches "decorators", but a
+    // token can no longer match *inside* an unrelated word: "oral" must never
+    // match "floral", and "ac" must never match "practice".
+    if (w.length <= 3) {
+      return new RegExp('(?:^|[\\s,;./\\[\\]()#+-])' + escaped + '(?:[\\s,;./\\[\\]()#+-]|$)', 'i').test(lower);
+    }
+    return new RegExp('(?:^|[\\s,;./\\[\\]()#+-])' + escaped, 'i').test(lower);
+  });
 }
 
 const ROLES = [
@@ -52,16 +67,23 @@ const ROLES = [
   {
     id: 'photographer',
     label: 'Photography',
-    match: ['photograph', 'photographer', 'photography', 'photo studio', 'photo shoot', 'photoshoot', 'videograph', 'cinematograph', 'candid photography', 'drone photography', 'camera'],
-    wants: ['photograph', 'photography', 'photo studio', 'photoshoot', 'photo shoot', 'videograph', 'cinematograph', 'candid', 'camera', 'lens', 'digital studio', 'photo'],
-    avoids: ['banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center', 'convention', 'marriage hall', 'wedding hall', 'party hall', 'lawns', 'resort', 'hotel', 'restaurant', 'caterer', 'catering', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi', 'mehndi', 'invitation', 'tent house', 'travels', 'jewell', 'jewel', 'bakery', 'sweet']
+    match: ['photograph', 'photographer', 'photography', 'photo studio', 'photo studios', 'photo shoot', 'photoshoot', 'videograph', 'videographer', 'cinematograph', 'candid photography', 'drone photography', 'digital studio', 'camera'],
+    wants: ['photograph', 'photography', 'photo studio', 'photoshoot', 'photo shoot', 'videograph', 'videographer', 'cinematograph', 'candid', 'digital studio', 'digital photo lab', 'portrait studio', 'wedding studio'],
+    avoids: [
+      'banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center',
+      'convention', 'marriage hall', 'wedding hall', 'party hall', 'lawns', 'resort', 'hotel',
+      'restaurant', 'caterer', 'catering', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi',
+      'mehndi', 'invitation', 'tent house', 'travels', 'jewell', 'jewel', 'bakery', 'sweet',
+      'xerox', 'photocopy', 'colour print', 'color print', 'flex print', 'offset', 'meeseva', 'mee seva',
+      'digital seva', 'internet cafe', 'internet center', 'photo frame', 'framing', 'glass house', 'cctv', 'mobile repair'
+    ]
   },
   {
     id: 'venue',
     label: 'Venue',
-    match: ['banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center', 'convention', 'marriage hall', 'wedding hall', 'wedding venue', 'party hall', 'reception hall', 'lawns', 'farm house', 'resort', 'event venue', 'function room', 'community hall', 'auditorium'],
-    wants: ['banquet', 'function hall', 'kalyana', 'mandapam', 'mandap', 'convention', 'marriage hall', 'wedding hall', 'party hall', 'reception hall', 'lawns', 'farm house', 'resort', 'venue', 'auditorium', 'community hall'],
-    avoids: ['photograph', 'photography', 'photo studio', 'videograph', 'cinematograph', 'caterer', 'catering service', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi', 'mehndi', 'dj ', 'invitation card', 'bakery']
+    match: ['banquet', 'function hall', 'function halls', 'ac function hall', 'ac function halls', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center', 'convention centers', 'convention centre', 'convention centres', 'ac convention centre', 'ac convention center', 'ac convention centres', 'ac convention centers', 'marriage hall', 'marriage halls', 'ac marriage hall', 'wedding hall', 'wedding venue', 'party hall', 'party halls', 'reception hall', 'lawns', 'farm house', 'resort', 'event venue', 'function room', 'community hall', 'community halls', 'auditorium', 'shadi mahal'],
+    wants: ['banquet', 'function hall', 'function halls', 'kalyana', 'mandapam', 'mandap', 'convention', 'convention centre', 'convention center', 'convention centres', 'convention centers', 'marriage hall', 'marriage halls', 'wedding hall', 'party hall', 'party halls', 'reception hall', 'lawns', 'farm house', 'resort', 'venue', 'venues', 'auditorium', 'community hall', 'shadi mahal', 'palace', 'gardens', 'inn', 'hotel', 'residency', 'lodge'],
+    avoids: ['photograph', 'photography', 'photo studio', 'videograph', 'cinematograph', 'caterer', 'catering service', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi', 'mehndi', 'dj ', 'invitation card', 'bakery', 'ac repair', 'ac service', 'air conditioner dealer', 'air conditioning repair', 'air conditioner repair', 'ac dealer', 'hvac', 'compressor', 'refrigerator', 'fridge', 'electronics', 'electronic', 'appliance', 'appliances', 'sonovision', 'vijaydigital', 'croma', 'bajaj electronics', 'reliance digital', 'vijay sales', 'mattupalli', 'mobile store', 'mobile shop', 'motor dealer', 'car dealer', 'truck dealer', 'vehicle dealer', 'automobile', 'servo', 'hardware', 'computer shop', 'laptop shop', 'repair shop', 'retail and repair']
   },
   {
     id: 'caterer',
@@ -208,7 +230,223 @@ const ROLES = [
     label: 'Dental & Dentist',
     match: ['dentist', 'dental', 'orthodont', 'teeth', 'root canal', 'dental clinic'],
     wants: ['dental', 'dentist', 'teeth', 'tooth', 'orthodont', 'oral', 'implant', 'smile'],
-    avoids: ['plumber', 'electrician', 'photo studio', 'wedding', 'caterer', 'venue', 'car repair']
+    // Strict carry-forward matching: only unambiguous dental anchors. A bare
+    // "smile" would pull a photo studio ("Smile Studio") into a dentist folder,
+    // and "oral" used to match inside "floral". Carrying an earlier lead is a
+    // claim about a business we are not looking at right now, so the evidence
+    // must be decisive.
+    strictWants: [
+      'dental', 'dentist', 'teeth', 'tooth', 'orthodont', 'periodont', 'endodont',
+      'prosthodont', 'oral care', 'oral health', 'oral clinic', 'oral surgery',
+      'dental implant', 'implant clinic', 'smile dental', 'smile care', 'smile clinic'
+    ],
+    // A city directory happily lists hospitals next to a dental clinic category.
+    // A dental search must never answer with an eye hospital or a maternity
+    // home, so the other medical specialities are negative signals.
+    avoids: [
+      'plumber', 'electrician', 'photo studio', 'wedding', 'caterer', 'venue', 'car repair',
+      'kalyana', 'mandap', 'mandapam', 'floral', 'decorator',
+      'eye', 'ophthal', 'maternity', 'gynec', 'cardio', 'derma', 'skin clinic',
+      'ent hospital', 'physio', 'pediatric', 'paediatric', 'child hospital', 'general hospital',
+      'diagnostic', 'scan centre', 'scan center', 'dialysis', 'cancer', 'orthopaedic', 'orthopedic',
+      'general hospital', 'multi speciality'
+    ]
+  },
+  {
+    id: 'doctor',
+    label: 'Doctor & Physician & Clinic',
+    match: [
+      'doctor', 'doctors', 'physician', 'physicians', 'general physician', 'general practitioner',
+      'consultant doctor', 'pediatrician', 'paediatrician', 'child doctor', 'gynecologist',
+      'gynaecologist', 'cardiologist', 'dermatologist', 'skin doctor', 'orthopedic', 'orthopaedic',
+      'orthopedic doctor', 'ent doctor', 'ent specialist', 'neurologist', 'urologist',
+      'psychiatrist', 'surgeon', 'clinic', 'polyclinic', 'consultation clinic', 'medical clinic'
+    ],
+    wants: [
+      'dr ', 'dr.', 'doctor', 'doctors', 'physician', 'clinic', 'polyclinic', 'consultant',
+      'specialist', 'hospital', 'health center', 'nursing home', 'pediatric', 'paediatric',
+      'gynec', 'gynaec', 'cardio', 'derma', 'ortho', 'surgeon', 'mbbs', 'md ', 'ms ', 'dnb',
+      'dm ', 'mch', 'mrcp', 'frcs', 'health clinic', 'medical centre', 'medical center'
+    ],
+    avoids: [
+      'pharmacy', 'chemist', 'druggist', 'medical store', 'medicals', 'medical shop',
+      'general store', 'drug store', 'ayurvedic pharmacy', 'homeo pharmacy', 'surgical',
+      'surgicals', 'surgical shop', 'surgical store', 'diagnostic', 'diagnostics', 'scan center',
+      'scan centre', 'imaging', 'blood bank', 'pathology lab', 'optical', 'opticals',
+      'optician', 'spectacles', 'veterinary', 'pet clinic', 'pet hospital', 'animal hospital',
+      'pest control', 'dentist', 'dental'
+    ]
+  },
+  {
+    id: 'pharmacy',
+    label: 'Pharmacy & Medical Store',
+    match: [
+      'pharmacy', 'chemist', 'druggist', 'medical store', 'medicals', 'medical shop', 'drug store',
+      'dispensary', 'chemist shop', 'ayurvedic medical store'
+    ],
+    wants: [
+      'pharmacy', 'chemist', 'druggist', 'medical store', 'medicals', 'medical shop', 'drug store',
+      'dispensary', 'medicines', 'apollo pharmacy', 'medplus'
+    ],
+    avoids: [
+      'physician consultation', 'consulting room', 'operation theatre'
+    ]
+  },
+  {
+    id: 'hospital',
+    label: 'Hospital & Healthcare & Specialist Medical Centers',
+    match: [
+      'hospital', 'hospitals', 'multispeciality hospital', 'super speciality hospital',
+      'nursing home', 'medical college hospital', 'general hospital', 'dental hospital',
+      'eye hospital', 'children hospital', 'maternity hospital', 'orthopedic hospital',
+      'ent hospital', 'cancer hospital', 'heart hospital', 'health center'
+    ],
+    wants: [
+      'hospital', 'hospitals', 'multispeciality', 'super speciality', 'healthcare',
+      'medical centre', 'medical center', 'nursing home', 'medical college',
+      'dental', 'dentist', 'teeth', 'tooth', 'orthodont', 'oral clinic',
+      'eye', 'ophthal', 'retina', 'lasik', 'vision',
+      'maternity', 'child', 'children', 'pediatric', 'paediatric', 'women care',
+      'ortho', 'orthopaedic', 'bone', 'joint', 'spine',
+      'ent', 'ear', 'nose', 'throat',
+      'cardio', 'heart', 'cardiac', 'vascular',
+      'neuro', 'neurology', 'brain',
+      'kidney', 'nephro', 'urology', 'dialysis',
+      'cancer', 'onco', 'oncology',
+      'skin clinic', 'derma', 'cosmetic clinic',
+      'clinic', 'polyclinic', 'institute', 'centre', 'center', 'health care', 'care'
+    ],
+    avoids: [
+      'pharmacy', 'chemist', 'druggist', 'medical store', 'surgical store', 'veterinary', 'pet hospital', 'pet clinic'
+    ]
+  },
+  {
+    id: 'diagnostic',
+    label: 'Diagnostic Center & Pathology Lab',
+    match: [
+      'diagnostic', 'diagnostics', 'pathology lab', 'scan centre', 'scan center',
+      'blood testing lab', 'diagnostic center', 'imaging center'
+    ],
+    wants: [
+      'diagnostic', 'pathology', 'scan centre', 'scan center', 'blood test', 'x-ray', 'mri',
+      'ct scan', 'ultrasound', 'lab', 'laboratory', 'imaging'
+    ],
+    avoids: [
+      'pharmacy', 'chemist', 'medical store', 'surgical shop', 'general store'
+    ]
+  },
+  {
+    id: 'lawyer',
+    label: 'Lawyer & Advocate',
+    match: [
+      'lawyer', 'lawyers', 'advocate', 'advocates', 'legal consultant', 'law firm', 'attorney',
+      'solicitor', 'notary', 'legal advisor'
+    ],
+    wants: [
+      'lawyer', 'advocate', 'legal', 'law firm', 'attorney', 'notary', 'high court', 'civil court',
+      'criminal lawyer', 'corporate lawyer'
+    ],
+    avoids: [
+      'hospital', 'doctor', 'pharmacy', 'restaurant', 'hotel', 'shop'
+    ]
+  },
+  {
+    id: 'realestate',
+    label: 'Real Estate & Property',
+    match: [
+      'real estate', 'property dealer', 'realtor', 'property consultant', 'property agent',
+      'plots', 'apartments', 'real estate agent', 'builders', 'developer'
+    ],
+    wants: [
+      'real estate', 'property', 'realtor', 'plots', 'apartments', 'flats', 'villas', 'lands',
+      'builders', 'developer', 'housing', 'estates'
+    ],
+    avoids: [
+      'hotel', 'restaurant', 'doctor', 'pharmacy', 'repair shop'
+    ]
+  },
+  {
+    id: 'gym',
+    label: 'Gym & Fitness',
+    match: [
+      'gym', 'gymnasium', 'fitness centre', 'fitness center', 'workout', 'bodybuilding',
+      'crossfit', 'health club', 'yoga'
+    ],
+    wants: [
+      'gym', 'fitness', 'workout', 'bodybuilding', 'crossfit', 'trainer', 'exercise', 'yoga',
+      'strength training', 'aerobics'
+    ],
+    avoids: [
+      'doctor', 'pharmacy', 'restaurant', 'medical store'
+    ]
+  },
+  {
+    id: 'school',
+    label: 'School & College',
+    match: [
+      'school', 'schools', 'high school', 'public school', 'international school', 'college',
+      'colleges', 'academy', 'vidyalaya'
+    ],
+    wants: [
+      'school', 'college', 'vidyalaya', 'academy', 'institution', 'education', 'campus'
+    ],
+    avoids: [
+      'stationery shop', 'book store', 'uniform store', 'tuition center'
+    ]
+  },
+  {
+    id: 'restaurant',
+    label: 'Restaurant & Eatery',
+    match: [
+      'restaurant', 'restaurants', 'cafe', 'dhaba', 'eatery', 'dining', 'bistro', 'food court'
+    ],
+    wants: [
+      'restaurant', 'cafe', 'dhaba', 'eatery', 'dining', 'food', 'biryani', 'kitchen', 'bistro', 'tiffin'
+    ],
+    avoids: [
+      'grocery', 'supermarket', 'medical store', 'pharmacy', 'electronic store'
+    ]
+  },
+  {
+    id: 'hotel',
+    label: 'Hotel & Lodging',
+    match: [
+      'hotel', 'hotels', 'lodge', 'lodging', 'guest house', 'inn', 'residency', 'stay'
+    ],
+    wants: [
+      'hotel', 'lodge', 'lodging', 'guest house', 'residency', 'inn', 'rooms', 'stay'
+    ],
+    avoids: [
+      'function hall', 'kalyana mandapam', 'marriage hall', 'pharmacy'
+    ]
+  },
+  {
+    id: 'autorepair',
+    label: 'Auto Repair & Garage',
+    match: [
+      'car repair', 'auto repair', 'garage', 'bike service', 'motorcycle repair', 'car service',
+      'mechanic', 'auto works'
+    ],
+    wants: [
+      'car repair', 'auto repair', 'garage', 'mechanic', 'service station', 'bike service',
+      'motorcycle repair', 'auto works', 'dent removal', 'car workshop'
+    ],
+    avoids: [
+      'car wash', 'car detailing', 'spare parts store', 'tyre shop', 'car dealer'
+    ]
+  },
+  {
+    id: 'ca',
+    label: 'Chartered Accountant & Tax',
+    match: [
+      'chartered accountant', 'ca firm', 'auditor', 'tax consultant', 'gst consultant', 'income tax'
+    ],
+    wants: [
+      'chartered accountant', 'ca ', 'ca.', 'auditor', 'tax consultant', 'audit firm', 'taxation', 'accounting'
+    ],
+    avoids: [
+      'bank', 'atm', 'doctor', 'pharmacy'
+    ]
   }
 ];
 
@@ -227,6 +465,9 @@ function isGenericName(name) {
   // Reject GPS coordinate strings (e.g., 16°19'35.8"N 80°26'16.4"E or 16.3266, 80.4378)
   if (/\d+°\d+['′"]\d+.*[NSEW]|-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/i.test(value)) return true;
   if (GENERIC_NAME.test(value)) return true;
+  if (/^(?:top|best)\s+\d+\b/i.test(value)) return true;
+  if (/^\d+\s+best\b/i.test(value)) return true;
+  if (/^list\s+of\b/i.test(value)) return true;
   // "Results", "Sponsored?", "Results - JustDial": presentation punctuation
   // must not defeat the guard.
   const stripped = value.replace(/[\s?.!:,;·—–-]+$/g, '').trim();
@@ -238,6 +479,11 @@ function isGenericName(name) {
 
 function vendorHaystack(vendor) {
   if (!vendor) return '';
+  // NOTE: vendor.category is deliberately NOT part of the haystack. The Maps
+  // engine stamps the *searched* category onto every result, so an eye hospital
+  // can arrive labelled "Dental Clinics". Treating that echo as evidence is how
+  // unrelated businesses survived the dental filter. Real source taxonomy lives
+  // in `subcategory`; a vendor's own name/description/URL are the honest signals.
   return norm([
     vendor.name,
     vendor.normalizedName,
@@ -275,13 +521,100 @@ function isVendorRelevant(vendor, requestedCategory) {
   if (isGenericName(vendor.name)) return false;
 
   const requestedRole = detectRole(requestedCategory);
-  if (!requestedRole) return true;
+  if (!requestedRole) {
+    // Universal Category & Token Matching Guard for all vendor types
+    const cleanReq = norm(requestedCategory).replace(/\b(in|near|best|top|all|the|and|for|city|town|district|mandal)\b/g, '').trim();
+    const reqTokens = cleanReq.split(/\s+/).filter(t => t.length > 2);
+    if (reqTokens.length > 0) {
+      const vText = norm([vendor.name, vendor.subcategory, vendor.description].filter(Boolean).join(' '));
+      // Common noise rejection: pure retail/stores appearing in service searches
+      const isServiceSearch = reqTokens.some(t => ['repair', 'service', 'services', 'contractor', 'contractors', 'works', 'agency', 'consultant', 'cleaner', 'cleaning'].includes(t));
+      if (isServiceSearch) {
+        if (hasAny(norm(vendor.name), ['wholesale', 'dealers', 'retail store', 'supermarket', 'mart', 'general store'])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 
   const text = vendorHaystack(vendor);
   if (!text) return true;
 
   const wants = hasAny(text, requestedRole.wants.map(norm));
   const avoids = hasAny(text, requestedRole.avoids.map(norm));
+
+  // Special high-fidelity rule for Photography & Studios:
+  // ABSOLUTELY NEVER allow Xerox, MeeSeva, Photocopying, Digital Seva, Photo Framing, or Camera Repair shops into Photographers!
+  if (requestedRole.id === 'photographer') {
+    const nameText = norm(vendor.name);
+    const subcategoryText = norm(vendor.subcategory || '');
+    const combinedName = `${nameText} ${subcategoryText}`;
+
+    // Hard negative check
+    if (hasAny(combinedName, [
+      'xerox', 'photocopy', 'colour print', 'color print', 'flex print', 'flex printing',
+      'offset', 'meeseva', 'mee seva', 'digital seva', 'internet cafe', 'internet center',
+      'photo frame', 'photo framing', 'glass house', 'cctv', 'mobile repair'
+    ])) {
+      return false;
+    }
+
+    if (avoids) return false;
+    return wants;
+  }
+
+  // Special high-fidelity rule for Doctors & Physicians:
+  // ABSOLUTELY NEVER allow pharmacies, chemists, medical stores, surgical supply shops,
+  // or pet/veterinary clinics into a Doctors result list!
+  if (requestedRole.id === 'doctor') {
+    const nameText = norm(vendor.name);
+    const subcategoryText = norm(vendor.subcategory || '');
+    const combinedName = `${nameText} ${subcategoryText}`;
+    
+    // Hard negative check: if business is explicitly a pharmacy or medical store, reject unconditionally
+    if (hasAny(combinedName, [
+      'pharmacy', 'chemist', 'druggist', 'medical store', 'medical and general',
+      'medicals', 'medical shop', 'drug store', 'ayurvedic medical', 'surgical',
+      'surgicals', 'surgical shop', 'surgical store', 'diagnostic', 'diagnostics',
+      'scan center', 'scan centre', 'imaging', 'blood bank', 'pathology lab',
+      'optical', 'opticals', 'optician', 'spectacles', 'veterinary', 'pet clinic',
+      'pet hospital', 'animal hospital'
+    ])) {
+      return false;
+    }
+    
+    // Must have a positive doctor anchor (Dr, Clinic, Hospital, Physician, Specialist, MBBS, etc.)
+    const strongDoctorAnchor = hasAny(combinedName, [
+      'dr ', 'dr.', 'doctor', 'physician', 'clinic', 'polyclinic', 'consultant',
+      'specialist', 'hospital', 'nursing home', 'pediatric', 'paediatric',
+      'gynec', 'gynaec', 'cardio', 'derma', 'ortho', 'surgeon', 'mbbs', 'md ',
+      'ms ', 'dnb', 'dm ', 'mch', 'health centre', 'health center'
+    ]);
+    if (strongDoctorAnchor) {
+      if (avoids) return false;
+      return true;
+    }
+    if (avoids) return false;
+    return wants;
+  }
+
+  // Special high-fidelity rule for venues (function halls, convention centres, marriage halls):
+  // Never allow non-venue commercial entities (electronics stores, truck dealers, appliance shops) into a venue list.
+  if (requestedRole.id === 'venue') {
+    const nameText = norm(vendor.name);
+    const strongNameAnchor = hasAny(nameText, [
+      'convention', 'function hall', 'function halls', 'banquet', 'mandapam', 'mandap', 
+      'kalyana', 'marriage hall', 'marriage halls', 'wedding hall', 'wedding venue', 
+      'party hall', 'reception hall', 'auditorium', 'shadi mahal'
+    ]);
+    if (strongNameAnchor) {
+      if (avoids) return false;
+      return true;
+    }
+    if (avoids) return false;
+    return wants;
+  }
 
   // A strong positive signal wins over a negative one. "Banquet Hall
   // Photography" is a photographer, not a venue.
@@ -297,6 +630,55 @@ function filterRelevantVendors(vendors, requestedCategory) {
   const role = detectRole(requestedCategory);
   if (!role) return vendors;
   return vendors.filter(vendor => isVendorRelevant(vendor, requestedCategory));
+}
+
+/**
+ * Strict positive match. `isVendorRelevant()` deliberately keeps a row when it
+ * has no evidence either way (a live scrape may legitimately surface a business
+ * whose name says nothing). That policy is wrong for carrying earlier leads into
+ * a new folder: "no evidence" must mean "do not carry", or a dental search ends
+ * up carrying cement traders that happen to be in the same city.
+ *
+ * Returns true only when the row itself carries a positive signal for the
+ * requested role (name, stored sub-category/category, description or URL).
+ */
+function hasStrongCategorySignal(vendor, requestedCategory) {
+  if (!vendor) return false;
+  if (isGenericName(vendor.name)) return false;
+
+  const role = detectRole(requestedCategory);
+  const text = norm([
+    vendor.name,
+    vendor.normalizedName,
+    vendor.subcategory,
+    vendor.description,
+    vendor.profileUrl,
+    vendor.sourceUrl
+  ].filter(Boolean).join(' '));
+
+  if (role) {
+    if (!text) return false;
+    if (role.id === 'doctor' && hasAny(text, ['pharmacy', 'chemist', 'druggist', 'medical store', 'medicals', 'medical shop', 'surgical', 'veterinary'])) {
+      return false;
+    }
+    // A row whose own stored category names a *different* role (e.g. a
+    // decorator stored as "Caterers") can never be carried into this search,
+    // even if some unrelated token appears in its URL or description.
+    const storedRole = detectRole(vendor.category);
+    if (storedRole && storedRole.id !== role.id) return false;
+    const wants = hasAny(text, (role.strictWants || role.wants).map(norm));
+    if (!wants) return false;
+    // A strong positive wins, same rule as isVendorRelevant(): "dental hospital"
+    // is dental even though "hospital" also appears in another role's avoids.
+    return true;
+  }
+
+  // Unknown role (a product/brand query): the stored category must name the
+  // same thing, never merely share the city.
+  const wanted = norm(requestedCategory);
+  const found = norm(vendor.category);
+  if (!wanted || !found) return false;
+  return wanted === found || wanted.includes(found) || found.includes(wanted);
 }
 
 function isVenueCategory(category) {
@@ -319,6 +701,7 @@ module.exports = {
   describeCategory,
   isGenericName,
   isVendorRelevant,
+  hasStrongCategorySignal,
   filterRelevantVendors,
   isVenueCategory
 };

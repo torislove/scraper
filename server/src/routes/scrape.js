@@ -5,6 +5,8 @@ const fs = require('fs');
 
 // Engines
 const { scrapeGooglePlaces, setDeps: setPlacesDeps } = require('../scrapers/engine-google-places');
+const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../scrapers/engine-openstreetmap');
+const { scrapeWebContact, setDeps: setWebContactDeps } = require('../scrapers/engine-web-contact');
 const { scrapeGoogleSerp, setDeps: setSerpDeps } = require('../scrapers/engine-google-serp');
 const { scrapeGoogleLocalFinder, setDeps: setLocalFinderDeps } = require('../scrapers/engine-google-serp-local');
 const { scrapeDuckDuckGoDork, setLogger: setDorkLogger } = require('../scrapers/engine-social-dork');
@@ -13,30 +15,26 @@ const { scrapeWeddingBazaar, setDeps: setWBDeps } = require('../scrapers/engine-
 const { scrapeWeddingWire, setDeps: setWWDeps } = require('../scrapers/engine-weddingwire');
 const { scrapeMandap, setDeps: setMandapDeps } = require('../scrapers/engine-mandap');
 const { scrapeBraveDork, setDeps: setBraveDeps } = require('../scrapers/engine-brave-dork');
-const { scrapeDeepseekAI, setDeps: setDeepseekDeps } = require('../scrapers/engine-deepseek');
 const { scrapeCrawleeDeep, setDeps: setCrawleeDeps } = require('../scrapers/engine-crawlee-deep');
 const { scrapePuppeteerIndiaMart, setDeps: setIndiaMartDeps } = require('../scrapers/engine-puppeteer-indiamart');
-const { scrapeScrapySpider, setDeps: setScrapyDeps } = require('../scrapers/engine-scrapy');
 
-const { initQueue, registerTask, addScrapeJob, clearQueue, getActiveJobs, getPersistentQueue, getConcurrencyMetrics } = require('../utils/queue');
-const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
+const { initQueue, registerTask, addScrapeJob, clearQueue, clearQueueForSession, getActiveJobs, getConcurrencyMetrics } = require('../utils/queue');
+const { geocodeLocation } = require('../utils/olaMaps');
 const { getKeywordSynonyms } = require('../utils/aiParser');
 const intelligentExtractor = require('../utils/intelligentExtractor');
 const { parseNaturalLanguageQuery } = require('../utils/queryParser');
-const { resolveUniversalZones, ZONE_COORDINATES, zoneCoordinates } = require('../utils/universalGeoCluster');
+const { resolveUniversalZones, ZONE_COORDINATES, classifyLocation } = require('../utils/universalGeoCluster');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const geoAI = require('../utils/geoAI');
-const { closeAllBrowsers } = require('../scrapers/browserFactory');
 const dbAdapter = require('../config/dbAdapter');
 const { defaultPool } = require('../scrapers/concurrencyManager');
-const { deduplicateBatch, generateFingerprint, normalizePhone } = require('../utils/deduplicator');
-const { enrichLead } = require('../utils/enricher');
 const categoryRouter = require('../services/categoryRouter');
-const leadRetention = require('../services/leadRetention');
+const credits = require('../services/credits');
 const engineHealth = require('../services/engineHealth');
+const requestGuard = require('../utils/requestGuard');
 const { buildScopeZones } = require('../services/sweepScopePolicy');
-const brandIntel = require('../services/brandIntel');
-const taxonomyLearner = require('../services/taxonomyLearner');
+const { runOmniSearchOrchestrator } = require('../services/omniSearchOrchestrator');
+const etaModel = require('../utils/etaModel');
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the earth in km
@@ -59,12 +57,16 @@ async function safeExecute(fn, name = 'Operation', logger = console.log, engineK
       engineHealth.recordRun(engineKey, {
         ok: true,
         ms: Date.now() - startedAt,
+        note: result && typeof result === 'object' ? result.note || '' : '',
         count: Array.isArray(result)
           ? result.length
           : (result && typeof result === 'object'
-            ? Number(result.totalScraped ?? result.newInserted ?? result.count ?? 0)
+            ? Number(result.totalScraped ?? result.newInserted ?? result.found ?? result.count ?? 0)
             : null)
       });
+      // Feed the same outcome to the politeness guard. An engine that answered
+      // with a CAPTCHA/429/403 rests; an engine that answered normally resets.
+      requestGuard.observe(engineKey, { ok: true, result });
     }
     return result;
   } catch (error) {
@@ -74,6 +76,7 @@ async function safeExecute(fn, name = 'Operation', logger = console.log, engineK
         error: error.message,
         ms: Date.now() - startedAt
       });
+      requestGuard.observe(engineKey, { ok: false, error: error.message });
     }
     logger(`[SafeExecute] ${name} failed: ${error.message}`);
     return null;
@@ -82,6 +85,18 @@ async function safeExecute(fn, name = 'Operation', logger = console.log, engineK
 
 let batchProgress = { total: 0, completed: 0, currentTask: '', isActive: false };
 let globalAbortSignal = { aborted: false };
+const sessionAbortSignals = new Map();
+
+function isSessionAborted(sessionId) {
+  if (sessionId) {
+    const sig = sessionAbortSignals.get(sessionId);
+    if (sig && sig.aborted) return true;
+    if (activeSessions[sessionId]?.aborted || activeSessions[sessionId]?.status === 'aborted') return true;
+    return false;
+  }
+  return Boolean(globalAbortSignal.aborted);
+}
+
 let addLog = console.log;
 let emitVendorEvent = () => {};
 let emitGridEvent = () => {};
@@ -102,14 +117,40 @@ function formatEta(ms) {
 
 const activeSessions = {};
 
+/**
+ * True while a session is still writing leads. Folder delete uses this to
+ * refuse removing a live vault that the orchestrator would recreate.
+ */
+function isSessionActive(sessionId) {
+  const session = activeSessions[sessionId];
+  if (!session) return false;
+  if (session.finished) return false;
+  return session.status === 'running'
+    || session.status === 'stopping'
+    || session.sessionActive === true;
+}
+
 function updateSessionTargetState(sessionId, loc, status) {
   if (!sessionId || !loc) return;
   const session = activeSessions[sessionId];
   if (!session) return;
   
   const key = (loc || '').toLowerCase().trim();
-  const tracked = Object.prototype.hasOwnProperty.call(session.completedTargetsMap, key);
-  if (tracked) session.completedTargetsMap[key] = status;
+  session.completedTargetsMap = session.completedTargetsMap || {};
+  session.completedTargetsMap[key] = status;
+
+  if (!session.completedZoneNames) session.completedZoneNames = [];
+  if (!session.completedZoneIndices) session.completedZoneIndices = [];
+
+  if (status === 'completed' && !session.completedZoneNames.includes(loc)) {
+    session.completedZoneNames.push(loc);
+    if (Array.isArray(session.zones)) {
+      const zIdx = session.zones.findIndex(z => String(z.zoneName || z.name || '').toLowerCase().trim() === key);
+      if (zIdx !== -1 && !session.completedZoneIndices.includes(zIdx)) {
+        session.completedZoneIndices.push(zIdx);
+      }
+    }
+  }
   
   let completedCount = 0;
   let runningCount = 0;
@@ -117,8 +158,11 @@ function updateSessionTargetState(sessionId, loc, status) {
     if (session.completedTargetsMap[k] === 'completed') completedCount++;
     if (session.completedTargetsMap[k] === 'running') runningCount++;
   });
-  
-  session.overallCompletedMandals = completedCount;
+
+  const activeTotal = Number(session.overallTotalMandals || session.totalMandals) || 0;
+  session.overallCompletedMandals = activeTotal
+    ? Math.min(completedCount, activeTotal)
+    : completedCount;
   
   if (status === 'running') {
     session.activeMandal = loc;
@@ -179,10 +223,12 @@ function updateSessionTargetState(sessionId, loc, status) {
     velocity = (totalFound / elapsedSec).toFixed(1);
   } catch (e) {}
 
+  const totalZonesCount = session.totalMandalsAcrossAll || session.totalMandals || (Array.isArray(session.zones) ? session.zones.length : Object.keys(session.completedTargetsMap).length);
+
   if (completedCount > 0) {
     const elapsed = Date.now() - session.startTime;
     const avgTime = elapsed / completedCount;
-    const remaining = Object.keys(session.completedTargetsMap).length - completedCount;
+    const remaining = Math.max(0, totalZonesCount - completedCount);
     session.eta = formatEta(remaining * avgTime);
   }
 
@@ -191,13 +237,13 @@ function updateSessionTargetState(sessionId, loc, status) {
   try {
     emitProgressEvent({
       sessionId,
-      totalDistricts: session.totalDistricts,
-      completedDistricts: session.completedDistricts,
+      totalDistricts: session.totalDistricts || 1,
+      completedDistricts: session.completedDistricts || 0,
       activeDistrict: session.activeDistrict,
-      totalMandals: Object.keys(session.completedTargetsMap).length,
+      totalMandals: totalZonesCount,
       completedMandals: completedCount,
       activeMandal: session.activeMandal,
-      totalMandalsAcrossAll: Object.keys(session.completedTargetsMap).length,
+      totalMandalsAcrossAll: totalZonesCount,
       overallCompletedMandals: completedCount,
       eta: session.eta,
       velocity,
@@ -213,21 +259,21 @@ function updateSessionTargetState(sessionId, loc, status) {
 }
 
 // Register tasks
-registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup) => {
+registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster = false, scope = null) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup), 'Google Local Finder Scrape', addLog, 'google-local-finder');
+  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster, scope), 'Google Local Finder Scrape', addLog, 'google-local-finder');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeGooglePlaces', async (q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint) => {
+registerTask('scrapeGooglePlaces', async (q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster = false, scope = null) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint), 'Google Places Scrape', addLog, 'maps');
+  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster, scope), 'Google Places Scrape', addLog, 'maps');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
 registerTask('scrapeGoogleSerp', async (q, cat, loc, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleSerp(q, cat, loc), 'Google Serp Scrape', addLog, 'google-serp');
+  const res = await safeExecute(() => scrapeGoogleSerp(q, cat, loc, sessionId), 'Google Serp Scrape', addLog, 'google-serp');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
@@ -240,9 +286,20 @@ registerTask('scrapeJustDial', async (cat, loc, dummy, sessionId) => {
 registerTask('scrapeWeddingBazaar', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingBazaar(cat, loc, sessionId), 'WeddingBazaar Scrape', addLog, 'weddingbazaar'));
 registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId), 'WeddingWire Scrape', addLog, 'weddingwire'));
 registerTask('scrapeMandap', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeMandap(cat, loc, sessionId), 'Mandap Scrape', addLog, 'mandap'));
-registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, globalAbortSignal, sessionId), `DDG Dork ${domain}`, addLog, 'social'));
+registerTask('scrapeOpenStreetMap', async (cat, loc, dummy, sessionId, lat, lng, radiusKm) => {
+  const res = await safeExecute(
+    () => scrapeOpenStreetMap(cat, loc, sessionId, lat, lng, radiusKm),
+    'OpenStreetMap Scrape',
+    addLog,
+    'openstreetmap'
+  );
+  return res;
+});
+registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  return safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, sig, sessionId), `DDG Dork ${domain}`, addLog, 'social');
+});
 registerTask('scrapeBraveDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeBraveDork(domain, q, cat, loc, sessionId), `Brave Dork ${domain}`, addLog, 'brave'));
-registerTask('scrapeDeepseekAI', async (q, cat, loc) => safeExecute(() => scrapeDeepseekAI(q, cat, loc), 'DeepSeek AI Scrape', addLog, 'deepseek'));
 registerTask('scrapeCrawleeDeep', async (url, vendorName, cat, loc, sessionId) => safeExecute(() => scrapeCrawleeDeep(url, vendorName, cat, loc, sessionId), 'Crawlee Deep Scrape', addLog));
 registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'running');
@@ -250,9 +307,20 @@ registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeScrapySpider', async (cat, loc) => safeExecute(() => scrapeScrapySpider(cat, loc), 'Scrapy Python Spider', addLog, 'scrapy'));
 registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null, isMaster = false) =>
-  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan, isMaster), 'Omni Search Orchestrator', addLog)
+  safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan, isMaster, {
+    activeSessions,
+    sessionAbortSignals,
+    globalAbortSignal,
+    addScrapeJob,
+    addLog: (...args) => addLog(...args),
+    emitVendorEvent: (...args) => emitVendorEvent(...args),
+    emitGridEvent: (...args) => emitGridEvent(...args),
+    emitDispatchEvent: (...args) => emitDispatchEvent(...args),
+    emitProgressEvent: (...args) => emitProgressEvent(...args),
+    emitActivePointEvent: (...args) => emitActivePointEvent(...args),
+    isSessionAborted
+  }), 'Omni Search Orchestrator', addLog)
 );
 
 function setDeps(deps) {
@@ -265,6 +333,8 @@ function setDeps(deps) {
   if (deps.emitActivePointEvent) emitActivePointEvent = deps.emitActivePointEvent;
   if (typeof setLocalFinderDeps !== 'undefined') setLocalFinderDeps(deps);
   if (typeof setPlacesDeps !== 'undefined') setPlacesDeps(deps);
+  if (typeof setOsmDeps !== 'undefined') setOsmDeps(deps);
+  if (typeof setWebContactDeps !== 'undefined') setWebContactDeps(deps);
   if (typeof setDorkLogger !== 'undefined') setDorkLogger(deps.logger);
   if (typeof setSerpDeps !== 'undefined') setSerpDeps(deps);
   if (typeof setCrawleeDeps !== 'undefined') setCrawleeDeps(deps);
@@ -274,9 +344,7 @@ function setDeps(deps) {
   if (typeof setWWDeps !== 'undefined') setWWDeps(deps);
   if (typeof setMandapDeps !== 'undefined') setMandapDeps(deps);
   if (typeof setBraveDeps !== 'undefined') setBraveDeps(deps);
-  if (typeof setDeepseekDeps !== 'undefined') setDeepseekDeps(deps);
   if (typeof setIndiaMartDeps !== 'undefined') setIndiaMartDeps(deps);
-  if (typeof setScrapyDeps !== 'undefined') setScrapyDeps(deps);
 
   initQueue(deps);
 }
@@ -361,7 +429,7 @@ router.get('/jobs', (req, res) => {
     activeDistrict: s.activeDistrict,
     activeMandal: s.activeMandal,
     completedCount: s.overallCompletedMandals,
-    totalCount: s.overallTotalMandals || Object.keys(s.completedTargetsMap || {}).length,
+    totalCount: s.overallTotalMandals || s.totalMandals || Object.keys(s.completedTargetsMap || {}).length,
     etaText: s.eta,
     type: 'omni'
   }));
@@ -385,13 +453,32 @@ router.get('/jobs', (req, res) => {
 
 router.get('/active', (req, res) => {
   const sessions = Object.values(activeSessions);
-  const runningSession = sessions.find(s => {
-    const total = s.overallTotalMandals || Object.keys(s.completedTargetsMap || {}).length || 1;
-    return s.overallCompletedMandals < total && !globalAbortSignal.aborted;
-  }) || sessions[sessions.length - 1] || null;
+  // Prefer the genuinely live session, newest first. The old predicate only
+  // checked `completed < total`, so a stale session left in memory (aborted,
+  // failed, or completed before the live-snapshot fix) could be returned while
+  // a different run was actually in flight - and its frozen ETA/zone counts
+  // leaked into the panel. Finished sessions are still available as a fallback
+  // so an idle UI can show the last run.
+  const newestFirst = (a, b) => (b.startTime || 0) - (a.startTime || 0);
+  const liveSession = sessions
+    .filter(s => s.sessionActive && !s.finished && s.status !== 'aborted' && s.status !== 'completed' && !globalAbortSignal.aborted)
+    .sort(newestFirst)[0];
+  const runningSession = liveSession
+    || sessions.slice().sort(newestFirst)[0]
+    || null;
 
   const activeQueue = (typeof getActiveJobs === 'function') ? getActiveJobs() : [];
-  const isScraping = activeQueue.length > 0 || (runningSession && runningSession.overallCompletedMandals < (runningSession.overallTotalMandals || 1));
+  // An aborted/completed session can never be "scraping", even while the last
+  // browser job is still settling. Otherwise the stop button leaves the UI
+  // spinner running for a few extra seconds after the folder is already saved.
+  const sessionIsLive = Boolean(
+    runningSession
+    && !runningSession.finished
+    && runningSession.status !== 'aborted'
+    && runningSession.status !== 'completed'
+    && runningSession.overallCompletedMandals < (runningSession.overallTotalMandals || 1)
+  );
+  const isScraping = activeQueue.length > 0 || sessionIsLive;
 
   res.json({
     isScraping: Boolean(isScraping),
@@ -472,44 +559,7 @@ router.post('/jobs/update', (req, res) => {
   res.json({ success: true, message: `Job for ${category} updated.` });
 });
 
-router.post('/firebase', async (req, res) => {
-  const { query, category, location } = req.body;
-  if (!query) return res.status(400).json({ error: 'Query required' });
-  res.json({ success: true, message: 'Firebase scrape initiated' });
-});
-
-// MANUAL SCRAPER TRIGGERS (Restored as requested)
-const { exec } = require('child_process');
-
-router.post('/python', async (req, res) => {
-  const { query, location } = req.body;
-  if (!query) return res.status(400).json({ error: 'Query required' });
-  
-  // Python trigger logic with properly escaped arguments
-  const pythonScript = path.join(__dirname, '../scrapers/engine-python.py');
-  const safeQuery = query.replace(/"/g, '\\"');
-  const safeLoc = (location || '').replace(/"/g, '\\"');
-  
-  const { getSettings } = require('../config/settingsManager');
-  const settings = getSettings();
-  const apiKey = settings.nvidiaApiKey || 'none';
-  
-  addLog(`[System] Triggering manual Python Engine for: "${safeQuery}" in "${safeLoc}"`);
-  
-  const cmd = `python "${pythonScript}" --query "${safeQuery}" --category "${safeQuery}" --location "${safeLoc}" --apikey "${apiKey}"`;
-  
-  exec(cmd, (error, stdout, stderr) => {
-    if (error) {
-      addLog(`[ERROR] Python engine failed: ${error.message}`);
-      return;
-    }
-    addLog(`[INFO] Python engine stdout: ${stdout}`);
-    if (stderr) addLog(`[WARN] Python engine stderr: ${stderr}`);
-  });
-  
-  res.json({ success: true, message: 'Python script triggered successfully' });
-});
-
+// MANUAL SCRAPER TRIGGERS
 router.post('/maps', async (req, res) => {
   const { query, category, location, radius } = req.body;
   if (!query) return res.status(400).json({ error: 'Query required' });
@@ -560,884 +610,53 @@ router.post('/preflight', async (req, res) => {
 
 
 
-// Permanent AI Geographical Memory
-const LOCATIONS_MEMORY_FILE = path.join(require('../config/paths').DB_DIR, 'locations_memory.json');
-let locationsMemoryCache = null;
-
-function getLocationsMemory() {
-  if (locationsMemoryCache) return locationsMemoryCache;
-  if (fs.existsSync(LOCATIONS_MEMORY_FILE)) {
-    try {
-      locationsMemoryCache = JSON.parse(fs.readFileSync(LOCATIONS_MEMORY_FILE, 'utf-8'));
-      return locationsMemoryCache;
-    } catch(e) { 
-      locationsMemoryCache = {};
-      return locationsMemoryCache; 
-    }
-  }
-  locationsMemoryCache = {};
-  return locationsMemoryCache;
-}
-
-function saveLocationsMemory(data) {
-  try {
-    locationsMemoryCache = data;
-    if (!fs.existsSync(path.dirname(LOCATIONS_MEMORY_FILE))) {
-      fs.mkdirSync(path.dirname(LOCATIONS_MEMORY_FILE), { recursive: true });
-    }
-    fs.writeFileSync(LOCATIONS_MEMORY_FILE, JSON.stringify(data, null, 2));
-  } catch(e) { console.error("Failed to save locations memory:", e); }
-}
-
-async function getSubLocations(locationName, stateHint = '') {
-  const memory = getLocationsMemory();
-  const key = `${(locationName || "").toString().toLowerCase().trim()}_${(stateHint || '').toLowerCase().trim()}`;
-  
-  if (memory[key] && memory[key].length > 0) {
-    return memory[key];
-  }
-  
-  // Not in memory, fetch it!
-  console.log(`[Geographic AI] Memory miss for "${locationName}". Learning sub-locations from AI...`);
-  const results = await intelligentExtractor.generateLocalities(locationName, stateHint);
-  
-  if (results && results.length > 0) {
-    memory[key] = results;
-    saveLocationsMemory(memory);
-  }
-  
-  return (results || [locationName]).filter(Boolean);
-}
-
-function getDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// PHYLLOTAXIS GOLDEN ANGLE GRID (Best-in-class 360° coverage algorithm)
-// Uses the same math as sunflower seeds and NASA radar arrays.
-// Golden Angle ≈ 137.5077° ensures ZERO clustering and ZERO blind spots.
-// ──────────────────────────────────────────────────────────────────────────────
-function generateGridCoordinates(centerLat, centerLng, radiusKm, pointCount = 20, boundingbox = null) {
-  const GOLDEN_ANGLE_DEG = 137.50776405003785; // 360° / φ²
-  const coords = [];
-
-  // Bounding box format from Nominatim: [south, north, west, east]
-  let minLat, maxLat, minLng, maxLng;
-  let useBoundary = false;
-  
-  if (boundingbox && boundingbox.length === 4) {
-    minLat = parseFloat(boundingbox[0]);
-    maxLat = parseFloat(boundingbox[1]);
-    minLng = parseFloat(boundingbox[2]);
-    maxLng = parseFloat(boundingbox[3]);
-    useBoundary = true;
-    addLog(`[Containment Guard] Enforcing strict boundary mesh [${minLat.toFixed(4)}, ${maxLat.toFixed(4)}, ${minLng.toFixed(4)}, ${maxLng.toFixed(4)}]`);
-  }
-
-  // Point 0: always the search center
-  coords.push({
-    lat: parseFloat(centerLat.toFixed(6)),
-    lng: parseFloat(centerLng.toFixed(6)),
-    distanceFromCenter: 0,
-    ring: 0,
-    angle: 0,
-    boundingbox: boundingbox
-  });
-
-  const totalOuterPoints = Math.max(pointCount - 1, 1);
-
-  for (let i = 1; i <= totalOuterPoints; i++) {
-    // Phyllotaxis formula: uniform spiral outward
-    const t = i / totalOuterPoints;
-    const distKm = Math.sqrt(t) * radiusKm; // √t gives inner-dense, outer-sparse
-    const angleDeg = i * GOLDEN_ANGLE_DEG;
-    const angleRad = (angleDeg % 360) * Math.PI / 180;
-
-    // Convert polar → geographic lat/lng
-    const ptLat = centerLat + (distKm * Math.cos(angleRad)) / 111.0;
-    const ptLng = centerLng + (distKm * Math.sin(angleRad)) / (111.0 * Math.cos(centerLat * Math.PI / 180));
-
-    // Advanced: If bounding box exists, discard points outside the district!
-    if (useBoundary) {
-      if (ptLat < minLat || ptLat > maxLat || ptLng < minLng || ptLng > maxLng) {
-        continue; // Skip this point, it's outside the district!
-      }
-    }
-
-    // Determine which concentric ring this point belongs to (for UI coloring)
-    const ring = t < 0.34 ? 1 : t < 0.67 ? 2 : 3;
-
-    coords.push({
-      lat: parseFloat(ptLat.toFixed(6)),
-      lng: parseFloat(ptLng.toFixed(6)),
-      distanceFromCenter: parseFloat(distKm.toFixed(2)),
-      ring,
-      angle: parseFloat((angleDeg % 360).toFixed(1)),
-      boundingbox: boundingbox
-    });
-  }
-
-  return coords;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// INSTANT MANDAL JOB QUEUER - Cache-first, never blocks on Nominatim
-// ──────────────────────────────────────────────────────────────────────────────
-async function queueMandalJob(subLoc, district, mandal, stateName, category, activeEngines, sessionId, geocodeCache, isVillage) {
-  const activeRadius = isVillage ? 5 : 10;
-  const queryStr = `${subLoc}, ${district}, ${stateName || 'India'}`;
-  const cacheKey = queryStr.toLowerCase().trim();
-
-  // Check cache instantly (0ms)
-  const cached = geocodeCache[cacheKey];
-  let geo = (cached && cached.lat) ? cached : null;
-
-  // If not cached, try district-level cache as fallback (still 0ms)
-  if (!geo) {
-    const districtKey = `${district}, ${stateName || 'India'}`.toLowerCase().trim();
-    const districtCached = geocodeCache[districtKey];
-    if (districtCached && districtCached.lat) {
-      geo = districtCached; // Use district coords as pin placeholder
-    }
-  }
-
-  // Emit map pin if we have coords
-  if (geo && geo.lat) {
-    const gridPoint = { lat: geo.lat, lng: geo.lng, distanceFromCenter: 0, ring: 0, angle: 0, centerLoc: subLoc, activeRadius, isExactPoint: true, boundingbox: geo.boundingbox };
-    try { emitGridEvent([gridPoint]); } catch (e) {}
-  }
-
-  // Build search URL - qualified with state & district to prevent cross-border drift
-  let searchUrl, meta;
-  const searchString = `${category} in ${subLoc}, ${district}, ${stateName || 'India'}`;
-  if (geo && geo.lat) {
-    searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchString)}/@${geo.lat},${geo.lng},14z`;
-    meta = { lat: geo.lat, lng: geo.lng, locationName: subLoc, district: district, state: stateName, isVillage, boundingbox: geo.boundingbox || null };
-  } else {
-    // Text-only search
-    searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchString)}`;
-    meta = { lat: null, lng: null, locationName: subLoc, district: district, state: stateName, isVillage, boundingbox: null };
-  }
-
-  // Queue ultra-fast Local Finder job (20 leads/page in pre-rendered HTML)
-  await addScrapeJob('scrapeGoogleLocalFinder', [searchString, category, subLoc, sessionId, 10, district, stateName, geo], 10, meta);
-  if (activeEngines && (activeEngines.includes('google-web') || activeEngines.includes('serp'))) {
-    await addScrapeJob('scrapeGoogleSerp', [`${category} in ${subLoc}, ${district}`, category, subLoc, sessionId], 10, meta);
-  }
-}
-
-/**
- * Write a search folder. Every run owns one JSON file under
- * db/user_sessions/<user>/<sessionId>.json. The live vendor store is purged
- * between runs, but these folders are the durable history the user can reopen.
- */
-function persistSessionVault({ sessionId, userId, category, location, leads, metadata }) {
-  const safeSessionId = String(sessionId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const SESSIONS_DIR = require('../config/paths').SESSIONS_DIR;
-  const targetDirs = [path.join(SESSIONS_DIR, 'anonymous')];
-  if (userId && userId !== 'anonymous') {
-    targetDirs.push(path.join(SESSIONS_DIR, String(userId).replace(/[^a-zA-Z0-9_-]/g, '_')));
-  }
-
-  const safeLeads = Array.isArray(leads) ? leads : [];
-  const phoneCount = safeLeads.filter(lead => lead && lead.phone && !String(lead.phone).includes('Requires')).length;
-  const verifiedCount = safeLeads.filter(lead => lead && (lead.verified || (lead.phone && /^[6-9]\d{9}$/.test(String(lead.phone).replace(/\D/g, '').slice(-10))))).length;
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-  const cleanCat = String(category || 'Business').replace(/[^\w\s&,-]/g, '').trim();
-  const cleanLoc = String(location || 'India').replace(/[^\w\s&,-]/g, '').trim();
-  const friendlyName = `${cleanCat} in ${cleanLoc} • ${dateStr}, ${timeStr}`;
-
-  const sessionVaultData = {
-    id: safeSessionId,
-    name: friendlyName,
-    name: `${String(category || 'Business').replace(/[^\w\s&,-]/g, '').trim()} in ${String(location || 'India').replace(/[^\w\s&,-]/g, '').trim()}`,
-    userId: userId || 'anonymous',
-    category: cleanCat,
-    location: cleanLoc,
-    timestamp: now.toISOString(),
-    createdAt: metadata?.startedAt || now.toISOString(),
-    leadCount: safeLeads.length,
-    phoneCount,
-    verifiedCount,
-    metadata: {
-      ...(metadata || {}),
-      phoneCount,
-      verifiedCount,
-      status: metadata?.status || 'completed'
-    },
-    leads: safeLeads
-  };
-
-  const written = [];
-  for (const dir of targetDirs) {
-    try {
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      const vaultPath = path.join(dir, `${safeSessionId}.json`);
-
-      // Never shrink a folder. A stop, a fresh run or a deep-profile pass can
-      // hand us a partial list for a session that already has a full snapshot;
-      // overwriting it would silently delete leads the user can still see.
-      try {
-        if (fs.existsSync(vaultPath)) {
-          const previous = JSON.parse(fs.readFileSync(vaultPath, 'utf-8'));
-          const previousCount = Number(previous?.leadCount) || (Array.isArray(previous?.leads) ? previous.leads.length : 0);
-          if (previousCount > safeLeads.length && previousCount > 0) {
-            written.push(vaultPath);
-            continue;
-          }
-        }
-      } catch (guardError) {
-        // A corrupt folder is replaced by the current snapshot.
-      }
-
-      fs.writeFileSync(vaultPath, JSON.stringify(sessionVaultData, null, 2), 'utf-8');
-      written.push(vaultPath);
-    } catch (error) {
-      // A folder write must never break a live scrape.
-    }
-  }
-  return { file: written[0] || '', phoneCount, leadCount: safeLeads.length };
-}
-
-function matchesMasterFilters(lead, filters = {}) {
-  if (!lead) return false;
-  if (Number(filters.minRating) > 0 && Number(lead.rating) < Number(filters.minRating)) return false;
-  if (filters.hasWebsite && !lead.website) return false;
-  if (filters.verifiedOnly && !(lead.verified || Number(lead.profileQuality?.score) >= 70)) return false;
-  if (filters.mobileOnly) {
-    const digits = String(lead.phone || lead.whatsapp || '').replace(/\D/g, '').slice(-10);
-    if (!/^[6-9]\d{9}$/.test(digits)) return false;
-  }
-  return true;
-}
-
-async function runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId = 'anonymous', filters = {}, plan = null, isMaster = false) {
-  const sessionAbortSignal = { aborted: false };
-  const requestedEngines = Array.isArray(enabledEngines) ? enabledEngines.filter(Boolean) : [];
-  const classification = categoryRouter.classifyCategory(category);
-  const autoMode = !requestedEngines.length || requestedEngines.some(engine => /^auto$/i.test(String(engine)));
-  const activeEngines = autoMode
-    ? categoryRouter.pickAutoEngines(classification)
-    : [...new Set(requestedEngines)];
-
-  // Product/brand intent is searched with the dealer phrase that directories
-  // actually index ("graphic card dealer", "Tamarind wholesaler"), while the
-  // folder keeps the operator's original words.
-  const productIntent = classification.intent
-    && ['product', 'brand', 'brand_product'].includes(classification.intent.intentKind);
-  const searchPhrase = productIntent
-    ? brandIntel.bestSearchPhrase(classification.intent, category)
-    : category;
-  if (productIntent && searchPhrase && searchPhrase.toLowerCase() !== category.toLowerCase()) {
-    addLog(`[Orchestrator] Intent: ${classification.intent.intentKind} · searching dealer phrase "${searchPhrase}" (folder keeps "${category}")`);
-  }
-
-  addLog(`[Orchestrator] Starting Universal Omni Search session: ${sessionId} (User: ${userId})`);
-  addLog(`[Orchestrator] Query: "${category}" in "${baseLocation}". Family: ${classification.label} (${classification.family}). Strategy: ${strategy}`);
-  addLog(`[Orchestrator] Auto engine plan: ${activeEngines.join(', ')}${autoMode ? ' (automatic)' : ' (manual)'}`);
-
-  // Open the search folder immediately so an interrupted run still leaves a
-  // dated artifact with its query and metadata. It is overwritten with the
-  // complete lead list when the scrape phase finishes.
-  try {
-    persistSessionVault({
-      sessionId,
-      userId,
-      category,
-      location: baseLocation,
-      leads: [],
-      metadata: {
-        status: 'running',
-        startedAt: new Date().toISOString(),
-        services: classification.label,
-        engines: activeEngines,
-        filters: filters && Object.keys(filters).length ? filters : undefined
-      }
-    });
-  } catch (error) {
-    addLog(`[Orchestrator] Folder could not be opened: ${error.message}`);
-  }
-  
-  // Clear any pending old ghost jobs from the queue to prevent blocking the new dispatch
-  await clearQueue();
-  addLog(`[Orchestrator] Flushed persistent job queue to unblock sequence.`);
-
-  // Fresh-data policy: older leads are removed automatically. CRM-engaged
-  // leads and the current run are preserved.
-  try {
-    const purge = leadRetention.prepareFreshRun({ keepSessionId: sessionId, requestedCategory: category });
-    addLog(`[Orchestrator] 🧹 Fresh-data purge: ${purge.removed} old leads removed, ${purge.engagedKept || 0} CRM-engaged kept, ${purge.profilesRemoved} deep profiles cleaned.`);
-  } catch (purgeError) {
-    addLog(`[Orchestrator] Purge skipped: ${purgeError.message}`);
-  }
-
-  // Ensure database sync is flushed to disk
-  if (typeof dbAdapter.flushSync === 'function') {
-    dbAdapter.flushSync();
-  }
-  
-  try {
-    // 1. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing).
-    //    A master sweep supplies a frozen plan, so its exact zone policy is honoured
-    //    instead of re-resolving from the location string.
-    const zones = (Array.isArray(plan?.zones) && plan.zones.length)
-      ? plan.zones.map((z, index) => {
-          const zoneName = z.name;
-          const suffix = z.kind === 'village' && plan.district ? `, ${plan.district}` : '';
-          const coords = zoneCoordinates(zoneName, plan.district, index, plan.zones.length);
-          return {
-            zoneName,
-            queryText: `${searchPhrase} in ${zoneName}${suffix}`,
-            district: plan.district || null,
-            state: plan.state || null,
-            lat: coords?.lat || null,
-            lng: coords?.lng || null,
-            isApproximate: Boolean(coords?.isApproximate),
-            kind: z.kind || 'zone',
-            isVectorQuery: true,
-            isSingle: false
-          };
-        })
-      : resolveUniversalZones(baseLocation, category, isMaster);
-    addLog(`[Orchestrator] Resolved ${zones.length} universal zones for "${baseLocation}": ${zones.map(z => z.zoneName).join(', ')}`);
-
-    // Geocode base location for initial radar map focus & fallback coordinates
-    let baseGeo = null;
-    try {
-      baseGeo = await geocodeLocation(baseLocation);
-    } catch (e) {}
-
-    // Zero-latency instant coordinate fallback from pre-indexed zones or hubs
-    if (!baseGeo || !baseGeo.lat) {
-      const firstWithCoords = zones.find(z => z.lat && z.lng);
-      if (firstWithCoords) {
-        baseGeo = {
-          lat: Number(firstWithCoords.lat),
-          lng: Number(firstWithCoords.lng),
-          district: firstWithCoords.district || baseLocation,
-          state: firstWithCoords.state || 'India'
-        };
-      } else {
-        const cleanKey = baseLocation.toLowerCase().trim();
-        const strippedKey = cleanKey.replace(/\b(city|town|district|dist|mandal)\b/gi, '').trim().replace(/[^a-z0-9]/g, '');
-        const hub = ZONE_COORDINATES[cleanKey] || ZONE_COORDINATES[strippedKey];
-        if (hub) {
-          baseGeo = {
-            lat: Number(hub.lat),
-            lng: Number(hub.lng),
-            district: baseLocation,
-            state: 'India'
-          };
-        }
-      }
-    }
-
-    // Emit initial dispatch event to radar map
-    try {
-      emitDispatchEvent(zones.map(z => z.zoneName));
-    } catch (e) {}
-
-    // Emit the full zone coverage, not just the base pin, so the command map
-    // can scan every area before the first vendor arrives.
-    if (baseGeo && baseGeo.lat) {
-      try {
-        const zonePoints = zones.map((zone, index) => {
-          const lat = Number(zone.lat);
-          const lng = Number(zone.lng);
-          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
-          return {
-            zoneName: zone.zoneName,
-            query: zone.queryText,
-            lat: hasCoords ? lat : baseGeo.lat,
-            lng: hasCoords ? lng : baseGeo.lng,
-            approx: !hasCoords || Boolean(zone.isApproximate),
-            index: index + 1,
-            centerLoc: baseLocation,
-            district: zone.district || baseGeo.district || baseLocation,
-            state: zone.state || baseGeo.state || 'India'
-          };
-        });
-        emitGridEvent([{
-          lat: baseGeo.lat,
-          lng: baseGeo.lng,
-          distanceFromCenter: 0,
-          ring: 0,
-          angle: 0,
-          centerLoc: baseLocation,
-          activeRadius: Number(radius) || 5,
-          isExactPoint: true,
-          boundingbox: baseGeo.boundingbox,
-          zones: zonePoints
-        }, ...zonePoints]);
-        addLog(`[Orchestrator] 🛰️ Coverage grid emitted: ${zonePoints.length} zones anchored around ${baseGeo.lat.toFixed(4)}, ${baseGeo.lng.toFixed(4)}.`);
-      } catch (e) {}
-    }
-
-    const totalZones = zones.length;
-    let completedZones = 0;
-    const startTime = Date.now();
-
-    activeSessions[sessionId] = {
-      sessionId,
-      userId,
-      category,
-      location: baseLocation,
-      family: classification.family,
-      engines: activeEngines,
-      baseLat: baseGeo?.lat || null,
-      baseLng: baseGeo?.lng || null,
-      status: 'running',
-      totalDistricts: 1,
-      completedDistricts: 0,
-      activeDistrict: baseLocation,
-      totalMandals: totalZones,
-      completedMandals: 0,
-      activeMandal: zones[0]?.zoneName || 'Zone 1',
-      totalMandalsAcrossAll: totalZones,
-      overallCompletedMandals: 0,
-      eta: formatEta(totalZones * 6000), // ~6s per zone with parallel workers
-      sessionActive: true,
-      finished: false,
-      completedTargetsMap: {},
-      fullHierarchy: [{
-        districtName: baseLocation,
-        mandals: zones.map(z => z.zoneName)
-      }],
-      zones,
-      startTime
-    };
-
-    // Emit initial progress
-    try {
-      emitProgressEvent({
-        sessionId,
-        totalDistricts: 1,
-        completedDistricts: 0,
-        activeDistrict: baseLocation,
-        totalMandals: totalZones,
-        completedMandals: 0,
-        activeMandal: zones[0]?.zoneName || 'Zone 1',
-        totalMandalsAcrossAll: totalZones,
-        overallCompletedMandals: 0,
-        eta: formatEta(totalZones * 6000),
-        etaText: formatEta(totalZones * 6000),
-        sessionActive: true
-      });
-    } catch (e) {}
-
-    const geocodeCache = getGeoCache();
-    const radiusKm = Number(radius) || 5;
-    const normEngines = (Array.isArray(activeEngines) ? activeEngines : []).map(e => String(e).toLowerCase().replace(/[^a-z0-9]/g, ''));
-    const isAutoMode = normEngines.length === 0 || normEngines.includes('auto');
-
-    const hasEngine = (key) => {
-      if (isAutoMode) return true;
-      switch (key) {
-        case 'local_finder':
-          return normEngines.some(e => e.includes('serp') || e.includes('local') || e.includes('finder') || e.includes('deepserp'));
-        case 'maps':
-          return normEngines.some(e => e.includes('map') || e.includes('place') || e.includes('geospatial') || e.includes('mesh') || e.includes('radar') || e.includes('gps'));
-        case 'justdial':
-          return normEngines.some(e => e.includes('justdial') || e.includes('jd') || e.includes('telecom') || e.includes('mobile') || e.includes('direct'));
-        case 'indiamart':
-          return normEngines.some(e => e.includes('indiamart') || e.includes('mart') || e.includes('b2b') || e.includes('enterprise') || e.includes('supplier'));
-        case 'social':
-          return normEngines.some(e => e.includes('dork') || e.includes('social') || e.includes('duckduckgo') || e.includes('ddg') || e.includes('instagram') || e.includes('facebook') || e.includes('footprint') || e.includes('digital'));
-        case 'weddingbazaar':
-          return normEngines.some(e => e.includes('weddingbazaar') || e.includes('bazaar') || e.includes('hospitality') || e.includes('venue'));
-        case 'weddingwire':
-          return normEngines.some(e => e.includes('weddingwire') || e.includes('wedding-wire') || e.includes('hospitality') || e.includes('venue'));
-        case 'mandap':
-          return normEngines.some(e => e.includes('mandap') || e.includes('hospitality') || e.includes('venue'));
-        default:
-          return normEngines.includes(String(key).toLowerCase().replace(/[^a-z0-9]/g, ''));
-      }
-    };
-
-    // 2. Queue all zones into the high-speed worker pool
-    for (let zi = 0; zi < zones.length; zi++) {
-      if (globalAbortSignal.aborted || sessionAbortSignal.aborted) break;
-
-      const z = zones[zi];
-      const zoneQuery = (z.isVectorQuery || z.queryText.toLowerCase().includes(searchPhrase.toLowerCase())) ? z.queryText : `${searchPhrase} in ${z.queryText}`;
-      
-      // Attempt 0ms geocode cache lookup for zone
-      const zoneCacheKey = `${z.zoneName}, ${baseLocation}`.toLowerCase().trim();
-      const zoneGeo = (z.lat && z.lng) ? { lat: z.lat, lng: z.lng } : (geocodeCache[zoneCacheKey] || baseGeo);
-
-      const targetDistrict = z.district || baseLocation;
-      const targetState = z.state || 'India';
-
-      const meta = {
-        lat: zoneGeo?.lat || null,
-        lng: zoneGeo?.lng || null,
-        zoneName: z.zoneName,
-        locationName: z.zoneName,
-        district: targetDistrict,
-        state: targetState,
-        sessionId,
-        active: true
-      };
-
-      activeSessions[sessionId].completedTargetsMap[z.zoneName.toLowerCase().trim()] = 'queued';
-
-      // Queue the Google Local Finder job (5 pages for comprehensive high-density lead yield)
-      if (hasEngine('local_finder')) {
-        await addScrapeJob(
-          'scrapeGoogleLocalFinder',
-          [zoneQuery, category, z.zoneName, sessionId, 5, targetDistrict, targetState, zoneGeo, baseLocation, hasEngine('maps')],
-          10,
-          meta
-        );
-      }
-
-      // Google Maps place feed with 5km search radius
-      if (hasEngine('maps')) {
-        await addScrapeJob(
-          'scrapeGooglePlaces',
-          [zoneQuery, category, z.zoneName, sessionId, zoneGeo?.lat || null, zoneGeo?.lng || null, radiusKm, 'broad', targetDistrict, targetState, zoneGeo?.boundingbox || null, baseLocation],
-          8,
-          meta
-        );
-      }
-
-      // If DeepSeek AI is enabled, also queue it for auxiliary AI enrichment
-      if (activeEngines.includes('deepseek-ai')) {
-        await addScrapeJob('scrapeDeepseekAI', [zoneQuery, category, z.zoneName], 5, meta);
-      }
-    }
-
-    addLog(`[Orchestrator] Queued all ${zones.length} zone jobs into high-speed swarm. Monitoring execution...`);
-
-    // 2b. City-scoped directory & marketplace engines. These run once per
-    // session (not per zone) and stream real listings into the same session.
-    const directoryJobs = [];
-    if (hasEngine('justdial')) {
-      directoryJobs.push(['scrapeJustDial', [searchPhrase, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('indiamart')) {
-      directoryJobs.push(['scrapePuppeteerIndiaMart', [searchPhrase, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('weddingbazaar')) {
-      directoryJobs.push(['scrapeWeddingBazaar', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('weddingwire')) {
-      directoryJobs.push(['scrapeWeddingWire', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('mandap')) {
-      directoryJobs.push(['scrapeMandap', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('social')) {
-      directoryJobs.push(['scrapeDuckDuckGoDork', ['instagram.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-      directoryJobs.push(['scrapeDuckDuckGoDork', ['facebook.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-    }
-    if (normEngines.some(e => e.includes('brave'))) {
-      directoryJobs.push(['scrapeBraveDork', ['instagram.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-    }
-
-    for (const [taskName, args] of directoryJobs) {
-      try {
-        await addScrapeJob(taskName, args, 5, {
-          lat: baseGeo?.lat || null,
-          lng: baseGeo?.lng || null,
-          zoneName: baseLocation,
-          locationName: baseLocation,
-          district: baseLocation,
-          state: 'India',
-          sessionId,
-          active: true,
-          cityScope: true
-        });
-        addLog(`[Orchestrator] Queued directory engine: ${taskName}`);
-      } catch (e) {
-        addLog(`[Orchestrator] Could not queue ${taskName}: ${e.message}`);
-      }
-    }
-
-    // 3. Monitor swarm progress & emit dynamic sliding-window ETA
-    let waitTicks = 0;
-    let allZonesCompleteAt = null;
-    const maxScrapeWindowMs = Math.max(60000, totalZones * 12000);
-    while (true) {
-      if (globalAbortSignal.aborted || sessionAbortSignal.aborted) break;
-
-      const currentQueue = getPersistentQueue();
-      const running = getActiveJobs();
-
-      const belongsToSession = (job) => Array.isArray(job.args) && job.args.includes(sessionId);
-      const pendingForSession = currentQueue.filter(belongsToSession);
-      const runningForSession = running.filter(belongsToSession);
-
-      // Progress must come from the per-zone state map, not from raw job
-      // counts. Two discovery engines run per zone plus city-scoped directory
-      // engines, so job counts made the bar sit at 0 until the very end.
-      const sessionState = activeSessions[sessionId] || {};
-      const targetMap = sessionState.completedTargetsMap || {};
-      const targetKeys = Object.keys(targetMap);
-      const finishedZones = targetKeys.filter(key => targetMap[key] === 'completed').length;
-      completedZones = Math.min(totalZones, finishedZones);
-
-      // Calculate sliding-window dynamic ETA
-      let etaStr = 'Calculating...';
-      const elapsed = Date.now() - startTime;
-      if (completedZones > 0) {
-        const avgTimePerZone = elapsed / completedZones;
-        const remainingMs = (totalZones - completedZones) * avgTimePerZone;
-        etaStr = formatEta(remainingMs);
-      } else {
-        etaStr = formatEta(Math.max(5000, (totalZones - completedZones) * 6000));
-      }
-
-      // Active zone name being processed
-      const activeRunningJob = runningForSession[0];
-      const nextZone = zones.find(zone => targetMap[String(zone.zoneName).toLowerCase().trim()] !== 'completed');
-      const activeZoneName = activeRunningJob?.meta?.locationName || nextZone?.zoneName || 'Finalizing';
-
-      try {
-        emitProgressEvent({
-          sessionId,
-          totalDistricts: 1,
-          completedDistricts: completedZones >= totalZones ? 1 : 0,
-          activeDistrict: baseLocation,
-          totalMandals: totalZones,
-          completedMandals: completedZones,
-          activeMandal: activeZoneName,
-          totalMandalsAcrossAll: totalZones,
-          overallCompletedMandals: completedZones,
-          eta: etaStr,
-          etaText: etaStr,
-          sessionActive: true
-        });
-      } catch (e) {}
-
-      // Completion rules. Once every zone has reported, give duplicate engine
-      // jobs a short grace window and release the stragglers. Also cap the
-      // whole scrape window so one hung page can never hold a run for minutes.
-      if (finishedZones >= totalZones) {
-        if (!allZonesCompleteAt) allZonesCompleteAt = Date.now();
-        if (Date.now() - allZonesCompleteAt > 6000) {
-          addLog('[Orchestrator] All zones reported complete. Releasing remaining browser jobs.');
-          break;
-        }
-      } else {
-        allZonesCompleteAt = null;
-      }
-      if (Date.now() - startTime > maxScrapeWindowMs) {
-        addLog(`[Orchestrator] Scrape window reached with ${finishedZones}/${totalZones} zones complete. Finalizing.`);
-        break;
-      }
-
-      if (pendingForSession.length === 0 && runningForSession.length === 0) {
-        break;
-      }
-
-      waitTicks++;
-      if (waitTicks % 5 === 0) {
-        addLog(`[Orchestrator] Progress: ${completedZones}/${totalZones} zones complete. ${pendingForSession.length} pending, ${runningForSession.length} running. ETA: ${etaStr}`);
-      }
-
-      await new Promise(r => setTimeout(r, 1000));
-    }
-
-    // Close the scrape phase for jobs that are still in flight. Without this,
-    // a hung duplicate engine keeps writing into a session that already
-    // reported 100% and the client never sees a completed run.
-    if (!sessionAbortSignal.aborted) {
-      sessionAbortSignal.aborted = true;
-      addLog(`[Orchestrator] Scrape phase closed for session ${sessionId}.`);
-    }
-
-    // 4. Scrape Completed: Aggregate Session Leads & Automatically Save to Individual Search Vault
-    const allVendors = dbAdapter.getVendors();
-    let harvestedLeads = allVendors.filter(v => 
-      v.sessionId === sessionId || 
-      v.lastSessionId === sessionId ||
-      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId)) ||
-      (v.scrapedAt && new Date(v.scrapedAt).getTime() >= startTime)
-    );
-
-    // Client Strict Geo Containment: If Client search (not Master), reject out-of-city/out-of-mandal bleed
-    if (!isMaster && baseLocation) {
-      try {
-        const { isListingRelevantToQuery } = require('../scrapers/engine-google-places');
-        harvestedLeads = harvestedLeads.filter(lead => {
-          const check = isListingRelevantToQuery(
-            lead.name,
-            lead.address,
-            lead.district,
-            lead.state,
-            baseLocation,
-            baseLocation,
-            (lead.latitude && lead.longitude ? { lat: Number(lead.latitude), lng: Number(lead.longitude) } : null),
-            null,
-            baseLocation
-          );
-          if (!check.relevant) {
-            addLog(`[Client Containment] Excluded out-of-city lead "${lead.name}" (${check.reason}) - Client restricted to "${baseLocation}"`);
-            return false;
-          }
-          return true;
-        });
-      } catch (e) {
-        addLog(`[Client Containment] Warning: ${e.message}`);
-      }
-    }
-    const hasFilters = filters && Object.keys(filters).length > 0;
-    const sessionLeads = hasFilters ? harvestedLeads.filter(lead => matchesMasterFilters(lead, filters)) : harvestedLeads;
-    addLog(`[Orchestrator] Swarm finished. Harvested ${sessionLeads.length} leads for session "${sessionId}"${hasFilters ? ` (${harvestedLeads.length - sessionLeads.length} removed by master filters)` : ''}.`);
-
-    // Dual-save session vault to disk. This is the user's "search folder":
-    // one file per run, kept even after the live dataset is purged.
-    try {
-      const saved = persistSessionVault({
-        sessionId,
-        userId,
-        category,
-        location: baseLocation,
-        leads: sessionLeads,
-        metadata: {
-          status: 'completed',
-          completedAt: new Date().toISOString(),
-          totalZones,
-          zones: zones.map(z => z.zoneName),
-          elapsedTimeSec: Math.round((Date.now() - startTime) / 1000),
-          filters: hasFilters ? filters : undefined,
-          harvestedBeforeFilters: hasFilters ? harvestedLeads.length : undefined
-        }
-      });
-      addLog(`[Orchestrator] 📁 Search folder saved: ${saved.file || `${sessionId}.json`} (${saved.leadCount} leads, ${saved.phoneCount} phones)`);
-    } catch (saveErr) {
-      addLog(`[Orchestrator] Note: Could not auto-persist vault to disk: ${saveErr.message}`);
-    }
-
-    // Auto-learning: only a finished run with real leads may teach the
-    // taxonomy. This is how the dictionary grows for products nobody curated.
-    try {
-      const learned = taxonomyLearner.recordRun({
-        query: plan?.query || `${category} in ${baseLocation}`,
-        location: baseLocation,
-        leadCount: sessionLeads.length,
-        phoneCount: sessionLeads.filter(v => v.phone).length,
-        vendors: sessionLeads
-      });
-      addLog(`[Orchestrator] 🧠 Autonomous Intelligence learned: "${category}" (${sessionLeads.length} leads, ${sessionLeads.filter(v => v.phone).length} verified +91 mobiles).`);
-    } catch (learnErr) {
-      addLog(`[Orchestrator] Taxonomy learning skipped: ${learnErr.message}`);
-    }
-
-    // Emit 100% complete event
-    try {
-      emitProgressEvent({
-        sessionId,
-        totalDistricts: 1,
-        completedDistricts: 1,
-        activeDistrict: baseLocation,
-        totalMandals: totalZones,
-        completedMandals: totalZones,
-        activeMandal: 'Complete',
-        totalMandalsAcrossAll: totalZones,
-        overallCompletedMandals: totalZones,
-        eta: '0s',
-        etaText: '0s',
-        totalLeads: sessionLeads.length,
-        sessionActive: false
-      });
-    } catch (e) {}
-
-    // 5. Automatic deep enrichment: Maps detail pass, then website crawl for
-    // every lead that is still missing contact data. Runs in the background so
-    // profiles stream in while the user reviews the map.
-    try {
-      const deepProfileService = require('../services/deepProfileService');
-      const candidates = sessionLeads.filter(v => !v.deepExtractedAt || !v.phone || !v.website);
-      if (candidates.length) {
-        const deepJob = deepProfileService.startJob({
-          vendorIds: candidates.map(v => v.id),
-          force: true,
-          includeWebsite: true,
-          includeGoogle: true,
-          concurrency: 3,
-          limit: Math.min(candidates.length, 300)
-        });
-        addLog(`[Orchestrator] Deep enrichment queued for ${deepJob.total} vendors (job ${deepJob.id}). Phones, websites and profiles will stream in as each vendor completes.`);
-      }
-    } catch (deepErr) {
-      addLog(`[Orchestrator] Deep enrichment could not be queued: ${deepErr.message}`);
-    }
-
-    sessionAbortSignal.aborted = true;
-    if (activeSessions[sessionId]) {
-      activeSessions[sessionId].finished = true;
-      activeSessions[sessionId].status = 'completed';
-      activeSessions[sessionId].sessionActive = false;
-      activeSessions[sessionId].finishedAt = Date.now();
-    }
-    addLog(`[Orchestrator] Universal Omni Search Session ${sessionId} completed in ${Math.round((Date.now() - startTime) / 1000)}s!`);
-  } catch (err) {
-    addLog(`[Orchestrator Error] ${err.message}`);
-    try {
-      persistSessionVault({
-        sessionId,
-        userId,
-        category,
-        location: baseLocation,
-        leads: dbAdapter.getVendors().filter(v => v.sessionId === sessionId || v.lastSessionId === sessionId),
-        metadata: { status: 'failed', error: err.message, completedAt: new Date().toISOString() }
-      });
-    } catch (saveErr) { /* ignore */ }
-    try {
-      emitProgressEvent({
-        sessionId,
-        sessionActive: false,
-        error: err.message
-      });
-    } catch (e) {}
-    sessionAbortSignal.aborted = true;
-    if (activeSessions[sessionId]) {
-      activeSessions[sessionId].finished = true;
-      activeSessions[sessionId].status = 'failed';
-      activeSessions[sessionId].sessionActive = false;
-      activeSessions[sessionId].finishedAt = Date.now();
-    }
-  }
-}
+// The Universal Omni Search Orchestrator is extracted to ../services/omniSearchOrchestrator.js
+// for surgical modularity, blazing speed, and durable folder persistence.
 
 
 // OMNI SEARCH API
-function chargeOmniCredits(userId) {
-  if (!userId || userId === 'anonymous' || String(userId).startsWith('usr_')) return { ok: true };
-  const users = dbAdapter.getPublicUsers();
-  const userIndex = users.findIndex(u => u.id === userId);
-  if (userIndex === -1) return { ok: true };
+/**
+ * Starting a search is free. Credits are charged per NEW lead by dbAdapter
+ * (1 credit = 1 lead), so a customer never pays for a search that finds
+ * nothing and never pays twice for the same business.
+ *
+ * The only admission check is creditsPreflight(): when the desktop grant is
+ * exhausted it returns 402 credits_exhausted and blocks NEW searches. Old
+ * folders, exports and edits keep working.
+ */
+function chargeOmniCredits() {
+  return { ok: true };
+}
 
-  const user = users[userIndex];
-  if (Number(user.credits) < 5) {
-    return { ok: false, status: 403, error: 'Insufficient credits for an Omni Scrape. Requires at least 5 credits.' };
+/**
+ * Credits exhaustion blocks NEW searches with an explicit 402. It must never
+ * drop leads silently in the middle of a run.
+ */
+function creditsPreflight(res) {
+  if (!credits.ENFORCED) return false;
+  const state = credits.status();
+  if (state.exhausted) {
+    res.status(402).json({
+      error: 'credits_exhausted',
+      message: 'Your free credits are used up. Existing folders and exports stay available; top up to start a new search.',
+      credits: state
+    });
+    return true;
   }
-
-  user.credits = Number(user.credits) - 5;
-  users[userIndex] = user;
-  dbAdapter.savePublicUsers(users);
-  addLog(`[Billing] Deducted 5 credits from user ${user.email || user.id} for Omni Scrape. Remaining: ${user.credits}`);
-  return { ok: true, remaining: user.credits };
+  return false;
 }
 
 router.post('/omni', async (req, res) => {
   const { query, category, location, radius, gridDensity, enabledEngines, engines, sessionId, userId: bodyUserId } = req.body;
   const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
-  const parsed = categoryRouter.parseSearchQuery({ query, category, location });
+  const { parseUniversalQuery } = require('../utils/universalQueryEngine');
+  const fullInput = query || `${category || ''} in ${location || ''}`.trim();
+  const parsedNL = parseUniversalQuery(fullInput);
+  const parsed = categoryRouter.parseSearchQuery({
+    query: fullInput,
+    category: parsedNL.category || category,
+    location: parsedNL.location || location
+  });
   const searchQuery = query || (parsed.category && parsed.location ? `${parsed.category} in ${parsed.location}` : (parsed.category || parsed.location));
 
   if (!parsed.category || !parsed.location) {
@@ -1465,6 +684,7 @@ router.post('/omni', async (req, res) => {
   if (!charge.ok) {
     return res.status(charge.status).json({ error: charge.error });
   }
+  if (creditsPreflight(res)) return;
 
   const matchedCategory = parsed.category;
   let baseLocation = parsed.location;
@@ -1501,6 +721,8 @@ router.post('/omni', async (req, res) => {
     : categoryRouter.pickAutoEngines(classification);
 
   // Register session immediately so jobs watchdog and client learn about active session
+  const estimatedClassification = classifyLocation(baseLocation);
+  const initialZoneCount = estimatedClassification?.zoneCount || (isMaster ? 250 : 120);
   activeSessions[finalSessionId] = {
     sessionId: finalSessionId,
     userId,
@@ -1508,24 +730,21 @@ router.post('/omni', async (req, res) => {
     location: baseLocation,
     status: 'running',
     sessionActive: true,
+    totalMandals: initialZoneCount,
+    totalMandalsAcrossAll: initialZoneCount,
     startTime: Date.now()
   };
 
-  // A new search replaces the live dataset. Stop the old deep job first so it
-  // cannot keep probing vendors that are about to be deleted. Archived search
-  // folders are preserved.
-  let purge = { removed: 0, engagedKept: 0, profilesRemoved: 0, vaultsRemoved: 0 };
+  // Append-only policy: a new search never deletes the previous dataset.
+  // Stop the old deep job so it stops consuming browser slots, then leave the
+  // store untouched. Folders and live leads both remain available.
+  let purge = { removed: 0, engagedKept: 0, profilesRemoved: 0, vaultsRemoved: 0, appendOnly: true };
   let deepStopped = 0;
   try {
     const deepProfileService = require('../services/deepProfileService');
     deepStopped = deepProfileService.stopAll('superseded by a fresh search');
   } catch (deepStopError) {
     addLog(`[Omni] Deep-cancel skipped: ${deepStopError.message}`);
-  }
-  try {
-    purge = leadRetention.prepareFreshRun({ keepSessionId: finalSessionId, requestedCategory: matchedCategory });
-  } catch (purgeError) {
-    addLog(`[Omni] Purge skipped: ${purgeError.message}`);
   }
 
   res.json({
@@ -1560,7 +779,12 @@ router.post('/auto', async (req, res) => {
   try {
     const { query, category, location, strategy = 'broad', radius, gridDensity, sessionId, userId: bodyUserId, engines, enabledEngines } = req.body;
     const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
-    const plan = categoryRouter.buildAutoPlan({ query, category, location });
+    const { parseUniversalQuery } = require('../utils/universalQueryEngine');
+    const fullInput = query || `${category || ''} in ${location || ''}`.trim();
+    const parsedNL = parseUniversalQuery(fullInput);
+    const resolvedCat = parsedNL.category || category;
+    const resolvedLoc = parsedNL.location || location;
+    const plan = categoryRouter.buildAutoPlan({ query: fullInput, category: resolvedCat, location: resolvedLoc });
 
     if (!plan.category || !plan.location) {
       return res.status(400).json({
@@ -1568,19 +792,75 @@ router.post('/auto', async (req, res) => {
       });
     }
 
-    // Client Restriction: Client can ONLY scrape individual cities and mandals!
+    // Client Restriction: Whole-district (18+ mandals) & state sweeps are restricted to Master!
+    // Individual mandals (and their constituent villages), cities, towns, and localities are fully supported in Client.
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    const { classifyLocation } = require('../utils/universalGeoCluster');
+    const locClassification = classifyLocation(plan.location);
+
     if (!isMaster) {
-      const { classifyLocation } = require('../utils/universalGeoCluster');
-      const locClassification = classifyLocation(plan.location);
       if (locClassification.type === 'state' || locClassification.type === 'district') {
         return res.status(403).json({
-          error: `Client searches are restricted to individual cities and mandals. Wide-area ${locClassification.type} sweeps (${locClassification.name}) require Master Command Center access.`,
+          error: `Client searches are restricted to individual cities, mandals, and villages. Wide-area ${locClassification.type} sweeps (${locClassification.name}) across all mandals require Master Command Center access.`,
           classification: locClassification,
-          allowedScopes: ['city', 'mandal', 'locality', 'town'],
+          allowedScopes: ['mandal', 'city', 'locality', 'town', 'village'],
           suggestedZones: locClassification.subZones?.slice(0, 8) || []
         });
       }
+    }
+
+    // Auto-populate constituent zones (e.g. all villages for a mandal, or commercial sectors for a city)
+    try {
+      const sweepScopePolicy = require('../services/sweepScopePolicy');
+      if (locClassification.type === 'mandal') {
+        const mandalPlan = sweepScopePolicy.buildScopeZones('mandal', plan.location);
+        if (mandalPlan && Array.isArray(mandalPlan.zones) && mandalPlan.zones.length) {
+          plan.zones = mandalPlan.zones;
+          plan.resolvedScope = 'mandal';
+          plan.district = mandalPlan.district;
+          plan.state = mandalPlan.state;
+          plan.mandal = mandalPlan.title;
+          addLog(`[Auto Plan] Auto-resolved mandal "${plan.location}" into ${plan.zones.length} constituent villages/zones.`);
+        }
+      } else if (locClassification.type === 'city' || locClassification.type === 'town' || locClassification.type === 'metro') {
+        const { resolveUniversalZones, AUTHORITATIVE_CLUSTERS } = require('../utils/universalGeoCluster');
+        const cleanLoc = (plan.location || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (AUTHORITATIVE_CLUSTERS[cleanLoc]) {
+          const uniZones = resolveUniversalZones(plan.location, plan.category, isMaster);
+          if (uniZones && uniZones.length) {
+            plan.zones = uniZones.map(z => ({ name: z.zoneName, ...z }));
+            plan.resolvedScope = 'city';
+            addLog(`[Auto Plan] Auto-resolved authoritative city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+          }
+        } else {
+          const cityPlan = sweepScopePolicy.buildScopeZones('city', plan.location);
+          if (cityPlan && Array.isArray(cityPlan.zones) && cityPlan.zones.length > 1) {
+            plan.zones = cityPlan.zones;
+            plan.resolvedScope = 'city';
+            plan.district = cityPlan.district;
+            plan.state = cityPlan.state;
+            addLog(`[Auto Plan] Auto-resolved city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+          } else {
+            const uniZones = resolveUniversalZones(plan.location, plan.category, isMaster);
+            if (uniZones && uniZones.length) {
+              plan.zones = uniZones.map(z => ({ name: z.zoneName, ...z }));
+              plan.resolvedScope = 'city';
+              addLog(`[Auto Plan] Auto-resolved city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+            }
+          }
+        }
+      } else if (locClassification.type === 'village') {
+        const villagePlan = sweepScopePolicy.buildScopeZones('village', plan.location);
+        if (villagePlan && Array.isArray(villagePlan.zones) && villagePlan.zones.length) {
+          plan.zones = villagePlan.zones;
+          plan.resolvedScope = 'village';
+          plan.district = villagePlan.district;
+          plan.state = villagePlan.state;
+          addLog(`[Auto Plan] Auto-resolved village "${plan.location}" into ${plan.zones.length} zones.`);
+        }
+      }
+    } catch (scopeErr) {
+      addLog(`[Auto Plan] Scope resolution error: ${scopeErr.message}`);
     }
 
     const explicitEngines = (Array.isArray(enabledEngines) && enabledEngines.length)
@@ -1597,13 +877,15 @@ router.post('/auto', async (req, res) => {
     if (!charge.ok) {
       return res.status(charge.status).json({ error: charge.error });
     }
+    if (creditsPreflight(res)) return;
 
+    const finalSessionId = sessionId || ((isMaster ? 'master_sweep_' : 'client_auto_') + Date.now().toString(36));
     globalAbortSignal.aborted = false;
+    sessionAbortSignals.set(finalSessionId, { aborted: false });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
-    const finalSessionId = sessionId || `auto_${Date.now().toString(36)}`;
-
     // Register session immediately so jobs watchdog and client learn about active session
+    const autoZonesCount = Array.isArray(plan.zones) && plan.zones.length ? plan.zones.length : 64;
     activeSessions[finalSessionId] = {
       sessionId: finalSessionId,
       userId,
@@ -1611,23 +893,21 @@ router.post('/auto', async (req, res) => {
       location: plan.location,
       status: 'running',
       sessionActive: true,
+      totalMandals: autoZonesCount,
+      totalMandalsAcrossAll: autoZonesCount,
+      zones: plan.zones || [],
       startTime: Date.now()
     };
 
-    let purge = { removed: 0, engagedKept: 0, profilesRemoved: 0, vaultsRemoved: 0 };
+    // Append-only: the previous run's leads stay in the store and its folder
+    // stays on disk. Only the background deep job is stopped.
+    const purge = { removed: 0, engagedKept: 0, profilesRemoved: 0, vaultsRemoved: 0, appendOnly: true };
     let deepStopped = 0;
     try {
-      // A new run replaces the previous dataset. Stop its deep job first so it
-      // does not keep probing vendors the purge is about to delete.
       const deepProfileService = require('../services/deepProfileService');
       deepStopped = deepProfileService.stopAll('superseded by a fresh run');
     } catch (deepStopError) {
       addLog(`[Auto] Deep-cancel skipped: ${deepStopError.message}`);
-    }
-    try {
-      purge = leadRetention.prepareFreshRun({ keepSessionId: finalSessionId, requestedCategory: plan.category });
-    } catch (purgeError) {
-      addLog(`[Auto] Purge skipped: ${purgeError.message}`);
     }
 
     res.json({
@@ -1639,9 +919,6 @@ router.post('/auto', async (req, res) => {
     });
 
     addLog(`\n[Auto Scrape] "${plan.category}" in "${plan.location}" · ${plan.familyLabel} · ${plan.engines.join(' + ')} · session ${finalSessionId}`);
-    if (purge.removed) {
-      addLog(`[Auto Scrape] Fresh-data purge removed ${purge.removed} old leads (${purge.engagedKept || 0} CRM-engaged kept).`);
-    }
 
     addScrapeJob('scrapeOmniOrchestrator', [
       plan.category,
@@ -1675,7 +952,11 @@ router.get('/engines/status', (req, res) => {
   try {
     const status = engineHealth.getStatus();
     const metrics = typeof getConcurrencyMetrics === 'function' ? getConcurrencyMetrics() : null;
-    res.json({ ok: true, ...status, queue: metrics, breakers: { localFinder: require('../services/serpBreaker').snapshot() } });
+    let httpCache = null;
+    try {
+      httpCache = require('../utils/fastGoogleHttp').getHttpCacheStats();
+    } catch (e) {}
+    res.json({ ok: true, ...status, queue: metrics, httpCache, breakers: { localFinder: require('../services/serpBreaker').snapshot() }, resilience: requestGuard.snapshot() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }
@@ -1690,6 +971,62 @@ router.post('/engines/reset', (req, res) => {
   }
 });
 
+router.post('/master-sweep/preview', async (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Master scope required.' });
+    }
+    const { scope = 'district', name, deep = false } = req.body || {};
+    if (!name) return res.status(400).json({ error: 'A place name is required.' });
+
+    const plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
+    if (!plan) {
+      return res.status(404).json({
+        error: `Could not resolve "${name}" in the offline India gazetteer.`,
+        name
+      });
+    }
+
+    // Rough wall-clock estimate from measured runs (~3 s per zone across the
+    // parallel engine board). The UI labels it "approx" so it never promises
+    // a precise finish time for a 700-zone state sweep.
+    const zones = plan.zones.length;
+    // Honest preview ETA: measured browser-seconds per zone ÷ live slots.
+    // The old `zones × 3 s` ignored concurrency and disagreed with the live
+    // ETA by an order of magnitude on large sweeps.
+    const previewMetrics = typeof getConcurrencyMetrics === 'function' ? getConcurrencyMetrics() : null;
+    const previewSlots = etaModel.liveBrowserSlots(previewMetrics);
+    const previewEtaMs = etaModel.modelEtaMs(zones, previewSlots);
+    res.json({
+      ok: true,
+      scope: plan.resolvedScope,
+      requestedScope: plan.requestedScope || plan.resolvedScope,
+      targetName: plan.title,
+      unitTerm: plan.unitTerm || null,
+      requestedTerm: plan.requestedTerm || null,
+      terminology: plan.terminology || null,
+      coverage: plan.coverage || null,
+      totalZones: zones,
+      capped: Boolean(plan.stats && plan.stats.capped),
+      unverifiedPlace: Boolean(plan.unverifiedPlace),
+      zoneStats: plan.stats || null,
+      policy: plan.policy || null,
+      warnings: plan.warnings || [],
+      estimatedMinutes: Math.max(1, Math.ceil(previewEtaMs / 60000)),
+      estimatedSeconds: Math.round(previewEtaMs / 1000),
+      etaModel: {
+        secondsPerZone: etaModel.MAPS_SECONDS_PER_ZONE,
+        liveSlots: previewSlots,
+        note: 'Measured browser-seconds per zone divided by live browser slots. An estimate, not a guarantee.'
+      },
+      sampleZones: plan.zones.slice(0, 12).map(z => z.name)
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/master-sweep', async (req, res) => {
   try {
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
@@ -1699,17 +1036,18 @@ router.post('/master-sweep', async (req, res) => {
       });
     }
 
-    const { category, scope = 'district', name, userId = 'master', strategy = 'broad', speedPreset = 'precision_grid', engines } = req.body;
+    const { category, scope = 'district', name, userId = 'master', strategy = 'broad', speedPreset = 'precision_grid', engines, deep = false } = req.body;
     if (!category || !name) {
       return res.status(400).json({ error: 'Both category and target location name are required for a Master Sweep.' });
     }
 
     // Resolve the requested scope through the India-aware policy layer:
-    //   district → all mandals (villages are covered by each mandal query)
-    //   mandal   → every village / ward
-    //   state    → all districts + district HQ cities + major mandals
-    //   city     → commercial localities
-    const plan = buildScopeZones(scope, name);
+    //   state    → every district + every sub-district (mandal / taluk / tehsil / block)
+    //   district → every sub-district of the district (each query covers its villages)
+    //   mandal   → every revenue village / ward in the sub-district
+    //   city     → commercial localities + street grid inside the city
+    // `deep` adds every village of a district as its own zone.
+    const plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
     if (!plan) {
       return res.status(404).json({
         error: `Could not resolve "${name}" in the offline India gazetteer. Try a district, mandal, state or city name, or add the parent district.`
@@ -1726,10 +1064,12 @@ router.post('/master-sweep', async (req, res) => {
     if (req.body.hasWebsite === true) filters.hasWebsite = true;
     if (req.body.verifiedOnly === true) filters.verifiedOnly = true;
 
-    const sessionId = `master_${Date.now().toString(36)}`;
+    const sessionId = req.body.sessionId || `master_sweep_${Date.now().toString(36)}`;
     const finalLocation = `${sweepTitle} (${resolvedScope.toUpperCase()} SWEEP)`;
 
+    // Reset abort signals for fresh master sweep
     globalAbortSignal.aborted = false;
+    sessionAbortSignals.set(sessionId, { aborted: false });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
     res.json({
@@ -1738,6 +1078,10 @@ router.post('/master-sweep', async (req, res) => {
       message: `Master ${resolvedScope} sweep initiated for "${sweepTitle}". Swarming ${targetZones.length} sub-zones.`,
       scope: resolvedScope,
       targetName: sweepTitle,
+      unitTerm: plan.unitTerm || null,
+      terminology: plan.terminology || null,
+      coverage: plan.coverage || null,
+      deep: deep === true || deep === 'true',
       totalZones: targetZones.length,
       capped: Boolean(plan.stats?.capped),
       zoneStats: plan.stats,
@@ -1751,9 +1095,9 @@ router.post('/master-sweep', async (req, res) => {
     addLog(`\n[Master Sweep] 🗺️ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
     addLog(`[Master Sweep] Coverage policy: ${plan.policy.label}. ${plan.policy.note}`);
 
-    addScrapeJob('scrapeOmniOrchestrator', [
+        addScrapeJob('scrapeOmniOrchestrator', [
       category,
-      finalLocation,
+      sweepTitle,
       strategy,
       5,
       'high',
@@ -1761,7 +1105,8 @@ router.post('/master-sweep', async (req, res) => {
       sessionId,
       userId || 'master',
       filters,
-      plan
+      plan,
+      true
     ]);
 
   } catch (error) {
@@ -1797,53 +1142,69 @@ router.post('/deep-enrich', async (req, res) => {
     addLog(`[Deep Enrich] ⚡ Customer triggered deep contact enrichment for ${targets.length} leads...`);
     res.json({ success: true, message: `Deep enrichment initiated for ${targets.length} leads in background`, targetCount: targets.length });
 
-    // Background asynchronous enrichment without blocking the client
+    // Background asynchronous enrichment with parallel workers (concurrency 6)
     (async () => {
       let enrichedCount = 0;
-      for (const lead of targets) {
-        if (globalAbortSignal.aborted) break;
-        if (!lead.website || !lead.website.startsWith('http')) continue;
+      let currentIndex = 0;
+      const workerConcurrency = 6;
 
-        try {
-          const webData = await fastWebsiteExtract(lead.website, lead.name);
-          if (webData && (webData.emails?.length > 0 || webData.instagram || webData.facebook || webData.phones?.length > 0 || webData.logo)) {
-            const currentVendors = dbAdapter.getVendors();
-            const targetIdx = currentVendors.findIndex(v => v.id === lead.id);
-            if (targetIdx !== -1) {
-              const item = currentVendors[targetIdx];
-              item.emails = webData.emails || item.emails || [];
-              item.email = webData.emails?.[0] || item.email || '';
-              if (webData.instagram) item.instagram = webData.instagram;
-              if (webData.facebook) item.facebook = webData.facebook;
-              if (webData.logo) item.logo = webData.logo;
-              if ((!item.phone || item.phone.includes('Requires')) && webData.phones?.length > 0) {
-                item.phone = webData.phones[0];
+      const worker = async () => {
+        while (currentIndex < targets.length) {
+          if (globalAbortSignal.aborted) break;
+          const lead = targets[currentIndex++];
+          if (!lead || !lead.website || !lead.website.startsWith('http')) continue;
+
+          try {
+            const webData = await fastWebsiteExtract(lead.website, lead.name);
+            if (webData && (webData.emails?.length > 0 || webData.instagram || webData.facebook || webData.phones?.length > 0 || webData.logo)) {
+              const currentVendors = dbAdapter.getVendors();
+              const targetIdx = currentVendors.findIndex(v => v.id === lead.id);
+              if (targetIdx !== -1) {
+                const item = currentVendors[targetIdx];
+                item.emails = webData.emails || item.emails || [];
+                item.email = webData.emails?.[0] || item.email || '';
+                if (webData.instagram) item.instagram = webData.instagram;
+                if (webData.facebook) item.facebook = webData.facebook;
+                if (webData.linkedin) item.linkedin = webData.linkedin;
+                if (webData.logo) item.logo = webData.logo;
+                if (webData.gstin && !item.gstin) item.gstin = webData.gstin;
+                if (webData.contactPerson && !item.contactPerson) item.contactPerson = webData.contactPerson;
+                if (webData.pincode && !item.pincode) item.pincode = webData.pincode;
+                if (webData.whatsappLink && !item.whatsappLink) {
+                  item.whatsappLink = webData.whatsappLink;
+                  item.whatsappAvailable = true;
+                }
+                if ((!item.phone || item.phone.includes('Requires')) && webData.phones?.length > 0) {
+                  item.phone = webData.phones[0];
+                }
+
+                // Recalculate CRM quality score
+                let score = 20;
+                if (item.phone && !item.phone.includes('Requires')) score += 35;
+                if (item.website && item.website.startsWith('http')) score += 20;
+                if (item.emails && item.emails.length > 0) score += 15;
+                if (item.rating && parseFloat(item.rating) >= 4.0) score += 10;
+                item.qualityScore = Math.min(score, 100);
+                item.tier = item.qualityScore >= 80 ? 'Premium' : (item.qualityScore >= 55 ? 'Standard' : 'Basic');
+
+                currentVendors[targetIdx] = item;
+                dbAdapter.saveVendor(item.userId || 'admin_1', item);
+
+                try {
+                  emitVendorEvent(item, 'updated');
+                } catch (e) {}
+
+                enrichedCount++;
               }
-
-              // Recalculate CRM quality score
-              let score = 20;
-              if (item.phone && !item.phone.includes('Requires')) score += 35;
-              if (item.website && item.website.startsWith('http')) score += 20;
-              if (item.emails && item.emails.length > 0) score += 15;
-              if (item.rating && parseFloat(item.rating) >= 4.0) score += 10;
-              item.qualityScore = Math.min(score, 100);
-              item.tier = item.qualityScore >= 80 ? 'Premium' : (item.qualityScore >= 55 ? 'Standard' : 'Basic');
-
-              currentVendors[targetIdx] = item;
-              dbAdapter.saveVendors(currentVendors);
-
-              try {
-                emitVendorEvent(item, 'updated');
-              } catch (e) {}
-
-              enrichedCount++;
             }
+          } catch (e) {
+            // Continue to next lead
           }
-        } catch (e) {
-          // Continue to next lead
         }
-      }
-      addLog(`[Deep Enrich] ✅ Completed deep enrichment: +${enrichedCount} leads enriched with verified owner contacts.`);
+      };
+
+      await Promise.all(Array.from({ length: Math.min(workerConcurrency, targets.length) }, worker));
+      addLog(`[Deep Enrich] ✅ Completed deep enrichment: +${enrichedCount} leads enriched with verified owner contacts in parallel.`);
     })();
   } catch (err) {
     addLog(`[Deep Enrich Error] ${err.message}`);
@@ -1851,29 +1212,45 @@ router.post('/deep-enrich', async (req, res) => {
   }
 });
 
-// BATCH API
+// Unified Parallel Batch Scrape (accepts either bulk tasks or queries)
 router.post('/batch', async (req, res) => {
-  const { tasks } = req.body;
-  if (!tasks || tasks.length === 0) return res.status(400).json({ error: 'No tasks' });
-
-  for (const t of tasks) {
-    const engines = t.engines || ['maps', 'justdial', 'weddingbazaar'];
-    
-    // Ola Maps Geocoding
-    const resolvedData = await geocodeLocation(t.location);
-    const accurateLocation = resolvedData && resolvedData.lat ? resolvedData.formattedLocation : t.location;
-    const q = `${t.category} in ${accurateLocation}`;
-    
-    // Exclusive DeepSeek AI Scraper
-    await addScrapeJob('scrapeDeepseekAI', [q, t.category, accurateLocation]);
-
-    // Regular Engines
-    if (engines.includes('maps')) {
-      await addScrapeJob('scrapeGooglePlaces', [q, t.category, accurateLocation, 'legacy', null, null, null]);
-    }
+  const { tasks, queries = [], engines = ['google-serp-local'], sessionId = `batch_${Date.now()}` } = req.body;
+  if ((!tasks || tasks.length === 0) && (!queries || queries.length === 0)) {
+    return res.status(400).json({ error: 'Either tasks or queries array is required' });
   }
 
-  res.json({ success: true, message: `Successfully queued ${tasks.length} bulk tasks in background memory queue.` });
+  if (tasks && tasks.length > 0) {
+    for (const t of tasks) {
+      const engs = t.engines || ['maps', 'justdial'];
+      const resolvedData = await geocodeLocation(t.location);
+      const accurateLocation = resolvedData && resolvedData.lat ? resolvedData.formattedLocation : t.location;
+      const q = `${t.category} in ${accurateLocation}`;
+      if (engs.includes('maps')) {
+        await addScrapeJob('scrapeGooglePlaces', [q, t.category, accurateLocation, 'legacy', null, null, null]);
+      }
+    }
+    return res.json({ success: true, message: `Successfully queued ${tasks.length} bulk tasks in background memory queue.` });
+  }
+
+  addLog(`[Batch Scraper] Dispatched parallel batch with ${queries.length} queries across concurrency pool`);
+  res.json({
+    success: true,
+    sessionId,
+    queriesCount: queries.length,
+    status: 'dispatched'
+  });
+
+  defaultPool.runBatch(queries.map(q => async () => {
+    try {
+      const parsed = parseNaturalLanguageQuery(q);
+      const cat = parsed.category || 'Business';
+      const loc = parsed.location || 'India';
+      addLog(`[Batch Worker] Scraping: "${cat}" in "${loc}"`);
+      await scrapeGoogleLocalFinder(q, cat, loc, sessionId, 5);
+    } catch (err) {
+      addLog(`[Batch Worker Error] Failed on "${q}": ${err.message}`);
+    }
+  })).catch(err => console.error('[Batch Pool Error]', err));
 });
 
 router.post('/upload', async (req, res) => {
@@ -1881,18 +1258,14 @@ router.post('/upload', async (req, res) => {
   if (!tasks || !Array.isArray(tasks)) return res.status(400).json({ error: 'Invalid tasks array' });
 
   for (const t of tasks) {
-    const engines = t.engines || ['maps', 'deepseek-ai'];
+    const engines = t.engines || ['maps'];
     const aiKeywords = await getKeywordSynonyms(t.category);
     
-    // Ola Maps Geocoding
+    // Free geocoding (OpenStreetMap Nominatim first)
     const resolvedData = await geocodeLocation(t.location);
     const accurateLocation = resolvedData && resolvedData.lat ? resolvedData.formattedLocation : t.location;
     const q = `${t.category} in ${accurateLocation}`;
     
-    // DeepSeek AI and Google Maps Scrapers
-    if (engines.includes('deepseek-ai')) {
-      await addScrapeJob('scrapeDeepseekAI', [q, t.category, accurateLocation]);
-    }
     if (engines.includes('maps') || engines.includes('google')) {
       await addScrapeJob('scrapeGooglePlaces', [q, t.category, accurateLocation, aiKeywords, 'legacy', null, null, null]);
     }
@@ -1907,160 +1280,330 @@ router.get('/batch/progress', async (req, res) => {
 });
 
 const handleMasterStopAll = async (req, res) => {
-  addLog('🛑 [SYSTEM] MASTER STOP INITIATED. Aborting all active scrapes & clearing queue.');
+  const bodySessionId = req.body?.sessionId || req.query?.sessionId || req.headers['x-session-id'] || null;
+  const workspaceScope = req.headers['x-workspace-scope'] || (req.body?.isMaster ? 'master' : null);
+  addLog(bodySessionId
+    ? `🛑 [SYSTEM] STOP INITIATED for session ${bodySessionId}.`
+    : `🛑 [SYSTEM] STOP INITIATED (scope: ${workspaceScope || 'global'}). Aborting active scrapes & clearing queue.`);
+
+  // 1. Determine targets: targeted stop must never abort unrelated runs
+  const runningSessions = Object.values(activeSessions).filter(session =>
+    session && (session.status === 'running' || session.sessionActive === true)
+  );
+
+  let targets = [];
+  if (bodySessionId) {
+    targets = runningSessions.filter(session => session.sessionId === bodySessionId);
+    if (targets.length === 0 && activeSessions[bodySessionId]) {
+      targets = [activeSessions[bodySessionId]];
+    }
+  } else if (workspaceScope === 'master') {
+    targets = runningSessions.filter(session => session.isMaster || session.sessionId.startsWith('master_'));
+  } else if (workspaceScope === 'client') {
+    targets = runningSessions.filter(session => !session.isMaster && !session.sessionId.startsWith('master_'));
+  } else {
+    targets = runningSessions;
+  }
+  // ALWAYS unconditionally set globalAbortSignal.aborted so active Playwright loops terminate immediately
   globalAbortSignal.aborted = true;
 
-  // 1. Instantly kill all spawned Playwright / headless browser processes
-  try {
-    await closeAllBrowsers();
-  } catch (e) {
-    console.warn('[Master Stop] Error closing browsers:', e.message);
+  // 2. Mark targets as aborted and signal per-session abort controllers
+  for (const session of targets) {
+    session.aborted = true;
+    session.status = 'aborted';
+    session.sessionActive = false;
+    const sig = sessionAbortSignals.get(session.sessionId);
+    if (sig) sig.aborted = true;
   }
 
-  // 2. Clear job queues and reset progress
-  await clearQueue();
-  batchProgress.isActive = false;
-  batchProgress.currentTask = 'Aborted';
+  // 3. Stop streaming enricher and deep jobs only if no other sessions are active
+  const otherRunning = runningSessions.filter(session => !targets.includes(session));
+  if (!bodySessionId || otherRunning.length === 0) {
+    try {
+      const { streamingEnricher } = require('../services/phoneBackfillService');
+      await streamingEnricher.stop();
+    } catch (e) {}
+    try {
+      require('../services/deepProfileService').stopAll('user pressed stop');
+    } catch (e) {}
+    try {
+      const { closeAllBrowsers } = require('../scrapers/browserFactory');
+      await closeAllBrowsers();
+    } catch (e) {}
+  }
 
-  // 3. Flush in-memory vendors buffer to disk synchronously
-  try {
-    if (typeof dbAdapter.flushSync === 'function') {
-      dbAdapter.flushSync();
+  // 4. Snappy queue clearing & browser cleanup
+  if (bodySessionId) {
+    await clearQueueForSession(bodySessionId).catch(() => {});
+  } else if (targets.length > 0 && targets.length < runningSessions.length) {
+    for (const s of targets) {
+      await clearQueueForSession(s.sessionId).catch(() => {});
     }
-  } catch (e) {}
+  } else {
+    await clearQueue().catch(() => {});
+    batchProgress.isActive = false;
+    batchProgress.currentTask = 'Aborted';
+  }
 
-  // 4. Safely commit collected leads into individual session folder files
-  const SESSIONS_DIR = require('../config/paths').SESSIONS_DIR;
-  const allVendors = dbAdapter.getVendors() || [];
+  // 5. Flush the atomic store before persisting
+  try { dbAdapter.flushSync(); } catch (e) {}
+
+  // 6. Persist each running session as aborted with preserved leads and zone metadata
   let totalPreserved = 0;
-
-  Object.keys(activeSessions).forEach(sessionId => {
-    const session = activeSessions[sessionId];
-    if (session) {
-      session.status = 'aborted';
-      const sessionLeads = allVendors.filter(v => v.sessionId === sessionId
-        || v.lastSessionId === sessionId
-        || (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId)));
-      totalPreserved += sessionLeads.length;
-
-      const safeUserDir = path.join(SESSIONS_DIR, (session.userId || 'anonymous').replace(/[^a-zA-Z0-9_-]/g, '_'));
-      if (!fs.existsSync(safeUserDir)) {
-        try { fs.mkdirSync(safeUserDir, { recursive: true }); } catch (e) {}
-      }
-      const safeSessionFile = path.join(safeUserDir, `${sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
-
-      const sessionRecord = {
-        id: sessionId,
-        userId: session.userId || 'anonymous',
-        category: session.category || 'General Business',
-        location: session.location || 'All India',
-        timestamp: new Date().toISOString(),
-        status: 'aborted',
-        leadCount: sessionLeads.length,
-        phoneCount: sessionLeads.filter(l => l.phone).length,
+  for (const session of targets) {
+    const sessionLeads = dbAdapter.getVendorsBySession(session.sessionId);
+    totalPreserved += sessionLeads.length;
+    try {
+      persistSessionVault({
+        sessionId: session.sessionId,
+        userId: session.userId,
+        category: session.category,
+        location: session.location,
+        leads: sessionLeads,
+        final: true,
         metadata: {
-          ...(session.metadata || {}),
           status: 'aborted',
           abortedAt: new Date().toISOString(),
-          preservedLeads: sessionLeads.length
-        },
-        leads: sessionLeads
-      };
-
-      try {
-        // Same no-shrink rule as persistSessionVault: an abort must not wipe a
-        // completed snapshot that already holds more leads.
-        let shouldWrite = true;
-        try {
-          if (fs.existsSync(safeSessionFile)) {
-            const previous = JSON.parse(fs.readFileSync(safeSessionFile, 'utf-8'));
-            const previousCount = Number(previous?.leadCount) || (Array.isArray(previous?.leads) ? previous.leads.length : 0);
-            if (previousCount > sessionRecord.leadCount && previousCount > 0) shouldWrite = false;
-          }
-        } catch (guardError) {
-          shouldWrite = true;
+          preservedLeads: sessionLeads.length,
+          totalZones: session.totalMandalsAcrossAll || session.totalMandals || (session.zones ? session.zones.length : 0),
+          completedZones: session.overallCompletedMandals || 0,
+          completedZoneIndices: session.completedZoneIndices || [],
+          completedZoneNames: session.completedZoneNames || [],
+          zones: session.zones || []
         }
-        if (shouldWrite) {
-          fs.writeFileSync(safeSessionFile, JSON.stringify(sessionRecord, null, 2), 'utf-8');
-        }
-      } catch (err) {
-        console.error('[Session Storage] Error saving aborted session file:', err.message);
-      }
-    }
-  });
+      });
+    } catch (e) {}
+    session.finished = true;
+    session.finishedAt = Date.now();
+    try {
+      emitProgressEvent({
+        sessionId: session.sessionId,
+        sessionActive: false,
+        aborted: true,
+        status: 'aborted',
+        totalLeads: sessionLeads.length,
+        currentTask: `Scrape safely terminated. Collected ${sessionLeads.length} stores saved to folder.`
+      });
+    } catch (e) {}
+  }
 
-  addLog(`🛑 [SYSTEM] MASTER STOP EXECUTED. Safely committed ${totalPreserved} collected stores into session folder with 'Aborted' badge.`);
+  addLog(`🛑 [SYSTEM] STOP EXECUTED. Safely committed ${totalPreserved} collected stores into session folder with 'Aborted' badge.`);
 
-  // 5. Emit event so frontend HUD & cockpit update immediately
-  try {
-    emitProgressEvent({
-      sessionActive: false,
-      aborted: true,
-      status: 'aborted',
-      totalLeads: totalPreserved,
-      currentTask: `Scrape safely terminated. Collected ${totalPreserved} stores saved to folder.`
-    });
-  } catch (e) {}
-
-  res.json({
+  return res.json({
     success: true,
     status: 'aborted',
     preservedCount: totalPreserved,
+    sessions: targets.map(session => session.sessionId),
     message: `Scrape safely terminated. Collected ${totalPreserved} stores saved to folder.`
   });
 };
 
 router.post('/jobs/stop-all', handleMasterStopAll);
+router.post('/stop-all', handleMasterStopAll);
 router.post('/stop', handleMasterStopAll);
 
-// Dedicated Session Stream
-router.get('/stream/:sessionId', (req, res) => {
-  const { sessionId } = req.params;
-  res.set({
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
-  res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, status: 'listening' })}\n\n`);
-  
-  const keepAlive = setInterval(() => {
-    try { res.write(': heartbeat\n\n'); } catch (e) { clearInterval(keepAlive); }
-  }, 15000);
+router.post('/resume', async (req, res) => {
+  try {
+    const { sessionId, userId: bodyUserId } = req.body || {};
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required to resume a scrape.' });
+    }
+    const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
 
-  req.on('close', () => clearInterval(keepAlive));
+    // 1. Look in activeSessions first, then read from disk vault
+    let session = activeSessions[sessionId];
+    let vaultData = null;
+    const SESSIONS_DIR = require('../config/paths').SESSIONS_DIR;
+    const userVaultPath = path.join(SESSIONS_DIR, String(userId).replace(/[^a-zA-Z0-9_-]/g, '_'), `${sessionId}.json`);
+    const anonVaultPath = path.join(SESSIONS_DIR, 'anonymous', `${sessionId}.json`);
+    const targetFile = fs.existsSync(userVaultPath) ? userVaultPath : (fs.existsSync(anonVaultPath) ? anonVaultPath : null);
+
+    if (targetFile) {
+      try {
+        vaultData = JSON.parse(fs.readFileSync(targetFile, 'utf8'));
+      } catch (e) {
+        addLog(`[Resume] Could not parse vault ${targetFile}: ${e.message}`);
+      }
+    }
+
+    const category = session?.category || vaultData?.category;
+    const location = session?.location || vaultData?.location;
+
+    if (!category || !location) {
+      return res.status(404).json({ error: `Cannot resume session "${sessionId}": session metadata not found.` });
+    }
+
+    // 2. Identify all zones and completed zones
+    const rawCoverageMode = session?.coverageMode || vaultData?.metadata?.coverageMode || 'deep';
+    const coverageMode = String(rawCoverageMode).toLowerCase() === 'fast' ? 'fast' : 'deep';
+    let allZones = session?.zones || vaultData?.metadata?.zones || [];
+    if (!allZones || allZones.length === 0) {
+      const { resolveUniversalZones } = require('../utils/universalGeoCluster');
+      const resolved = resolveUniversalZones(location, category, isMaster);
+      allZones = resolved.map(z => ({ name: z.zoneName, ...z }));
+    }
+
+    // Fast folders deliberately deferred their grid pass. Resume continues the
+    // named pass only; the grid cells stay recorded for a later deep pass.
+    if (coverageMode === 'fast') {
+      allZones = allZones.filter(z => !(z.coverageKind === 'grid' || z.kind === 'grid'));
+    }
+
+    const completedZoneIndices = new Set(
+      session?.completedZoneIndices || vaultData?.metadata?.completedZoneIndices || []
+    );
+    const completedZoneNames = new Set(
+      (session?.completedZoneNames || vaultData?.metadata?.completedZoneNames || []).map(s => String(s).toLowerCase().trim())
+    );
+
+    // Filter to remaining uncompleted zones. Names are the durable identity:
+    // a fast folder's stored indices point at the full footprint, so after the
+    // grid cells are filtered out only the names can be trusted.
+    const remainingZones = allZones.filter((z, idx) => {
+      const zName = String(z.name || z.zoneName || '').toLowerCase().trim();
+      if (completedZoneNames.has(zName)) return false;
+      if (coverageMode === 'fast') return true;
+      return !completedZoneIndices.has(idx);
+    });
+
+    const remainingSet = new Set(remainingZones);
+    const activeCompletedIndices = new Set();
+    allZones.forEach((zone, idx) => {
+      if (!remainingSet.has(zone)) activeCompletedIndices.add(idx);
+    });
+
+    if (remainingZones.length === 0) {
+      return res.json({
+        ok: true,
+        alreadyComplete: true,
+        message: 'All zones for this search have already been completed!',
+        totalZones: allZones.length,
+        completedZones: allZones.length,
+        sessionId
+      });
+    }
+
+    addLog(`[Resume] 🔄 Resuming session "${sessionId}" ("${category}" in "${location}"): ${remainingZones.length}/${allZones.length} zones remaining.`);
+
+    // 3. Reset abort flags for this session
+    sessionAbortSignals.set(sessionId, { aborted: false });
+    activeSessions[sessionId] = {
+      ...(session || {}),
+      sessionId,
+      userId,
+      category,
+      location,
+      status: 'running',
+      sessionActive: true,
+      aborted: false,
+      finished: false,
+      zones: allZones,
+      coverageMode,
+      completedZoneIndices: Array.from(activeCompletedIndices),
+      completedZoneNames: Array.from(completedZoneNames),
+      startTime: Date.now()
+    };
+
+    // 4. Construct a resumed plan
+    const resumePlan = {
+      category,
+      location,
+      zones: remainingZones,
+      originalTotalZones: allZones.length,
+      resumed: true,
+      coverageMode,
+      initialCompletedCount: activeCompletedIndices.size,
+      completedZoneIndices: Array.from(activeCompletedIndices),
+      completedZoneNames: Array.from(completedZoneNames)
+    };
+
+    // 5. Respond immediately to UI
+    res.json({
+      ok: true,
+      resumed: true,
+      sessionId,
+      category,
+      location,
+      coverageMode,
+      remainingZonesCount: remainingZones.length,
+      totalZonesCount: allZones.length,
+      completedZonesCount: activeCompletedIndices.size,
+      message: `Resuming scrape: ${remainingZones.length} zones remaining.`
+    });
+
+    // 6. Enqueue the orchestrator for remaining zones. Resuming keeps the
+    // folder's original coverage mode instead of forcing a full grid sweep.
+    addScrapeJob('scrapeOmniOrchestrator', [
+      category,
+      location,
+      'broad',
+      5,
+      coverageMode,
+      session?.engines || vaultData?.metadata?.engines || ['auto'],
+      sessionId,
+      userId,
+      {},
+      resumePlan,
+      isMaster
+    ]);
+
+  } catch (err) {
+    console.error('[Resume Error]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Parallel Multi-Location Batch Scrape
-router.post('/batch', async (req, res) => {
-  const { queries = [], engines = ['google-serp-local'], sessionId = `batch_${Date.now()}` } = req.body;
-  if (!queries || queries.length === 0) {
-    return res.status(400).json({ error: 'Queries array is required' });
+router.post('/enrich-now', async (req, res) => {
+  const { sessionId, leadIds } = req.body || {};
+  const phoneBackfillService = require('../services/phoneBackfillService');
+  const allVendors = dbAdapter.getVendors();
+  let targetLeads = allVendors;
+
+  if (Array.isArray(leadIds) && leadIds.length > 0) {
+    const idSet = new Set(leadIds);
+    targetLeads = allVendors.filter(v => idSet.has(v.id));
+  } else if (sessionId) {
+    targetLeads = dbAdapter.getVendorsBySession(sessionId);
   }
 
-  addLog(`[Batch Scraper] Dispatched parallel batch with ${queries.length} queries across concurrency pool`);
-  
-  res.json({
-    success: true,
-    sessionId,
-    queriesCount: queries.length,
-    status: 'dispatched'
+  // Every lead without a mobile is a candidate. Name-search URLs are verified
+  // against the place panel inside backfillPhones(), so they are safe to use.
+  const missingMobile = targetLeads.filter(lead => !phoneBackfillService.hasValidMobile(lead.phone));
+
+  if (!missingMobile.length) {
+    return res.json({
+      success: true,
+      message: 'All selected leads already have verified mobile contacts.',
+      filled: 0,
+      candidates: 0
+    });
+  }
+
+  addLog(`[On-Demand Enrich] Starting instant enrichment for ${missingMobile.length} leads...`);
+
+  phoneBackfillService.backfillPhones({
+    leads: missingMobile,
+    sessionId: sessionId || 'manual_enrich',
+    budgetMs: Math.min(300_000, Math.max(60_000, missingMobile.length * 2_000)),
+    concurrency: 8,
+    emit: (vendor, type) => { try { emitVendorEvent(vendor, type); } catch (e) {} },
+    log: addLog
+  }).then(summary => {
+    addLog(`[On-Demand Enrich] Finished: ${summary.filled} contacts enriched (${summary.mobilesFound} mobile, ${summary.landlinesFound} landline).`);
+  }).catch(err => {
+    addLog(`[On-Demand Enrich] Error: ${err.message}`);
   });
 
-  // Execute in background via defaultPool
-  defaultPool.runBatch(queries.map(q => async () => {
-    try {
-      const parsed = parseNaturalLanguageQuery(q);
-      const cat = parsed.category || 'Business';
-      const loc = parsed.location || 'India';
-      addLog(`[Batch Worker] Scraping: "${cat}" in "${loc}"`);
-      await scrapeGoogleLocalFinder(q, cat, loc, sessionId, 5);
-    } catch (err) {
-      addLog(`[Batch Worker Error] Failed on "${q}": ${err.message}`);
-    }
-  })).catch(err => console.error('[Batch Pool Error]', err));
+  return res.json({
+    success: true,
+    message: `Enrichment started for ${missingMobile.length} leads. Contacts will stream to the table in real time.`,
+    candidateCount: missingMobile.length
+  });
 });
 
 module.exports = {
   scrapeRouter: router,
-  setDeps
+  setDeps,
+  isSessionActive
 };

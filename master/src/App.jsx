@@ -5,12 +5,13 @@ import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
+import '@ui3d/tokens.css';
+import '@ui3d/kit.css';
 import './v2/v2.css';
 
 // scraper.co.in has exactly one workspace: the command center.
 const LandingV2 = lazy(() => import('./v2/LandingV2'));
 const CommandCenter = lazy(() => import('./v2/CommandCenter'));
-const MasterCommandCenter = lazy(() => import('./v2/MasterCommandCenter'));
 
 function PageLoader() {
   return (
@@ -41,6 +42,70 @@ function PageLoader() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('Master App Uncaught Error:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#0a0d14',
+          color: '#f8fafc',
+          padding: '24px',
+          fontFamily: 'Inter, sans-serif'
+        }}>
+          <div style={{
+            maxWidth: '520px',
+            background: 'rgba(15, 23, 42, 0.95)',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '16px',
+            padding: '28px',
+            boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f87171', marginBottom: '8px' }}>
+              Master Command Center Encountered a Problem
+            </h2>
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '20px', lineHeight: 1.5 }}>
+              {this.state.error?.message || 'An unexpected rendering error occurred.'}
+            </p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              style={{
+                background: 'linear-gradient(135deg, #0284c7, #00f0ff)',
+                color: '#0a0d14',
+                fontWeight: 700,
+                fontSize: '12px',
+                border: 'none',
+                padding: '10px 24px',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              Reload Master Workspace
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
     <>
@@ -62,12 +127,13 @@ export default function App() {
         }}
       />
 
+      <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* LeadHarvest Master Command Center */}
-          <Route path="/" element={<MasterCommandCenter />} />
-          <Route path="/master" element={<MasterCommandCenter />} />
-          <Route path="/command" element={<MasterCommandCenter />} />
+          <Route path="/" element={<CommandCenter isMaster />} />
+          <Route path="/master" element={<CommandCenter isMaster />} />
+          <Route path="/command" element={<CommandCenter isMaster />} />
           <Route path="/landing" element={<LandingV2 />} />
 
           <Route path="/pricing" element={<PricingPage />} />
@@ -82,6 +148,7 @@ export default function App() {
           <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
         </Routes>
       </Suspense>
+    </ErrorBoundary>
     </>
   );
 }

@@ -38,6 +38,9 @@ export function relativeTime(value) {
   return new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+import BrandLogo, { BrandIcon } from './components/BrandLogo';
+export { BrandLogo, BrandIcon };
+
 export function compactDate(value) {
   if (!value) return '—';
   const date = new Date(value);
@@ -45,17 +48,15 @@ export function compactDate(value) {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function Logo({ compact = false }) {
+export function Logo({ compact = false, theme = 'dark' }) {
   return (
-    <span className={cx('v2-logo', compact && 'is-compact')}>
-      <span className="v2-logo-mark" aria-hidden="true">
-        <i /><i /><i /><b />
-      </span>
-      <span className="v2-logo-type">
-        <strong>scraper<span>.co.in</span></strong>
-        {!compact && <small>INDIA VENDOR INTELLIGENCE</small>}
-      </span>
-    </span>
+    <BrandLogo
+      size={compact ? 28 : 34}
+      variant={compact ? 'compact' : 'full'}
+      theme={theme}
+      showTagline={!compact}
+      tagline="Vendor Intelligence"
+    />
   );
 }
 

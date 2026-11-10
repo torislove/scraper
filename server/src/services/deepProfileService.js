@@ -1244,7 +1244,7 @@ function startJob(options = {}) {
       includeWebsite: options.includeWebsite !== false,
       includeGoogle: options.includeGoogle !== false,
       websiteUrl: options.websiteUrl || null,
-      concurrency: Math.max(1, Math.min(4, Number(options.concurrency) || 2)),
+      concurrency: Math.max(1, Math.min(8, Number(options.concurrency) || 6)),
       limit
     },
     results: [],
@@ -1267,7 +1267,7 @@ async function runJob(job) {
   job.status = 'running';
   job.startedAt = new Date().toISOString();
   let index = 0;
-  const concurrency = Math.max(1, Math.min(3, Number(job.options.concurrency) || 2));
+  const concurrency = Math.max(1, Math.min(8, Number(job.options.concurrency) || 6));
 
   const worker = async () => {
     while (!job.stopRequested) {
@@ -1367,6 +1367,27 @@ function stopAll(reason = 'superseded') {
   return stopped;
 }
 
+/**
+ * Stop only the deep jobs that are walking rows from a deleted folder. A
+ * folder delete must not leave a browser pass writing profiles for leads that
+ * no longer exist.
+ */
+function stopJobsForVendorIds(vendorIds) {
+  const wanted = new Set(Array.isArray(vendorIds) ? vendorIds.filter(Boolean).map(String) : []);
+  if (!wanted.size) return 0;
+  let stopped = 0;
+  for (const job of jobs.values()) {
+    if (!['queued', 'running'].includes(job.status)) continue;
+    const ids = Array.isArray(job.vendorIds) ? job.vendorIds : [];
+    if (!ids.some(id => wanted.has(String(id)))) continue;
+    job.stopRequested = true;
+    job.status = 'stopping';
+    job.stopReason = 'folder deleted';
+    stopped += 1;
+  }
+  return stopped;
+}
+
 function getHealth() {
   let profileFiles = 0;
   try {
@@ -1408,6 +1429,7 @@ module.exports = {
   listJobs,
   stopJob,
   stopAll,
+  stopJobsForVendorIds,
   getHealth,
   computeCompleteness,
   baseGroups,

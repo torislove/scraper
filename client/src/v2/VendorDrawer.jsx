@@ -1,27 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  AlertTriangle, CheckCircle2, CircleHelp, Clock3, ExternalLink, Globe2,
-  Loader2, Mail, MapPin, MessageSquare, Phone, RefreshCw, Send, Star, X, Zap
+  AlertTriangle, Building2, Calendar, Check, CheckCircle2, Clock3,
+  Compass, Copy, ExternalLink, Globe2, Loader2, Mail, MapPin,
+  MessageSquare, Navigation, Phone, RefreshCw, Send, ShieldCheck,
+  Star, Utensils, X, Zap
 } from 'lucide-react';
 import {
   getVendorProfile, deepExtractVendor, getDeepJob, updateVendorCrm
 } from './api';
 import {
-  CopyButton, ScoreRing, StatusPill, Unknown, cx, formatNumber, relativeTime
+  CopyButton, StatusPill, ScoreRing, Unknown, cx, formatNumber, relativeTime
 } from './ui';
 import { CRM_STAGES, crmStageOf } from './CrmBoard';
-
-function isKnown(value) {
-  if (value == null) return false;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'string') {
-    const v = value.trim().toLowerCase();
-    return Boolean(v) && !['unknown', 'n/a', 'na', 'none', 'null', 'undefined', 'requires manual lookup', 'obfuscated'].includes(v);
-  }
-  if (typeof value === 'number') return Number.isFinite(value);
-  return Boolean(value);
-}
+import { parseIndianPhone, isIndianMobile } from '../utils/phoneClassify';
 
 function safeUrl(value) {
   const raw = String(value || '').trim();
@@ -31,207 +23,37 @@ function safeUrl(value) {
   return '';
 }
 
-function humanSource(source) {
-  const map = {
-    website: 'Website',
-    website_jsonld: 'Website JSON-LD',
-    website_contact: 'Website contact',
-    website_address: 'Website address',
-    website_legal: 'Website legal',
-    website_social: 'Website social',
-    google_maps: 'Google Maps',
-    existing: 'Existing record',
-    merged: 'Merged'
-  };
-  return map[source] || String(source || 'Unknown source').replace(/_/g, ' ');
-}
-
-function fieldProvenance(profile, field, path) {
-  const entries = Array.isArray(profile?.provenance) ? profile.provenance : [];
-  return entries.filter(item => {
-    const key = String(item.field || '');
-    return key === path || key === field.key || key.endsWith(`.${field.key}`);
-  }).slice(0, 3);
-}
-
-function ChipList({ values }) {
-  const drawerEl = (
-    <span className="v2-chip-list">
-      {values.map((item, index) => {
-        const text = typeof item === 'string' ? item : (item?.name || item?.label || JSON.stringify(item));
-        return <span className="v2-chip" key={`${text}-${index}`}>{text}</span>;
-      })}
-    </span>
-  );
-}
-
-function LinkValue({ value, label }) {
-  const url = safeUrl(value);
-  if (!url) return <span>{String(value)}</span>;
-  const drawerEl = (
-    <a className="v2-link-value" href={url} target="_blank" rel="noreferrer">
-      {label || String(value).replace(/^https?:\/\//i, '').replace(/\/$/, '')}
-      <ExternalLink size={11} />
-    </a>
-  );
-}
-
-function HoursTable({ rows }) {
-  const drawerEl = (
-    <div className="v2-hours-table">
-      {rows.map((row, index) => (
-        <div key={`${row.day}-${index}`}>
-          <span>{row.day || 'Day'}</span>
-          <b>{row.hours || (row.opens || row.closes ? `${row.opens || '—'} – ${row.closes || '—'}` : 'Unknown')}</b>
-        </div>
-      ))}
-    </div>
-  );
-  return typeof document !== "undefined" ? createPortal(drawerEl, document.body) : drawerEl;
-}
-
-function ReviewCards({ reviews }) {
-  const drawerEl = (
-    <div className="v2-review-list">
-      {reviews.map((review, index) => (
-        <article className="v2-review" key={`${review.author || 'review'}-${index}`}>
-          <header>
-            <b>{review.author || 'Anonymous'}</b>
-            {review.rating != null && <span><Star size={11} /> {Number(review.rating).toFixed(1)}</span>}
-            {review.date && <small>{review.date}</small>}
-          </header>
-          <p>{review.text || review.reviewBody || 'No text'}</p>
-          {review.response && <blockquote><b>Owner response</b>{review.response}</blockquote>}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function FaqList({ faqs }) {
-  const drawerEl = (
-    <div className="v2-faq-list">
-      {faqs.map((faq, index) => (
-        <details key={`${faq.question}-${index}`}>
-          <summary>{faq.question}</summary>
-          <p>{faq.answer}</p>
-        </details>
-      ))}
-    </div>
-  );
-}
-
-function MediaGrid({ items }) {
-  const urls = items.map(item => typeof item === 'string' ? item : item?.url).filter(Boolean).slice(0, 12);
-  if (!urls.length) return <Unknown />;
-  const drawerEl = (
-    <div className="v2-media-grid">
-      {urls.map((url, index) => (
-        <a href={url} target="_blank" rel="noreferrer" key={`${url}-${index}`}>
-          <img src={url} alt="" loading="lazy" onError={event => { event.currentTarget.parentElement.style.display = 'none'; }} />
-        </a>
-      ))}
-    </div>
-  );
-}
-
-function renderValue(field, value) {
-  if (!isKnown(value)) {
-    return <Unknown />;
-  }
-
-  if (field.key === 'phone' && typeof value === 'string') {
-    const drawerEl = (
-      <span className="v2-phone-value">
-        <a href={`tel:${value}`}>{value}</a>
-        <CopyButton value={value} />
-      </span>
-    );
-  }
-
-  if (field.key === 'email' && typeof value === 'string') {
-    return <a className="v2-link-value" href={`mailto:${value}`}>{value}<ExternalLink size={11} /></a>;
-  }
-
-  if (['website', 'instagram', 'facebook', 'linkedin', 'youtube', 'twitter', 'whatsapp', 'menuLink', 'plusCode'].includes(field.key)) {
-    if (field.key === 'plusCode') return <span className="v2-mono-value">{String(value)}</span>;
-    if (field.key === 'whatsapp' && !/^https?:/i.test(String(value))) {
-      return <a className="v2-link-value" href={`https://wa.me/${String(value).replace(/\D/g, '')}`} target="_blank" rel="noreferrer">WhatsApp<ExternalLink size={11} /></a>;
+function extractArea(address, cityHint) {
+  if (!address || typeof address !== 'string') return '';
+  const segs = address.split(',').map(s => s.trim()).filter(Boolean);
+  const clean = segs.filter(s => !/^\d{6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
+  if (clean.length >= 2) {
+    const cand = clean[clean.length - 2];
+    if (cand && cand.length >= 3 && cand.length <= 40 && !/^(near|opp|behind|plot|door|flat|shop|floor|no\.)/i.test(cand)) {
+      return cand;
     }
-    return <LinkValue value={value} />;
   }
-
-  if (field.key === 'rating' && typeof value === 'number') {
-    return <span className="v2-rating"><Star size={12} /><b>{value.toFixed(1)}</b></span>;
+  if (clean.length >= 1) {
+    const cand = clean[clean.length - 1];
+    if (cand.toLowerCase() !== (cityHint || '').toLowerCase()) {
+      return cand;
+    }
   }
-
-  if (field.key === 'reviewsCount' || field.key === 'latitude' || field.key === 'longitude') {
-    return <span className="v2-mono-value">{field.key === 'reviewsCount' ? formatNumber(value) : String(value)}</span>;
-  }
-
-  if (field.key === 'hoursTable' && Array.isArray(value)) return <HoursTable rows={value} />;
-  if (field.key === 'reviews' && Array.isArray(value)) return <ReviewCards reviews={value} />;
-  if (field.key === 'ownerResponses' && Array.isArray(value)) return <ReviewCards reviews={value} />;
-  if (field.key === 'faqs' && Array.isArray(value)) return <FaqList faqs={value} />;
-  if (['images', 'photos'].includes(field.key)) return <MediaGrid items={value} />;
-  if (field.key === 'logo') {
-    const drawerEl = (
-      <span className="v2-logo-value">
-        <img src={value} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
-        <LinkValue value={value} label="Open source image" />
-      </span>
-    );
-  }
-
-  if (['gstin', 'pan', 'cin'].includes(field.key)) {
-    return <span className="v2-mono-value v2-legal-value">{String(value)}<CopyButton value={value} /></span>;
-  }
-
-  if (field.key === 'services' || field.key === 'products' || field.key === 'offers' || field.key === 'bookingLinks') {
-    if (!Array.isArray(value)) return <span>{String(value)}</span>;
-    const drawerEl = (
-      <div className="v2-catalog-list">
-        {value.map((item, index) => {
-          if (typeof item === 'string') return <span className="v2-chip" key={index}>{item}</span>;
-          const label = item.name || item.label || item.title || item.url || 'Untitled';
-          const detail = [item.description, item.price && `${item.currency || '₹'} ${item.price}`, item.validUntil && `until ${item.validUntil}`].filter(Boolean).join(' · ');
-          const url = safeUrl(item.url);
-          const drawerEl = (
-            <div className="v2-catalog-item" key={`${label}-${index}`}>
-              <b>{url ? <a href={url} target="_blank" rel="noreferrer">{label}<ExternalLink size={10} /></a> : label}</b>
-              {detail && <small>{detail}</small>}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  if (Array.isArray(value)) {
-    const simple = value.every(item => typeof item === 'string' || typeof item === 'number');
-    if (simple) return <ChipList values={value.map(String)} />;
-    const drawerEl = (
-      <div className="v2-catalog-list">
-        {value.map((item, index) => {
-          const label = item?.name || item?.label || item?.author || item?.question || `Item ${index + 1}`;
-          return <div className="v2-catalog-item" key={index}><b>{label}</b>{item?.description && <small>{item.description}</small>}</div>;
-        })}
-      </div>
-    );
-  }
-
-  if (typeof value === 'object') {
-    return <span className="v2-mono-value">{JSON.stringify(value)}</span>;
-  }
-
-  return <span>{String(value)}</span>;
+  return '';
 }
 
-export default function VendorDrawer({ vendor, onClose, onUpdated }) {
+function getDirectGoogleMapsUrl(vendor, fullAddress) {
+  if (vendor?.mapsLink && /^https?:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google|maps\.app)/i.test(vendor.mapsLink)) {
+    return vendor.mapsLink;
+  }
+  const query = [vendor?.name, fullAddress || vendor?.address || vendor?.city].filter(Boolean).join(', ');
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsApp }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [activeGroup, setActiveGroup] = useState('identity');
   const [extracting, setExtracting] = useState(false);
   const [job, setJob] = useState(null);
   const [crmStage, setCrmStage] = useState(crmStageOf(vendor));
@@ -243,7 +65,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    const drawerEl = () => { mountedRef.current = false; };
+    return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -251,7 +73,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
       if (event.key === 'Escape') onClose?.();
     };
     document.addEventListener('keydown', onKey);
-    const drawerEl = () => document.removeEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
   useEffect(() => {
@@ -262,7 +84,6 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
     setCrmMessage('');
     setProfile(null);
     setError('');
-    setActiveGroup('identity');
     setJob(null);
     loadProfile();
   }, [vendor?.id]);
@@ -312,7 +133,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
       await loadProfile();
       onUpdated?.();
       if (current?.status === 'failed') {
-        setError('Deep extraction finished with errors. Review the warnings below.');
+        setError('Deep extraction finished with errors.');
       }
     } catch (err) {
       if (mountedRef.current) setError(err?.response?.data?.error || err.message || 'Deep extraction failed.');
@@ -346,288 +167,607 @@ export default function VendorDrawer({ vendor, onClose, onUpdated }) {
     }
   };
 
-  const groupProgress = profile?.completeness?.byGroup || {};
-  const sources = profile?.sources || {};
-  const unknownCount = profile ? Object.values(profile.fieldStatus || {}).filter(status => status === 'unknown').length : 0;
-  const conflictCount = profile?.conflicts?.length || 0;
-
-  const summary = useMemo(() => {
-    if (!profile) return null;
-    return {
-      known: profile.completeness?.known || 0,
-      total: profile.completeness?.total || 52,
-      score: profile.completeness?.percent || 0,
-      bucket: profile.completeness?.bucket || 'thin'
-    };
-  }, [profile]);
-
   if (!vendor) return null;
 
-  const address = vendor.address || [vendor.city, vendor.district, vendor.state, vendor.pincode].filter(Boolean).join(', ');
+  // Contact fields resolution (Vendor record + Deep Profile)
+  const contactGroup = profile?.groups?.contact || {};
+  const locationGroup = profile?.groups?.location || {};
+  const reputationGroup = profile?.groups?.reputation || {};
+  const operationsGroup = profile?.groups?.operations || {};
+  const offeringsGroup = profile?.groups?.offerings || {};
+  const socialGroup = profile?.groups?.social || {};
+
+  const primaryPhone = vendor.phone || contactGroup.primaryPhone || contactGroup.phone || '';
+  const parsedPhone = parseIndianPhone(primaryPhone);
+  const isMobile = Boolean(parsedPhone && parsedPhone.isMobile);
+  const isLandline = Boolean(parsedPhone && parsedPhone.isLandline) || String(primaryPhone).trim().startsWith('0');
+  const formattedDisplayPhone = parsedPhone ? parsedPhone.display : primaryPhone;
+  const callUrl = parsedPhone ? parsedPhone.callUrl : (primaryPhone ? `tel:${String(primaryPhone).replace(/\s+/g, '')}` : '');
+
+  const displayEmail = vendor.email || contactGroup.email || (Array.isArray(vendor.emails) ? vendor.emails[0] : '') || '';
+  const displayWebsite = vendor.website || contactGroup.website || '';
+
+  const fullAddressLine = vendor.address || locationGroup.address || [vendor.city, vendor.district, vendor.state, vendor.pincode].filter(Boolean).join(', ');
+  const displayLocality = vendor.locality || vendor.suburb || locationGroup.suburb || locationGroup.locality || extractArea(fullAddressLine, vendor.city) || vendor.city || '';
+  const displayMandal = vendor.mandal || locationGroup.mandal || vendor.district || '';
+  const displayDistrict = vendor.district || locationGroup.district || vendor.city || '';
+  const displayState = vendor.state || locationGroup.state || 'Telangana';
+  const displayPincode = vendor.pincode || locationGroup.pincode || (fullAddressLine.match(/\b\d{6}\b/) ? fullAddressLine.match(/\b\d{6}\b/)[0] : '');
+  const latitude = vendor.latitude || locationGroup.latitude;
+  const longitude = vendor.longitude || locationGroup.longitude;
+
+  const displayRating = vendor.rating || reputationGroup.rating;
+  const displayReviews = vendor.reviewsCount || reputationGroup.reviewsCount;
+
+  const directMapsUrl = getDirectGoogleMapsUrl(vendor, fullAddressLine);
+  const reservations = vendor.reservations || offeringsGroup.bookingLinks || [];
+  const serviceOptions = vendor.serviceOptions || (Array.isArray(offeringsGroup.services) ? offeringsGroup.services.join(' · ') : '');
+  const hoursTable = operationsGroup.hoursTable || [];
+
   const hasLogo = vendor.logo && !/ui-avatars/i.test(vendor.logo) && !/google\.com\/s2\/favicons/i.test(vendor.logo);
 
   const drawerEl = (
     <div className="v2-drawer-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose?.(); }}>
-      <aside className="v2-drawer" role="dialog" aria-modal="true" aria-label={vendor.name || 'Vendor profile'}>
+      <aside className="v2-drawer" role="dialog" aria-modal="true" aria-label={vendor.name || 'Vendor Profile'}>
+        {/* Top Header */}
         <header className="v2-drawer-top">
-          <span className="v2-drawer-crumb">VENDOR PROFILE <b>/</b> {vendor.id}</span>
+          <span className="v2-drawer-crumb">
+            <Building2 size={13} /> {vendor.category || 'BUSINESS'} <b>/</b> {vendor.name || vendor.id}
+          </span>
           <div className="v2-drawer-top-actions">
-            <button type="button" className="v2-icon-btn" onClick={loadProfile} title="Refresh profile" disabled={loading}>
+            <button type="button" className="v2-icon-btn" onClick={loadProfile} title="Refresh Profile" disabled={loading}>
               <RefreshCw size={15} className={loading ? 'v2-spin' : ''} />
             </button>
-            <button type="button" className="v2-icon-btn" onClick={onClose} title="Close profile">
+            <button type="button" className="v2-icon-btn" onClick={onClose} title="Close Profile">
               <X size={17} />
             </button>
           </div>
         </header>
 
         <div className="v2-drawer-scroll">
-          <section className="v2-drawer-hero">
-            <div className="v2-drawer-avatar">
+          {/* Executive Hero Banner */}
+          <section className="v2-drawer-hero" style={{ padding: '16px 20px', background: '#FFFFFF', borderBottom: '1.5px solid #E2E8F0' }}>
+            <div className="v2-drawer-avatar" style={{ width: 56, height: 56, borderRadius: 12, border: '1.5px solid #E2E8F0', overflow: 'hidden' }}>
               {hasLogo
-                ? <img src={vendor.logo} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
-                : <b>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
+                ? <img src={vendor.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={event => { event.currentTarget.style.display = 'none'; }} />
+                : <b style={{ fontSize: 20, color: '#4F46E5' }}>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
             </div>
-            <div className="v2-drawer-title">
-              <div className="v2-drawer-eyebrow">
-                <span>{vendor.category || 'Uncategorised'}</span>
+            <div className="v2-drawer-title" style={{ flex: 1, minWidth: 0 }}>
+              <div className="v2-drawer-eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <span className="v2-chip" style={{ background: '#EEF2FF', color: '#4338CA', fontWeight: 700, fontSize: 11 }}>
+                  {vendor.category || 'Business'}
+                </span>
                 {vendor.verified && <StatusPill tone="lime">VERIFIED</StatusPill>}
-                {profile?.hasDeepProfile && <StatusPill tone="cyan">DEEP PROFILE</StatusPill>}
+                {displayRating ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 750, color: '#D97706', fontSize: 12 }}>
+                    <Star size={13} fill="#F59E0B" color="#D97706" /> {Number(displayRating).toFixed(1)}
+                    {displayReviews > 0 && (
+                      <span style={{ color: '#64748B', fontWeight: 600 }}>({formatNumber(displayReviews)} Google reviews)</span>
+                    )}
+                  </span>
+                ) : null}
               </div>
-              <h2>{vendor.name || 'Unknown vendor'}</h2>
-              <p><MapPin size={13} /> {address || 'Address unknown'}</p>
-              <div className="v2-drawer-quick">
-                {vendor.phone && <a href={`tel:${vendor.phone}`}><Phone size={13} /> {vendor.phone}</a>}
-                {vendor.email && <a href={`mailto:${vendor.email}`}><Mail size={13} /> {vendor.email}</a>}
-                {vendor.website && <a href={vendor.website} target="_blank" rel="noreferrer"><Globe2 size={13} /> Website</a>}
-                {vendor.mapsLink && <a href={vendor.mapsLink} target="_blank" rel="noreferrer"><MapPin size={13} /> Maps</a>}
-                {vendor.whatsappLink && <a href={vendor.whatsappLink} target="_blank" rel="noreferrer"><Send size={13} /> WhatsApp</a>}
-              </div>
-            </div>
-            <div className="v2-drawer-score">
-              <ScoreRing value={summary?.score || vendor.profileQuality?.score || 0} size={92} label="complete" />
-              <small>{summary ? `${summary.known}/${summary.total} fields known` : 'Live record view'}</small>
+              <h2 style={{ fontSize: 21, fontWeight: 800, color: '#FFFFFF', margin: '4px 0 6px', letterSpacing: '-0.02em' }}>
+                {vendor.name || 'Unknown Business'}
+              </h2>
+              <p style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: '#94a3b8', fontSize: 12, margin: 0 }}>
+                <MapPin size={13} style={{ flexShrink: 0, marginTop: 2, color: '#64748B' }} />
+                <span>{fullAddressLine || 'Address not listed'}</span>
+              </p>
             </div>
           </section>
 
-          <section className="v2-drawer-metrics">
-            <div><span>CONFIDENCE</span><b>{summary ? `${summary.score}%` : '—'}</b><small>{summary?.bucket || 'not extracted'}</small></div>
-            <div><span>UNKNOWN FIELDS</span><b>{profile ? unknownCount : '—'}</b><small>never guessed</small></div>
-            <div><span>CONFLICTS</span><b className={conflictCount ? 'tone-amber' : ''}>{profile ? conflictCount : '—'}</b><small>source disagreements</small></div>
-            <div><span>LAST DEEP PASS</span><b className="is-small">{profile?.extractedAt ? relativeTime(profile.extractedAt) : 'Never'}</b><small>{profile?.version ? `v${profile.version}` : 'not run'}</small></div>
-          </section>
+          {/* 3D Tactile Action Bar (WhatsApp, Call, Email, Direct Maps, Website, Enrich) */}
+          <div className="v2-drawer-3d-actions">
+            {/* If Mobile: Render 💬 WhatsApp Outreach */}
+            {isMobile && parsedPhone ? (
+              <button
+                type="button"
+                className="v2-3d-action-btn v2-btn-wa"
+                onClick={() => {
+                  if (onOpenWhatsApp) onOpenWhatsApp(vendor);
+                  else window.open(parsedPhone.whatsappUrl, '_blank');
+                }}
+                title={`Open WhatsApp outreach for ${parsedPhone.national}`}
+              >
+                <MessageSquare size={14} /> 💬 WhatsApp Outreach
+              </button>
+            ) : null}
 
-          {!profile?.hasDeepProfile && !loading && (
-            <div className="v2-drawer-notice">
-              <Zap size={15} />
-              <span>
-                <b>Live record only.</b> Fields below come from the existing search. Run a deep pass to read the website and Google Maps profile.
-              </span>
-            </div>
-          )}
+            {/* If Landline: Primary prominent 📞 Call Vendor Button (replaces WhatsApp) */}
+            {isLandline ? (
+              <a
+                href={callUrl || `tel:${primaryPhone}`}
+                className="v2-3d-action-btn v2-btn-call"
+                style={{ background: '#F0FDF4', color: '#166534', border: '1.5px solid #BBF7D0', fontWeight: 750 }}
+                title={`Call Landline ${formattedDisplayPhone}`}
+              >
+                <Phone size={14} /> 📞 Call Vendor ({formattedDisplayPhone})
+              </a>
+            ) : (
+              primaryPhone ? (
+                <a
+                  href={callUrl || `tel:${primaryPhone}`}
+                  className="v2-3d-action-btn v2-btn-call"
+                  title={`Call ${formattedDisplayPhone}`}
+                >
+                  <Phone size={14} /> 📞 Call Vendor
+                </a>
+              ) : (
+                <button type="button" className="v2-3d-action-btn v2-btn-call is-disabled">
+                  <Phone size={14} /> 📞 Call
+                </button>
+              )
+            )}
+
+            {/* 3. Email Button */}
+            {displayEmail ? (
+              <a
+                href={`mailto:${displayEmail}`}
+                className="v2-3d-action-btn v2-btn-email"
+                title={`Send email to ${displayEmail}`}
+              >
+                <Mail size={14} /> ✉️ Send Email
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="v2-3d-action-btn v2-btn-email is-disabled"
+                title="No email discovered yet"
+              >
+                <Mail size={14} /> ✉️ Email
+              </button>
+            )}
+
+            {/* 4. Direct Google Maps Pin */}
+            <a
+              href={directMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="v2-3d-action-btn v2-btn-maps"
+              title="Open exact vendor pin directly on Google Maps"
+            >
+              <Compass size={14} /> 🗺️ Google Maps Pin
+            </a>
+
+            {/* 5. Official Website */}
+            {displayWebsite ? (
+              <a
+                href={safeUrl(displayWebsite)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="v2-3d-action-btn v2-btn-web"
+                title="Visit official website"
+              >
+                <Globe2 size={14} /> 🌐 Website
+              </a>
+            ) : null}
+
+            {/* 6. Live Deep Enrich */}
+            <button
+              type="button"
+              className="v2-3d-action-btn v2-btn-enrich"
+              onClick={runDeepExtraction}
+              disabled={extracting}
+              title="Live scrape website & places for missing details"
+            >
+              {extracting ? <Loader2 size={14} className="v2-spin" /> : <Zap size={14} />}
+              {extracting ? 'Enriching...' : '⚡ Deep Enrich'}
+            </button>
+          </div>
 
           {error && (
-            <div className="v2-drawer-error"><AlertTriangle size={14} /> {error}</div>
+            <div style={{ margin: '0 16px 12px', padding: '10px 14px', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 10, color: '#991B1B', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={14} /> {error}
+            </div>
           )}
-
-          <section className="v2-drawer-actions">
-            <button type="button" className="v2-btn v2-btn-lime" onClick={runDeepExtraction} disabled={extracting || !vendor.id}>
-              {extracting ? <Loader2 size={15} className="v2-spin" /> : <Zap size={15} />}
-              {extracting ? 'DEEP EXTRACTION RUNNING' : 'RUN DEEP EXTRACTION'}
-            </button>
-            <span className="v2-drawer-actions-hint">
-              Fills missing emails, websites, hours and social handles. Safe to re-run.
-            </span>
-          </section>
-
-          <section className="v2-drawer-crm">
-            <div className="v2-drawer-crm-head">
-              <span><MessageSquare size={13} /> SALES PIPELINE</span>
-              <b>{crmStage.replace(/_/g, ' ')}</b>
-            </div>
-
-            <div className="v2-crm-stage-chips" role="group" aria-label="CRM stage">
-              {CRM_STAGES.map(stage => (
-                <button
-                  type="button"
-                  key={stage.id}
-                  className={cx('v2-crm-stage-chip', `tone-${stage.tone}`, crmStage === stage.id && 'is-on')}
-                  onClick={() => setCrmStage(stage.id)}
-                  aria-pressed={crmStage === stage.id}
-                >
-                  {stage.label}
-                </button>
-              ))}
-            </div>
-
-            <label className="v2-crm-note-field">
-              <span>ADD A NOTE</span>
-              <textarea
-                value={crmNote}
-                onChange={event => setCrmNote(event.target.value)}
-                placeholder="Called the owner, asked for a quote. Follow up Monday…"
-                rows={3}
-              />
-            </label>
-
-            <div className="v2-crm-save-row">
-              <button type="button" className="v2-btn v2-btn-lime v2-btn-sm" onClick={saveCrm} disabled={crmSaving}>
-                {crmSaving ? <Loader2 size={12} className="v2-spin" /> : <CheckCircle2 size={12} />}
-                SAVE CRM
-              </button>
-              {crmMessage && <small className={cx('v2-crm-msg', crmMessage === 'Saved' && 'is-ok')}>{crmMessage}</small>}
-            </div>
-
-            {crmNotes.length > 0 && (
-              <div className="v2-crm-notes">
-                <span className="v2-crm-notes-title">NOTE HISTORY · {crmNotes.length}</span>
-                {crmNotes.slice(0, 6).map((note, index) => (
-                  <div className="v2-crm-note" key={`${note.date || index}-${index}`}>
-                    <p>{note.text}</p>
-                    <small>{note.author || 'You'} · {relativeTime(note.date)}</small>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
 
           {job && extracting && (
-            <div className="v2-job-inline">
-              <div>
-                <span>DEEP JOB {job.id}</span>
-                <b>{job.status} · {job.progressPercent}%</b>
+            <div style={{ margin: '0 16px 12px', padding: '10px 14px', background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: 10, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 650, color: '#1E40AF' }}>
+                <span>DEEP ENRICHMENT RUNNING</span>
+                <span>{job.progressPercent || 0}%</span>
               </div>
-              <span className="v2-progress"><i style={{ width: `${job.progressPercent}%` }} /></span>
+              <div style={{ height: 6, background: '#DBEAFE', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${job.progressPercent || 0}%`, height: '100%', background: '#2563EB', transition: 'width 0.3s ease' }} />
+              </div>
             </div>
           )}
 
-          <section className="v2-drawer-sources">
-            <div className={cx('v2-source-card', sources.website?.ok && 'is-ok')}>
-              <Globe2 size={15} />
-              <span>
-                <b>Website crawl</b>
-                <small>{sources.website?.ok ? `${sources.website.pagesCrawled || 0} pages · ${humanSource('website')}` : sources.website?.skipped ? 'Skipped' : 'No website'}</small>
-              </span>
-              <StatusPill tone={sources.website?.ok ? 'lime' : 'neutral'}>{sources.website?.ok ? 'ONLINE' : 'OFF'}</StatusPill>
-            </div>
-            <div className={cx('v2-source-card', sources.google?.ok && 'is-ok')}>
-              <MapPin size={15} />
-              <span>
-                <b>Google Maps</b>
-                <small>{sources.google?.ok ? `${Math.round((sources.google.durationMs || 0) / 100) / 10}s · place detail DOM` : 'Not extracted yet'}</small>
-              </span>
-              <StatusPill tone={sources.google?.ok ? 'lime' : 'neutral'}>{sources.google?.ok ? 'ONLINE' : 'OFF'}</StatusPill>
-            </div>
-          </section>
+          {/* Structured Pure Data Cards (Zero Nonsense, High Density) */}
+          <div style={{ padding: '0 16px 24px' }}>
+            {/* Card 1: Contact Intel & Telecom */}
+            <div className="v2-drawer-data-card">
+              <div className="v2-drawer-card-head">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Phone size={13} style={{ color: '#4F46E5' }} /> CONTACT INTEL & TELECOM
+                </span>
+                {isMobile && <span style={{ color: '#059669', fontWeight: 700, fontSize: 10 }}>VERIFIED MOBILE</span>}
+                {isLandline && <span style={{ color: '#0284C7', fontWeight: 700, fontSize: 10 }}>STD LANDLINE (CALL ONLY)</span>}
+              </div>
+              <div className="v2-drawer-card-body">
+                <div className="v2-data-row">
+                  <span className="v2-data-label">{isLandline ? 'Landline Number' : 'Primary Phone'}</span>
+                  <span className="v2-data-val">
+                    {primaryPhone ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <a href={callUrl || `tel:${primaryPhone}`} style={{ color: isLandline ? '#0F766E' : '#1D4ED8', fontWeight: 700, textDecoration: 'none' }}>
+                          {formattedDisplayPhone}
+                        </a>
+                        {isMobile && (
+                          <span style={{ background: '#DCFCE7', color: '#166534', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 750 }}>
+                            WhatsApp
+                          </span>
+                        )}
+                        {isLandline && (
+                          <span style={{ background: '#E0F2FE', color: '#0369A1', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 750 }}>
+                            Direct Call
+                          </span>
+                        )}
+                        <CopyButton value={formattedDisplayPhone} />
+                      </span>
+                    ) : <span style={{ color: '#94A3B8' }}>Not found</span>}
+                  </span>
+                </div>
 
-          {loading && !profile && (
-            <div className="v2-drawer-loading"><Loader2 size={18} className="v2-spin" /> Loading field contract…</div>
-          )}
+                {((Array.isArray(vendor.phones) && vendor.phones.length > 1) || (contactGroup.alternatePhones && contactGroup.alternatePhones.length > 0)) && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">All Direct Numbers</span>
+                    <span className="v2-data-val">
+                      {Array.from(new Set([...(Array.isArray(vendor.phones) ? vendor.phones : []), ...(contactGroup.alternatePhones || [])])).map((p, i) => (
+                        <span key={i} style={{ display: 'inline-block', marginRight: 8, marginTop: 2 }}>
+                          <a href={`tel:${p}`} style={{ color: '#0369A1', fontWeight: 650, textDecoration: 'none' }}>{p}</a>
+                        </span>
+                      ))}
+                    </span>
+                  </div>
+                )}
 
-          {profile && (
-            <>
-              <nav className="v2-drawer-groups">
-                {(profile.fieldGroups || []).map(group => {
-                  const stat = groupProgress[group.key] || { known: 0, total: group.fields.length, percent: 0 };
-                  const drawerEl = (
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Email Address</span>
+                  <span className="v2-data-val">
+                    {displayEmail ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <a href={`mailto:${displayEmail}`} style={{ color: '#0284C7', fontWeight: 650, textDecoration: 'none' }}>
+                          {displayEmail}
+                        </a>
+                        <CopyButton value={displayEmail} />
+                      </span>
+                    ) : <span style={{ color: '#94A3B8' }}>Not published</span>}
+                  </span>
+                </div>
+
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Official Website</span>
+                  <span className="v2-data-val">
+                    {displayWebsite ? (
+                      <a href={safeUrl(displayWebsite)} target="_blank" rel="noopener noreferrer" style={{ color: '#4F46E5', fontWeight: 650, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {displayWebsite.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
+                        <ExternalLink size={11} />
+                      </a>
+                    ) : <span style={{ color: '#94A3B8' }}>No website attached</span>}
+                  </span>
+                </div>
+
+                {(socialGroup.instagram || socialGroup.facebook || socialGroup.linkedin || socialGroup.twitter) && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">Social Handles</span>
+                    <span className="v2-data-val" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                      {socialGroup.instagram && (
+                        <a href={socialGroup.instagram} target="_blank" rel="noreferrer" style={{ color: '#E1306C', fontWeight: 600 }}>Instagram</a>
+                      )}
+                      {socialGroup.facebook && (
+                        <a href={socialGroup.facebook} target="_blank" rel="noreferrer" style={{ color: '#1877F2', fontWeight: 600 }}>Facebook</a>
+                      )}
+                      {socialGroup.linkedin && (
+                        <a href={socialGroup.linkedin} target="_blank" rel="noreferrer" style={{ color: '#0A66C2', fontWeight: 600 }}>LinkedIn</a>
+                      )}
+                      {socialGroup.twitter && (
+                        <a href={socialGroup.twitter} target="_blank" rel="noreferrer" style={{ color: '#1DA1F2', fontWeight: 600 }}>Twitter</a>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 2: Postal & Geographic Intel */}
+            <div className="v2-drawer-data-card">
+              <div className="v2-drawer-card-head">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MapPin size={13} style={{ color: '#EA580C' }} /> POSTAL & GEOGRAPHIC INTEL
+                </span>
+                <a href={directMapsUrl} target="_blank" rel="noreferrer" style={{ color: '#EA580C', fontSize: 10, fontWeight: 750, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  DIRECT MAP PIN <ExternalLink size={10} />
+                </a>
+              </div>
+              <div className="v2-drawer-card-body">
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Complete Address</span>
+                  <span className="v2-data-val">
+                    {fullAddressLine} <CopyButton value={fullAddressLine} />
+                  </span>
+                </div>
+
+                {displayLocality && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">Locality / Suburb</span>
+                    <span className="v2-data-val" style={{ fontWeight: 750, color: '#1E293B' }}>
+                      📍 {displayLocality}
+                    </span>
+                  </div>
+                )}
+
+                {displayMandal && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">Mandal / Sub-district</span>
+                    <span className="v2-data-val">{displayMandal}</span>
+                  </div>
+                )}
+
+                <div className="v2-data-row">
+                  <span className="v2-data-label">District & State</span>
+                  <span className="v2-data-val">{displayDistrict}, {displayState}</span>
+                </div>
+
+                {displayPincode && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">Postal Pincode</span>
+                    <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>
+                      {displayPincode}
+                    </span>
+                  </div>
+                )}
+
+                {latitude && longitude && (
+                  <div className="v2-data-row">
+                    <span className="v2-data-label">GPS Coordinates</span>
+                    <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
+                      {Number(latitude).toFixed(5)}° N, {Number(longitude).toFixed(5)}° E
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Card 3: Reputation & Google Reviews */}
+            <div className="v2-drawer-data-card">
+              <div className="v2-drawer-card-head">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Star size={13} style={{ color: '#D97706' }} /> REPUTATION & GOOGLE REVIEWS
+                </span>
+                {displayRating >= 4.0 && (
+                  <span style={{ color: '#059669', fontWeight: 700, fontSize: 10 }}>TOP RATED</span>
+                )}
+              </div>
+              <div className="v2-drawer-card-body">
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Google Rating</span>
+                  <span className="v2-data-val">
+                    {displayRating ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 14, fontWeight: 800, color: '#D97706' }}>
+                        <Star size={14} fill="#F59E0B" color="#D97706" /> {Number(displayRating).toFixed(1)} / 5.0
+                      </span>
+                    ) : <span style={{ color: '#94A3B8' }}>No rating</span>}
+                  </span>
+                </div>
+
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Total Reviews</span>
+                  <span className="v2-data-val" style={{ fontWeight: 700, color: '#FFFFFF' }}>
+                    {displayReviews ? `${formatNumber(displayReviews)} Google reviews` : <span style={{ color: '#94A3B8' }}>0 reviews</span>}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Amenities, Services & Table Reservations */}
+            {(serviceOptions || reservations.length > 0 || offeringsGroup.menuLink) && (
+              <div className="v2-drawer-data-card">
+                <div className="v2-drawer-card-head">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Utensils size={13} style={{ color: '#059669' }} /> SERVICES & RESERVATIONS
+                  </span>
+                </div>
+                <div className="v2-drawer-card-body">
+                  {serviceOptions && (
+                    <div className="v2-data-row">
+                      <span className="v2-data-label">Service Options</span>
+                      <span className="v2-data-val" style={{ color: '#334155' }}>
+                        {serviceOptions}
+                      </span>
+                    </div>
+                  )}
+
+                  {reservations.length > 0 && (
+                    <div className="v2-data-row">
+                      <span className="v2-data-label">Online Table Booking</span>
+                      <span className="v2-data-val" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                        {reservations.map((r, i) => (
+                          <a
+                            key={i}
+                            href={r.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '3px 8px',
+                              background: '#F0FDF4',
+                              border: '1px solid #BBF7D0',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: '#15803D',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            {r.provider || 'Reserve'} <ExternalLink size={10} />
+                          </a>
+                        ))}
+                      </span>
+                    </div>
+                  )}
+
+                  {offeringsGroup.menuLink && (
+                    <div className="v2-data-row">
+                      <span className="v2-data-label">Digital Menu</span>
+                      <span className="v2-data-val">
+                        <a href={safeUrl(offeringsGroup.menuLink)} target="_blank" rel="noreferrer" style={{ color: '#2563EB', fontWeight: 650 }}>
+                          View Menu <ExternalLink size={10} />
+                        </a>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Card 5: Operating Hours */}
+            {(vendor.operatingHours || hoursTable.length > 0) && (
+              <div className="v2-drawer-data-card">
+                <div className="v2-drawer-card-head">
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Clock3 size={13} style={{ color: '#6366F1' }} /> OPERATING HOURS
+                  </span>
+                </div>
+                <div className="v2-drawer-card-body">
+                  {vendor.operatingHours && (
+                    <div className="v2-data-row">
+                      <span className="v2-data-label">Today's Schedule</span>
+                      <span className="v2-data-val" style={{ fontWeight: 650, color: '#FFFFFF' }}>
+                        {vendor.operatingHours}
+                      </span>
+                    </div>
+                  )}
+
+                  {hoursTable.length > 0 && (
+                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {hoursTable.map((h, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderBottom: '1px dashed rgba(165, 184, 204, 0.12)' }}>
+                          <span style={{ color: '#8fa0b3', fontWeight: 600 }}>{h.day}</span>
+                          <span style={{ color: '#FFFFFF', fontWeight: 650 }}>{h.hours || (h.opens ? `${h.opens} – ${h.closes}` : 'Closed')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Card 6: Sales Pipeline & Telecaller CRM */}
+            <div className="v2-drawer-data-card">
+              <div className="v2-drawer-card-head">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <MessageSquare size={13} style={{ color: '#059669' }} /> SALES PIPELINE & TELECALLER CRM
+                </span>
+                <span style={{ color: '#059669', fontWeight: 750, textTransform: 'uppercase' }}>{crmStage.replace(/_/g, ' ')}</span>
+              </div>
+              <div className="v2-drawer-card-body">
+                <div className="v2-crm-stage-chips" role="group" aria-label="CRM stage" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {CRM_STAGES.map(stage => (
                     <button
                       type="button"
-                      key={group.key}
-                      className={cx('v2-group-tab', activeGroup === group.key && 'is-active')}
-                      onClick={() => setActiveGroup(group.key)}
+                      key={stage.id}
+                      className={cx('v2-crm-stage-chip', `tone-${stage.tone}`, crmStage === stage.id && 'is-on')}
+                      onClick={() => setCrmStage(stage.id)}
+                      aria-pressed={crmStage === stage.id}
                     >
-                      <span>{group.label}</span>
-                      <b>{stat.known}/{stat.total}</b>
-                      <i style={{ width: `${stat.percent}%` }} />
+                      {stage.label}
                     </button>
-                  );
-                })}
-              </nav>
+                  ))}
+                </div>
 
-              {(profile.fieldGroups || []).filter(group => group.key === activeGroup).map(group => (
-                <section className="v2-field-group" key={group.key}>
-                  <header>
-                    <div>
-                      <span>GROUP {String((profile.fieldGroups || []).indexOf(group) + 1).padStart(2, '0')}</span>
-                      <h3>{group.label}</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: '#64748B', letterSpacing: '0.06em' }}>LOG CALL OR ADD NOTE</span>
+                  <textarea
+                    value={crmNote}
+                    onChange={event => setCrmNote(event.target.value)}
+                    placeholder="Called owner, interested in catering. Follow-up next Tuesday..."
+                    rows={2}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: 8,
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: 12,
+                      fontFamily: 'inherit',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                  <button
+                    type="button"
+                    className="v2-3d-action-btn v2-btn-wa"
+                    style={{ padding: '6px 14px', fontSize: 11 }}
+                    onClick={saveCrm}
+                    disabled={crmSaving}
+                  >
+                    {crmSaving ? <Loader2 size={12} className="v2-spin" /> : <Check size={12} />}
+                    Save CRM Status
+                  </button>
+                  {crmMessage && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: crmMessage === 'Saved' ? '#059669' : '#DC2626' }}>
+                      {crmMessage}
+                    </span>
+                  )}
+                </div>
+
+                {crmNotes.length > 0 && (
+                  <div style={{ marginTop: 12, borderTop: '1px solid #E2E8F0', paddingTop: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 750, color: '#64748B', textTransform: 'uppercase' }}>
+                      Note History ({crmNotes.length})
+                    </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                      {crmNotes.slice(0, 5).map((note, idx) => (
+                        <div key={idx} style={{ padding: '6px 10px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 11 }}>
+                          <p style={{ margin: 0, color: '#1E293B' }}>{note.text}</p>
+                          <small style={{ color: '#94A3B8', fontSize: 9.5 }}>{note.author || 'User'} · {relativeTime(note.date)}</small>
+                        </div>
+                      ))}
                     </div>
-                    <small>{groupProgress[group.key]?.percent || 0}% complete</small>
-                  </header>
+                  </div>
+                )}
+              </div>
+            </div>
 
-                  {group.fields.map(field => {
-                    const path = `${group.key}.${field.key}`;
-                    const value = profile.groups?.[group.key]?.[field.key];
-                    const status = profile.fieldStatus?.[path] || (isKnown(value) ? 'known' : 'unknown');
-                    const conflict = (profile.conflicts || []).find(item => item.field === path);
-                    const provenance = fieldProvenance(profile, field, path);
-
-                    const drawerEl = (
-                      <div className={cx('v2-field-row', `status-${status}`)} key={path}>
-                        <div className="v2-field-label">
-                          <span className={cx('v2-status-dot', `tone-${status}`)} />
-                          <span>
-                            <b>{field.label}</b>
-                            <small>{path}</small>
-                          </span>
-                        </div>
-                        <div className="v2-field-value">
-                          {renderValue(field, value)}
-                          {status === 'unknown' && (
-                            <small className="v2-field-reason">Not observed on website, Maps or the existing record. Left unknown on purpose.</small>
-                          )}
-                          {conflict && (
-                            <div className="v2-conflict">
-                              <div className="v2-conflict-head"><AlertTriangle size={13} /><b>Source conflict</b><span>chosen: {humanSource(conflict.chosenSource)}</span></div>
-                              <div className="v2-conflict-values">
-                                {conflict.values.map((item, index) => (
-                                  <span key={index}><b>{humanSource(item.source)}</b>{String(item.value)}</span>
-                                ))}
-                              </div>
-                              {conflict.reason && <small>{conflict.reason}</small>}
-                            </div>
-                          )}
-                          {provenance.length > 0 && (
-                            <div className="v2-provenance">
-                              {provenance.map((item, index) => (
-                                <span key={`${item.source}-${index}`} title={item.url || ''}>
-                                  <CheckCircle2 size={11} />
-                                  {humanSource(item.source)}
-                                  {item.confidence != null && <b>{Math.round(Number(item.confidence) * 100)}%</b>}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </section>
-              ))}
-
-              {profile.warnings?.length > 0 && (
-                <section className="v2-drawer-warnings">
-                  <h4><AlertTriangle size={13} /> EXTRACTION WARNINGS</h4>
-                  {profile.warnings.map((warning, index) => <p key={index}>{warning}</p>)}
-                </section>
-              )}
-
-              <section className="v2-drawer-footer">
-                <Clock3 size={13} />
-                <span>
-                  {profile.extractedAt ? `Extracted ${relativeTime(profile.extractedAt)}` : 'Not deep-extracted yet'}
-                  {profile.provenance?.length ? ` · ${profile.provenance.length} provenance records` : ''}
-                  {' · '}Unknown values are never fabricated.
+            {/* Card 7: Data Source & Audit Trail */}
+            <div className="v2-drawer-data-card">
+              <div className="v2-drawer-card-head">
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={13} style={{ color: '#64748B' }} /> AUDIT TRAIL & SOURCE
                 </span>
-              </section>
-            </>
-          )}
-
-          {!loading && !profile && !error && (
-            <div className="v2-drawer-loading"><CircleHelp size={16} /> No profile data available for this vendor.</div>
-          )}
+                <span style={{ color: '#64748B', fontSize: 10 }}>SCRAPER.CO.IN VERIFIED</span>
+              </div>
+              <div className="v2-drawer-card-body">
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Source Engine</span>
+                  <span className="v2-data-val" style={{ color: '#475569', fontSize: 11 }}>
+                    {vendor.source || 'Google Local Knowledge Graph'}
+                  </span>
+                </div>
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Scraped Timestamp</span>
+                  <span className="v2-data-val" style={{ color: '#475569', fontSize: 11 }}>
+                    {vendor.scrapedAt ? new Date(vendor.scrapedAt).toLocaleString() : 'Recent run'}
+                  </span>
+                </div>
+                <div className="v2-data-row">
+                  <span className="v2-data-label">Lead Unique ID</span>
+                  <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10.5, color: '#64748B' }}>
+                    {vendor.id}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
   );
-  return typeof document !== "undefined" ? createPortal(drawerEl, document.body) : drawerEl;
+
+  return createPortal(drawerEl, document.body);
 }

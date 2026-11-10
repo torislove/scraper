@@ -148,11 +148,17 @@ function titleCase(value) {
 }
 
 function buildVariants(category) {
-  const base = clean(category, 120) || 'Business';
+  let base = clean(category, 120) || 'Business';
+  base = base.replace(/\s+in\s+.*$/i, '').trim() || 'Business';
+  try {
+    const { normalizeTradePhrase } = require('../utils/tradeIntelligence');
+    base = normalizeTradePhrase(base) || base;
+  } catch (e) {}
   const list = [];
   const seen = new Set();
   const push = value => {
-    const label = clean(value, 120);
+    let label = clean(value, 120);
+    label = label.replace(/\s+in\s+.*$/i, '').trim();
     const key = label.toLowerCase();
     if (!label || seen.has(key)) return;
     seen.add(key);
@@ -208,13 +214,15 @@ function resolveGeo(location) {
  * Resolve the JustDial national category id (ncatid) for a category label.
  */
 async function lookupCategoryId(label, city, attempt = 0) {
+  const cleanLabel = (label || '').replace(/\s+in\s+.*$/i, '').trim();
+  const cleanCity = (city || '').replace(/\s+(City|Urban|Rural|District|Tehsil|Taluk|Mandal|HQ)$/i, '').trim();
   const params = new URLSearchParams({
     source: '77',
     wap: '77',
     version: '2.9',
     user: '1',
-    search: label,
-    city: city || '',
+    search: cleanLabel,
+    city: cleanCity,
     deviceId: DEVICE_ID,
     dtcity: '',
     area: '',
@@ -491,12 +499,24 @@ function dropSharedHelplines(vendors) {
   return { sharedCount: shared.size };
 }
 
-async function scrapeJustDial(category, location, sessionId = 'legacy') {
+async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId = 'legacy', extraSessionId = null) {
+  let category = categoryOrOptions;
+  let location = locationInput;
+  let sessionId = extraSessionId || modeOrSessionId || 'legacy';
+
+  if (categoryOrOptions && typeof categoryOrOptions === 'object') {
+    category = categoryOrOptions.category || categoryOrOptions.query || 'Business';
+    location = categoryOrOptions.location || categoryOrOptions.city || locationInput || 'India';
+    sessionId = categoryOrOptions.sessionId || modeOrSessionId || 'legacy';
+  }
+
   const startedAt = Date.now();
-  const baseCategory = clean(category, 120) || 'Business';
+  const baseCategory = (clean(category, 120) || 'Business').replace(/\s+in\s+.*$/i, '').trim() || 'Business';
   const cityInput = clean(location, 120) || 'India';
   const geo = resolveGeo(cityInput);
-  const city = titleCase(geo.city) || titleCase(cityInput);
+  let resolvedCity = geo.city || cityInput;
+  resolvedCity = resolvedCity.replace(/\s+(City|Urban|Rural|District|Tehsil|Taluk|Mandal|HQ)$/i, '').trim();
+  const city = titleCase(resolvedCity) || titleCase(cityInput);
   const state = geo.state || '';
 
   deps.logger(`[JustDial] API scrape: "${baseCategory}" in "${city}"${state ? `, ${state}` : ''}`);
@@ -667,9 +687,26 @@ async function scrapeJustDial(category, location, sessionId = 'legacy') {
     // Category fidelity: keep only vendors that match the requested category.
     if (!fidelity.isVendorRelevant(vendor, primaryCategory)) continue;
 
-    // JustDial's CALL numbers are phone contacts, not confirmed WhatsApp.
-    vendor.whatsapp = '';
-    vendor.whatsappAvailable = false;
+    // Enable WhatsApp direct connection for valid Indian mobile numbers
+    const primaryMobile = (item.phones || []).find(phone => phone && phone.isMobile);
+    if (primaryMobile) {
+      const tenDigits = primaryMobile.national ? primaryMobile.national.slice(-10) : primaryMobile.e164.replace(/\D/g, '').slice(-10);
+      vendor.whatsapp = `https://wa.me/91${tenDigits}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
+      vendor.whatsappLink = vendor.whatsapp;
+      vendor.whatsappAvailable = true;
+      if (!vendor.phone) vendor.phone = primaryMobile.e164;
+      vendor.phoneType = 'mobile';
+      vendor.callUrl = primaryMobile.callUrl || `tel:${tenDigits}`;
+    } else {
+      vendor.whatsapp = '';
+      vendor.whatsappAvailable = false;
+      const primaryLandline = (item.phones || []).find(phone => phone && phone.isLandline) || item.phones[0];
+      if (primaryLandline && !vendor.phone) {
+        vendor.phone = primaryLandline.displayPhone || primaryLandline.e164 || primaryLandline.national;
+        vendor.phoneType = 'landline';
+        vendor.callUrl = primaryLandline.callUrl || `tel:${primaryLandline.national || primaryLandline.e164}`;
+      }
+    }
 
     const result = dv.saveDirectoryVendor(vendor, sessionId);
     if (!result.vendor) continue;
@@ -683,6 +720,11 @@ async function scrapeJustDial(category, location, sessionId = 'legacy') {
       updated += 1;
       try { deps.emitVendorEvent(result.vendor, 'updated'); } catch (e) {}
     }
+
+    try {
+      const { streamingEnricher } = require('../services/phoneBackfillService');
+      streamingEnricher.enqueue(result.vendor);
+    } catch (e) {}
   }
 
   try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) {}
