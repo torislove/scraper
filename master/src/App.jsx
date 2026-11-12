@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
@@ -12,6 +12,35 @@ import './v2/v2.css';
 // scraper.co.in has exactly one workspace: the command center.
 const LandingV2 = lazy(() => import('./v2/LandingV2'));
 const CommandCenter = lazy(() => import('./v2/CommandCenter'));
+const FeatureShell = lazy(() => import('./v2/FeatureShell'));
+const WhatsAppPage = lazy(() => import('./v2/whatsapp/WhatsAppPage'));
+const MasterClients = lazy(() => import('./v2/MasterClients'));
+const LearningCenter = lazy(() => import('./v2/LearningCenter'));
+const LiveAnimationTheater = lazy(() => import('./v2/LiveAnimationTheater'));
+
+function WhatsAppRoute() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const targetLead = location.state?.targetLead || null;
+  return <WhatsAppPage onBack={() => navigate('/command')} targetLead={targetLead} />;
+}
+
+function LearningRoute() {
+  return (
+    <FeatureShell title="Learning Center" subtitle="What the engine has learned from every sweep">
+      <LearningCenter />
+    </FeatureShell>
+  );
+}
+
+function TheaterRoute() {
+  const navigate = useNavigate();
+  return (
+    <FeatureShell title="Sweep Theater" subtitle="Sample walkthrough — demo data, not live leads">
+      <LiveAnimationTheater onDeployClick={() => navigate('/command')} />
+    </FeatureShell>
+  );
+}
 
 function PageLoader() {
   return (
@@ -135,6 +164,12 @@ export default function App() {
           <Route path="/master" element={<CommandCenter isMaster />} />
           <Route path="/command" element={<CommandCenter isMaster />} />
           <Route path="/landing" element={<LandingV2 />} />
+          <Route path="/whatsapp" element={<WhatsAppRoute />} />
+          <Route path="/clients" element={<MasterClients />} />
+          <Route path="/learning" element={<LearningRoute />} />
+          <Route path="/theater" element={<TheaterRoute />} />
+          <Route path="/engines" element={<Navigate to="/command?tab=engines" replace />} />
+          <Route path="/terminal" element={<Navigate to="/command?tab=terminal" replace />} />
 
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<Terms />} />

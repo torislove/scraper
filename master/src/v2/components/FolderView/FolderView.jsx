@@ -13,7 +13,7 @@ import {
 import CommandMap from '../../CommandMap';
 import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
 import { EmptyState, MapLegend, VendorAvatar } from '../cards/MetricCard';
-import { extractLeadArea, CarriedBadge, qualityOf } from '../../utils/leadHelpers';
+import { extractLeadArea, CarriedBadge, qualityOf, buildFolderTree, resolveLeadMandal, resolveLeadVillage } from '../../utils/leadHelpers';
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, scoreLead, highlightMatches
 } from '../../../utils/universalSearchEngine';
@@ -36,16 +36,56 @@ export default function FolderView({
   const session = view?.session;
   const leads = Array.isArray(session?.leads) ? session.leads : [];
   const isMasterSweep = Boolean(session?.isMasterSweep || view?.run?.isMasterSweep || /master_/i.test(session?.id || '') || /sweep/i.test(session?.location || ''));
+  const isOutOfBound = Boolean(session?.isOutOfBound || session?.metadata?.isOutOfBound || view?.run?.isOutOfBound);
+  const boundary = session?.metadata?.boundary || null;
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedLocality, setSelectedLocality] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedNode, setSelectedNode] = useState({ type: 'all', group: '', child: '' });
+  const [expandedGroups, setExpandedGroups] = useState(() => new Set());
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'map' | 'telecaller' | 'analytics'
   const [copied, setCopied] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showWaCampaign, setShowWaCampaign] = useState(false);
   const [sortField, setSortField] = useState('default');
   const [sortOrder, setSortOrder] = useState('asc');
+
+  // District → mandal → village tree. Every lead lands in exactly one group,
+  // including rows whose mandal field was never filled by the engine.
+  const tree = useMemo(
+    () => buildFolderTree(leads, {
+      boundary,
+      isOutOfBound,
+      fallbackDistrict: session?.location || ''
+    }),
+    [leads, boundary, isOutOfBound, session?.location]
+  );
+
+  const selectAllLeads = () => setSelectedNode({ type: 'all', group: '', child: '' });
+  const selectGroup = (group) => {
+    setSelectedNode(prev => (prev.type === 'group' && prev.group === group ? { type: 'all', group: '', child: '' } : { type: 'group', group, child: '' }));
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.add(group);
+      return next;
+    });
+  };
+  const selectChild = (group, child) => {
+    setSelectedNode(prev => (
+      prev.type === 'child' && prev.group === group && prev.child === child
+        ? { type: 'group', group, child: '' }
+        : { type: 'child', group, child }
+    ));
+  };
+  const toggleGroup = (group) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  };
 
   const phoneLeads = useMemo(() => leads.filter(l => Boolean(getDisplayPhone(l))), [leads]);
   const webLeads = useMemo(() => leads.filter(l => Boolean(l.website)), [leads]);
@@ -105,6 +145,23 @@ export default function FolderView({
       list = list.filter(l => (l.category || '').trim() === selectedCategory);
     }
 
+    if (selectedNode.type === 'group') {
+      list = list.filter(l => {
+        if (isOutOfBound) return String(l.oobCategory || 'Outside target boundary') === selectedNode.group;
+        return resolveLeadMandal(l, boundary) === selectedNode.group;
+      });
+    } else if (selectedNode.type === 'child') {
+      list = list.filter(l => {
+        if (isOutOfBound) {
+          const group = String(l.oobCategory || 'Outside target boundary');
+          const child = String(l.district || '').replace(/\b(district|dist)\b/gi, '').trim() || 'Unknown district';
+          return group === selectedNode.group && child === selectedNode.child;
+        }
+        return resolveLeadMandal(l, boundary) === selectedNode.group
+          && resolveLeadVillage(l) === selectedNode.child;
+      });
+    }
+
     if (search.trim()) {
       const tokens = searchTokens;
       const digits = normalizePhoneDigits(search);
@@ -123,7 +180,7 @@ export default function FolderView({
     }
 
     return list;
-  }, [leads, filter, selectedLocality, selectedCategory, search, searchTokens, sortField, sortOrder, session?.location]);
+  }, [leads, filter, selectedLocality, selectedCategory, search, searchTokens, sortField, sortOrder, session?.location, selectedNode, boundary, isOutOfBound]);
 
   const toggleSelectAll = () => {
     if (selectedIds.size === filtered.length && filtered.length > 0) {
@@ -282,6 +339,11 @@ export default function FolderView({
             </div>
             <div className="v2-folder-header-meta">
               <span className="v2-meta-badge"><MapPin size={11} /> {session?.location || 'India'}</span>
+              {isOutOfBound && (
+                <span className="v2-meta-badge is-oob" title="Rejected by district containment; these leads are not part of any client folder.">
+                  <AlertTriangle size={11} /> Out of Bound
+                </span>
+              )}
               <span className="v2-meta-badge"><Users size={11} /> <b>{formatNumber(leads.length)}</b> leads</span>
               <span className="v2-meta-badge is-highlight"><Phone size={11} /> <b>{formatNumber(phoneLeads.length)}</b> verified mobiles ({percentMobiles}%)</span>
               <span className="v2-meta-badge"><Globe2 size={11} /> <b>{formatNumber(webLeads.length)}</b> websites</span>
@@ -468,6 +530,89 @@ export default function FolderView({
           </div>
         </div>
 
+        {/* Folder body: left coverage tree + main workspace */}
+        <div className="v2-folder-split">
+          <aside className="v2-folder-rail" aria-label={isOutOfBound ? 'Rejection categories' : 'District, mandal and village folders'}>
+            <div className="v2-folder-rail-head">
+              <Layers size={13} />
+              <span>{isOutOfBound ? 'REJECTION CATEGORIES' : 'DISTRICT · MANDAL · VILLAGE'}</span>
+            </div>
+            <div className="v2-folder-rail-district" title={tree.district}>
+              <MapPin size={12} />
+              <span>{tree.district}</span>
+              <b>{formatNumber(tree.total)}</b>
+            </div>
+            <button
+              type="button"
+              className={cx('v2-tree-node', 'is-root', selectedNode.type === 'all' && 'is-active')}
+              onClick={selectAllLeads}
+            >
+              <Folder size={13} />
+              <span>All leads</span>
+              <b>{formatNumber(tree.total)}</b>
+            </button>
+            <div className="v2-tree-scroll">
+              {tree.groups.map(group => {
+                const expanded = expandedGroups.has(group.name);
+                const groupActive = selectedNode.type === 'group' && selectedNode.group === group.name;
+                return (
+                  <div className="v2-tree-group" key={group.name}>
+                    <button
+                      type="button"
+                      className={cx('v2-tree-node', 'is-group', groupActive && 'is-active')}
+                      onClick={() => selectGroup(group.name)}
+                      title={`${group.name} · ${group.count} leads`}
+                    >
+                      <span
+                        className="v2-tree-caret"
+                        onClick={event => { event.stopPropagation(); toggleGroup(group.name); }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleGroup(group.name); } }}
+                      >
+                        {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </span>
+                      <FolderArchive size={12} />
+                      <span className="v2-tree-label">{group.name}</span>
+                      <b>{formatNumber(group.count)}</b>
+                    </button>
+                    {expanded && (
+                      <div className="v2-tree-children">
+                        {group.children.map(child => {
+                          const childActive = selectedNode.type === 'child'
+                            && selectedNode.group === group.name
+                            && selectedNode.child === child.name;
+                          return (
+                            <button
+                              type="button"
+                              className={cx('v2-tree-node', 'is-child', childActive && 'is-active')}
+                              key={`${group.name}-${child.name}`}
+                              onClick={() => selectChild(group.name, child.name)}
+                              title={`${child.name} · ${child.count} leads`}
+                            >
+                              <CircleDot size={9} />
+                              <span className="v2-tree-label">{child.name}</span>
+                              <b>{formatNumber(child.count)}</b>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {!tree.groups.length && (
+                <div className="v2-tree-empty">No lead groups yet.</div>
+              )}
+            </div>
+            <div className="v2-folder-rail-foot">
+              {isOutOfBound
+                ? 'Rejected vendors stay here for review and never enter a client folder.'
+                : 'Every lead is filed under its mandal and village.'}
+            </div>
+          </aside>
+
+          <div className="v2-folder-main">
         {/* Filter and View Mode Toolbar */}
         <div className="v2-folder-toolbar">
           <div className="v2-folder-search-wrap">
@@ -490,6 +635,17 @@ export default function FolderView({
             <span className="v2-search-count-pill">
               Showing <b>{filtered.length}</b> of {leads.length} leads
             </span>
+          )}
+          {selectedNode.type !== 'all' && (
+            <button
+              type="button"
+              className="v2-node-clear-pill"
+              onClick={selectAllLeads}
+              title="Clear the selected folder and show all leads"
+            >
+              {selectedNode.group}{selectedNode.child ? ` · ${selectedNode.child}` : ''}
+              <X size={11} />
+            </button>
           )}
 
           {/* 4 View Modes */}
@@ -561,64 +717,32 @@ export default function FolderView({
           </div>
         </div>
 
-        {/* Area & Category Sub-Folders */}
-        {(areaSubfolders.length > 0 || categorySubfolders.length > 1) && (
+        {/* Category sub-folders (area grouping now lives in the left tree) */}
+        {categorySubfolders.length > 1 && (
           <div className="v2-subfolder-container">
-            {areaSubfolders.length > 0 && (
-              <>
-                <div className="v2-subfolder-label">
-                  <FolderArchive size={12} />
-                  <span>AREA SUB-FOLDERS IN {(session?.location || 'CITY').toUpperCase()} ({areaSubfolders.length} NEIGHBORHOODS)</span>
-                </div>
-                <div className="v2-subfolder-chips">
-                  <button
-                    type="button"
-                    className={cx('v2-subfolder-chip', selectedLocality === 'all' && 'is-active')}
-                    onClick={() => setSelectedLocality('all')}
-                  >
-                    📁 All {(session?.location || 'City')} Leads ({leads.length})
-                  </button>
-                  {areaSubfolders.map(({ area, count }) => (
-                    <button
-                      type="button"
-                      key={area}
-                      className={cx('v2-subfolder-chip', selectedLocality === area && 'is-active')}
-                      onClick={() => setSelectedLocality(selectedLocality === area ? 'all' : area)}
-                    >
-                      📂 {area} <b style={{ opacity: 0.85 }}>({count})</b>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {categorySubfolders.length > 1 && (
-              <>
-                <div className="v2-subfolder-label" style={{ marginTop: 10 }}>
-                  <Building2 size={12} />
-                  <span>CATEGORIES ({categorySubfolders.length})</span>
-                </div>
-                <div className="v2-subfolder-chips">
-                  <button
-                    type="button"
-                    className={cx('v2-subfolder-chip', selectedCategory === 'all' && 'is-active')}
-                    onClick={() => setSelectedCategory('all')}
-                  >
-                    📁 All Categories
-                  </button>
-                  {categorySubfolders.map(({ cat, count }) => (
-                    <button
-                      type="button"
-                      key={cat}
-                      className={cx('v2-subfolder-chip', selectedCategory === cat && 'is-active')}
-                      onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
-                    >
-                      🏷️ {cat} <b style={{ opacity: 0.85 }}>({count})</b>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+            <div className="v2-subfolder-label">
+              <Building2 size={12} />
+              <span>CATEGORIES ({categorySubfolders.length})</span>
+            </div>
+            <div className="v2-subfolder-chips">
+              <button
+                type="button"
+                className={cx('v2-subfolder-chip', selectedCategory === 'all' && 'is-active')}
+                onClick={() => setSelectedCategory('all')}
+              >
+                📁 All Categories
+              </button>
+              {categorySubfolders.map(({ cat, count }) => (
+                <button
+                  type="button"
+                  key={cat}
+                  className={cx('v2-subfolder-chip', selectedCategory === cat && 'is-active')}
+                  onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
+                >
+                  🏷️ {cat} <b style={{ opacity: 0.85 }}>({count})</b>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -966,6 +1090,8 @@ export default function FolderView({
               )}
             </div>
           )}
+        </div>
+          </div>
         </div>
 
         {showWaCampaign && (

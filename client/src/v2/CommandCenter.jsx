@@ -34,6 +34,7 @@ import {
   exportLeadsToVcf
 } from '../utils/whatsappCatalog';
 import { productArt } from '../utils/productArt';
+import { leadSourceMeta, listLeadSources, downloadLeadCsv } from './utils/leadSource';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 const SORTS = [
@@ -1898,6 +1899,34 @@ function CockpitView({
   const plotted = filteredVendors.filter(vendor => Number.isFinite(Number(vendor.latitude))).length;
   const recentRuns = runs.slice(0, 6);
 
+  // Which scrapes produced the live rows? Counts respect the open folder so a
+  // selected source chip keeps a stable total instead of collapsing to itself.
+  const scopedVendors = useMemo(() => {
+    if (!sessionFilter) return vendors || [];
+    return (vendors || []).filter(v =>
+      v.sessionId === sessionFilter ||
+      v.lastSessionId === sessionFilter ||
+      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionFilter))
+    );
+  }, [vendors, sessionFilter]);
+
+  const sourceFacets = useMemo(() => listLeadSources(scopedVendors), [scopedVendors]);
+  const activeSource = filters?.source || 'all';
+
+  const handleExportCsv = () => {
+    const selected = (filteredVendors || []).filter(v =>
+      cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`)
+    );
+    const rows = selected.length ? selected : (filteredVendors || []);
+    if (!rows.length) {
+      toast.error('No leads to export yet.');
+      return;
+    }
+    const name = selected.length ? 'selected_leads' : 'live_leads';
+    const ok = downloadLeadCsv(rows, `${name}_${Date.now()}.csv`, { city: run?.location || '' });
+    if (ok) toast.success(`Exported ${rows.length} leads with scrape source to CSV.`);
+  };
+
   return (
     <div className="v2-cockpit">
       {/* LEFT: folders + CRM */}
@@ -1962,7 +1991,42 @@ function CockpitView({
           <span className="v2-cp-sub">
             {formatNumber(stats.phones)} mobiles · {stats.avg}% profile quality
           </span>
+          <button
+            type="button"
+            className="v2-btn-ghost v2-export-csv-btn"
+            onClick={handleExportCsv}
+            title="Download the live leads (or selected rows) as a CSV spreadsheet with the scrape source"
+          >
+            <Download size={12} />
+            <span>Export CSV</span>
+          </button>
         </div>
+
+        {/* Scrape source differentiation: each row is stamped by the engine
+            that produced it, and the chips filter without a reload. */}
+        {sourceFacets.length > 0 && (
+          <div className="v2-source-bar" role="group" aria-label="Filter live leads by scrape source">
+            <span className="v2-source-bar-label">SCRAPE SOURCE</span>
+            <button
+              type="button"
+              className={cx('v2-source-chip', activeSource === 'all' && 'is-active')}
+              onClick={() => onFilterChange?.('source', 'all')}
+            >
+              All scrapes <b>{formatNumber(filteredVendors.length)}</b>
+            </button>
+            {sourceFacets.map(facet => (
+              <button
+                type="button"
+                key={facet.key}
+                className={cx('v2-source-chip', `is-${facet.tone}`, activeSource === facet.key && 'is-active')}
+                onClick={() => onFilterChange?.('source', activeSource === facet.key ? 'all' : facet.key)}
+                title={`${facet.label} · ${facet.count} leads from this scrape`}
+              >
+                {facet.short} <b>{formatNumber(facet.count)}</b>
+              </button>
+            ))}
+          </div>
+        )}
 
         <FilterBar
           filters={filters}
@@ -2020,6 +2084,17 @@ function CockpitView({
                         <VendorAvatar vendor={vendor} size={32} />
                         <span className="v2-vendor-info-wrap">
                           <b className="v2-lead-proper-name">{vendor.name || 'Verified Business'}</b>
+                          {(() => {
+                            const src = leadSourceMeta(vendor);
+                            return (
+                              <span
+                                className={cx('v2-source-badge', `is-${src.tone}`)}
+                                title={`This lead was found by the ${src.label} scrape`}
+                              >
+                                {src.short}
+                              </span>
+                            );
+                          })()}
                           {(() => {
                             const activePhone = getDisplayPhone(vendor);
                             if (!activePhone) return null;
@@ -2141,7 +2216,17 @@ function CockpitView({
                 icon={Search}
                 title="No leads on screen yet."
                 body="Type a category and a city in the search bar above. Verified businesses appear here as each area reports back."
-                action={() => onFilterChange({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
+                action={() => {
+                  onFilterChange('query', '');
+                  onFilterChange('phoneOnly', false);
+                  onFilterChange('primeOnly', false);
+                  onFilterChange('websiteOnly', false);
+                  onFilterChange('deepOnly', false);
+                  onFilterChange('conflictsOnly', false);
+                  onFilterChange('minRating', 0);
+                  onFilterChange('source', 'all');
+                  onFilterChange('sort', 'newest');
+                }}
                 actionLabel="Reset filters"
               />
             )
@@ -2529,7 +2614,8 @@ export default function CommandCenter() {
     deepOnly: false,
     conflictsOnly: false,
     minRating: 0,
-    sort: 'newest'
+    sort: 'newest',
+    source: 'all'
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -3441,6 +3527,7 @@ export default function CommandCenter() {
       if (filters.deepOnly && !vendor.deepExtractedAt) return false;
       if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
       if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
+      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
       if (query) {
         const haystack = [
           vendor.name, vendor.category, vendor.city, vendor.village, vendor.mandal,

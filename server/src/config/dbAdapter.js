@@ -386,6 +386,7 @@ module.exports = {
   replaceVendors,
   saveVendor,
   deleteVendor,
+  dropFromSession: vendorStore.dropFromSession,
   updateVendorsBatch,
   getEmployees,
   saveEmployees,

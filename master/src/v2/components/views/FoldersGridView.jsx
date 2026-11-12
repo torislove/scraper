@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  CheckSquare, FolderArchive, GitMerge, MapPin, Search, Square, Trash2, X
+  AlertTriangle, CheckSquare, FolderArchive, GitMerge, MapPin, Search, Square, Trash2, X
 } from 'lucide-react';
 import { formatNumber, relativeTime, cx } from '../../ui';
 import RunCard from '../cards/RunCard';
@@ -48,6 +48,14 @@ export default function FoldersGridView({
           <span><b>{formatNumber(effectiveRuns.reduce((acc, r) => acc + (r.leadCount || 0), 0))}</b> Leads</span>
           <span>•</span>
           <span><b>{formatNumber(effectiveRuns.reduce((acc, r) => acc + (r.phoneCount || 0), 0))}</b> Mobiles</span>
+          {effectiveRuns.some(r => r.isOutOfBound) && (
+            <>
+              <span>•</span>
+              <span className="v2-oob-stat" title="Rejected vendors kept for review. They never enter a client folder.">
+                <AlertTriangle size={11} /> <b>{formatNumber(effectiveRuns.filter(r => r.isOutOfBound).reduce((acc, r) => acc + (r.leadCount || 0), 0))}</b> Out of Bound
+              </span>
+            </>
+          )}
         </div>
       </div>
 

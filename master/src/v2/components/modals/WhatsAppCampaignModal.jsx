@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy,
+  AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Copy,
   Download, ExternalLink, Globe2, MessageSquare, Phone, Plus, Smartphone, Sparkles, X
 } from 'lucide-react';
 import { productAlbum } from '@ui3d/art';
@@ -16,7 +16,23 @@ import { getDisplayPhone, isMobilePhone, whatsappNumber } from '../../../utils/p
 import { cx } from '../../ui';
 
 export default function WhatsAppCampaignModal({ leads, onClose, onUpdateStage }) {
-  const validLeads = useMemo(() => (Array.isArray(leads) ? leads : []).filter(l => isMobilePhone(getDisplayPhone(l))), [leads]);
+  // Rejected vendors sit in the Out-of-Bound folder for review, not for
+  // outreach. They are excluded from a campaign unless the operator opts in.
+  const [includeOob, setIncludeOob] = useState(false);
+  const oobLeads = useMemo(
+    () => (Array.isArray(leads) ? leads : []).filter(l => l && (l.oob === true || l.oobCategory)),
+    [leads]
+  );
+  const validLeads = useMemo(
+    () => (Array.isArray(leads) ? leads : [])
+      .filter(l => includeOob || !(l && (l.oob === true || l.oobCategory)))
+      .filter(l => isMobilePhone(getDisplayPhone(l))),
+    [leads, includeOob]
+  );
+  const oobMobileCount = useMemo(
+    () => oobLeads.filter(l => isMobilePhone(getDisplayPhone(l))).length,
+    [oobLeads]
+  );
 
   // Product Catalog State
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
@@ -169,6 +185,18 @@ export default function WhatsAppCampaignModal({ leads, onClose, onUpdateStage })
             <button type="button" className="v2-modal-close" onClick={onClose}><X size={15} /></button>
           </div>
         </div>
+
+        {oobLeads.length > 0 && (
+          <div className="v2-wa-oob-notice">
+            <AlertTriangle size={13} />
+            <span>
+              <b>{oobLeads.length}</b> Out-of-Bound {oobLeads.length === 1 ? 'lead is' : 'leads are'} excluded from this campaign ({oobMobileCount} with a mobile).
+            </span>
+            <button type="button" className="v2-wa-oob-toggle" onClick={() => setIncludeOob(v => !v)}>
+              {includeOob ? 'Exclude them again' : 'Include them'}
+            </button>
+          </div>
+        )}
 
         {validLeads.length === 0 ? (
           <div className="v2-modal-body" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>

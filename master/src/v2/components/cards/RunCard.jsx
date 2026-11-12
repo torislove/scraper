@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-  ArrowUpRight, CheckSquare, Download, Edit3, FileSpreadsheet, FolderArchive,
-  Loader2, MapPin, Phone, Play, Square, Tag, Trash2
+  AlertTriangle, ArrowUpRight, CheckSquare, Download, Edit3, FileSpreadsheet,
+  FolderArchive, Layers, Loader2, MapPin, Phone, Play, Square, Tag, Trash2
 } from 'lucide-react';
 import { StatusPill, cx, formatNumber, relativeTime } from '../../ui';
 import { formatInr } from '../../CrmBoard';
@@ -20,7 +20,9 @@ export default function RunCard({
 }) {
   const percentMobiles = run.leadCount > 0 ? Math.round((run.phoneCount / run.leadCount) * 100) : 0;
   const displayName = run.customName || run.name || `${run.category} in ${run.location}`;
-  const colorStyle = run.color ? { borderLeftColor: run.color, borderLeftWidth: '3px' } : {};
+  const colorStyle = run.isOutOfBound
+    ? { borderLeftColor: '#f87171', borderLeftWidth: '3px' }
+    : (run.color ? { borderLeftColor: run.color, borderLeftWidth: '3px' } : {});
 
   return (
     <div
@@ -44,8 +46,8 @@ export default function RunCard({
           {selected ? <CheckSquare size={15} /> : <Square size={15} />}
         </button>
 
-        <span className="v2-run-mark" style={run.color ? { color: run.color } : {}}>
-          <FolderArchive size={16} />
+        <span className={cx('v2-run-mark', run.isOutOfBound && 'is-oob')} style={run.isOutOfBound ? {} : (run.color ? { color: run.color } : {})}>
+          {run.isOutOfBound ? <AlertTriangle size={16} /> : <FolderArchive size={16} />}
         </span>
 
         <div className="v2-run-title-wrap">
@@ -53,6 +55,11 @@ export default function RunCard({
             <b className="v2-run-title" title={displayName}>
               {displayName}
             </b>
+            {run.isOutOfBound && (
+              <span className="v2-run-oob-pill" title="Rejected vendors kept for review. They never enter a client folder.">
+                <AlertTriangle size={9} /> Out of Bound
+              </span>
+            )}
             <StatusPill tone={run.status === 'completed' || run.status === 'complete' ? 'lime' : run.status === 'running' ? 'cyan' : run.status === 'aborted' ? 'red' : 'neutral'}>
               {run.status === 'completed' ? 'ready' : run.status}
             </StatusPill>
@@ -73,6 +80,16 @@ export default function RunCard({
             <span className="v2-run-time">{relativeTime(run.timestamp)}</span>
             <span className="v2-run-dot">•</span>
             <span className="v2-run-mobiles"><Phone size={10} /> {formatNumber(run.phoneCount)} mobiles</span>
+            {run.mandalCount > 0 && (
+              <>
+                <span className="v2-run-dot">•</span>
+                <span className="v2-run-areas" title={run.isOutOfBound ? 'Number of rejection categories in this folder' : 'Mandal and village sub-folders'}>
+                  <Layers size={10} /> {run.isOutOfBound
+                    ? `${formatNumber(run.mandalCount)} categories`
+                    : `${formatNumber(run.mandalCount)} mandals · ${formatNumber(run.villageCount)} villages`}
+                </span>
+              </>
+            )}
           </div>
           {Array.isArray(run.tags) && run.tags.length > 0 && (
             <div className="v2-run-tags-row">

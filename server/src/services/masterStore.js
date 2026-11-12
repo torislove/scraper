@@ -89,11 +89,14 @@ function statsForWorkspace(id) {
 
   let latest = 0;
   const categories = new Set();
+  const seenSessions = new Set();
 
   for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'));
       if (!data || !data.id) continue;
+      if (seenSessions.has(data.id)) continue;
+      seenSessions.add(data.id);
       const leads = Array.isArray(data.leads) ? data.leads : [];
       stats.folders += 1;
       stats.leads += Number(data.leadCount) || leads.length;
@@ -442,18 +445,49 @@ function importSessions(clientId, sessionIds = [], mode = 'separate') {
 
 /* ----------------------------------------------------------------- overview */
 
+/**
+ * Headline numbers must count a folder once even if a legacy build left a
+ * copy under two workspaces. Later copies win only when they hold more leads,
+ * so the operator never sees a smaller number than the truth.
+ */
+function uniqueSessionTotals(clients) {
+  const byId = new Map();
+  for (const client of clients) {
+    const dir = path.join(SESSIONS_DIR, safeId(client.id));
+    if (!fs.existsSync(dir)) continue;
+    for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.json'))) {
+      try {
+        const data = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'));
+        if (!data || !data.id) continue;
+        const leads = Array.isArray(data.leads) ? data.leads : [];
+        const count = Number(data.leadCount) || leads.length;
+        const previous = byId.get(data.id);
+        if (!previous || count > previous.count) {
+          byId.set(data.id, { count, folder: file });
+        }
+      } catch (e) {
+        /* one corrupt folder must not hide the rest */
+      }
+    }
+  }
+  let leads = 0;
+  for (const value of byId.values()) leads += value.count;
+  return { folders: byId.size, leads };
+}
+
 function overview() {
   const all = listClients();
   // Empty auto-detected workspaces are still listed (hidden by default in the
   // UI), but they must not inflate the operator's headline numbers.
   const clients = all.filter(item => !item.autoCreated || item.folders > 0 || item.email);
   const notifications = loadNotifications();
+  const totals = uniqueSessionTotals(clients);
   return {
     clients: clients.length,
     workspaces: all.length,
     suspended: clients.filter(c => c.status === 'suspended').length,
-    leads: clients.reduce((sum, c) => sum + (c.leads || 0), 0),
-    folders: clients.reduce((sum, c) => sum + (c.folders || 0), 0),
+    leads: totals.leads,
+    folders: totals.folders,
     notifications: notifications.length,
     unread: notifications.filter(item => !item.readBy?.length).length
   };

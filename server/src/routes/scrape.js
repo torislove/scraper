@@ -33,7 +33,11 @@ const credits = require('../services/credits');
 const engineHealth = require('../services/engineHealth');
 const requestGuard = require('../utils/requestGuard');
 const { buildScopeZones } = require('../services/sweepScopePolicy');
-const { runOmniSearchOrchestrator } = require('../services/omniSearchOrchestrator');
+const { runOmniSearchOrchestrator, isInsideDistrictBoundary } = require('../services/omniSearchOrchestrator');
+const { persistSessionVault } = require('../services/sessionVaultService');
+const leadArchive = require('../services/leadArchive');
+const outOfBoundsVault = require('../services/outOfBoundsVault');
+const { SESSIONS_DIR } = require('../config/paths');
 const etaModel = require('../utils/etaModel');
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
@@ -1012,6 +1016,7 @@ router.post('/master-sweep/preview', async (req, res) => {
       unverifiedPlace: Boolean(plan.unverifiedPlace),
       zoneStats: plan.stats || null,
       policy: plan.policy || null,
+      boundary: plan.boundary || null,
       warnings: plan.warnings || [],
       estimatedMinutes: Math.max(1, Math.ceil(previewEtaMs / 60000)),
       estimatedSeconds: Math.round(previewEtaMs / 1000),
@@ -1086,6 +1091,7 @@ router.post('/master-sweep', async (req, res) => {
       capped: Boolean(plan.stats?.capped),
       zoneStats: plan.stats,
       policy: plan.policy,
+      boundary: plan.boundary || null,
       warnings: plan.warnings || [],
       zones: targetZones.slice(0, 35).map(z => z.name),
       filters,
@@ -1113,6 +1119,181 @@ router.post('/master-sweep', async (req, res) => {
     console.error('[Master Sweep Error]', error);
     addLog(`[Master Sweep Error] ${error.message}`);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DISTRICT BOUNDARY AUDIT
+// Re-checks every lead a district sweep already saved and removes anything that
+// does not belong to that district. Used after tightening containment so an
+// older folder can be repaired without losing data: rejected rows are archived
+// (recovery bin + out_of_bounds ledger) before the folder is rewritten.
+// ──────────────────────────────────────────────────────────────────────────────
+router.post('/district-audit', async (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Master scope required for a district audit.' });
+    }
+    const { sessionId, district, dryRun = false } = req.body || {};
+    if (!sessionId || !district) {
+      return res.status(400).json({ error: 'sessionId and district are required.' });
+    }
+
+    const plan = buildScopeZones('district', district);
+    if (!plan || !plan.boundary) {
+      return res.status(404).json({ error: `Could not build a district boundary for "${district}".` });
+    }
+
+    // Locate the folder (owner folder can be `master` or a user id).
+    const candidates = [];
+    try {
+      const dirs = fs.readdirSync(SESSIONS_DIR, { withFileTypes: true }).filter(d => d.isDirectory());
+      for (const dir of dirs) {
+        const file = path.join(SESSIONS_DIR, dir.name, `${sessionId}.json`);
+        if (fs.existsSync(file)) candidates.push(file);
+      }
+    } catch (e) {}
+
+    // Audit the rows the operator can actually see (the folder) plus any richer
+    // store copy of the same id. Auditing only the store silently dropped folder
+    // rows that had already been merged by name in an older read path.
+    const storeRows = dbAdapter.getVendorsBySession(sessionId);
+    let folderData = null;
+    if (candidates.length) {
+      try { folderData = JSON.parse(fs.readFileSync(candidates[0], 'utf8')); } catch (e) {}
+    }
+    const byId = new Map();
+    for (const lead of (folderData?.leads || [])) {
+      if (lead && lead.id) byId.set(lead.id, lead);
+    }
+    for (const lead of storeRows) {
+      if (!lead || !lead.id) continue;
+      byId.set(lead.id, { ...(byId.get(lead.id) || {}), ...lead });
+    }
+    const allRows = [...byId.values()];
+
+    const kept = [];
+    const rejected = [];
+    for (const lead of allRows) {
+      if (isInsideDistrictBoundary(lead, plan.boundary)) kept.push(lead);
+      else rejected.push(lead);
+    }
+
+    if (dryRun) {
+      return res.json({
+        ok: true,
+        dryRun: true,
+        sessionId,
+        district: plan.boundary.district,
+        centers: plan.boundary.centers.length,
+        storeRows: allRows.length,
+        kept: kept.length,
+        rejected: rejected.length,
+        rejectedSamples: rejected.slice(0, 25).map(lead => ({
+          id: lead.id,
+          name: lead.name,
+          district: lead.district || '',
+          mandal: lead.mandal || '',
+          latitude: lead.latitude,
+          longitude: lead.longitude,
+          address: lead.address || ''
+        })),
+        folder: candidates[0] || null
+      });
+    }
+
+    let archived = 0;
+    if (rejected.length) {
+      const result = leadArchive.archive(rejected, {
+        reason: `district boundary audit:${plan.boundary.district}`,
+        sessionId
+      });
+      archived = result.archived || 0;
+      for (const lead of rejected) {
+        try { dbAdapter.dropFromSession(lead.id, sessionId); } catch (e) {}
+      }
+    }
+
+    // Rejected vendors stay visible in the district's Out-of-Bound folder so
+    // nothing is silently lost. Categorised by the rule that removed the row.
+    let oobFolder = null;
+    let oobAdded = 0;
+    if (rejected.length) {
+      try {
+        const oob = outOfBoundsVault.recordRejections({
+          district: plan.boundary.district,
+          state: plan.boundary.state,
+          category: folderData?.category || 'Rejected leads',
+          sessionId,
+          rows: rejected.map(lead => ({ lead, reason: 'outside district boundary' }))
+        });
+        oobFolder = oob.id;
+        oobAdded = oob.added;
+      } catch (oobError) {
+        // The audit has already archived the rows; a folder write failure must
+        // not turn a successful audit into an error.
+        oobFolder = null;
+      }
+    }
+
+    let folderSaved = null;
+    let vaultMeta = {};
+    if (candidates.length) {
+      try {
+        const current = JSON.parse(fs.readFileSync(candidates[0], 'utf8'));
+        vaultMeta = current.metadata || {};
+        const saved = persistSessionVault({
+          sessionId,
+          userId: current.userId || 'master',
+          category: current.category,
+          location: current.location,
+          leads: kept,
+          final: true,
+          allowLead: lead => isInsideDistrictBoundary(lead, plan.boundary),
+          metadata: {
+            ...vaultMeta,
+            status: 'completed',
+            boundary: plan.boundary,
+            scope: 'district',
+            district: plan.boundary.district,
+            state: plan.boundary.state,
+            boundaryAudit: {
+              at: new Date().toISOString(),
+              rejected: rejected.length,
+              kept: kept.length,
+              rule: 'district boundary (sub-district union)'
+            }
+          }
+        });
+        folderSaved = saved.file || candidates[0];
+      } catch (e) {
+        return res.status(500).json({ error: `Boundary audit could not rewrite the folder: ${e.message}` });
+      }
+    }
+
+    return res.json({
+      ok: true,
+      sessionId,
+      district: plan.boundary.district,
+      boundaryCenters: plan.boundary.centers.length,
+      storeRows: allRows.length,
+      kept: kept.length,
+      rejected: rejected.length,
+      archived,
+      oobFolder,
+      oobAdded,
+      folderSaved,
+      rejectedSamples: rejected.slice(0, 25).map(lead => ({
+        id: lead.id,
+        name: lead.name,
+        district: lead.district || '',
+        mandal: lead.mandal || '',
+        address: lead.address || ''
+      }))
+    });
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
   }
 });
 
@@ -1505,10 +1686,31 @@ router.post('/resume', async (req, res) => {
       startTime: Date.now()
     };
 
-    // 4. Construct a resumed plan
+    // 4. Construct a resumed plan. Scope and parent names are inferred from the
+    // stored zone rows so a resumed Tenali Mandal sweep stays a mandal sweep
+    // (the old plan carried no scope, so it fell back to district behaviour).
+    const sampleZone = remainingZones[0] || allZones[0] || {};
+    const resumeScope = session?.scope || vaultData?.metadata?.scope || sampleZone.scope || (isMaster ? 'district' : 'city');
+    const resumeDistrict = session?.district || vaultData?.metadata?.district || sampleZone.district || null;
+    let resumeBoundary = session?.boundary || vaultData?.metadata?.boundary || null;
+    // Older folders predate the stored boundary. Rebuild it from the gazetteer
+    // so a resumed district sweep keeps the same territorial guard.
+    if (!resumeBoundary && resumeScope === 'district' && resumeDistrict) {
+      try {
+        const rebuilt = buildScopeZones('district', resumeDistrict);
+        resumeBoundary = rebuilt?.boundary || null;
+      } catch (e) {}
+    }
+
     const resumePlan = {
       category,
       location,
+      resolvedScope: resumeScope,
+      district: resumeDistrict,
+      state: session?.state || vaultData?.metadata?.state || sampleZone.state || null,
+      title: session?.title || vaultData?.metadata?.title || location,
+      center: session?.center || vaultData?.metadata?.center || null,
+      boundary: resumeBoundary,
       zones: remainingZones,
       originalTotalZones: allZones.length,
       resumed: true,

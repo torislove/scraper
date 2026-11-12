@@ -133,3 +133,89 @@ export function calculateHaversineKm(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(R * c * 10) / 10;
 }
+
+function cleanTreeLabel(value) {
+  return String(value || '')
+    .replace(/\b(revenue|village|mandal|tehsil|taluk|block|district)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * A lead belongs to a mandal even when the engine left `mandal` empty. The
+ * folder stores the surveyed boundary centres, so coordinates are enough.
+ * This mirrors the server-side hierarchy builder exactly, which keeps the
+ * sidebar counts and the filtered table in agreement.
+ */
+export function resolveLeadMandal(lead, boundary) {
+  const explicit = cleanTreeLabel(lead?.mandal);
+  if (explicit) return explicit;
+  const lat = Number(lead?.latitude);
+  const lng = Number(lead?.longitude);
+  const centers = Array.isArray(boundary?.centers) ? boundary.centers : [];
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !centers.length) return 'Unassigned mandal';
+
+  let best = null;
+  let bestKm = Infinity;
+  for (const center of centers) {
+    const km = calculateHaversineKm(center.lat, center.lng, lat, lng);
+    if (km != null && km < bestKm) { bestKm = km; best = center; }
+  }
+  return best ? (cleanTreeLabel(best.name) || 'Unassigned mandal') : 'Unassigned mandal';
+}
+
+export function resolveLeadVillage(lead) {
+  return cleanTreeLabel(lead?.village)
+    || cleanTreeLabel(lead?.locality)
+    || cleanTreeLabel(lead?.suburb)
+    || cleanTreeLabel(lead?.zoneName)
+    || 'All areas';
+}
+
+/**
+ * Group every lead into a district → mandal → village tree.
+ * Out-of-Bound folders group by rejection category instead, so the operator
+ * sees why each vendor was rejected.
+ */
+export function buildFolderTree(leads, { boundary = null, isOutOfBound = false, fallbackDistrict = '' } = {}) {
+  const list = Array.isArray(leads) ? leads : [];
+  const groups = new Map();
+  let district = cleanTreeLabel(fallbackDistrict);
+
+  for (const lead of list) {
+    const groupName = isOutOfBound
+      ? (String(lead.oobCategory || 'Outside target boundary').trim() || 'Outside target boundary')
+      : resolveLeadMandal(lead, boundary);
+    const childName = isOutOfBound
+      ? (cleanTreeLabel(lead.district) || 'Unknown district')
+      : resolveLeadVillage(lead);
+    if (!district) district = cleanTreeLabel(lead.district);
+
+    const groupKey = groupName.toLowerCase();
+    if (!groups.has(groupKey)) groups.set(groupKey, { name: groupName, count: 0, children: new Map() });
+    const group = groups.get(groupKey);
+    group.count += 1;
+    const childKey = childName.toLowerCase();
+    group.children.set(childKey, {
+      name: childName,
+      count: (group.children.get(childKey)?.count || 0) + 1
+    });
+  }
+
+  const nodes = [...groups.values()]
+    .map(group => ({
+      name: group.name,
+      count: group.count,
+      children: [...group.children.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  return {
+    total: list.length,
+    district: district || (isOutOfBound ? 'Rejected leads' : 'District'),
+    isOutOfBound,
+    groups: nodes
+  };
+}
+

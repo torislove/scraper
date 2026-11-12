@@ -7838,3 +7838,118 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   padding: 2px 8px !important;
   border-radius: 5px !important;
 }
+
+/* ============================================================
+   SCRAPE SOURCE DIFFERENTIATION + CSV EXPORT (Live Leads)
+   Every row is stamped with the engine that produced it, the
+   chips filter the table, and Export CSV writes a spreadsheet.
+   ============================================================ */
+.v2-export-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #0F172A;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.06);
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.v2-export-csv-btn:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+}
+.v2-export-csv-btn:active { transform: translateY(1px); }
+
+.v2-source-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border-bottom: 1px solid #E2E8F0;
+  background: #FBFDFF;
+}
+.v2-source-bar-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  color: #64748B;
+  margin-right: 2px;
+}
+.v2-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  cursor: pointer;
+  line-height: 1.2;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.v2-source-chip b {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #F1F5F9;
+  color: #475569;
+}
+.v2-source-chip:hover { border-color: #94A3B8; background: #F8FAFC; }
+.v2-source-chip.is-google { border-color: #BFDBFE; color: #1D4ED8; }
+.v2-source-chip.is-google b { background: #DBEAFE; color: #1D4ED8; }
+.v2-source-chip.is-justdial { border-color: #FDE68A; color: #B45309; }
+.v2-source-chip.is-justdial b { background: #FEF3C7; color: #B45309; }
+.v2-source-chip.is-osm { border-color: #BBF7D0; color: #15803D; }
+.v2-source-chip.is-osm b { background: #DCFCE7; color: #15803D; }
+.v2-source-chip.is-indiamart { border-color: #FBCFE8; color: #BE185D; }
+.v2-source-chip.is-indiamart b { background: #FCE7F3; color: #BE185D; }
+.v2-source-chip.is-sulekha { border-color: #DDD6FE; color: #6D28D9; }
+.v2-source-chip.is-sulekha b { background: #EDE9FE; color: #6D28D9; }
+.v2-source-chip.is-practo { border-color: #A5F3FC; color: #0E7490; }
+.v2-source-chip.is-practo b { background: #CFFAFE; color: #0E7490; }
+.v2-source-chip.is-bing { border-color: #C7D2FE; color: #4338CA; }
+.v2-source-chip.is-bing b { background: #E0E7FF; color: #4338CA; }
+.v2-source-chip.is-social { border-color: #E9D5FF; color: #7E22CE; }
+.v2-source-chip.is-social b { background: #F3E8FF; color: #7E22CE; }
+.v2-source-chip.is-active {
+  background: #0F172A;
+  border-color: #0F172A;
+  color: #FFFFFF;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.15), 0 2px 6px rgba(15, 23, 42, 0.18);
+}
+.v2-source-chip.is-active b { background: rgba(255, 255, 255, 0.18); color: #FFFFFF; }
+
+.v2-source-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid #E2E8F0;
+  background: #F8FAFC;
+  color: #475569;
+  white-space: nowrap;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+.v2-source-badge.is-google { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+.v2-source-badge.is-justdial { background: #FFFBEB; border-color: #FDE68A; color: #B45309; }
+.v2-source-badge.is-osm { background: #F0FDF4; border-color: #BBF7D0; color: #15803D; }
+.v2-source-badge.is-indiamart { background: #FDF2F8; border-color: #FBCFE8; color: #BE185D; }
+.v2-source-badge.is-sulekha { background: #F5F3FF; border-color: #DDD6FE; color: #6D28D9; }
+.v2-source-badge.is-practo { background: #ECFEFF; border-color: #A5F3FC; color: #0E7490; }
+.v2-source-badge.is-bing { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
+.v2-source-badge.is-social { background: #FAF5FF; border-color: #E9D5FF; color: #7E22CE; }

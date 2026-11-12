@@ -17,6 +17,7 @@ import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from '
 import { CRM_STAGES, crmStageOf, formatInr } from '../../CrmBoard';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
+import { leadSourceMeta, listLeadSources, downloadLeadCsv } from '../../utils/leadSource';
 import { cx, formatNumber, relativeTime } from '../../ui';
 
 export default function CockpitView({
@@ -155,6 +156,36 @@ export default function CockpitView({
     return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   }, [filteredVendors]);
 
+  // Which scrapes produced the live rows? Counts respect the open folder so a
+  // selected source chip keeps a stable total instead of collapsing to itself.
+  const scopedVendors = useMemo(() => {
+    if (!sessionFilter) return vendors || [];
+    return (vendors || []).filter(v =>
+      v.sessionId === sessionFilter ||
+      v.lastSessionId === sessionFilter ||
+      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionFilter))
+    );
+  }, [vendors, sessionFilter]);
+
+  const sourceFacets = useMemo(() => listLeadSources(scopedVendors), [scopedVendors]);
+  const activeSource = filters?.source || 'all';
+
+  const handleExportCsv = () => {
+    const selected = (filteredVendors || []).filter(v =>
+      cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`)
+    );
+    const rows = selected.length ? selected : (filteredVendors || []);
+    if (!rows.length) {
+      toast.error('No leads to export yet.');
+      return;
+    }
+    const name = selected.length ? 'selected_leads' : 'live_leads';
+    const ok = downloadLeadCsv(rows, `${name}_${Date.now()}.csv`, { city: run?.location || '' });
+    if (ok) {
+      toast.success(`Exported ${rows.length} leads with scrape source to CSV.`);
+    }
+  };
+
   return (
     <div className="v2-cockpit">
       {/* LEFT: folders + CRM */}
@@ -228,30 +259,67 @@ export default function CockpitView({
               {formatNumber(cockpitMobilesCount)} mobiles · {cockpitAvgQuality}% profile quality
             </span>
           </div>
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            style={{ fontSize: 11, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 6, background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.35)', color: '#fbbf24', cursor: 'pointer', fontWeight: 600 }}
-            onClick={async () => {
-              try {
-                toast.loading('Enriching contact numbers...', { id: 'enrich-toast' });
-                const res = await fetch('/api/scrape/enrich-now', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ sessionId: run?.sessionId || run?.id })
-                });
-                const data = await res.json();
-                toast.success(data.message || 'Real-time contact enrichment active!', { id: 'enrich-toast' });
-              } catch (e) {
-                toast.error('Could not reach enrichment service', { id: 'enrich-toast' });
-              }
-            }}
-            title="Extract mobile numbers, WhatsApp links & full postal addresses"
-          >
-            <Sparkles size={12} className="v2-text-amber" />
-            <span>Enrich Mobile Numbers</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="v2-btn-ghost v2-export-csv-btn"
+              onClick={handleExportCsv}
+              title="Download the live leads (or selected rows) as a CSV spreadsheet with the scrape source"
+            >
+              <Download size={12} />
+              <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              style={{ fontSize: 11, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 6, background: 'rgba(234, 179, 8, 0.12)', border: '1px solid rgba(234, 179, 8, 0.35)', color: '#fbbf24', cursor: 'pointer', fontWeight: 600 }}
+              onClick={async () => {
+                try {
+                  toast.loading('Enriching contact numbers...', { id: 'enrich-toast' });
+                  const res = await fetch('/api/scrape/enrich-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sessionId: run?.sessionId || run?.id })
+                  });
+                  const data = await res.json();
+                  toast.success(data.message || 'Real-time contact enrichment active!', { id: 'enrich-toast' });
+                } catch (e) {
+                  toast.error('Could not reach enrichment service', { id: 'enrich-toast' });
+                }
+              }}
+              title="Extract mobile numbers, WhatsApp links & full postal addresses"
+            >
+              <Sparkles size={12} className="v2-text-amber" />
+              <span>Enrich Mobile Numbers</span>
+            </button>
+          </div>
         </div>
+
+        {/* Scrape source differentiation: every live row is stamped by the
+            engine that produced it, and the chips filter without a reload. */}
+        {sourceFacets.length > 0 && (
+          <div className="v2-source-bar" role="group" aria-label="Filter live leads by scrape source">
+            <span className="v2-source-bar-label">SCRAPE SOURCE</span>
+            <button
+              type="button"
+              className={cx('v2-source-chip', activeSource === 'all' && 'is-active')}
+              onClick={() => onFilterChange?.('source', 'all')}
+            >
+              All scrapes <b>{formatNumber(filteredVendors.length)}</b>
+            </button>
+            {sourceFacets.map(facet => (
+              <button
+                type="button"
+                key={facet.key}
+                className={cx('v2-source-chip', `is-${facet.tone}`, activeSource === facet.key && 'is-active')}
+                onClick={() => onFilterChange?.('source', activeSource === facet.key ? 'all' : facet.key)}
+                title={`${facet.label} · ${facet.count} leads from this scrape`}
+              >
+                {facet.short} <b>{formatNumber(facet.count)}</b>
+              </button>
+            ))}
+          </div>
+        )}
 
         <FilterBar
           filters={filters}
@@ -326,6 +394,17 @@ export default function CockpitView({
                         <span className="v2-vendor-info-wrap">
                           <b className="v2-lead-proper-name">{vendor.name || 'Verified Business'}</b>
                           <CarriedBadge lead={vendor} />
+                          {(() => {
+                            const src = leadSourceMeta(vendor);
+                            return (
+                              <span
+                                className={cx('v2-source-badge', `is-${src.tone}`)}
+                                title={`This lead was found by the ${src.label} scrape`}
+                              >
+                                {src.short}
+                              </span>
+                            );
+                          })()}
                           {(() => {
                             const activePhone = getDisplayPhone(vendor);
                             if (!activePhone) return null;

@@ -866,19 +866,19 @@ function SearchConsole({
               <span>Hierarchy:</span>
               <b>{locClassification.name}</b>
               <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
-              {onMasterSweep && (locClassification.type === 'district' || locClassification.type === 'state' || locClassification.type === 'mandal') && (
+              {onMasterSweep && ['district', 'state', 'mandal', 'city', 'town'].includes(locClassification.type) && (
                 <button
                   type="button"
                   className="v2-hud-sweep-btn"
                   onClick={() => onMasterSweep({
                     category: parsedCategory || category,
                     name: locClassification.name,
-                    scope: locClassification.type,
+                    scope: locClassification.type === 'town' ? 'city' : locClassification.type,
                     engines: selectedEngines
                   })}
                   title={'Launch full ' + locClassification.type + ' master sweep'}
                 >
-                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Mandal'}
+                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : locClassification.type === 'mandal' ? 'Mandal' : 'City'}
                 </button>
               )}
             </div>

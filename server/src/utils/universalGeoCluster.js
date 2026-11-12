@@ -772,7 +772,17 @@ function spreadCoords(center, index, total, radius = 0.075) {
   };
 }
 
-function zoneCoordinates(name, district, index = 0, total = 1) {
+/**
+ * Resolve a zone anchor.
+ *
+ * `options.center` is the sweep's own anchor (the geocoded mandal / district /
+ * city the operator asked for). It must win over the district fallback: a
+ * Tenali Mandal sweep was previously anchoring every village on Guntur city,
+ * which made Google return Guntur businesses for a Tenali query. `options.spread`
+ * widens the deterministic ring for larger scopes (a state needs degrees, a
+ * mandal needs a few hundred metres of separation).
+ */
+function zoneCoordinates(name, district, index = 0, total = 1, options = {}) {
   const key = String(name || '').toLowerCase().trim();
   const districtKey = String(district || '').toLowerCase().trim();
   const direct = ZONE_COORDINATES[key];
@@ -781,8 +791,19 @@ function zoneCoordinates(name, district, index = 0, total = 1) {
   const cached = cachedZoneCoords(name, district);
   if (cached) return cached;
 
-  const center = ZONE_COORDINATES[districtKey] || cachedZoneCoords(district, '') || null;
-  return spreadCoords(center, index, total, 0.075);
+  const explicitCenter = options.center
+    && Number.isFinite(Number(options.center.lat))
+    && Number.isFinite(Number(options.center.lng))
+    ? options.center
+    : null;
+  const center = explicitCenter
+    || ZONE_COORDINATES[districtKey]
+    || cachedZoneCoords(district, '')
+    || null;
+  const spread = Number.isFinite(Number(options.spread)) && Number(options.spread) > 0
+    ? Number(options.spread)
+    : 0.075;
+  return spreadCoords(center, index, total, spread);
 }
 
 // ── WHOLE-CITY COVERAGE GRID ──

@@ -103,31 +103,39 @@ last (default: keep, never silently drop a named zone).
 
 ### 3.5 Zone granularity policy (what "sweep everything" actually means)
 
-Enumerating every village for a district is wasted traffic: a mandal-headquarters query
-already returns its villages' shops because Google resolves the surrounding area. The
-policy layer therefore expands each scope differently:
+Enumerating every village for a district is the operator's explicit requirement: a district
+sweep must cover every mandal **and** every village. The policy layer expands each scope
+differently:
 
 | Scope | Zones actually scraped | Deliberately **not** scraped | Cap |
 |---|---|---|---|
-| **District** | **all mandals** (the administrative hubs) | individual villages — they arrive inside each mandal's results | 120 |
-| **Mandal** | **every village / ward** in the mandal | nothing — mandal sweeps are exhaustive | 160 |
-| **State** | **all districts** (district HQ city query) **+ up to 9 major mandals per district** | full village enumeration (that is a district sweep) | 300 |
-| **City / town** | commercial localities / wards | surrounding rural mandals | 60 |
+| **District** | district HQ + **all mandals** + **every revenue village** | nothing inside the district | 2600 |
+| **Mandal** | sub-district HQ + **every village / ward** in it | nothing — mandal sweeps are exhaustive | 400 |
+| **State** | **all districts** (district HQ city query) **+ every sub-district** | full village enumeration (run a district sweep) | 1200 |
+| **City / town** | commercial localities / wards | surrounding rural mandals | 80 |
 
 Implementation: `server/src/services/sweepScopePolicy.js` → `buildScopeZones(scope, name)`.
+
+District containment is territorial, not radial. A district plan carries `boundary`
+(one surveyed circle per sub-district anchor, radius derived from its nearest neighbour).
+Every write path — live snapshot, late reconciliation, final folder — rejects a row that
+is outside every circle or whose structured district names another district. Post-run
+repair is available at `POST /api/scrape/district-audit` (dry-run supported); it archives
+rejected rows in the recovery bin before rewriting the folder.
 
 Rules:
 
 - A cap is never silent. The response carries `stats { totalZones, returnedZones, capped,
-  cap }`, and the UI says *"56 of 56 mandals"* or *"300 of 412 zones — cap reached"*.
+  cap }`, and the UI says *"18/18 mandals · 219/219 villages"* or *"2600 of 3200 zones — cap reached"*.
 - A wrong scope is auto-corrected: asking for `Tenali` as a *state* resolves it as a
   mandal and adds a warning; asking for `Guntur District` as a *district* strips the
   suffix before lookup.
 - The frozen plan is passed into the orchestrator as `plan.zones`, so execution uses the
   exact policy list instead of re-resolving from a text string (which used to cap a
   district at 40 mandals and a mandal at 11 villages).
-- The launcher shows the policy live: *"Guntur · district — every mandal (villages
-  covered by each mandal query)"*.
+- The launcher shows the policy live: *"Guntur · district — every mandal and every village"*
+  plus the boundary line ("18 sub-district circles inside Guntur; neighbouring districts
+  are rejected").
 
 ---
 

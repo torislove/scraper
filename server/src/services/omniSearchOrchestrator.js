@@ -9,6 +9,7 @@
 
 const dbAdapter = require('../config/dbAdapter');
 const { persistSessionVault, matchesMasterFilters } = require('./sessionVaultService');
+const outOfBoundsVault = require('./outOfBoundsVault');
 const categoryRouter = require('./categoryRouter');
 const brandIntel = require('./brandIntel');
 const engineHealth = require('./engineHealth');
@@ -18,7 +19,7 @@ const { collectCarryForward, findRepeatCoveredZones } = require('./carryForwardS
 const { areNearDuplicates, mergeVendorLeads } = require('../utils/indiaTradeIntelligence');
 const { calculateLeadQuality, determineTier } = require('../utils/leadScoring');
 const { streamingEnricher, backfillPhones, hasValidMobile } = require('./phoneBackfillService');
-const { resolveUniversalZones, zoneCoordinates, ZONE_COORDINATES, buildCityGridZones, classifyLocation } = require('../utils/universalGeoCluster');
+const { resolveUniversalZones, zoneCoordinates, ZONE_COORDINATES, buildCityGridZones, classifyLocation, mandalIndex } = require('../utils/universalGeoCluster');
 const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
 const { clearStaleQueue, getPersistentQueue, getActiveJobs, addScrapeJob: queueAddScrapeJob, getConcurrencyMetrics } = require('../utils/queue');
 const etaModel = require('../utils/etaModel');
@@ -69,6 +70,262 @@ function zoneKey(zone) {
 }
 
 /**
+ * India place names are noisy: "Guntur", "Guntur District", "Guntur Mandal"
+ * all describe the same parent. Comparing a compact key catches those variants
+ * without turning "Tenali" into "Tenaliupalayam".
+ */
+function placeKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * A master sweep must contain every lead inside the zone that produced it.
+ * The old check used only the farthest zone + 5 km, so a Tenali Mandal sweep
+ * could keep businesses 24 km away in Guntur city. This check anchors each row
+ * to its own zone and only falls back to written address evidence when the
+ * coordinates are missing or approximate.
+ *
+ * Text evidence deliberately excludes `city`, because that field holds the
+ * sweep's base label ("Tenali Mandal") for every row and would match anything.
+ */
+/**
+ * How far from the sweep anchor a lead may sit for each scope when the zone
+ * anchor itself is only an estimate. These are generous outer bounds used only
+ * as a last resort; exact zone distance and written address evidence are
+ * checked first.
+ */
+const SCOPE_REACH_KM = {
+  mandal: 22,
+  city: 26,
+  district: 140,
+  state: 800
+};
+
+/**
+ * Hard outer bound for a whole sweep, measured from the geocoded sweep anchor.
+ * Every row — live snapshot, reconciled late row, final folder — must pass this
+ * before it can be written. Without it a browser engine that pads the requested
+ * locality onto every address (e.g. "Gopal Nagar A, Tenali") could smuggle a
+ * Jaipur business into a Tenali folder and text evidence would "match" it.
+ */
+function sweepReachKm(scope) {
+  return SCOPE_REACH_KM[scope] || SCOPE_REACH_KM.district;
+}
+
+function normalizeAdminName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\b(district|dist|state)\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function normalizeMandalName(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\bmandal\b/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * District containment is territorial, not radial. A district sweep is only
+ * allowed to keep a business that sits inside at least one sub-district circle
+ * of that district. Coordinates decide first; a structured district mismatch
+ * (the engine saying "Palnadu", "Bapatla", "Krishna", "NTR") rejects a row even
+ * when its coordinates drift a few kilometres inside the outer circles.
+ */
+function isInsideDistrictBoundary(lead, boundary) {
+  if (!boundary || !Array.isArray(boundary.centers) || !boundary.centers.length) return true;
+  if (!lead) return true;
+
+  const targetDistrict = normalizeAdminName(boundary.district);
+  const leadDistrict = normalizeAdminName(lead.district);
+  if (targetDistrict && leadDistrict && leadDistrict !== targetDistrict) return false;
+
+  const targetState = normalizeAdminName(boundary.state);
+  const leadState = normalizeAdminName(lead.state);
+  if (targetState && leadState && leadState !== targetState) return false;
+
+  // When the engine gives no district, its mandal field still names the real
+  // sub-district. A known mandal from another district is a foreign lead.
+  if (!leadDistrict) {
+    const mandalKey = normalizeMandalName(lead.mandal);
+    if (mandalKey && mandalKey !== targetDistrict) {
+      const ownMandals = new Set((boundary.centers || []).map(c => normalizeMandalName(c.name)));
+      const info = mandalIndex.get(mandalKey);
+      if (!ownMandals.has(mandalKey) && info && info.district
+        && normalizeAdminName(info.district) !== targetDistrict) {
+        return false;
+      }
+    }
+  }
+
+  const lat = Number(lead.latitude);
+  const lng = Number(lead.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+
+  for (const center of boundary.centers) {
+    if (!Number.isFinite(Number(center.lat)) || !Number.isFinite(Number(center.lng))) continue;
+    const radius = Number(center.radiusKm) || 9;
+    if (getDistanceKm(Number(center.lat), Number(center.lng), lat, lng) <= radius) return true;
+  }
+  return false;
+}
+
+function isInsideSweepArea(lead, center, scope, options = {}) {
+  if (!lead || !center) return true;
+  if (scope === 'district' && options.boundary) {
+    return isInsideDistrictBoundary(lead, options.boundary);
+  }
+  if (!Number.isFinite(Number(lead.latitude)) || !Number.isFinite(Number(lead.longitude))) return true;
+  const km = getDistanceKm(
+    Number(center.lat),
+    Number(center.lng),
+    Number(lead.latitude),
+    Number(lead.longitude)
+  );
+  return km <= sweepReachKm(scope);
+}
+
+function leadBelongsToZone(lead, zone, options = {}) {
+  const zoneKeyValue = placeKey(zone?.zoneName || zone?.name);
+  if (!zoneKeyValue) return true;
+
+  // A district sweep has an explicit territorial boundary. Nothing outside the
+  // district may pass, regardless of what the zone anchor or address says.
+  if (options.boundary && !isInsideDistrictBoundary(lead, options.boundary)) return false;
+
+  const hasLeadCoords = Number.isFinite(Number(lead.latitude)) && Number.isFinite(Number(lead.longitude));
+  const hasZoneCoords = Number.isFinite(Number(zone.lat)) && Number.isFinite(Number(zone.lng));
+  const distance = (hasLeadCoords && hasZoneCoords)
+    ? getDistanceKm(Number(zone.lat), Number(zone.lng), Number(lead.latitude), Number(lead.longitude))
+    : null;
+
+  const reach = options.reachKm || sweepReachKm(options.scope);
+
+  // 1.5 km absorbs the gap between a locality centroid and its boundary. The
+  // 6 km floor keeps a compact village zone from rejecting its own marketplace.
+  const radius = Math.max(6, (Number(zone.radiusKm) || 3) + 1.5);
+  if (distance != null && distance <= radius) return true;
+
+  // No coordinates at all: keep the row. It is not provably outside, and the
+  // folder can still show it with its query provenance.
+  if (distance == null) return true;
+
+  // A district boundary already approved this row; an approximate zone anchor
+  // must not widen that approval into a 140 km radius.
+  if (options.boundary) return true;
+
+  // The sweep's own anchor is the source of truth for the outer bound. A row
+  // beyond it is out of bounds even if the engine stamped the search name into
+  // its address, which is why evidence is never trusted past this line.
+  if (options.center) {
+    const fromCenter = getDistanceKm(
+      Number(options.center.lat),
+      Number(options.center.lng),
+      Number(lead.latitude),
+      Number(lead.longitude)
+    );
+    if (fromCenter > reach) return false;
+
+    // Written evidence (street / area / village / sub-district) can only confirm
+    // a row that is already inside the sweep's outer reach. `city` is never used:
+    // it holds the sweep label for every row.
+    const evidence = [lead.address, lead.area, lead.village, lead.suburb, lead.locality, lead.mandal, lead.district]
+      .map(placeKey)
+      .filter(Boolean);
+    if (evidence.some(value => value.includes(zoneKeyValue) || (value.length >= 5 && zoneKeyValue.includes(value)))) {
+      return true;
+    }
+
+    // The zone anchor is a deterministic ring position, not a surveyed centroid.
+    // A row inside the sweep reach is plausible for that zone.
+    return zone.isApproximate === true;
+  }
+
+  // No sweep centre supplied (legacy path): reject anything beyond the reach.
+  return distance <= reach;
+}
+
+function nearestBoundaryZone(lead, boundary) {
+  const centers = (boundary && boundary.centers) || [];
+  const lat = Number(lead?.latitude);
+  const lng = Number(lead?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { zoneName: boundary?.district || 'district boundary', lat: null, lng: null };
+  }
+  let best = null;
+  let bestKm = Infinity;
+  for (const center of centers) {
+    if (!Number.isFinite(Number(center.lat)) || !Number.isFinite(Number(center.lng))) continue;
+    const km = getDistanceKm(Number(center.lat), Number(center.lng), lat, lng);
+    if (km < bestKm) { bestKm = km; best = center; }
+  }
+  return best
+    ? { zoneName: best.name, lat: best.lat, lng: best.lng }
+    : { zoneName: boundary?.district || 'district boundary', lat: null, lng: null };
+}
+
+function enforceMasterZoneContainment(leads, zones, options = {}) {
+  const byName = new Map();
+  const coordinateZones = [];
+  for (const zone of zones || []) {
+    const key = placeKey(zone.zoneName || zone.name);
+    if (key && !byName.has(key)) byName.set(key, zone);
+    if (Number.isFinite(Number(zone.lat)) && Number.isFinite(Number(zone.lng))) {
+      coordinateZones.push(zone);
+    }
+  }
+  const kept = [];
+  const rejected = [];
+  for (const lead of leads || []) {
+    let zone = byName.get(placeKey(lead.zoneName))
+      || byName.get(placeKey(lead.suburb))
+      || byName.get(placeKey(lead.locality))
+      || byName.get(placeKey(lead.village));
+
+    // A locality inside a named zone may be tagged with the locality rather
+    // than the zone. Attach it to the nearest zone so it is still checked
+    // instead of silently escaping containment.
+    if (!zone && coordinateZones.length
+      && Number.isFinite(Number(lead.latitude)) && Number.isFinite(Number(lead.longitude))) {
+      let best = null;
+      let bestKm = Infinity;
+      for (const candidate of coordinateZones) {
+        const km = getDistanceKm(
+          Number(candidate.lat),
+          Number(candidate.lng),
+          Number(lead.latitude),
+          Number(lead.longitude)
+        );
+        if (km < bestKm) {
+          bestKm = km;
+          best = candidate;
+        }
+      }
+      zone = best;
+    }
+
+    if (!zone) {
+      // No matching zone label. The district boundary still has the final say:
+      // a row that is not inside the district is rejected with its nearest
+      // sub-district recorded as evidence.
+      if (options.boundary && !isInsideDistrictBoundary(lead, options.boundary)) {
+        rejected.push({ lead, zone: nearestBoundaryZone(lead, options.boundary) });
+        continue;
+      }
+      kept.push(lead);
+      continue;
+    }
+    if (leadBelongsToZone(lead, zone, options)) {
+      kept.push(lead);
+      continue;
+    }
+    rejected.push({ lead, zone });
+  }
+  return { kept, rejected };
+}
+
+/**
  * Universal Omni Search Orchestrator
  */
 async function runOmniSearchOrchestrator(
@@ -113,8 +370,10 @@ async function runOmniSearchOrchestrator(
 
   // Rejected rows are archived as evidence but removed from the live table, so
   // an out-of-area business can never appear in the customer's folder.
+  let pendingOob = [];
   const quarantineLead = (lead, reason, source) => {
     if (!lead) return;
+    pendingOob.push({ lead, reason: reason || 'outside search area' });
     try {
       dbAdapter.saveOutOfBoundsVendor({
         ...lead,
@@ -205,22 +464,95 @@ async function runOmniSearchOrchestrator(
     dbAdapter.flushSync();
   }
 
+  // Scope guard for every folder write, including the error path below. It is
+  // replaced with a real predicate once the sweep anchor is geocoded.
+  let allowSweepLead = () => true;
+
   try {
-    // 1. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing).
+    // 1. Geocode the sweep's own anchor first. Every master zone is then laid
+    // out around the mandal / district / city the operator actually asked for,
+    // not around its parent district HQ (the old bug put Tenali villages on
+    // Guntur city and returned Guntur businesses for a Tenali sweep).
+    let baseGeo = null;
+    try {
+      baseGeo = await geocodeLocation(baseLocation);
+    } catch (e) {}
+    if (!baseGeo || !baseGeo.lat) baseGeo = null;
+
+    // Gazetteer first, network second. Fuzzy geocoding once resolved "Guntur
+    // District" to Madhya Pradesh, which invalidated every zone anchor and every
+    // containment radius in the sweep.
+    const gazetteerHit = (() => {
+      const clean = String(baseLocation || '').toLowerCase().trim();
+      const stripped = clean.replace(/\b(city|town|district|dist|mandal|tehsil|taluk|taluka|block)\b/gi, '').replace(/\s+/g, ' ').trim();
+      const hub = ZONE_COORDINATES[clean] || ZONE_COORDINATES[stripped];
+      return hub && Number.isFinite(Number(hub.lat)) ? { lat: Number(hub.lat), lng: Number(hub.lng) } : null;
+    })();
+
+    let planCenter = (plan?.center && Number.isFinite(Number(plan.center.lat)))
+      ? { lat: Number(plan.center.lat), lng: Number(plan.center.lng) }
+      : (gazetteerHit || (baseGeo ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) } : null));
+
+    const sweepScope = plan?.resolvedScope || (isMaster ? 'district' : 'city');
+
+    // A master district sweep keeps every rejected vendor in a visible
+    // `master_oob_<district>` folder. Client searches do not create one.
+    const flushOob = () => {
+      if (!isMaster || !pendingOob.length) return;
+      const rows = pendingOob;
+      pendingOob = [];
+      try {
+        outOfBoundsVault.recordRejections({
+          district: plan?.district || plan?.boundary?.district || baseLocation,
+          state: plan?.state || plan?.boundary?.state || '',
+          category,
+          sessionId,
+          rows
+        });
+      } catch (e) {
+        addLog(`[Out of Bound] Folder notice: ${e.message}`);
+      }
+    };
+
+    const scopeSpread = plan?.resolvedScope === 'state'
+      ? 2.2
+      : plan?.resolvedScope === 'district'
+        ? 0.35
+        : 0.09;
+
+    // 2. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing).
     // A master sweep supplies a frozen plan, so its exact zone policy is honoured
     // instead of re-resolving from the location string.
-    const zones = (Array.isArray(plan?.zones) && plan.zones.length)
+    const buildZones = (center) => (Array.isArray(plan?.zones) && plan.zones.length)
       ? plan.zones.map((z, index) => {
-          const zoneName = z.name;
+          // A resumed plan can carry either `name` or `zoneName`, so normalise
+          // once instead of assuming the launch-time shape.
+          const zoneName = z.name || z.zoneName || '';
+          const zoneNameLower = String(zoneName).toLowerCase();
           let suffix = '';
           const targetDistrict = z.district || plan.district;
           const targetState = z.state || plan.state;
-          if (targetDistrict && z.name.toLowerCase() !== targetDistrict.toLowerCase()) {
-            suffix = `, ${targetDistrict}`;
-          } else if (targetState && z.name.toLowerCase() !== targetState.toLowerCase()) {
-            suffix = `, ${targetState}`;
+
+          // The suffix tells Google which real place the query belongs to.
+          // A mandal/city sweep must localise to the sweep itself ("Morrispet,
+          // Tenali Mandal"), never to the parent district. A district sweep
+          // localises to the district, and a state sweep disambiguates each
+          // sub-district with its own district + state.
+          if (plan.resolvedScope === 'state') {
+            const parts = [targetDistrict, targetState].filter(Boolean);
+            if (parts.length) suffix = `, ${parts.join(', ')}`;
+          } else if (targetDistrict && zoneNameLower !== String(targetDistrict).toLowerCase()) {
+            suffix = plan.resolvedScope === 'district'
+              ? `, ${targetDistrict}`
+              : `, ${baseLocation || targetDistrict}`;
+          } else if (plan.resolvedScope !== 'district' && baseLocation) {
+            suffix = `, ${baseLocation}`;
           }
-          const coords = zoneCoordinates(zoneName, targetDistrict, index, plan.zones.length);
+
+          const coords = zoneCoordinates(zoneName, targetDistrict, index, plan.zones.length, {
+            center,
+            spread: scopeSpread
+          });
           return {
             zoneName,
             queryText: z.queryText || `${searchPhrase} in ${zoneName}${suffix}`,
@@ -239,15 +571,61 @@ async function runOmniSearchOrchestrator(
           };
         })
       : resolveUniversalZones(baseLocation, category, isMaster);
+
+    let zones = buildZones(planCenter);
+
+    // Cross-check the anchor against the zones that have a real gazetteer
+    // coordinate. If the anchor drifts far from their centroid, the anchor is
+    // wrong — rebuild the approximate cells around the real cluster instead of
+    // scattering a district's villages into another state.
+    try {
+      const precise = zones.filter(z => !z.isApproximate && Number.isFinite(Number(z.lat)) && Number.isFinite(Number(z.lng)));
+      if (precise.length >= 3) {
+        const centroid = {
+          lat: precise.reduce((sum, z) => sum + Number(z.lat), 0) / precise.length,
+          lng: precise.reduce((sum, z) => sum + Number(z.lng), 0) / precise.length
+        };
+        const driftLimit = plan?.resolvedScope === 'state' ? 500
+          : plan?.resolvedScope === 'district' ? 120
+            : plan?.resolvedScope === 'city' ? 40 : 20;
+        const drift = planCenter
+          ? getDistanceKm(Number(planCenter.lat), Number(planCenter.lng), centroid.lat, centroid.lng)
+          : Infinity;
+        if (!planCenter || drift > driftLimit) {
+          addLog(`[Orchestrator] Anchor correction: "${baseLocation}" was ${Number.isFinite(drift) ? drift.toFixed(0) + 'km' : 'unset'} from the zone cluster; rebuilding around ${centroid.lat.toFixed(3)}, ${centroid.lng.toFixed(3)}.`);
+          planCenter = centroid;
+          zones = buildZones(planCenter);
+        }
+      }
+    } catch (anchorError) {}
+
+    // One guard is used by every write path — live snapshot, reconciliation and
+    // the final folder — so a row can never enter through the side door after
+    // the containment pass has already judged it out of bounds.
+    allowSweepLead = (lead) => isInsideSweepArea(lead, planCenter, sweepScope, { boundary: plan?.boundary });
+
     addLog(`[Orchestrator] Resolved ${zones.length} universal zones for "${baseLocation}": ${zones.map(z => z.zoneName).join(', ')}`);
 
-    // Geocode base location for initial radar map focus & fallback coordinates
-    let baseGeo = null;
-    try {
-      baseGeo = await geocodeLocation(baseLocation);
-    } catch (e) {}
-
     // Zero-latency instant coordinate fallback from pre-indexed zones or hubs
+    if (planCenter && (!baseGeo || !baseGeo.lat)) {
+      baseGeo = {
+        lat: planCenter.lat,
+        lng: planCenter.lng,
+        district: plan.district || baseLocation,
+        state: plan.state || 'India'
+      };
+    } else if (planCenter && baseGeo && Number.isFinite(Number(baseGeo.lat))) {
+      const anchorDrift = getDistanceKm(Number(baseGeo.lat), Number(baseGeo.lng), planCenter.lat, planCenter.lng);
+      if (anchorDrift > (plan?.resolvedScope === 'state' ? 500 : 40)) {
+        addLog(`[Orchestrator] Map anchor aligned to the sweep centre (${planCenter.lat.toFixed(3)}, ${planCenter.lng.toFixed(3)}); the geocoder was ${anchorDrift.toFixed(0)}km away.`);
+        baseGeo = {
+          lat: planCenter.lat,
+          lng: planCenter.lng,
+          district: plan.district || baseLocation,
+          state: plan.state || 'India'
+        };
+      }
+    }
     if (!baseGeo || !baseGeo.lat) {
       const firstWithCoords = zones.find(z => z.lat && z.lng);
       if (firstWithCoords) {
@@ -419,6 +797,11 @@ async function runOmniSearchOrchestrator(
       completedZoneIndices: activeSessions[sessionId]?.completedZoneIndices || (plan?.resumed ? (plan.completedZoneIndices || []) : []),
       completedZoneNames: activeSessions[sessionId]?.completedZoneNames || (plan?.resumed ? (plan.completedZoneNames || []) : []),
       coverageMode,
+      scope: plan?.resolvedScope || (isMaster ? 'district' : 'city'),
+      district: plan?.district || null,
+      state: plan?.state || null,
+      title: plan?.title || baseLocation,
+      boundary: plan?.boundary || null,
       deferredZones: deferredZones.map(z => z.zoneName),
       activeZoneNames: activeZones.map(z => z.zoneName),
       fullHierarchy: [{
@@ -622,16 +1005,18 @@ async function runOmniSearchOrchestrator(
       if (isAborted()) break;
 
       const z = activeZones[zi];
-      const zoneQuery = (z.isVectorQuery || z.queryText.toLowerCase().includes(searchPhrase.toLowerCase())) ? z.queryText : `${searchPhrase} in ${z.queryText}`;
+      const zoneLabel = z.zoneName || z.name || '';
+      const zoneQueryBase = String(z.queryText || `${searchPhrase} in ${zoneLabel}`);
+      const zoneQuery = (z.isVectorQuery || zoneQueryBase.toLowerCase().includes(searchPhrase.toLowerCase())) ? zoneQueryBase : `${searchPhrase} in ${zoneQueryBase}`;
 
       const queryKey = String(zoneQuery).toLowerCase().replace(/\s+/g, ' ').trim();
       if (queuedQueryKeys.has(queryKey)) {
-        activeSessions[sessionId].completedTargetsMap[z.zoneName.toLowerCase().trim()] = 'completed';
+        activeSessions[sessionId].completedTargetsMap[String(zoneLabel).toLowerCase().trim()] = 'completed';
         continue;
       }
       queuedQueryKeys.add(queryKey);
 
-      const zoneCacheKey = `${z.zoneName}, ${baseLocation}`.toLowerCase().trim();
+      const zoneCacheKey = `${zoneLabel}, ${baseLocation}`.toLowerCase().trim();
       const zoneGeo = (z.lat && z.lng) ? { lat: z.lat, lng: z.lng } : (geocodeCache[zoneCacheKey] || baseGeo);
 
       const targetDistrict = z.district || baseLocation;
@@ -655,7 +1040,7 @@ async function runOmniSearchOrchestrator(
         boundaryKm: zoneRadius
       };
 
-      activeSessions[sessionId].completedTargetsMap[z.zoneName.toLowerCase().trim()] = 'queued';
+      activeSessions[sessionId].completedTargetsMap[String(zoneLabel).toLowerCase().trim()] = 'queued';
 
       const zoneEngines = Array.isArray(z.engines) ? z.engines : null;
       const allowLocalFinder = hasEngine('local_finder') && (!zoneEngines || zoneEngines.includes('local_finder'));
@@ -791,9 +1176,15 @@ async function runOmniSearchOrchestrator(
               category,
               location: baseLocation,
               leads: liveLeads,
+              allowLead: allowSweepLead,
               metadata: {
                 status: 'running',
                 coverageMode,
+                scope: plan?.resolvedScope || (isMaster ? 'district' : 'city'),
+                district: plan?.district || null,
+                state: plan?.state || null,
+                title: plan?.title || baseLocation,
+                boundary: plan?.boundary || null,
                 totalZones,
                 completedZones,
                 deferredZones: deferredZones.map(z => z.zoneName),
@@ -821,6 +1212,7 @@ async function runOmniSearchOrchestrator(
       try {
         await streamingEnricher.stop().catch(() => {});
       } catch (e) {}
+      flushOob();
       const abortedLeads = dbAdapter.getVendorsBySession(sessionId);
       try {
         persistSessionVault({
@@ -830,10 +1222,16 @@ async function runOmniSearchOrchestrator(
           location: baseLocation,
           leads: abortedLeads,
           final: true,
+          allowLead: allowSweepLead,
           metadata: {
             status: 'aborted',
             abortedAt: new Date().toISOString(),
             coverageMode,
+            scope: plan?.resolvedScope || (isMaster ? 'district' : 'city'),
+            district: plan?.district || null,
+            state: plan?.state || null,
+            title: plan?.title || baseLocation,
+            boundary: plan?.boundary || null,
             totalZones,
             completedZones,
             deferredZones: deferredZones.map(z => z.zoneName),
@@ -871,6 +1269,21 @@ async function runOmniSearchOrchestrator(
 
     addLog(`[Orchestrator] Scrape phase closed for session ${sessionId}.`);
 
+    // Engines can flush their final batch a moment after the last zone resolves.
+    // Aggregating immediately used to miss those rows (a Guntur district sweep
+    // ended with 0 leads while 153 valid rows were still landing). Wait until
+    // the session's store count is stable for two consecutive checks.
+    try {
+      let lastCount = -1;
+      let stableTicks = 0;
+      for (let i = 0; i < 16 && stableTicks < 2; i += 1) {
+        await new Promise(r => setTimeout(r, 400));
+        const count = dbAdapter.getVendorsBySession(sessionId).length;
+        if (count === lastCount) stableTicks += 1;
+        else { stableTicks = 0; lastCount = count; }
+      }
+    } catch (settleErr) {}
+
     // 4. Scrape Completed: Aggregate Session Leads & Automatically Save to Individual Search Vault
     const allVendors = dbAdapter.getVendors();
     let harvestedLeads = allVendors.filter(v =>
@@ -878,6 +1291,41 @@ async function runOmniSearchOrchestrator(
       v.lastSessionId === sessionId ||
       (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
     );
+
+    // Master Strict Zone Containment: every row must sit inside the zone query
+    // that found it. This runs before filters so an out-of-area business can
+    // never enter a Master folder, and is archived as evidence when rejected.
+    if (isMaster && Array.isArray(zones) && zones.length) {
+      try {
+        const containment = enforceMasterZoneContainment(harvestedLeads, zones, {
+          center: planCenter,
+          scope: plan?.resolvedScope || 'district',
+          boundary: plan?.boundary || null
+        });
+        if (containment.rejected.length) {
+          for (const item of containment.rejected) {
+            const zoneLat = item.zone && item.zone.lat != null ? Number(item.zone.lat) : null;
+            const zoneLng = item.zone && item.zone.lng != null ? Number(item.zone.lng) : null;
+            const km = (Number.isFinite(Number(item.lead.latitude)) && Number.isFinite(Number(item.lead.longitude))
+              && zoneLat != null && zoneLng != null)
+              ? getDistanceKm(zoneLat, zoneLng, Number(item.lead.latitude), Number(item.lead.longitude))
+              : null;
+            quarantineLead(
+              item.lead,
+              km == null
+                ? `outside ${plan?.boundary?.district || ''} district boundary (nearest ${item.zone?.zoneName || 'zone'})`.trim()
+                : `${km.toFixed(1)}km from ${item.zone?.zoneName || 'district boundary'}`,
+              'Master Zone Containment (Out of Bounds)'
+            );
+          }
+          addLog(`[Master Containment] ${containment.rejected.length} lead(s) were outside the ${plan?.boundary?.district || plan?.district || ''} district boundary and moved to Out of Bounds.`);
+        }
+        flushOob();
+        harvestedLeads = containment.kept;
+      } catch (containmentError) {
+        addLog(`[Master Containment] Warning: ${containmentError.message}`);
+      }
+    }
 
     // Client Strict Geo Containment: If Client search (not Master), reject out-of-city/out-of-mandal bleed
     if (!isMaster && baseLocation) {
@@ -915,22 +1363,23 @@ async function runOmniSearchOrchestrator(
     let finalAnchor = null;
     let finalMaxKm = 0;
     try {
-      const anchor = baseGeo && Number.isFinite(Number(baseGeo.lat)) ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) } : null;
+      const anchor = planCenter
+        || (baseGeo && Number.isFinite(Number(baseGeo.lat)) ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) } : null);
       if (anchor) {
-        let reachKm = 0;
-        for (const zone of zones) {
-          if (!Number.isFinite(Number(zone.lat)) || !Number.isFinite(Number(zone.lng))) continue;
-          reachKm = Math.max(reachKm, getDistanceKm(anchor.lat, anchor.lng, Number(zone.lat), Number(zone.lng)));
-        }
         const scopeType = plan?.resolvedScope || (isMaster ? 'district' : 'city');
-        const minReachForScope = (scopeType === 'state') ? 800.0
-          : ((scopeType === 'district') ? 140.0 : vectorBoundaryKm);
-        const maxKm = Math.max(minReachForScope, reachKm + 5.0);
+        const boundary = scopeType === 'district' ? plan?.boundary : null;
+        const maxKm = sweepReachKm(scopeType);
         finalAnchor = anchor;
         finalMaxKm = maxKm;
         const before = sessionLeads.length;
         sessionLeads = sessionLeads.filter(lead => {
           if (!lead.latitude || !lead.longitude) return true;
+          if (boundary) {
+            if (isInsideDistrictBoundary(lead, boundary)) return true;
+            addLog(`[Containment] Dropped "${lead.name}" · outside ${boundary.district} district boundary`);
+            quarantineLead(lead, `outside ${boundary.district} district boundary`);
+            return false;
+          }
           const km = getDistanceKm(anchor.lat, anchor.lng, Number(lead.latitude), Number(lead.longitude));
           if (km <= maxKm) return true;
           addLog(`[Containment] Dropped "${lead.name}" · ${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
@@ -939,6 +1388,7 @@ async function runOmniSearchOrchestrator(
         });
         const dropped = before - sessionLeads.length;
         if (dropped > 0) addLog(`[Containment] ${dropped} lead(s) outside the searched area moved to Out of Bounds.`);
+        flushOob();
       }
     } catch (e) {
       addLog(`[Containment] Warning: ${e.message}`);
@@ -992,6 +1442,7 @@ async function runOmniSearchOrchestrator(
         for (const lead of fresh) {
           if (!lead || !lead.id || seen.has(lead.id)) continue;
           if (hasFilters && !matchesMasterFilters(lead, filters)) continue;
+          if (!allowSweepLead(lead)) continue;
           if (finalAnchor && lead.latitude && lead.longitude) {
             const km = getDistanceKm(finalAnchor.lat, finalAnchor.lng, Number(lead.latitude), Number(lead.longitude));
             if (km > finalMaxKm) continue;
@@ -1193,11 +1644,17 @@ async function runOmniSearchOrchestrator(
         location: baseLocation,
         leads: sessionLeads,
         final: true,
+        allowLead: allowSweepLead,
         metadata: {
           status: finalStatus,
           completedAt: new Date().toISOString(),
           abortedAt: finalStatus === 'aborted' ? new Date().toISOString() : undefined,
           coverageMode,
+          scope: plan?.resolvedScope || (isMaster ? 'district' : 'city'),
+          district: plan?.district || null,
+          state: plan?.state || null,
+          title: plan?.title || baseLocation,
+          boundary: plan?.boundary || null,
           totalZones,
           completedZones: finalStatus === 'completed' ? totalZones : completedZones,
           deferredZones: deferredZones.map(z => z.zoneName),
@@ -1299,6 +1756,7 @@ async function runOmniSearchOrchestrator(
   } catch (err) {
     addLog(`[Orchestrator Error] ${err.message}`);
     try {
+      const failedSession = activeSessions[sessionId] || {};
       persistSessionVault({
         sessionId,
         userId,
@@ -1306,7 +1764,20 @@ async function runOmniSearchOrchestrator(
         location: baseLocation,
         leads: dbAdapter.getVendorsBySession(sessionId),
         final: true,
-        metadata: { status: isAborted() ? 'aborted' : 'failed', error: err.message, completedAt: new Date().toISOString() }
+        allowLead: allowSweepLead,
+        metadata: {
+          status: isAborted() ? 'aborted' : 'failed',
+          error: err.message,
+          completedAt: new Date().toISOString(),
+          // A crash must not erase which zones already finished, otherwise
+          // Resume re-scrapes the whole sweep and burns time for nothing.
+          coverageMode: failedSession.coverageMode,
+          totalZones: failedSession.totalMandals || failedSession.zones?.length,
+          completedZones: failedSession.completedMandals || (failedSession.completedZoneIndices || []).length,
+          completedZoneIndices: failedSession.completedZoneIndices || [],
+          completedZoneNames: failedSession.completedZoneNames || [],
+          zones: failedSession.zones || []
+        }
       });
     } catch (saveErr) { /* ignore */ }
     try {
@@ -1328,6 +1799,7 @@ async function runOmniSearchOrchestrator(
 module.exports = {
   runOmniSearchOrchestrator,
   getDistanceKm,
-  formatEta
+  formatEta,
+  isInsideDistrictBoundary
 };
 

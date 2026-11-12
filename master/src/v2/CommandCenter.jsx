@@ -7,16 +7,18 @@ import {
   ExternalLink, FileSpreadsheet, FileText, Filter, Folder, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
-  Table2, Tag, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus
+  Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus
 } from 'lucide-react';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
+import EngineStatusBoard from './EngineStatusBoard';
+import MasterTerminalView from './MasterTerminalView';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
-  startAuto, startMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, updateVendorCrm, streamUrl,
+  startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, updateVendorCrm, streamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
@@ -49,7 +51,11 @@ const TAB_ALIASES = {
   crm: 'crm',
   folders: 'runs',
   runs: 'runs',
-  deep: 'deep'
+  deep: 'deep',
+  engines: 'engines',
+  engine: 'engines',
+  terminal: 'terminal',
+  logs: 'terminal'
 };
 
 function tabFromUrl(value) {
@@ -76,6 +82,7 @@ import FoldersGridView from './components/views/FoldersGridView';
 import IntelligenceView from './components/views/IntelligenceView';
 import DeepJobsView from './components/views/DeepJobsView';
 import { extractLeadArea, CarriedBadge, qualityOf } from './utils/leadHelpers';
+import { leadSourceMeta } from './utils/leadSource';
 import InstrumentPanel from './components/InstrumentPanel';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../utils/phoneClassify';
 import {
@@ -210,8 +217,16 @@ export default function CommandCenter() {
   const [folderCity, setFolderCity] = useState('all');
   const [folderSort, setFolderSort] = useState('newest');
   const [runsSubTab, setRunsSubTab] = useState('client'); // 'client' | 'master'
-  const [masterSweepForm, setMasterSweepForm] = useState({ category: '', name: '', scope: 'district' });
+  const [masterSweepForm, setMasterSweepForm] = useState({
+    category: '', name: '', scope: 'district',
+    deep: false, engines: 'auto',
+    minRating: 0, mobileOnly: false, hasWebsite: false, verifiedOnly: false
+  });
   const [masterLaunching, setMasterLaunching] = useState(false);
+  const [masterPreview, setMasterPreview] = useState(null);
+  const [masterPreviewLoading, setMasterPreviewLoading] = useState(false);
+  const [masterPreviewError, setMasterPreviewError] = useState('');
+  const [masterConfirm, setMasterConfirm] = useState(false);
 
   const [selectedFolderIds, setSelectedFolderIds] = useState(new Set());
   const [renamingFolder, setRenamingFolder] = useState(null);
@@ -294,7 +309,8 @@ export default function CommandCenter() {
     deepOnly: false,
     conflictsOnly: false,
     minRating: 0,
-    sort: 'newest'
+    sort: 'newest',
+    source: 'all'
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -425,13 +441,20 @@ export default function CommandCenter() {
 
   useEffect(() => {
     refresh();
+    // A cold start can race the backend: the first list call happens while the
+    // API is still booting, leaving the folder counters at zero until a manual
+    // refresh. Retry once shortly after mount.
+    const folderRetry = setTimeout(() => { refresh(); }, 1800);
     const id = setInterval(() => {
       getDeepJobs().then(deepData => {
         if (!mountedRef.current) return;
         setDeepJobs(deepData || []);
       }).catch(() => { });
     }, 9000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(folderRetry);
+      clearInterval(id);
+    };
   }, [refresh]);
 
   // Live estimate. Auto mode parses the free-text query server-side, so the
@@ -618,6 +641,9 @@ export default function CommandCenter() {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
           }
+          // The stream is live again; folder counts were fetched while the
+          // server was unreachable, so pull them once more.
+          refresh();
         });
 
         es.addEventListener('error', () => {
@@ -752,6 +778,7 @@ export default function CommandCenter() {
       if (sseStatusRef.current !== 'open') {
         scheduleReconnect(true);
       }
+      refresh();
     };
 
     window.addEventListener('online', onWakeup);
@@ -869,29 +896,91 @@ export default function CommandCenter() {
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
   const updateFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
+  const updateMasterSweep = (key, value) => {
+    setMasterConfirm(false);
+    setMasterSweepForm(prev => ({ ...prev, [key]: value }));
+  };
+
+  // Debounced dry-run: the operator sees the exact zone count, local unit
+  // names, coverage and ETA before a single credit is spent.
+  useEffect(() => {
+    const name = String(masterSweepForm.name || '').trim();
+    if (name.length < 3) {
+      setMasterPreview(null);
+      setMasterPreviewError('');
+      setMasterPreviewLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setMasterPreviewLoading(true);
+    setMasterPreviewError('');
+    const timer = setTimeout(async () => {
+      try {
+        const data = await previewMasterSweep({
+          scope: masterSweepForm.scope,
+          name,
+          deep: masterSweepForm.deep
+        });
+        if (!cancelled) setMasterPreview(data);
+      } catch (e) {
+        if (!cancelled) {
+          setMasterPreview(null);
+          setMasterPreviewError(e?.response?.data?.error || e.message || 'Preview failed');
+        }
+      } finally {
+        if (!cancelled) setMasterPreviewLoading(false);
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [masterSweepForm.name, masterSweepForm.scope, masterSweepForm.deep]);
 
   const handleStartMasterSweep = async (sweepParams = {}) => {
     const sweepCat = String(sweepParams.category || masterSweepForm.category || form.category || autoQuery).trim();
     const sweepName = String(sweepParams.name || masterSweepForm.name || form.location || '').trim();
     const scope = sweepParams.scope || masterSweepForm.scope || 'district';
+    const expectedZones = Number(sweepParams.totalZones || masterPreview?.totalZones || 0);
 
     if (!sweepCat || !sweepName) {
       toast.error('Please specify both a category and a target location name for the Master Sweep.');
       return;
     }
 
+    // A large sweep is never launched by a single accidental click. The first
+    // press turns the button into an explicit confirmation.
+    if (expectedZones > 250 && !sweepParams.confirmed && !masterConfirm) {
+      setMasterConfirm(true);
+      toast(`This sweep plans ${expectedZones} zones. Press "Confirm & Start" to launch it.`, {
+        icon: '⚠️', duration: 7000
+      });
+      return;
+    }
+
     setMasterLaunching(true);
     setLaunching(true);
+    setMasterConfirm(false);
     try {
+      const engines = sweepParams.engines
+        || (masterSweepForm.engines === 'multi' ? ['geospatial_mesh', 'direct_telecom'] : ['auto']);
       const res = await startMasterSweep({
         category: sweepCat,
         scope,
         name: sweepName,
-        engines: sweepParams.engines || ['geospatial_mesh', 'direct_telecom']
+        deep: masterSweepForm.deep === true,
+        engines,
+        minRating: Number(masterSweepForm.minRating) || 0,
+        mobileOnly: masterSweepForm.mobileOnly === true,
+        hasWebsite: masterSweepForm.hasWebsite === true,
+        verifiedOnly: masterSweepForm.verifiedOnly === true
       });
 
       if (res?.sessionId) {
-        toast.success('🗺️ Master ' + scope + ' sweep initiated! Swarming ' + res.totalZones + ' zones across ' + res.targetName);
+        toast.success(
+          `🗺️ ${res.targetName} sweep started · ${res.totalZones} zones · about ${Math.max(1, Math.round(Number(res.estimatedSeconds || 0) / 60))} min`
+        );
+        setMasterPreview(null);
         setActiveTab('cockpit');
         refresh();
       }
@@ -1500,6 +1589,7 @@ export default function CommandCenter() {
       if (filters.deepOnly && !vendor.deepExtractedAt) return false;
       if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
       if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
+      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
       if (selectedAreaFilter && selectedAreaFilter !== 'all') {
         const area = extractLeadArea(vendor);
         if (area !== selectedAreaFilter) return false;
@@ -1604,7 +1694,19 @@ export default function CommandCenter() {
         existing.dealValueTotal = Number(session.dealValueTotal);
       }
       existing.isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
-      existing.masterScope = session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null);
+      // Out-of-Bound folders are rejected rows kept for review. They are never
+      // a client folder and must not be labelled as a district sweep.
+      existing.isOutOfBound = Boolean(session.isOutOfBound || session.metadata?.isOutOfBound);
+      existing.oobDistrict = session.oobDistrict || session.metadata?.oobDistrict || existing.oobDistrict || null;
+      existing.hierarchy = session.hierarchy || existing.hierarchy || null;
+      const mandals = Array.isArray(session.hierarchy?.mandals) ? session.hierarchy.mandals : null;
+      if (mandals) {
+        existing.mandalCount = mandals.length;
+        existing.villageCount = mandals.reduce((sum, m) => sum + (Array.isArray(m.villages) ? m.villages.length : 0), 0);
+      }
+      existing.masterScope = existing.isOutOfBound
+        ? null
+        : (session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null));
       existing.status = session.metadata?.status || existing.status;
       map.set(session.id, existing);
     }
@@ -1687,6 +1789,43 @@ export default function CommandCenter() {
   const runElapsed = run ? Math.max(0, Math.floor(((run.finishedAt || now) - run.startedAt) / 1000)) : 0;
   const runTotal = progress?.totalMandalsAcrossAll || progress?.totalMandals || estimate?.zones?.count || 0;
   const runDone = progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0;
+
+  // Launchpad copy adapts to the chosen administrative level so an operator
+  // never sees "District" while sweeping a mandal.
+  const masterPlaceLabel = masterSweepForm.scope === 'state'
+    ? 'State'
+    : masterSweepForm.scope === 'mandal'
+      ? 'Mandal / Taluk / Tehsil / Block'
+      : masterSweepForm.scope === 'city'
+        ? 'City or Town'
+        : 'District';
+  const masterPlacePlaceholder = masterSweepForm.scope === 'state'
+    ? 'e.g. Andhra Pradesh, Telangana, Tamil Nadu'
+    : masterSweepForm.scope === 'mandal'
+      ? 'e.g. Tenali Mandal, Pollachi Taluk'
+      : masterSweepForm.scope === 'city'
+        ? 'e.g. Tenali, Coimbatore, Srirangapatna'
+        : 'e.g. Guntur District, Coimbatore, NTR';
+  const masterCoverageText = (() => {
+    const coverage = masterPreview?.coverage;
+    if (!coverage) return '—';
+    if (masterPreview.scope === 'state' || coverage.districts > 1) {
+      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} districts · ${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${masterPreview.unitTerm || 'units'}`;
+    }
+    if (coverage.localities != null) {
+      return `${formatNumber(coverage.localitiesCovered ?? 0)}/${formatNumber(coverage.localities ?? 0)} localities`;
+    }
+    if (masterPreview.scope === 'district') {
+      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${(masterPreview.unitTerm || 'units').toLowerCase()} · ${formatNumber(coverage.villagesCovered ?? 0)}/${formatNumber(coverage.villages ?? 0)} villages`;
+    }
+    if (coverage.subDistricts != null) {
+      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${masterPreview.unitTerm || 'units'}`;
+    }
+    if (coverage.districts != null) {
+      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} district`;
+    }
+    return '—';
+  })();
   const bannerDone = run?.completedZones != null ? Number(run.completedZones) || 0 : runDone;
   const bannerTotal = run?.totalZones != null ? Number(run.totalZones) || 0 : runTotal;
   const runPercent = run?.status === 'complete' || run?.status === 'stopped'
@@ -2193,6 +2332,21 @@ export default function CommandCenter() {
             <button type="button" className={cx(activeTab === 'intelligence' && 'is-active')} onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}>
               <Brain size={14} /> Intelligence Bank
             </button>
+            <button type="button" className={cx(activeTab === 'engines' && 'is-active')} onClick={() => setActiveTab('engines')}>
+              <Activity size={14} /> Engines
+            </button>
+            <button type="button" className={cx(activeTab === 'terminal' && 'is-active')} onClick={() => setActiveTab('terminal')}>
+              <Terminal size={14} /> Terminal
+            </button>
+            <button type="button" onClick={() => navigate('/whatsapp')}>
+              <MessageSquare size={14} /> WhatsApp
+            </button>
+            <button type="button" onClick={() => navigate('/clients')}>
+              <Users size={14} /> Clients
+            </button>
+            <button type="button" onClick={() => navigate('/learning')}>
+              <Sparkles size={14} /> Learning
+            </button>
             <span className="v2-cmd-tabs-spacer" />
             <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
               <RefreshCw size={13} /> Refresh
@@ -2309,10 +2463,30 @@ export default function CommandCenter() {
                         <div className="v2-master-launcher-head">
                           <div>
                             <span className="v2-badge-gold">🗺️ MASTER GEO-COVERAGE SWEEP LAUNCHPAD</span>
-                            <h3>Swarm an Entire District, Mandal Cluster, or State</h3>
-                            <p>Automatically enumerates all constituent mandals/districts, eliminates duplicate leads cross-regionally, and creates a consolidated Master Folder.</p>
+                            <h3>State · District · Mandal · City — every unit, no gaps</h3>
+                            <p>Pick a scope, type a place, and see the exact zones, coverage and ETA before you launch. Auto mode routes each category to the best free engines.</p>
                           </div>
                         </div>
+
+                        <div className="v2-master-scope-row">
+                          {[
+                            { id: 'state', label: 'State', hint: 'Every district + sub-district' },
+                            { id: 'district', label: 'District', hint: 'Every mandal / taluk / tehsil' },
+                            { id: 'mandal', label: 'Mandal', hint: 'Every village and ward' },
+                            { id: 'city', label: 'City', hint: 'Localities + street grid + ring' }
+                          ].map(option => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className={cx('v2-master-scope-btn', masterSweepForm.scope === option.id && 'is-active')}
+                              onClick={() => updateMasterSweep('scope', option.id)}
+                            >
+                              <b>{option.label}</b>
+                              <span>{option.hint}</span>
+                            </button>
+                          ))}
+                        </div>
+
                         <div className="v2-master-launcher-fields">
                           <div className="v2-master-field">
                             <label>Business Category</label>
@@ -2320,38 +2494,142 @@ export default function CommandCenter() {
                               type="text"
                               placeholder="e.g. Photography Studios, Plumbers, Banquet Halls"
                               value={masterSweepForm.category}
-                              onChange={e => setMasterSweepForm(prev => ({ ...prev, category: e.target.value }))}
+                              onChange={e => updateMasterSweep('category', e.target.value)}
                             />
                           </div>
                           <div className="v2-master-field">
-                            <label>District, Mandal or State</label>
+                            <label>{masterPlaceLabel}</label>
                             <input
                               type="text"
-                              placeholder="e.g. Guntur District, Tenali Mandal, Andhra Pradesh"
+                              placeholder={masterPlacePlaceholder}
                               value={masterSweepForm.name}
-                              onChange={e => setMasterSweepForm(prev => ({ ...prev, name: e.target.value }))}
+                              onChange={e => updateMasterSweep('name', e.target.value)}
                             />
                           </div>
                           <div className="v2-master-field">
-                            <label>Coverage Scope</label>
+                            <label>Engine Mode</label>
                             <select
-                              value={masterSweepForm.scope}
-                              onChange={e => setMasterSweepForm(prev => ({ ...prev, scope: e.target.value }))}
+                              value={masterSweepForm.engines}
+                              onChange={e => updateMasterSweep('engines', e.target.value)}
                             >
-                              <option value="district">🗺️ District Sweep (all 14–35 mandals)</option>
-                              <option value="mandal">📍 Mandal Cluster (all villages)</option>
-                              <option value="state">🏛️ State Sweep (all districts)</option>
+                              <option value="auto">⚡ Auto — best engines for this category</option>
+                              <option value="multi">🧩 Multi-vector — Maps + directory sweep</option>
                             </select>
                           </div>
                           <button
                             type="button"
                             className="v2-btn-master-sweep"
                             onClick={() => handleStartMasterSweep()}
-                            disabled={masterLaunching || !masterSweepForm.category || !masterSweepForm.name}
+                            disabled={masterLaunching || masterConfirm || !masterSweepForm.category || !masterSweepForm.name || masterPreviewLoading}
                           >
-                            <Compass size={15} /> {masterLaunching ? 'SWARMING...' : '🚀 START MASTER SWEEP'}
+                            <Compass size={15} /> {masterLaunching ? 'SWARMING…' : '🚀 START MASTER SWEEP'}
                           </button>
                         </div>
+
+                        <div className="v2-master-options-row">
+                          <label className="v2-master-check">
+                            <input
+                              type="checkbox"
+                              checked={masterSweepForm.scope === 'district' ? true : masterSweepForm.deep}
+                              disabled={masterSweepForm.scope === 'district'}
+                              onChange={e => updateMasterSweep('deep', e.target.checked)}
+                            />
+                            All villages {masterSweepForm.scope === 'district' ? '(always on)' : ''}
+                          </label>
+                          <label className="v2-master-check">
+                            <input
+                              type="checkbox"
+                              checked={masterSweepForm.mobileOnly}
+                              onChange={e => updateMasterSweep('mobileOnly', e.target.checked)}
+                            />
+                            Mobile numbers only
+                          </label>
+                          <label className="v2-master-check">
+                            <input
+                              type="checkbox"
+                              checked={masterSweepForm.verifiedOnly}
+                              onChange={e => updateMasterSweep('verifiedOnly', e.target.checked)}
+                            />
+                            Verified only
+                          </label>
+                          <label className="v2-master-check">
+                            <input
+                              type="checkbox"
+                              checked={masterSweepForm.hasWebsite}
+                              onChange={e => updateMasterSweep('hasWebsite', e.target.checked)}
+                            />
+                            Has website
+                          </label>
+                          <label className="v2-master-rating">
+                            Min rating
+                            <select
+                              value={masterSweepForm.minRating}
+                              onChange={e => updateMasterSweep('minRating', e.target.value)}
+                            >
+                              <option value={0}>Any</option>
+                              <option value={3}>3★+</option>
+                              <option value={4}>4★+</option>
+                              <option value={4.5}>4.5★+</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        {masterPreviewLoading && (
+                          <div className="v2-master-preview is-loading">
+                            <Loader2 size={14} className="v2-spin" /> Resolving every zone…
+                          </div>
+                        )}
+                        {!masterPreviewLoading && masterPreviewError && (
+                          <div className="v2-master-preview is-error">
+                            <AlertTriangle size={14} /> {masterPreviewError}
+                          </div>
+                        )}
+                        {!masterPreviewLoading && masterPreview && (
+                          <div className="v2-master-preview">
+                            <div className="v2-master-preview-grid">
+                              <div><span>Target</span><b>{masterPreview.targetName}</b></div>
+                              <div><span>Zones</span><b>{formatNumber(masterPreview.totalZones)}</b></div>
+                              <div><span>Coverage</span><b>{masterCoverageText}</b></div>
+                              <div><span>ETA</span><b>~{masterPreview.estimatedMinutes} min</b></div>
+                            </div>
+                            {masterPreview.terminology?.sentence && (
+                              <p className="v2-master-preview-note">{masterPreview.terminology.sentence}</p>
+                            )}
+                            {masterPreview.boundary?.centers?.length > 0 && (
+                              <p className="v2-master-preview-note">
+                                Territory boundary: {formatNumber(masterPreview.boundary.centers.length)} {masterPreview.unitTerm || 'sub-district'} circles inside {masterPreview.boundary.district}. Only businesses inside this district are saved; neighbouring districts are rejected.
+                              </p>
+                            )}
+                            {masterPreview.sampleZones?.length > 0 && (
+                              <p className="v2-master-preview-zones">
+                                {masterPreview.sampleZones.join(' · ')}
+                                {masterPreview.totalZones > masterPreview.sampleZones.length ? ' …' : ''}
+                              </p>
+                            )}
+                            {(masterPreview.warnings || []).map((warning, index) => (
+                              <p key={index} className="v2-master-preview-warn">
+                                <AlertTriangle size={12} /> {warning}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+
+                        {masterConfirm && (
+                          <div className="v2-master-confirm">
+                            <AlertTriangle size={16} />
+                            <span>This sweep plans {formatNumber(masterPreview?.totalZones || 0)} zones. Launch it?</span>
+                            <button
+                              type="button"
+                              className="v2-btn-master-sweep"
+                              onClick={() => handleStartMasterSweep({ confirmed: true })}
+                            >
+                              Confirm &amp; Start
+                            </button>
+                            <button type="button" className="v2-btn-ghost" onClick={() => setMasterConfirm(false)}>
+                              Cancel
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </>
@@ -2410,6 +2688,22 @@ export default function CommandCenter() {
                 setSelectedVendor={setSelectedVendor}
               />
             )}
+            {activeTab === 'engines' && (
+              <div className="v2-feature-tab">
+                <EngineStatusBoard />
+              </div>
+            )}
+
+            {activeTab === 'terminal' && (
+              <div className="v2-feature-tab">
+                <MasterTerminalView
+                  logs={logs}
+                  onClear={() => setLogs([])}
+                  run={run}
+                  progress={progress}
+                />
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -2421,13 +2715,12 @@ export default function CommandCenter() {
           onUpdated={() => { loadVendors(); loadHealth(); }}
           onOpenWhatsApp={(v) => {
             const phone = getDisplayPhone(v);
-            const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
-            if (digits.length === 10) {
-              const text = `Hi ${v.name || 'there'}, I found your business on Scraper.co.in and wanted to connect.`;
-              window.open(`https://wa.me/91${digits}?text=${encodeURIComponent(text)}`, '_blank');
-            } else if (v.whatsappLink) {
-              window.open(v.whatsappLink, '_blank');
+            if (!isMobilePhone(phone)) {
+              toast.error('This lead has no validated mobile number for WhatsApp.');
+              return;
             }
+            setSelectedVendor(null);
+            navigate('/whatsapp', { state: { targetLead: v } });
           }}
         />
       )}

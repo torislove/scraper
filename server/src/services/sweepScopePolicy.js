@@ -11,16 +11,16 @@
  *
  * Coverage rules (operator requirement: no part of the selected area is skipped):
  *   • state    → every district HQ + every sub-district HQ in every district.
- *   • district → every sub-district HQ in the district. Each sub-district query
- *                is run as "<category> in <sub-district>, <district>" with the
- *                sub-district radius, so its villages and hamlets are inside
- *                the area that query covers.
+ *   • district → the district HQ + every sub-district HQ + every revenue
+ *                village. A district sweep always means every mandal and every
+ *                village; the `deep` flag no longer narrows it.
  *   • mandal   → the sub-district HQ + every revenue village / ward in it.
  *   • city     → the city's commercial localities + street grid + 5 km ring.
  *
- * `deep: true` additionally enumerates every village of a district. It is
- * explicit because a large district can hold 8,000 villages; the default district
- * sweep stays complete by area without spending a query on each hamlet.
+ * A district plan also carries an explicit `boundary` built from its
+ * sub-district anchors: the containment guard uses that union of circles to
+ * reject a business that belongs to a neighbouring district, instead of a
+ * generous radius measured from one central point.
  *
  * Caps exist only as a safety valve. They are always applied **coverage-first**
  * (every unit gets its HQ before any unit gets a second zone), and the exact
@@ -35,7 +35,9 @@ const {
   mandalIndex,
   villageIndex,
   getMandalTypology,
-  AUTHORITATIVE_CLUSTERS
+  AUTHORITATIVE_CLUSTERS,
+  ZONE_COORDINATES,
+  buildCityGridZones
 } = require('../utils/universalGeoCluster');
 
 const {
@@ -49,7 +51,7 @@ const {
 
 const CAPS = {
   state: 1200,
-  district: 200,
+  district: 2600,
   mandal: 400,
   city: 80
 };
@@ -58,6 +60,89 @@ const SUFFIX_WORDS = /\b(states?|districts?|dists?|zillas?|zilas?|jillas?|jilas?
 
 function keyOf(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Offline gazetteer coordinate for a place name. Master sweeps use this before
+ * any network geocode: a fuzzy geocoder once resolved "Guntur District" to a
+ * point in Madhya Pradesh, which put every zone anchor and every containment
+ * radius in the wrong state.
+ */
+function gazetteerCenter(name) {
+  const raw = String(name || '').toLowerCase().trim();
+  if (!raw) return null;
+  const stripped = raw.replace(SUFFIX_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  const candidates = [raw, stripped, keyOf(raw), keyOf(stripped)];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const hit = ZONE_COORDINATES[candidate];
+    if (hit && Number.isFinite(Number(hit.lat)) && Number.isFinite(Number(hit.lng))) {
+      return { lat: Number(hit.lat), lng: Number(hit.lng) };
+    }
+  }
+  return null;
+}
+
+function averageCenter(points) {
+  const valid = (points || []).filter(p => p && Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
+  if (!valid.length) return null;
+  return {
+    lat: valid.reduce((sum, p) => sum + Number(p.lat), 0) / valid.length,
+    lng: valid.reduce((sum, p) => sum + Number(p.lng), 0) / valid.length
+  };
+}
+
+function haversineKm(a, b) {
+  if (!a || !b) return Infinity;
+  const rad = d => (d * Math.PI) / 180;
+  const dLat = rad(Number(b.lat) - Number(a.lat));
+  const dLng = rad(Number(b.lng) - Number(a.lng));
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(Number(a.lat))) * Math.cos(rad(Number(b.lat))) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * Explicit territorial boundary for a district sweep.
+ *
+ * Each sub-district anchor is a surveyed gazetteer coordinate. Every anchor gets
+ * a radius derived from its nearest neighbour, so the union of circles follows
+ * the district's real shape and density. A business outside every circle belongs
+ * to a neighbouring district (a Narasaraopet shop is ~25 km from Phirangipuram,
+ * a Podili shop ~90 km from Pedanandipadu) and must never enter the folder.
+ */
+function buildDistrictBoundary(mandals, entry) {
+  const centers = [];
+  const seen = new Set();
+  for (const name of mandals || []) {
+    const key = String(name || '').toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    const c = gazetteerCenter(name);
+    if (!c) continue;
+    seen.add(key);
+    centers.push({ name, lat: c.lat, lng: c.lng });
+  }
+  if (centers.length < 2) return null;
+
+  for (const center of centers) {
+    let nearest = Infinity;
+    for (const other of centers) {
+      if (other === center) continue;
+      nearest = Math.min(nearest, haversineKm(center, other));
+    }
+    // Half the distance to the nearest neighbour keeps adjacent sub-districts
+    // overlapping; the +3.5 km covers the outer edge of each unit. 8.5 km is the
+    // floor for dense city mandals, 13 km the ceiling for large rural ones.
+    center.radiusKm = Math.min(13, Math.max(8.5, nearest / 2 + 3.5));
+  }
+
+  return {
+    kind: 'mandal_union',
+    district: entry.district,
+    state: entry.state,
+    centers,
+    note: 'A lead must sit inside at least one sub-district circle of this district.'
+  };
 }
 
 function lookupCandidates(name) {
@@ -147,8 +232,67 @@ function zoneKey(z) {
   const name = keyOf(z?.name || z);
   if (!name) return '';
   // Two districts can legitimately share a sub-district name (Bilaspur in HP and
-  // Chhattisgarh). The parent keeps them apart.
-  return [name, keyOf(z?.district), keyOf(z?.state)].filter(Boolean).join('|');
+  // Chhattisgarh), and one district can have two different villages with the
+  // same name in different mandals. Parent + sub-district keep them apart.
+  return [name, keyOf(z?.mandal), keyOf(z?.district), keyOf(z?.state)].filter(Boolean).join('|');
+}
+
+/**
+ * The offline gazetteer carries more than one row for the same district in a
+ * few states (Andhra Pradesh has both "NTR" and "NTR (Vijayawada)"). Those rows
+ * must never inflate a state's district count or split one district's mandals,
+ * so aliases resolve to one canonical name and their sub-district lists merge.
+ */
+const DISTRICT_ALIASES = new Map([
+  ['ntr', 'NTR'],
+  ['ntrvijayawada', 'NTR']
+]);
+
+function canonicalDistrictName(name) {
+  const k = keyOf(name);
+  return DISTRICT_ALIASES.get(k) || String(name || '').trim();
+}
+
+function districtVariantKeys(name) {
+  const canonicalKey = keyOf(canonicalDistrictName(name));
+  const keys = new Set([canonicalKey]);
+  for (const [aliasKey, target] of DISTRICT_ALIASES) {
+    if (keyOf(target) === canonicalKey) keys.add(aliasKey);
+  }
+  return keys;
+}
+
+/**
+ * Merge every gazetteer row for a district into one entry, unioning mandals so
+ * an alias row can add coverage but never duplicate a sub-district.
+ */
+function districtEntry(name) {
+  const rows = [];
+  for (const key of districtVariantKeys(name)) {
+    const entry = districtIndex.get(key);
+    if (entry) rows.push(entry);
+  }
+  if (!rows.length) {
+    const fallback = lookup(districtIndex, name);
+    if (fallback) rows.push(fallback);
+  }
+  if (!rows.length) return null;
+
+  const seenMandals = new Set();
+  const mandals = [];
+  for (const row of rows) {
+    for (const mandal of row.mandals || []) {
+      const key = keyOf(mandal);
+      if (!key || seenMandals.has(key)) continue;
+      seenMandals.add(key);
+      mandals.push(mandal);
+    }
+  }
+  return {
+    district: canonicalDistrictName(rows[0].district || name),
+    state: rows[0].state,
+    mandals
+  };
 }
 
 function uniqueZones(zones) {
@@ -167,7 +311,15 @@ function uniqueZones(zones) {
       district: z.district || null,
       state: z.state || null,
       radiusKm: z.radiusKm || null,
-      typology: z.typology || null
+      typology: z.typology || null,
+      // Coordinate cells carry their real anchor and an explicit query string.
+      // Dropping them here used to erase a city grid's precision and force the
+      // orchestrator to guess the anchor again.
+      lat: Number.isFinite(Number(z.lat)) ? Number(z.lat) : undefined,
+      lng: Number.isFinite(Number(z.lng)) ? Number(z.lng) : undefined,
+      queryText: z.queryText || undefined,
+      coverageKind: z.coverageKind || undefined,
+      engines: Array.isArray(z.engines) ? z.engines : undefined
     });
   }
   return out;
@@ -194,12 +346,25 @@ function unitZone(name, kind, meta, radiusKm) {
   };
 }
 
+// A district whose gazetteer village list is this thin is under-reported.
+// Widening its zones and adding a coordinate grid keeps coverage honest instead
+// of silently skipping half the district.
+const THIN_DISTRICT_MIN_VILLAGES = 120;
+
 function buildDistrictZones(name, options = {}) {
-  const entry = lookup(districtIndex, name);
+  const entry = districtEntry(name);
   if (!entry) return null;
 
   const term = unitLabel(LEVELS.SUBDISTRICT, entry.state, options.explicitTerm);
-  const mandals = Array.isArray(entry.mandals) ? entry.mandals : [];
+  // Duplicate gazetteer rows and alias rows must not run the same mandal twice.
+  const seenMandals = new Set();
+  const mandals = [];
+  for (const mandal of entry.mandals || []) {
+    const key = keyOf(mandal);
+    if (!key || seenMandals.has(key)) continue;
+    seenMandals.add(key);
+    mandals.push(mandal);
+  }
   const hqCity = entry.district;
 
   // Tier 1 — the district HQ itself, so the parent city is always covered even
@@ -234,14 +399,22 @@ function buildDistrictZones(name, options = {}) {
     }
   }
 
-  // Tier 3 — optional deep enumeration: every village, round-robin across
-  // sub-districts so a cap can never starve a whole unit.
-  if (options.deep) {
+  // Tier 3 — full village enumeration is always on for a district. The operator
+  // asked for a district sweep to mean every mandal AND every village, so the
+  // `deep` flag no longer decides coverage; it only remains as an API field for
+  // older callers. Villages are added round-robin across sub-districts so a cap
+  // can never starve a whole unit.
+  let shadowedVillages = 0;
+  {
     const farthest = villageBuckets.reduce((max, b) => Math.max(max, b.villages.length), 0);
     for (let round = 0; round < farthest; round += 1) {
       for (const bucket of villageBuckets) {
         const v = bucket.villages[round];
-        if (!v || keyOf(v) === keyOf(bucket.mandal)) continue;
+        if (!v) continue;
+        // A village whose name is the mandal HQ is already covered by that
+        // mandal's own query; count it as covered instead of issuing a
+        // duplicate query under a different label.
+        if (keyOf(v) === keyOf(bucket.mandal)) { shadowedVillages += 1; continue; }
         rawList.push({
           name: v,
           kind: 'village',
@@ -255,9 +428,55 @@ function buildDistrictZones(name, options = {}) {
     }
   }
 
-  const unique = uniqueZones(rawList);
-  const capped = capZones(unique, CAPS.district);
+  let unique = uniqueZones(rawList);
   const villagesTotal = villageBuckets.reduce((sum, b) => sum + b.villages.length, 0);
+
+  // Tier 4 — thin-district safety net. Full village enumeration closes the gaps
+  // on its own, so this now runs only when the gazetteer's village list itself
+  // looks incomplete. Widening radii plus an urban grid keeps such a district
+  // honest instead of silently skipping half of it.
+  const thinDistrict = mandals.length > 0
+    && villagesTotal < Math.max(THIN_DISTRICT_MIN_VILLAGES, mandals.length * 3);
+  let gridAdded = 0;
+  if (thinDistrict) {
+    unique = unique.map(zone => (zone.kind === 'mandal'
+      ? { ...zone, radiusKm: Math.max(Number(zone.radiusKm) || 0, 14) }
+      : zone));
+    const hub = ZONE_COORDINATES[String(hqCity || '').toLowerCase().trim()];
+    if (hub) {
+      const grid = buildCityGridZones(hqCity, '', [], {
+        center: { lat: Number(hub.lat), lng: Number(hub.lng) },
+        cappedRadiusKm: 12,
+        ringKm: 6
+      });
+      const gridZones = grid.map(cell => ({
+        name: cell.zoneName,
+        kind: 'grid',
+        district: entry.district,
+        state: entry.state,
+        radiusKm: 2.6,
+        lat: cell.lat,
+        lng: cell.lng,
+        queryText: cell.queryText,
+        coverageKind: 'grid'
+      }));
+      const before = unique.length;
+      unique = uniqueZones([...unique, ...gridZones]);
+      gridAdded = unique.length - before;
+    }
+  }
+
+  const capped = capZones(unique, CAPS.district);
+
+  const warnings = [];
+  if (thinDistrict) {
+    warnings.push(
+      `The offline gazetteer lists only ${villagesTotal} villages for ${entry.district} District (${mandals.length} ${term.toLowerCase()} units). Each unit's radius is widened and ${gridAdded} coordinate cells fill the gaps so unlisted areas are still swept.`
+    );
+  }
+  if (capped.capped) {
+    warnings.push(`District resolves to ${capped.total} territorial points; the swarm covers the first ${CAPS.district}. Narrow the category or run a mandal sweep for the remainder.`);
+  }
 
   return {
     resolvedScope: 'district',
@@ -266,29 +485,37 @@ function buildDistrictZones(name, options = {}) {
     terminology: describeTerminology(entry.state),
     state: entry.state,
     district: entry.district,
+    // Authoritative sweep anchor from the offline gazetteer. Network geocoding
+    // is only a fallback in the orchestrator.
+    center: gazetteerCenter(entry.district),
+    boundary: buildDistrictBoundary(mandals, entry),
     zones: capped.zones,
     coverage: {
       districts: 1,
       subDistricts: mandals.length,
       subDistrictsCovered: capped.zones.filter(z => z.kind === 'mandal').length,
       villages: villagesTotal,
-      villagesCovered: capped.zones.filter(z => z.kind === 'village').length
+      villagesCovered: Math.min(
+        villagesTotal,
+        capped.zones.filter(z => z.kind === 'village').length + shadowedVillages
+      )
     },
     stats: {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
       cap: CAPS.district,
-      mandalsCount: mandals.length
+      mandalsCount: mandals.length,
+      villagesCount: villagesTotal,
+      thinDistrict,
+      gridZones: gridAdded
     },
     policy: {
-      mode: options.deep ? 'district_deep_villages' : 'every_subdistrict',
-      label: `Every ${term} in ${entry.district} District`,
-      note: `One query per ${term} plus the district HQ. Each ${term} query covers its own villages and hamlets; enable deep mode to add every revenue village as a separate zone.`
+      mode: 'district_all_mandals_all_villages',
+      label: `Every ${term} and every village in ${entry.district} District`,
+      note: `Full district coverage: one query for the district HQ, one for every ${term}, and one for every revenue village in the gazetteer — ${villagesTotal} villages in total.`
     },
-    warnings: capped.capped
-      ? [`District resolves to ${capped.total} territorial points; the swarm covers the first ${CAPS.district}.`]
-      : []
+    warnings
   };
 }
 
@@ -298,7 +525,15 @@ function buildMandalZones(name, options = {}) {
 
   const term = unitLabel(LEVELS.SUBDISTRICT, entry.state, options.explicitTerm);
   const typology = getMandalTypology(entry.subDistrict);
-  const villages = Array.isArray(entry.villages) ? entry.villages : [];
+  // Duplicate village rows in the gazetteer must not become duplicate queries.
+  const seenVillages = new Set();
+  const villages = [];
+  for (const village of entry.villages || []) {
+    const key = keyOf(village);
+    if (!key || seenVillages.has(key)) continue;
+    seenVillages.add(key);
+    villages.push(village);
+  }
 
   const rawList = [{
     name: entry.subDistrict,
@@ -333,6 +568,7 @@ function buildMandalZones(name, options = {}) {
     terminology: describeTerminology(entry.state),
     state: entry.state,
     district: entry.district,
+    center: gazetteerCenter(entry.subDistrict),
     zones: capped.zones,
     coverage: {
       districts: 1,
@@ -363,8 +599,19 @@ function buildStateZones(name) {
   const entry = lookup(stateIndex, name);
   if (!entry) return null;
 
-  const districts = Array.isArray(entry.districts) ? entry.districts : [];
-  const uniqueDistrictNames = uniqueZones(districts.map(d => ({ name: d, kind: 'district', state: entry.state })));
+  const rawDistricts = Array.isArray(entry.districts) ? entry.districts : [];
+  // Collapse alias rows (NTR / NTR (Vijayawada)) before counting or planning,
+  // otherwise Andhra Pradesh claims 27 districts instead of 26.
+  const districtNames = [];
+  const seenDistricts = new Set();
+  for (const raw of rawDistricts) {
+    const canonical = canonicalDistrictName(raw);
+    const key = keyOf(canonical);
+    if (!key || seenDistricts.has(key)) continue;
+    seenDistricts.add(key);
+    districtNames.push(canonical);
+  }
+  const uniqueDistrictNames = uniqueZones(districtNames.map(d => ({ name: d, kind: 'district', state: entry.state })));
 
   // Tier 1 — every district HQ.
   const rawList = uniqueDistrictNames.map(z => ({
@@ -378,12 +625,15 @@ function buildStateZones(name) {
   // Tier 2 — every sub-district HQ of every district. Villages are deliberately
   // not enumerated at state level: each sub-district query already covers its
   // own villages, and a state has hundreds of thousands of them.
-  let subDistrictCount = 0;
+  const uniqueSubDistrictKeys = new Set();
   for (const dist of uniqueDistrictNames) {
-    const distEntry = lookup(districtIndex, dist.name);
+    const distEntry = districtEntry(dist.name);
     if (!distEntry || !Array.isArray(distEntry.mandals)) continue;
     for (const m of distEntry.mandals) {
       if (keyOf(m) === keyOf(dist.name)) continue;
+      const uniqueKey = `${keyOf(m)}|${keyOf(dist.name)}`;
+      if (uniqueSubDistrictKeys.has(uniqueKey)) continue;
+      uniqueSubDistrictKeys.add(uniqueKey);
       const typology = getMandalTypology(m);
       rawList.push({
         name: m,
@@ -394,13 +644,18 @@ function buildStateZones(name) {
         radiusKm: typology.radiusKm,
         typology: typology.type
       });
-      subDistrictCount += 1;
     }
   }
+  const subDistrictCount = uniqueSubDistrictKeys.size;
 
   const unique = uniqueZones(rawList);
   const capped = capZones(unique, CAPS.state);
   const districtZones = capped.zones.filter(z => z.kind === 'district');
+  const coveredSubDistricts = new Set(
+    capped.zones
+      .filter(z => z.kind === 'mandal')
+      .map(z => `${keyOf(z.name)}|${keyOf(z.district)}`)
+  );
 
   return {
     resolvedScope: 'state',
@@ -409,19 +664,20 @@ function buildStateZones(name) {
     terminology: describeTerminology(entry.state),
     state: entry.state,
     district: null,
+    center: averageCenter(districtNames.map(d => gazetteerCenter(d))),
     zones: capped.zones,
     coverage: {
-      districts: districts.length,
+      districts: districtNames.length,
       districtsCovered: districtZones.length,
       subDistricts: subDistrictCount,
-      subDistrictsCovered: capped.zones.filter(z => z.kind === 'mandal').length
+      subDistrictsCovered: coveredSubDistricts.size
     },
     stats: {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
       cap: CAPS.state,
-      districts: districts.length,
+      districts: districtNames.length,
       subDistricts: subDistrictCount
     },
     policy: {
@@ -477,6 +733,7 @@ function buildCityZones(name) {
         terminology: describeTerminology(cityContext.state),
         state: cityContext.state,
         district: cityContext.district || title,
+        center: averageCenter(capped.zones) || gazetteerCenter(cleanName),
         zones: capped.zones,
         coverage: { cities: 1, localities: capped.total, localitiesCovered: capped.zones.length },
         stats: {
@@ -515,6 +772,7 @@ function buildCityZones(name) {
     terminology: describeTerminology(classification.state || cityContext.state),
     state: classification.state || cityContext.state,
     district: classification.district || cityContext.district || null,
+    center: gazetteerCenter(classification.name || cleanName) || gazetteerCenter(cleanName),
     zones: capped.zones,
     coverage: { cities: 1, localities: capped.total, localitiesCovered: capped.zones.length },
     stats: {

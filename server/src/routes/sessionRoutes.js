@@ -34,6 +34,10 @@ function listSessionDirs({ isMaster = false } = {}) {
   const dirs = [];
   if (!fs.existsSync(SESSIONS_DIR)) return dirs;
   for (const entry of fs.readdirSync(SESSIONS_DIR)) {
+    // Internal folders (recovery bins, guard backups, migration output) are not
+    // user vaults. Listing them made the sidebar show a backup's 151 rows while
+    // the real folder held 114, and could shadow the real folder entirely.
+    if (!entry || entry.startsWith('_') || entry.startsWith('.')) continue;
     try {
       if (!fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) continue;
     } catch (e) {
@@ -290,6 +294,100 @@ function isMobileNumber(value) {
 // ── In-Memory Metadata Header Cache (Ultra-Fast 0ms File Handling) ──────────
 const sessionHeaderCache = new Map(); // filePath -> { mtimeMs, summary }
 
+function haversineKm(a, b) {
+  if (!a || !b) return Infinity;
+  const rad = d => (d * Math.PI) / 180;
+  const dLat = rad(Number(b.lat) - Number(a.lat));
+  const dLng = rad(Number(b.lng) - Number(a.lng));
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(rad(Number(a.lat))) * Math.cos(rad(Number(b.lat))) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+function cleanGroupLabel(value) {
+  return String(value || '')
+    .replace(/\b(revenue|village|mandal|tehsil|taluk|block|district)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Every lead must appear in the left folder tree, even when Google never filled
+ * its `mandal` field. The district boundary stored with a master sweep carries
+ * surveyed sub-district centres, so a coordinate is enough to place the row.
+ */
+function resolveMandalForLead(lead, boundary) {
+  const explicit = cleanGroupLabel(lead.mandal);
+  if (explicit) return explicit;
+  const lat = Number(lead.latitude);
+  const lng = Number(lead.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !boundary || !Array.isArray(boundary.centers)) {
+    return '';
+  }
+  let best = null;
+  let bestKm = Infinity;
+  for (const center of boundary.centers) {
+    if (!Number.isFinite(Number(center.lat)) || !Number.isFinite(Number(center.lng))) continue;
+    const km = haversineKm({ lat: Number(center.lat), lng: Number(center.lng) }, { lat, lng });
+    if (km < bestKm) { bestKm = km; best = center; }
+  }
+  return best ? cleanGroupLabel(best.name) : '';
+}
+
+/**
+ * District → mandal → village tree for the folder sidebar. All leads appear in
+ * exactly one mandal and one village group; unmatched rows land in a visible
+ * "Unassigned" node instead of silently disappearing.
+ */
+function buildLeadHierarchy(leads, { boundary = null, fallbackDistrict = '' } = {}) {
+  const list = Array.isArray(leads) ? leads : [];
+  const districtCounts = new Map();
+  const mandalMap = new Map();
+
+  for (const lead of list) {
+    const district = cleanGroupLabel(lead.district) || cleanGroupLabel(fallbackDistrict) || 'Unassigned district';
+    const mandal = resolveMandalForLead(lead, boundary) || 'Unassigned mandal';
+    const village = cleanGroupLabel(lead.village)
+      || cleanGroupLabel(lead.locality)
+      || cleanGroupLabel(lead.suburb)
+      || cleanGroupLabel(lead.zoneName)
+      || 'All areas';
+
+    districtCounts.set(district, (districtCounts.get(district) || 0) + 1);
+
+    const mandalKey = mandal.toLowerCase();
+    if (!mandalMap.has(mandalKey)) {
+      mandalMap.set(mandalKey, { name: mandal, count: 0, villages: new Map() });
+    }
+    const node = mandalMap.get(mandalKey);
+    node.count += 1;
+    const villageKey = village.toLowerCase();
+    node.villages.set(villageKey, {
+      name: village,
+      count: (node.villages.get(villageKey)?.count || 0) + 1
+    });
+  }
+
+  const mandals = [...mandalMap.values()]
+    .map(node => ({
+      name: node.name,
+      count: node.count,
+      villages: [...node.villages.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  const districts = [...districtCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+
+  return {
+    total: list.length,
+    district: districts[0]?.name || cleanGroupLabel(fallbackDistrict) || '',
+    districts,
+    mandals
+  };
+}
+
 function readSessionHeader(filePath, fallbackClientId) {
   try {
     const stat = fs.statSync(filePath);
@@ -315,23 +413,21 @@ function readSessionHeader(filePath, fallbackClientId) {
         if (dbLeads.length > 0) {
           leads = dbLeads;
           data.leads = dbLeads;
+          // Read paths never write. The old code persisted this backfill here,
+          // which mutated a folder merely because the sidebar listed it.
           data.leadCount = dbLeads.length;
-          data.phoneCount = dbLeads.filter(l => l.phone && !String(l.phone).includes('Requires')).length;
+          data.phoneCount = dbLeads.filter(l => isMobileNumber(l.phone)).length;
           data.verifiedCount = dbLeads.filter(l => l.verified || l.phone).length;
-          try {
-            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-          } catch (e) {}
         }
       } catch (e) {}
     }
 
-    const phoneCount = data.phoneCount || 
-      data.metadata?.phoneCount || 
-      data.metadata?.verifiedPhones || 
-      leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
-    const verifiedCount = data.verifiedCount ||
-      data.metadata?.verifiedCount ||
-      leads.filter(l => l && (l.verified || isMobileNumber(l.phone))).length;
+    // The file is the source of truth. `leadCount` used to be a stale header
+    // field (the sidebar showed 151 while the folder held 114), so it is always
+    // derived from the rows that are actually present.
+    const phoneCount = leads.filter(l => isMobileNumber(l.phone)).length;
+    const verifiedCount = leads.filter(l => l && (l.verified || isMobileNumber(l.phone))).length;
+    const leadCount = leads.length;
 
     const cleanCat = (data.category || 'Business Search').replace(/[^\w\s&,-]/g, '').trim();
     const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
@@ -353,15 +449,25 @@ function readSessionHeader(filePath, fallbackClientId) {
     const masterScope = data.masterScope || data.metadata?.masterScope || (isMasterSweep ? (/(state)/i.test(data.location || '') ? 'state' : 'district') : null);
 
     // Extract top neighborhood sub-folders for instant tree display in sidebar
-    const { extractLeadArea } = require('../utils/godLevelExcelGenerator');
-    const areaCounts = {};
-    leads.forEach(l => {
-      const a = extractLeadArea(l, cleanLoc);
-      if (a && a !== 'General') areaCounts[a] = (areaCounts[a] || 0) + 1;
+    let subFolders = [];
+    try {
+      const areaCounts = {};
+      for (const lead of leads) {
+        const area = cleanGroupLabel(lead.village) || cleanGroupLabel(lead.locality)
+          || cleanGroupLabel(lead.suburb) || cleanGroupLabel(lead.mandal) || cleanGroupLabel(lead.zoneName);
+        if (area) areaCounts[area] = (areaCounts[area] || 0) + 1;
+      }
+      subFolders = Object.entries(areaCounts)
+        .map(([area, count]) => ({ area, count }))
+        .sort((a, b) => b.count - a.count || a.area.localeCompare(b.area));
+    } catch (e) {
+      subFolders = [];
+    }
+
+    const hierarchy = buildLeadHierarchy(leads, {
+      boundary: data.metadata?.boundary || null,
+      fallbackDistrict: cleanLoc
     });
-    const subFolders = Object.entries(areaCounts)
-      .map(([area, count]) => ({ area, count }))
-      .sort((a, b) => b.count - a.count);
 
     const summary = {
       id: data.id,
@@ -374,6 +480,9 @@ function readSessionHeader(filePath, fallbackClientId) {
       isMasterSweep,
       masterScope,
       subFolders,
+      hierarchy,
+      isOutOfBound: Boolean(data.isOutOfBound || data.metadata?.isOutOfBound),
+      oobDistrict: data.metadata?.oobDistrict || null,
       clientId: data.userId || fallbackClientId,
       clientLabel: (data.userId || fallbackClientId) === 'master' ? '👑 Master System' : `👤 Client (${data.userId || fallbackClientId})`,
       userId: data.userId || fallbackClientId,
@@ -381,7 +490,7 @@ function readSessionHeader(filePath, fallbackClientId) {
       location: cleanLoc,
       timestamp: data.timestamp || new Date().toISOString(),
       createdAt: data.createdAt || data.timestamp || new Date().toISOString(),
-      leadCount: data.leadCount || leads.length,
+      leadCount,
       phoneCount,
       verifiedCount,
       status: data.metadata?.status || 'completed',
@@ -1167,43 +1276,10 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
           return res.status(403).json({ error: 'Access denied: Master territorial sweeps are restricted to Master Command Center.' });
         }
 
-        // Real-Time Category Fidelity & Smart Brand Deduplication auto-sanitization
-        try {
-          const { isVendorRelevant } = require('../services/categoryFidelity');
-          const { areNearDuplicates, mergeVendorLeads } = require('../utils/indiaTradeIntelligence');
-          if (Array.isArray(data.leads) && data.leads.length > 0) {
-            const originalCount = data.leads.length;
-            // 1. Category fidelity
-            let sanitized = data.category ? data.leads.filter(lead => isVendorRelevant(lead, data.category)) : data.leads;
-
-            // 2. Smart Multi-Vendor Deduplication & Multi-Phone Merging
-            const deduped = [];
-            for (const lead of sanitized) {
-              let matchedIndex = -1;
-              for (let i = 0; i < deduped.length; i++) {
-                if (areNearDuplicates(deduped[i], lead)) {
-                  matchedIndex = i;
-                  break;
-                }
-              }
-              if (matchedIndex >= 0) {
-                deduped[matchedIndex] = mergeVendorLeads(deduped[matchedIndex], lead);
-              } else {
-                deduped.push(lead);
-              }
-            }
-            data.leads = deduped;
-
-            if (data.leads.length !== originalCount) {
-              data.leadCount = data.leads.length;
-              data.phoneCount = data.leads.filter(l => l.phone && !l.phone.includes('Obfuscated') && !l.phone.includes('Requires')).length;
-              data.verifiedCount = data.leads.filter(l => l.verified || l.phone).length;
-              try {
-                fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-              } catch (e) {}
-            }
-          }
-        } catch (e) {}
+        // A folder is returned exactly as it was saved. Category fidelity and
+        // dedupe already ran before the save; repeating them here silently
+        // removed rows (114 → 104) and made two views of the same folder
+        // disagree. Any clean-up must be an explicit, archived audit instead.
 
         // Merge with current live dbAdapter vendors for freshest CRM stages, notes, and contacts!
         try {
@@ -1220,11 +1296,9 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
           if ((!Array.isArray(data.leads) || data.leads.length === 0) && dbSessionLeads.length > 0) {
             data.leads = dbSessionLeads;
             data.leadCount = dbSessionLeads.length;
-            data.phoneCount = dbSessionLeads.filter(l => l.phone && !String(l.phone).includes('Requires')).length;
+            data.phoneCount = dbSessionLeads.filter(l => isMobileNumber(l.phone)).length;
             data.verifiedCount = dbSessionLeads.filter(l => l.verified || l.phone).length;
-            try {
-              fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-            } catch (e) {}
+            // In-memory recovery only; the folder file is never rewritten here.
           } else if (Array.isArray(data.leads)) {
             data.leads = data.leads.map(lead => {
               const live = liveMap.get(lead.id);
@@ -1242,22 +1316,18 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
           }
         } catch (e) { /* ignore merge error */ }
 
-        // Ensure subFolders is always present and up-to-date
+        // Always derive the counts and the district → mandal → village tree from
+        // the rows actually returned, so the folder header and the sidebar agree.
+        data.leadCount = Array.isArray(data.leads) ? data.leads.length : 0;
+        data.phoneCount = (data.leads || []).filter(l => isMobileNumber(l.phone)).length;
+        data.verifiedCount = (data.leads || []).filter(l => l && (l.verified || isMobileNumber(l.phone))).length;
+        data.hierarchy = buildLeadHierarchy(data.leads || [], {
+          boundary: data.metadata?.boundary || null,
+          fallbackDistrict: data.location || ''
+        });
+
         if (!Array.isArray(data.subFolders) || data.subFolders.length === 0) {
-          try {
-            const { extractLeadArea } = require('../utils/godLevelExcelGenerator');
-            const cleanLoc = (data.location || 'India').replace(/[^\w\s&,-]/g, '').trim();
-            const areaCounts = {};
-            (data.leads || []).forEach(l => {
-              const a = extractLeadArea(l, cleanLoc);
-              if (a && a !== 'General') areaCounts[a] = (areaCounts[a] || 0) + 1;
-            });
-            data.subFolders = Object.entries(areaCounts)
-              .map(([area, count]) => ({ area, count }))
-              .sort((a, b) => b.count - a.count);
-          } catch (e) {
-            data.subFolders = [];
-          }
+          data.subFolders = (data.hierarchy.mandals || []).map(m => ({ area: m.name, count: m.count }));
         }
 
         return res.json({ success: true, session: data, isMasterAuthorized: isMaster });

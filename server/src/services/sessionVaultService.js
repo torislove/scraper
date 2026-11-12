@@ -78,14 +78,21 @@ function mergeLeadLists(previousLeads, freshLeads) {
   return order.map(key => byKey.get(key));
 }
 
-function persistSessionVault({ sessionId, userId, category, location, leads, metadata, final = false }) {
+function persistSessionVault({ sessionId, userId, category, location, leads, metadata, final = false, allowLead = null }) {
   const safeSessionId = String(sessionId || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_');
-  const targetDirs = [path.join(SESSIONS_DIR, 'anonymous')];
-  if (userId && userId !== 'anonymous') {
-    targetDirs.push(path.join(SESSIONS_DIR, String(userId).replace(/[^a-zA-Z0-9_-]/g, '_')));
-  }
+  // A folder belongs to exactly one workspace. The old code always wrote an
+  // extra copy under `anonymous`, which made Master report double the real
+  // leads and left two divergent folders for the same run. Legacy reads still
+  // fall back to `anonymous`, but new writes never duplicate.
+  const ownerId = String(userId || 'anonymous').replace(/[^a-zA-Z0-9_-]/g, '_') || 'anonymous';
+  const targetDirs = [path.join(SESSIONS_DIR, ownerId)];
 
-  const rawLeads = Array.isArray(leads) ? leads : [];
+  // A master sweep passes a scope guard so a live snapshot can never persist a
+  // row that the final containment pass would reject later. Applying it to the
+  // previous snapshot as well keeps the "never lose a lead" union honest: only
+  // leads inside the searched area survive the merge.
+  const guard = typeof allowLead === 'function' ? allowLead : null;
+  const rawLeads = (Array.isArray(leads) ? leads : []).filter(lead => !guard || guard(lead));
   // Retain ALL leads (mobiles, landlines, and general listings)
   // STD Landlines starting with 0: strictly preserve leading 0, never add +91, whatsapp=false, callUrl set
   // Normal Mobiles (6-9): formatted as +91, whatsapp=true
@@ -197,7 +204,24 @@ function persistSessionVault({ sessionId, userId, category, location, leads, met
       // larger one: that preserves the guard (no row is ever lost) while still
       // admitting carry-forward rows that were not in the live snapshot.
       if (guardTrips && final) {
-        const mergedLeads = mergeLeadLists(previous?.leads, safeLeads);
+        const previousLeads = (Array.isArray(previous?.leads) ? previous.leads : []);
+        const guardedPrevious = guard ? previousLeads.filter(lead => guard(lead)) : previousLeads;
+        // If the scope guard removes rows from the previous snapshot, keep a
+        // byte-for-byte archive first. Containment may be right, but a destructive
+        // path must never destroy evidence without a restore point.
+        if (guardedPrevious.length < previousLeads.length) {
+          try {
+            const backupDir = path.join(SESSIONS_DIR, '_guard_backup');
+            if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+            fs.writeFileSync(
+              path.join(backupDir, `${safeSessionId}-${stamp}.json`),
+              JSON.stringify(previous, null, 2),
+              'utf-8'
+            );
+          } catch (backupError) { /* a backup must never block the save */ }
+        }
+        const mergedLeads = mergeLeadLists(guardedPrevious, safeLeads);
         const mergedPhoneCount = mergedLeads.filter(l => l && l.phone && !String(l.phone).includes('Requires')).length;
         const mergedVerifiedCount = mergedLeads.filter(l => l && (l.verified || l.phone)).length;
         const upgraded = {

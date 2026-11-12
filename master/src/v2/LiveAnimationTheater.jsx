@@ -113,10 +113,10 @@ export default function LiveAnimationTheater({ onDeployClick }) {
         <div className="theater-title-group">
           <span className="theater-live-pill">
             <span className="theater-pulse-dot" />
-            LIVE HARVEST SIMULATOR
+            SAMPLE WALKTHROUGH · DEMO DATA
           </span>
-          <h3 className="theater-heading">Watch a real search happen, step by step</h3>
-          <p className="theater-sub">Select an Indian city below to see the 5-vector matrix uncover verified +91 numbers in seconds.</p>
+          <h3 className="theater-heading">See how a sweep works, step by step</h3>
+          <p className="theater-sub">A sample animation of the search flow. The businesses and phone numbers below are illustrative demo data, not live leads.</p>
         </div>
 
         {/* City Switcher Tabs */}
