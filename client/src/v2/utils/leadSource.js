@@ -7,6 +7,8 @@
  * to the same key before anything is displayed or filtered.
  */
 
+import { classifyPhone } from '../../utils/phoneClassify.js';
+
 const SOURCE_MAP = {
   'google-places': { key: 'google', label: 'Google Maps', short: 'Google', tone: 'google' },
   'google maps': { key: 'google', label: 'Google Maps', short: 'Google', tone: 'google' },
@@ -88,12 +90,45 @@ function csvCell(value) {
 }
 
 /**
+ * Split a lead's numbers into the export rule:
+ *   Primary Phone   = the first parser-validated mobile (never a landline)
+ *   Secondary Phone = every other number (extra mobiles + landlines)
+ *
+ * A lead whose only number is a landline therefore exports with an empty
+ * Primary Phone and the landline in Secondary Phone — the dialer column never
+ * silently mixes in a number that cannot receive WhatsApp.
+ */
+export function exportPhones(lead) {
+  const seen = new Set();
+  const numbers = [];
+  for (const value of [lead?.phone, lead?.primaryPhone, lead?.secondaryPhone, ...(Array.isArray(lead?.phones) ? lead.phones : [])]) {
+    const raw = typeof value === 'object' && value
+      ? (value.displayPhone || value.e164 || value.national || value.number || '')
+      : value;
+    const text = String(raw || '').trim();
+    if (!text) continue;
+    const classified = classifyPhone(text);
+    if (!classified || classified.type === 'none') continue;
+    if (classified.digits && seen.has(classified.digits)) continue;
+    if (classified.digits) seen.add(classified.digits);
+    numbers.push(classified);
+  }
+  const mobile = numbers.find(n => n.isMobile);
+  const rest = numbers.filter(n => n !== mobile);
+  return {
+    primary: mobile ? mobile.display || mobile.raw : '',
+    secondary: rest.map(n => n.display || n.raw).filter(Boolean).join(', '),
+    isMobile: Boolean(mobile),
+  };
+}
+
+/**
  * Build a spreadsheet-ready CSV for the given leads. The Scrape Source column
  * keeps the engine visible in Excel/Sheets after export.
  */
 export function buildLeadCsv(leads, { city = '' } = {}) {
   const headers = [
-    'Business Name', 'Category', 'Primary Phone', 'Mobile Verified',
+    'Business Name', 'Category', 'Primary Phone', 'Mobile Verified', 'Secondary Phone',
     'Area', 'Village', 'Mandal', 'District', 'State', 'Pincode',
     'Rating', 'Reviews', 'Website', 'Scrape Source', 'Search Folder',
     'CRM Stage', 'Google Maps Link'
@@ -102,11 +137,13 @@ export function buildLeadCsv(leads, { city = '' } = {}) {
     const source = leadSourceMeta(lead);
     const area = lead.locality || lead.suburb || lead.area || lead.zoneName || '';
     const village = lead.village || lead.city || city || '';
+    const phones = exportPhones(lead);
     return [
       lead.name || 'Unknown Business',
       lead.category || 'Unknown',
-      lead.phone || lead.primaryPhone || '',
-      lead.isMobile || lead.phoneType === 'mobile' ? 'Yes' : 'No',
+      phones.primary,
+      phones.isMobile ? 'Yes' : 'No',
+      phones.secondary,
       area,
       village,
       lead.mandal || '',

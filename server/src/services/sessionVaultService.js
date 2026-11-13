@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { normalizePhone } = require('../utils/phoneUtils');
+const { normalizePhone, syncPhoneFlags } = require('../utils/phoneUtils');
 const { SESSIONS_DIR } = require('../config/paths');
 
 const TERMINAL_STATUSES = new Set(['completed', 'aborted', 'failed', 'interrupted']);
@@ -107,6 +107,8 @@ function persistSessionVault({ sessionId, userId, category, location, leads, met
         if (parsed.isMobile) {
           l.phone = parsed.displayPhone;
           l.phoneType = 'mobile';
+          l.isMobile = true;
+          l.isLandline = false;
           l.whatsappAvailable = true;
           l.whatsappLink = `https://wa.me/91${parsed.national}`;
           l.callUrl = parsed.callUrl;
@@ -114,6 +116,8 @@ function persistSessionVault({ sessionId, userId, category, location, leads, met
           // STD Landline starting with 0: strictly NO +91
           l.phone = parsed.displayPhone;
           l.phoneType = 'landline';
+          l.isMobile = false;
+          l.isLandline = true;
           l.whatsappAvailable = false;
           l.whatsappLink = '';
           l.callUrl = parsed.callUrl;
@@ -121,7 +125,7 @@ function persistSessionVault({ sessionId, userId, category, location, leads, met
         break;
       }
     }
-    return l;
+    return syncPhoneFlags(l);
   }).filter(Boolean);
 
   // ALL LEADS PRESERVED: Priority sorting — Mobiles first (3), Landlines second (2), other/no-phone third (1/0)

@@ -234,25 +234,6 @@ function buildVcard(lead) {
   return lines.join('\r\n');
 }
 
-function formatExcelPhone(ph) {
-  if (!ph) return '';
-  const { normalizePhone } = require('../utils/phoneUtils');
-  const parsed = normalizePhone(ph);
-  if (parsed) {
-    if (parsed.isLandline) {
-      // STD Landline starting with 0: strictly NO +91
-      return parsed.displayPhone || ('0' + parsed.national);
-    }
-    if (parsed.isMobile) {
-      return `+91 ${parsed.national.slice(0, 5)} ${parsed.national.slice(5)}`;
-    }
-  }
-  if (String(ph).trim().startsWith('0')) {
-    return String(ph).trim();
-  }
-  return String(ph);
-}
-
 /**
  * Every usable number for a lead, in one deduped list. The store keeps extra
  * phones in `phones[]`; exports used to look only at `phone`, so a business
@@ -554,58 +535,58 @@ function buildExportContent(leads, format, baseName, options = {}) {
   const escapeCsv = val => `"${String(val == null ? '' : val).replace(/"/g, '""')}"`;
   const headers = [
     'Business Name', 'Category', 'Area / Locality', 'Primary Phone', 'Phone Type',
-    'Alternate Numbers', 'Total Lines',
+    'Secondary Phone', 'Total Lines',
     'WhatsApp Direct URL', 'Direct Call Link', 'Email Address', 'Website',
     'Complete Address', 'City', 'District', 'State', 'Pincode', 'Rating', 'Reviews Count',
     'Profile Quality (%)', 'Quality Tier',
     'Google Maps URL', 'CRM Stage', 'CRM Notes'
   ];
 
+  /**
+   * Export rule: Primary Phone is a parser-validated mobile and nothing else.
+   * Extra mobiles and every landline go to Secondary Phone, so the dialer
+   * column never mixes in a number that cannot receive WhatsApp. A lead whose
+   * only number is a landline exports with an empty Primary Phone on purpose.
+   */
   const buildCsvRow = (lead) => {
-    const rawPhone = lead.phone || lead.primaryPhone || '';
-    const parsed = rawPhone ? normalizePhone(rawPhone) : null;
-    let displayPhone = '';
-    let phoneType = 'Unlisted';
-    let whatsappUrl = '';
-    let callUrl = '';
-
-    if (parsed) {
-      if (parsed.isMobile) {
-        displayPhone = parsed.displayPhone || `+91 ${parsed.national.slice(0, 5)} ${parsed.national.slice(5)}`;
-        phoneType = 'Mobile';
-        whatsappUrl = `https://wa.me/91${parsed.national}`;
-        callUrl = parsed.callUrl || `tel:+91${parsed.national}`;
-      } else if (parsed.isLandline) {
-        // Strictly preserve leading 0, no +91! Prepend tab so Excel keeps 0
-        displayPhone = parsed.displayPhone || ('0' + parsed.national);
-        phoneType = 'STD Landline';
-        whatsappUrl = '';
-        callUrl = parsed.callUrl || `tel:0${parsed.national}`;
-      } else {
-        displayPhone = rawPhone;
-        phoneType = 'Other';
-        callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+    const numbers = [];
+    const seenDigits = new Set();
+    for (const value of leadPhoneList(lead)) {
+      const parsed = normalizePhone(value, { context: 'phone mobile', trusted: true });
+      if (parsed) {
+        if (seenDigits.has(parsed.national)) continue;
+        seenDigits.add(parsed.national);
+        numbers.push({
+          display: parsed.isMobile
+            ? (parsed.displayPhone || `+91 ${parsed.national.slice(0, 5)} ${parsed.national.slice(5)}`)
+            : (parsed.displayPhone || ('0' + parsed.national)),
+          national: parsed.national,
+          isMobile: Boolean(parsed.isMobile),
+          isLandline: Boolean(parsed.isLandline),
+          callUrl: parsed.callUrl || ''
+        });
+        continue;
       }
-    } else if (rawPhone) {
-      displayPhone = rawPhone;
-      phoneType = rawPhone.trim().startsWith('0') ? 'STD Landline' : 'Contact';
-      callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+      // Keep a number the parser could not classify instead of dropping it.
+      const text = String(value).trim();
+      if (!text) continue;
+      const digits = text.replace(/\D/g, '').slice(-10);
+      const key = digits.length === 10 ? digits : text.toLowerCase();
+      if (seenDigits.has(key)) continue;
+      seenDigits.add(key);
+      numbers.push({ display: text, national: '', isMobile: false, isLandline: false, callUrl: '' });
     }
 
-    const allPhones = Array.isArray(lead.phones) ? lead.phones : [];
-    const primaryDigits = parsed ? parsed.national : String(rawPhone).replace(/\D/g, '').slice(-10);
-    const seenAltDigits = new Set([primaryDigits]);
-    const alternatePhones = [];
-    for (const p of allPhones) {
-      const parsedAlt = normalizePhone(p);
-      const altDigits = parsedAlt ? parsedAlt.national : String(p).replace(/\D/g, '').slice(-10);
-      if (altDigits && altDigits.length >= 7 && !seenAltDigits.has(altDigits)) {
-        seenAltDigits.add(altDigits);
-        alternatePhones.push(parsedAlt ? parsedAlt.displayPhone : p);
-      }
-    }
-    const alternateStr = alternatePhones.join(', ');
-    const totalLinesCount = Math.max(1, (displayPhone ? 1 : 0) + alternatePhones.length);
+    const primary = numbers.find(n => n.isMobile) || null;
+    const secondary = numbers.filter(n => n !== primary);
+    const displayPhone = primary ? primary.display : '';
+    const phoneType = primary
+      ? 'Mobile'
+      : (secondary.some(n => n.isLandline) ? 'STD Landline' : (secondary.length ? 'Contact' : 'Unlisted'));
+    const whatsappUrl = primary ? `https://wa.me/91${primary.national}` : '';
+    const callUrl = (primary && primary.callUrl) || (secondary[0] && secondary[0].callUrl) || '';
+    const alternateStr = secondary.map(n => n.display).join(', ');
+    const totalLinesCount = numbers.length;
 
     const area = extractLeadArea(lead, options.city || lead.city);
     const notesStr = Array.isArray(lead.crmNotes)
@@ -622,9 +603,10 @@ function buildExportContent(leads, format, baseName, options = {}) {
       escapeCsv(lead.name),
       escapeCsv(lead.category),
       escapeCsv(area),
-      escapeCsv(displayPhone ? `\t${displayPhone}` : ''), // Leading tab preserves 0 in Excel
+      escapeCsv(displayPhone),
       escapeCsv(phoneType),
-      escapeCsv(alternateStr ? `\t${alternateStr}` : '—'),
+      // Leading tab keeps a landline's leading 0 alive in Excel.
+      escapeCsv(alternateStr ? `\t${alternateStr}` : ''),
       escapeCsv(totalLinesCount),
       escapeCsv(whatsappUrl),
       escapeCsv(callUrl),

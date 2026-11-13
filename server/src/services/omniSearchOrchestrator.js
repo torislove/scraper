@@ -1577,6 +1577,8 @@ async function runOmniSearchOrchestrator(
           if (contact.isMobile) {
             lead.phone = contact.displayPhone; // +91 ...
             lead.phoneType = 'mobile';
+            lead.isMobile = true;
+            lead.isLandline = false;
             lead.whatsappAvailable = true;
             lead.whatsappLink = `https://wa.me/91${contact.national}`;
             lead.callUrl = contact.callUrl;
@@ -1585,6 +1587,8 @@ async function runOmniSearchOrchestrator(
             // Authentic STD Landline starting with 0: strictly NO +91
             lead.phone = contact.displayPhone; // e.g. 040 2324 3798
             lead.phoneType = 'landline';
+            lead.isMobile = false;
+            lead.isLandline = true;
             lead.whatsappAvailable = false;
             lead.whatsappLink = '';
             lead.callUrl = contact.callUrl;
@@ -1600,6 +1604,8 @@ async function runOmniSearchOrchestrator(
         }
         if (nameCityKey) seenNameCities.add(nameCityKey);
         lead.phoneType = 'unknown';
+        lead.isMobile = false;
+        lead.isLandline = false;
         lead.whatsappAvailable = false;
         lead.whatsappLink = '';
         noContact.push(lead);

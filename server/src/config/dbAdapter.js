@@ -203,6 +203,8 @@ function admitLeads(list) {
 function saveVendor(userId, vendor) {
   if (!vendor || !vendor.id) return false;
   vendor.userId = userId || vendor.userId || 'admin_1';
+  // One parse decides every phone flag. See syncPhoneFlags().
+  try { require('../utils/phoneUtils').syncPhoneFlags(vendor); } catch (e) {}
 
   // Credit is charged only when this row creates a NEW lead. A row that merges
   // by Maps link or mobile into an existing lead is an update, not a new lead.
@@ -238,7 +240,9 @@ function deleteVendor(userId, vendorId) {
 }
 
 function updateVendorsBatch(userId, updatedList) {
-  const rows = (Array.isArray(updatedList) ? updatedList : []).map(v => ({ ...v, userId: userId || v.userId }));
+  const { syncPhoneFlags } = require('../utils/phoneUtils');
+  const rows = (Array.isArray(updatedList) ? updatedList : [])
+    .map(v => syncPhoneFlags({ ...v, userId: userId || v.userId }));
   vendorStore.upsertMany(rows);
 }
 
@@ -250,7 +254,8 @@ function updateVendorsBatch(userId, updatedList) {
 function saveVendors(data) {
   const incoming = Array.isArray(data) ? data.filter(Boolean) : [];
   if (!incoming.length) return;
-  vendorStore.upsertMany(admitLeads(incoming));
+  const { syncPhoneFlags } = require('../utils/phoneUtils');
+  vendorStore.upsertMany(admitLeads(incoming.map(vendor => syncPhoneFlags(vendor))));
 }
 
 /**
@@ -261,7 +266,8 @@ function saveVendors(data) {
  * the recovery bin stays understandable.
  */
 function replaceVendors(data, meta = {}) {
-  const rows = admitLeads(Array.isArray(data) ? data.filter(Boolean) : []);
+  const { syncPhoneFlags } = require('../utils/phoneUtils');
+  const rows = admitLeads(Array.isArray(data) ? data.filter(Boolean).map(vendor => syncPhoneFlags(vendor)) : []);
   const nextIds = new Set(rows.map(vendor => vendor && vendor.id).filter(Boolean));
   try {
     const removed = vendorStore.all().filter(vendor => vendor && vendor.id && !nextIds.has(vendor.id));

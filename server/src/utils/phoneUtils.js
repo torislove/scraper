@@ -476,11 +476,56 @@ function splitIndianAddress(address) {
   };
 }
 
+/**
+ * Keep a lead's phone flags consistent with its primary phone.
+ *
+ * Engines, the streaming backfill and the session vault each rewrote
+ * `phone`/`phoneType` at different moments but not always `isMobile` /
+ * `isLandline`. The result was rows like `{ phoneType: 'mobile',
+ * isLandline: true, isMobile: false }` for a perfectly valid mobile: lead
+ * scoring treated them as landlines and WhatsApp was denied.
+ *
+ * Deriving every boolean from one parse removes the contradiction. The helper
+ * never invents a number: if the primary phone is missing or unparseable, the
+ * row is returned untouched.
+ */
+function syncPhoneFlags(lead) {
+  if (!lead || typeof lead !== 'object') return lead;
+  const raw = lead.phone || lead.primaryPhone;
+  if (!raw) {
+    if (lead.phoneType === 'mobile' && !lead.isMobile) {
+      lead.isMobile = false;
+      lead.isLandline = false;
+    }
+    return lead;
+  }
+  const parsed = normalizePhone(raw, { context: 'phone mobile', trusted: true });
+  if (!parsed) return lead;
+
+  lead.isMobile = Boolean(parsed.isMobile);
+  lead.isLandline = Boolean(parsed.isLandline);
+  lead.callUrl = parsed.callUrl || lead.callUrl || '';
+
+  if (parsed.isMobile) {
+    lead.phoneType = 'mobile';
+    lead.whatsappAvailable = true;
+    // A validated mobile may carry a WhatsApp deep link. Keep an existing
+    // prefilled link; otherwise derive the plain one.
+    if (!lead.whatsappLink) lead.whatsappLink = `https://wa.me/91${parsed.national}`;
+  } else if (parsed.isLandline) {
+    lead.phoneType = 'landline';
+    lead.whatsappAvailable = false;
+    lead.whatsappLink = '';
+  }
+  return lead;
+}
+
 module.exports = {
   INDIAN_MOBILE_RE,
   isIndianMobile,
   isIndianLandline,
   normalizePhone,
+  syncPhoneFlags,
   extractPhones,
   pickBestPhone,
   toWhatsAppLink,
