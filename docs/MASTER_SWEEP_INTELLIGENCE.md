@@ -114,6 +114,14 @@ differently:
 | **State** | **all districts** (district HQ city query) **+ every sub-district** | full village enumeration (run a district sweep) | 1200 |
 | **City / town** | commercial localities / wards | surrounding rural mandals | 80 |
 
+Client searches (`POST /api/scrape/auto` without `x-workspace-scope: master`) use the
+same builders but are capped at **64 zones** per search and are limited to one city,
+town, mandal or village. The cap is applied after scope resolution
+(`CLIENT_ZONE_CAP` in `server/src/routes/scrape.js`), so a client run stays minutes
+instead of hours while Master keeps the full territorial coverage above. Before the
+cap, the universal builder and the scope policy disagreed (96–250 zones) and a
+client city search could run far longer than the UI promised.
+
 Implementation: `server/src/services/sweepScopePolicy.js` → `buildScopeZones(scope, name)`.
 
 District containment is territorial, not radial. A district plan carries `boundary`

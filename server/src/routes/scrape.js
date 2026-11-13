@@ -867,6 +867,18 @@ router.post('/auto', async (req, res) => {
       addLog(`[Auto Plan] Scope resolution error: ${scopeErr.message}`);
     }
 
+    // One city / town / village per client search, and a hard zone cap so a
+    // customer run stays minutes, not hours. Master keeps full territorial
+    // coverage (state 1200, district 2600, mandal 400, city 200). Before this
+    // cap, a client city search could resolve to 96+ zones because the
+    // universal builder and the scope policy disagreed on the limit.
+    const CLIENT_ZONE_CAP = 64;
+    if (!isMaster && Array.isArray(plan.zones) && plan.zones.length > CLIENT_ZONE_CAP) {
+      const before = plan.zones.length;
+      plan.zones = plan.zones.slice(0, CLIENT_ZONE_CAP);
+      addLog(`[Auto Plan] Client zone cap applied: ${CLIENT_ZONE_CAP} of ${before} zones for "${plan.location}" (district and state sweeps are Master-only).`);
+    }
+
     const explicitEngines = (Array.isArray(enabledEngines) && enabledEngines.length)
       ? enabledEngines
       : (Array.isArray(engines) && engines.length)

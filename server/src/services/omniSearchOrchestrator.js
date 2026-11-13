@@ -13,6 +13,7 @@ const outOfBoundsVault = require('./outOfBoundsVault');
 const categoryRouter = require('./categoryRouter');
 const brandIntel = require('./brandIntel');
 const engineHealth = require('./engineHealth');
+const requestGuard = require('../utils/requestGuard');
 const taxonomyLearner = require('./taxonomyLearner');
 const { isVendorRelevant } = require('./categoryFidelity');
 const { collectCarryForward, findRepeatCoveredZones } = require('./carryForwardService');
@@ -868,6 +869,33 @@ async function runOmniSearchOrchestrator(
     // Runs direct keyless HTTP engines (JustDial Mobile JSON + OSM Overpass POI) immediately
     // without queuing delays, streaming 30–120 rich leads into SSE right at second 0!
     if (hasEngine('justdial') || hasEngine('openstreetmap')) {
+      // Health and politeness must be recorded on this path too. These engines
+      // are invoked directly here (not through the queued task wrappers), and
+      // the board used to keep showing an old "empty" badge for an engine that
+      // was in fact returning rows on every sweep.
+      const runBurst = async (engineKey, label, fn) => {
+        const t0 = Date.now();
+        try {
+          const result = await fn();
+          const count = result && typeof result === 'object'
+            ? Number(result.totalScraped ?? result.newInserted ?? 0)
+            : 0;
+          engineHealth.recordRun(engineKey, {
+            ok: true,
+            ms: Date.now() - t0,
+            count,
+            note: `${label} turbo-burst`
+          });
+          requestGuard.observe(engineKey, { ok: true, result });
+          return result;
+        } catch (error) {
+          engineHealth.recordRun(engineKey, { ok: false, error: error.message, ms: Date.now() - t0 });
+          requestGuard.observe(engineKey, { ok: false, error: error.message });
+          addLog(`[Turbo-Burst] ${label} skipped: ${error.message}`);
+          return null;
+        }
+      };
+
       (async () => {
         try {
           addLog(`[Turbo-Burst] ⚡ Launching Tier-0 direct HTTP burst for instant first leads...`);
@@ -880,19 +908,19 @@ async function runOmniSearchOrchestrator(
           if (hasEngine('justdial')) {
             const { scrapeJustDial, setDeps: setJDDeps } = require('../scrapers/engine-justdial');
             if (typeof setJDDeps === 'function') setJDDeps({ logger: addLog, emitVendorEvent });
-            burstTasks.push(scrapeJustDial(category, cleanBaseCity, sessionId).catch(e => {}));
+            burstTasks.push(runBurst('justdial', 'JustDial', () => scrapeJustDial(category, cleanBaseCity, sessionId)));
           }
           if (hasEngine('openstreetmap')) {
             const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../scrapers/engine-openstreetmap');
             if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent });
-            burstTasks.push(scrapeOpenStreetMap(
+            burstTasks.push(runBurst('openstreetmap', 'OpenStreetMap', () => scrapeOpenStreetMap(
               category,
               cleanBaseCity,
               sessionId,
               baseGeo?.lat || null,
               baseGeo?.lng || null,
               Math.max(6, radiusKm + 5)
-            ).catch(e => {}));
+            )));
           }
           await Promise.allSettled(burstTasks);
           addLog(`[Turbo-Burst] 🚀 Tier-0 direct HTTP burst complete: first leads delivered to Command Center.`);

@@ -294,7 +294,12 @@ function buildEngineStatus(definition) {
   } else if (entry.lastSuccessAt) {
     if (entry.lastCount === 0) {
       status = 'empty';
-      message = entry.lastNote || 'Last run returned 0 rows';
+      // An empty result is honest information, not an explanation. Always say
+      // "0 rows" first, then append where the run came from.
+      const note = String(entry.lastNote || '').trim();
+      message = note && !/0 rows/i.test(note)
+        ? `Last run returned 0 rows · ${note}`
+        : (note || 'Last run returned 0 rows');
     } else {
       status = 'online';
       message = entry.lastCount == null ? 'Last run OK' : `Last run returned ${entry.lastCount} rows`;
