@@ -26,6 +26,7 @@ import {
   relativeTime
 } from './ui';
 import { parseIndianPhone, isIndianMobile, isIndianLandline } from '../utils/phoneClassify';
+import { createLiveStream } from './liveStream';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
 import {
@@ -514,12 +515,10 @@ export default function CommandCenter() {
 
   // SSE: logs, vendor events, progress with Auto-Reconnect supervisor
   useEffect(() => {
-    let es = null;
-    let reconnectTimer = null;
     let flushTimer = null;
     let microFlushTimer = null;
-    let bufferTimer = null;
     let mounted = true;
+    let stream = null;
     const vendorBuffer = [];
     const logBuffer = [];
 
@@ -596,215 +595,171 @@ export default function CommandCenter() {
       lastEventRef.current = Date.now();
     };
 
-    let retryAttempt = 0;
+    // Every reconnect creates a fresh EventSource, so listeners are bound here
+    // instead of once at mount. `open` / `error` / heartbeat scheduling lives
+    // in createLiveStream; this function only owns the data handlers.
+    const bindSource = es => {
+      es.addEventListener('init', event => {
+        try {
+          const data = JSON.parse(event.data);
+          if (Array.isArray(data)) setLogs(data.slice(-400));
+        } catch (error) { /* ignore */ }
+      });
 
-    const scheduleReconnect = (immediate = false) => {
-      if (!mounted) return;
-      updateSseStatus('error');
-      if (es) {
-        try { es.close(); } catch (e) { }
-        es = null;
-      }
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (immediate) {
-        connectStream();
-        return;
-      }
-      retryAttempt++;
-      setReconnectAttemptCount(retryAttempt);
-      const delay = Math.min(8000, 1000 * Math.pow(1.5, Math.min(retryAttempt, 5))) + Math.floor(Math.random() * 400);
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        if (mounted) connectStream();
-      }, delay);
-    };
-    reconnectStreamRef.current = scheduleReconnect;
+      es.addEventListener('vendor', event => {
+        try {
+          const payload = JSON.parse(event.data);
+          const vendor = payload?.vendor;
+          if (!vendor || !vendor.id) return;
+          if (payload.action === 'out-of-bounds') return;
+          lastEventRef.current = Date.now();
+          if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
 
-    const connectStream = () => {
-      if (!mounted) return;
-      if (es) {
-        try { es.close(); } catch (e) { }
-      }
-      try {
-        updateSseStatus('connecting');
-        es = new EventSource(streamUrl());
-
-        es.addEventListener('open', () => {
-          if (!mounted) return;
-          updateSseStatus('open');
-          retryAttempt = 0;
-          setReconnectAttemptCount(0);
-          if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            reconnectTimer = null;
+          if (runRef.current?.status === 'running') {
+            const currentSid = runRef.current.sessionId || runRef.current.id;
+            if (currentSid) {
+              vendor.sessionId = currentSid;
+              vendor.lastSessionId = currentSid;
+              vendor.sessionIds = Array.isArray(vendor.sessionIds)
+                ? Array.from(new Set([...vendor.sessionIds, currentSid]))
+                : [currentSid];
+            }
+            runVendorIdsRef.current.add(vendor.id);
+            setRunLeadCount(runVendorIdsRef.current.size);
           }
-          // The stream is live again; folder counts were fetched while the
-          // server was unreachable, so pull them once more.
-          refresh();
-        });
 
-        es.addEventListener('error', () => {
-          if (!mounted) return;
-          scheduleReconnect(false);
-        });
+          vendorBuffer.push(vendor);
+          const locLabel = vendor.zoneName || vendor.locality || vendor.mandal || vendor.city || vendor.village || 'location unknown';
+          pushLog(`[LEAD] ${vendor.name || vendor.id} · ${vendor.phone || 'no phone'} · 📍 ${locLabel}`);
+          scheduleMicroFlush();
+        } catch (error) { /* ignore */ }
+      });
 
-        es.addEventListener('init', event => {
-          try {
-            const data = JSON.parse(event.data);
-            if (Array.isArray(data)) setLogs(data.slice(-400));
-          } catch (error) { /* ignore */ }
-        });
+      es.addEventListener('progress', event => {
+        try {
+          const data = JSON.parse(event.data);
+          const currentRun = runRef.current;
+          const currentId = currentRun?.sessionId || currentRun?.id;
+          // SSE is broadcast to every workspace. Ignore events from another
+          // session so one run can never pause or complete the one on screen.
+          if (currentId && data?.sessionId && data.sessionId !== currentId) return;
 
-        es.addEventListener('vendor', event => {
-          try {
-            const payload = JSON.parse(event.data);
-            const vendor = payload?.vendor;
-            if (!vendor || !vendor.id) return;
-            if (payload.action === 'out-of-bounds') return;
-            lastEventRef.current = Date.now();
-            if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
-
-            if (runRef.current?.status === 'running') {
-              const currentSid = runRef.current.sessionId || runRef.current.id;
-              if (currentSid) {
-                vendor.sessionId = currentSid;
-                vendor.lastSessionId = currentSid;
-                vendor.sessionIds = Array.isArray(vendor.sessionIds)
-                  ? Array.from(new Set([...vendor.sessionIds, currentSid]))
-                  : [currentSid];
+          lastEventRef.current = Date.now();
+          setProgress(data);
+          if (typeof data?.sessionActive === 'boolean') {
+            if (!data.sessionActive) {
+              setScanning(false);
+              const explicitStop = data.aborted === true
+                || ['aborted', 'failed', 'interrupted'].includes(String(data.status || '').toLowerCase());
+              const totalZ = Number(data.totalMandals || data.totalMandalsAcrossAll) || 0;
+              const doneZ = Number(data.completedMandals ?? data.overallCompletedMandals) || 0;
+              const incomplete = totalZ > 0 && doneZ < totalZ;
+              if (currentRun?.status === 'running' && (explicitStop || incomplete)) {
+                setRun(prev => ({
+                  ...(prev || {}),
+                  id: data.sessionId || prev?.id,
+                  sessionId: data.sessionId || prev?.sessionId,
+                  status: explicitStop ? (String(data.status || '').toLowerCase() || 'aborted') : 'interrupted',
+                  completedZones: doneZ,
+                  totalZones: totalZ,
+                  leadCount: prev?.leadCount
+                }));
+                toast.error(`⚠️ Scrape stopped (${doneZ}/${totalZ || '?'} zones done). Choose "Continue Scrape" to resume.`, { id: 'scrape-stop-alert', duration: 8000 });
               }
-              runVendorIdsRef.current.add(vendor.id);
-              setRunLeadCount(runVendorIdsRef.current.size);
+            } else {
+              setScanning(true);
             }
+          }
+        } catch (error) { /* ignore */ }
+      });
 
-            vendorBuffer.push(vendor);
-            const locLabel = vendor.zoneName || vendor.locality || vendor.mandal || vendor.city || vendor.village || 'location unknown';
-            pushLog(`[LEAD] ${vendor.name || vendor.id} · ${vendor.phone || 'no phone'} · 📍 ${locLabel}`);
-            scheduleMicroFlush();
-          } catch (error) { /* ignore */ }
-        });
+      es.addEventListener('dispatch_targets', event => {
+        try {
+          const targets = JSON.parse(event.data);
+          if (Array.isArray(targets) && targets.length) pushLog(`[DISPATCH] ${targets.length} zone targets armed: ${targets.slice(0, 5).join(', ')}${targets.length > 5 ? '…' : ''}`);
+        } catch (error) { /* ignore */ }
+      });
 
-        es.addEventListener('progress', event => {
-          try {
-            const data = JSON.parse(event.data);
-            const currentRun = runRef.current;
-            const currentId = currentRun?.sessionId || currentRun?.id;
-            // SSE is broadcast to every workspace. Ignore events from another
-            // session so one run can never pause or complete the one on screen.
-            if (currentId && data?.sessionId && data.sessionId !== currentId) return;
+      es.addEventListener('grid_points', event => {
+        try {
+          const points = JSON.parse(event.data);
+          const grid = Array.isArray(points) ? points : [];
+          const zoneEntry = grid.find(item => Array.isArray(item.zones) && item.zones.length);
+          if (zoneEntry) {
+            setGridZones(zoneEntry.zones);
+            pushLog(`[GRID] ${zoneEntry.zones.length} coverage zones anchored.`);
+          } else if (grid.length) {
+            pushLog(`[GRID] ${grid.length} geocoded grid points received.`);
+          }
+        } catch (error) { /* ignore */ }
+      });
 
-            lastEventRef.current = Date.now();
-            setProgress(data);
-            if (typeof data?.sessionActive === 'boolean') {
-              if (!data.sessionActive) {
-                setScanning(false);
-                const explicitStop = data.aborted === true
-                  || ['aborted', 'failed', 'interrupted'].includes(String(data.status || '').toLowerCase());
-                const totalZ = Number(data.totalMandals || data.totalMandalsAcrossAll) || 0;
-                const doneZ = Number(data.completedMandals ?? data.overallCompletedMandals) || 0;
-                const incomplete = totalZ > 0 && doneZ < totalZ;
-                if (currentRun?.status === 'running' && (explicitStop || incomplete)) {
-                  setRun(prev => ({
-                    ...(prev || {}),
-                    id: data.sessionId || prev?.id,
-                    sessionId: data.sessionId || prev?.sessionId,
-                    status: explicitStop ? (String(data.status || '').toLowerCase() || 'aborted') : 'interrupted',
-                    completedZones: doneZ,
-                    totalZones: totalZ,
-                    leadCount: prev?.leadCount
-                  }));
-                  toast.error(`⚠️ Scrape stopped (${doneZ}/${totalZ || '?'} zones done). Choose "Continue Scrape" to resume.`, { id: 'scrape-stop-alert', duration: 8000 });
-                }
-              } else {
-                setScanning(true);
-              }
-            }
-          } catch (error) { /* ignore */ }
-        });
+      es.addEventListener('active_point', event => {
+        try {
+          const point = JSON.parse(event.data);
+          if (!point || point.completed) return;
+          if (runRef.current?.status === 'stopped' || runRef.current?.status === 'complete') return;
+          const lat = Number(point.lat);
+          const lng = Number(point.lng);
+          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98;
+          if (point.zoneName) {
+            setActiveZone(prev => ({
+              name: point.zoneName,
+              lat: hasCoords ? lat : prev?.lat,
+              lng: hasCoords ? lng : prev?.lng
+            }));
+            pushLog(`[ZONE] searching ${point.zoneName}`);
+          }
+          setScanning(true);
+          lastEventRef.current = Date.now();
+        } catch (error) { /* ignore */ }
+      });
 
-        es.addEventListener('dispatch_targets', event => {
-          try {
-            const targets = JSON.parse(event.data);
-            if (Array.isArray(targets) && targets.length) pushLog(`[DISPATCH] ${targets.length} zone targets armed: ${targets.slice(0, 5).join(', ')}${targets.length > 5 ? '…' : ''}`);
-          } catch (error) { /* ignore */ }
-        });
-
-        es.addEventListener('grid_points', event => {
-          try {
-            const points = JSON.parse(event.data);
-            const grid = Array.isArray(points) ? points : [];
-            const zoneEntry = grid.find(item => Array.isArray(item.zones) && item.zones.length);
-            if (zoneEntry) {
-              setGridZones(zoneEntry.zones);
-              pushLog(`[GRID] ${zoneEntry.zones.length} coverage zones anchored.`);
-            } else if (grid.length) {
-              pushLog(`[GRID] ${grid.length} geocoded grid points received.`);
-            }
-          } catch (error) { /* ignore */ }
-        });
-
-        es.addEventListener('active_point', event => {
-          try {
-            const point = JSON.parse(event.data);
-            if (!point || point.completed) return;
-            if (runRef.current?.status === 'stopped' || runRef.current?.status === 'complete') return;
-            const lat = Number(point.lat);
-            const lng = Number(point.lng);
-            const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98;
-            if (point.zoneName) {
-              setActiveZone(prev => ({
-                name: point.zoneName,
-                lat: hasCoords ? lat : prev?.lat,
-                lng: hasCoords ? lng : prev?.lng
-              }));
-              pushLog(`[ZONE] searching ${point.zoneName}`);
-            }
-            setScanning(true);
-            lastEventRef.current = Date.now();
-          } catch (error) { /* ignore */ }
-        });
-
-        es.onmessage = event => pushLog(event.data);
-      } catch (error) {
-        scheduleReconnect(false);
-      }
+      es.onmessage = event => pushLog(event.data);
     };
 
-    const onWakeup = () => {
-      if (!mounted) return;
-      if (sseStatusRef.current !== 'open') {
-        scheduleReconnect(true);
+    stream = createLiveStream({
+      url: streamUrl(),
+      onSource: bindSource,
+      onStatus: status => {
+        if (!mounted) return;
+        updateSseStatus(status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error');
+        if (status === 'open') {
+          // Folder counts were fetched while the server was unreachable, so
+          // pull them once more now that the feed is live again.
+          refresh();
+        }
+      },
+      onAttempt: count => {
+        if (mounted) setReconnectAttemptCount(count);
       }
+    });
+    reconnectStreamRef.current = () => {
+      if (stream) stream.reconnect();
+    };
+
+    // The stream owner handles online/focus/visibility. This custom event is
+    // raised by the API layer only when the engine genuinely comes back after
+    // being unreachable (edge-triggered), or by the desktop shell after a local
+    // engine restart. A healthy socket is never torn down here: reconnect()
+    // would otherwise cost a stream on every recovery notification.
+    const onServerOnline = () => {
+      if (!mounted) return;
+      if (stream && stream.status !== 1) stream.reconnect();
       refresh();
     };
+    window.addEventListener('leadharvest:server_online', onServerOnline);
 
-    window.addEventListener('online', onWakeup);
-    window.addEventListener('focus', onWakeup);
-    window.addEventListener('leadharvest:server_online', onWakeup);
-
-    connectStream();
+    stream.start();
 
     flushTimer = setInterval(flushBuffers, 250);
 
-    bufferTimer = setInterval(() => {
-      lastEventRef.current = Date.now();
-    }, 15000);
-
     return () => {
       mounted = false;
-      window.removeEventListener('online', onWakeup);
-      window.removeEventListener('focus', onWakeup);
-      window.removeEventListener('leadharvest:server_online', onWakeup);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      window.removeEventListener('leadharvest:server_online', onServerOnline);
       if (flushTimer) clearInterval(flushTimer);
       if (microFlushTimer) clearTimeout(microFlushTimer);
-      if (bufferTimer) clearInterval(bufferTimer);
-      if (es) {
-        try { es.close(); } catch (e) { }
-      }
+      if (stream) stream.stop();
     };
   }, []);
 

@@ -108,7 +108,18 @@ app.use(express.urlencoded({ limit: '2mb', extended: true }));
 
 // Broad ceiling for every API call, then a stricter one for writes and an even
 // stricter one for endpoints that start real work.
-app.use('/api', security.createRateLimiter({ windowMs: 60_000, max: 2400, name: 'API' }));
+//
+// Liveness and stream endpoints are exempt by design. They are the two things a
+// dashboard uses to decide whether the engine is alive; throttling them turns a
+// routine burst into a false "engine offline" state, which is exactly what used
+// to produce an endless reconnect banner. The stream hub already bounds the
+// number of open sockets, so this is not an unbounded hole.
+const apiLimiter = security.createRateLimiter({ windowMs: 60_000, max: 2400, name: 'API' });
+const LIMIT_EXEMPT = /^\/(health|app\/info|logs\/stream|scrape\/stream\/)/;
+app.use('/api', (req, res, next) => {
+  if (LIMIT_EXEMPT.test(req.path)) return next();
+  return apiLimiter(req, res, next);
+});
 app.use('/api', security.sanitizeRequest);
 app.use('/api', (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
@@ -121,8 +132,8 @@ app.use('/api/scrape', (req, res, next) => {
 });
 
 // System Logging State & SSE
+const liveStreams = require('./src/services/liveStreams');
 let systemLogs = [];
-let sseClients = [];
 
 /* ------------------------------------------------------------------ */
 /* Vendor SSE batching                                                 */
@@ -138,8 +149,6 @@ const VENDOR_SSE_FLUSH_MS = 100;
 const VENDOR_OUTBOX_MAX = 400;
 let vendorOutbox = [];
 let vendorFlushTimer = null;
-// Dedicated per-session streams (/api/scrape/stream/:sessionId).
-const sessionStreams = new Map();
 
 function vendorBelongsToSession(vendor, sessionId) {
   if (!vendor || !sessionId) return false;
@@ -155,27 +164,44 @@ function flushVendorOutbox() {
   if (!vendorOutbox.length) return;
   const batch = vendorOutbox;
   vendorOutbox = [];
-  const globalFrame = batch.map(entry => `event: vendor\ndata: ${entry.data}\n\n`).join('');
-  sseClients.forEach(res => {
-    try { res.write(globalFrame); } catch (e) {}
-  });
-  for (const [sessionId, clients] of sessionStreams) {
-    const frame = batch
-      .filter(entry => vendorBelongsToSession(entry.vendor, sessionId))
-      .map(entry => `event: vendor\ndata: ${entry.data}\n\n`)
-      .join('');
-    if (!frame) continue;
-    clients.forEach(res => {
-      try { res.write(frame); } catch (e) {}
-    });
+  liveStreams.broadcastVendorBatch(batch, vendorBelongsToSession);
+}
+
+/* Console lines are coalesced the same way vendor rows are. A live sweep can
+   print several lines per lead; one socket write per line was pure overhead and
+   made a slow dashboard buffer thousands of tiny frames. */
+const LOG_SSE_FLUSH_MS = 120;
+const LOG_OUTBOX_MAX = 60;
+let logOutbox = [];
+let logFlushTimer = null;
+
+function flushLogOutbox() {
+  if (logFlushTimer) {
+    clearTimeout(logFlushTimer);
+    logFlushTimer = null;
   }
+  if (!logOutbox.length) return;
+  const batch = logOutbox;
+  logOutbox = [];
+  // The contract is unchanged: unnamed `data:` frames that the console renders
+  // as plain lines. Batch them into one write per client.
+  liveStreams.broadcastRaw(batch.map(line => `data: ${String(line).replace(/\n/g, '\\n')}\n\n`).join(''));
 }
 
 function sendSse(msg) {
-  const safe = msg.replace(/\n/g, '\\n');
-  sseClients.forEach(res => {
-    try { res.write(`data: ${safe}\n\n`); } catch (e) {}
-  });
+  if (!msg) return;
+  logOutbox.push(msg);
+  if (logOutbox.length >= LOG_OUTBOX_MAX) {
+    flushLogOutbox();
+    return;
+  }
+  if (!logFlushTimer) {
+    logFlushTimer = setTimeout(() => {
+      logFlushTimer = null;
+      flushLogOutbox();
+    }, LOG_SSE_FLUSH_MS);
+    if (typeof logFlushTimer.unref === 'function') logFlushTimer.unref();
+  }
 }
 
 function addLog(msg) {
@@ -231,47 +257,31 @@ function emitVendorEvent(vendorObj, action = 'inserted') {
 
 function emitGridEvent(gridCoords) {
   try {
-    const safe = JSON.stringify(gridCoords).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: grid_points\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    liveStreams.broadcastEvent('grid_points', gridCoords);
   } catch (e) { console.error('Failed to emit grid SSE', e.message); }
 }
 
 function emitInterventionEvent(platformName, isActive) {
   try {
-    const payload = { platform: platformName, active: isActive };
-    const safe = JSON.stringify(payload).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: intervention\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    liveStreams.broadcastEvent('intervention', { platform: platformName, active: isActive });
   } catch (e) { console.error('Failed to emit intervention SSE', e.message); }
 }
 
 function emitDispatchEvent(targets) {
   try {
-    const safe = JSON.stringify(targets).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: dispatch_targets\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    liveStreams.broadcastEvent('dispatch_targets', targets);
   } catch (e) { console.error('Failed to emit dispatch_targets SSE', e.message); }
 }
 
 function emitActivePointEvent(pointInfo) {
   try {
-    const safe = JSON.stringify(pointInfo).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: active_point\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    liveStreams.broadcastEvent('active_point', pointInfo);
   } catch (e) { console.error('Failed to emit active_point SSE', e.message); }
 }
 
 function emitProgressEvent(progressInfo) {
   try {
-    const safe = JSON.stringify(progressInfo).replace(/\n/g, '\\n');
-    sseClients.forEach(res => {
-      try { res.write('event: progress\n'); res.write(`data: ${safe}\n\n`); } catch (e) {}
-    });
+    liveStreams.broadcastEvent('progress', progressInfo);
   } catch (e) { console.error('Failed to emit progress SSE', e.message); }
 }
 
@@ -450,7 +460,8 @@ app.get('/api/health', (req, res) => {
     timestamp: Date.now(),
     uptime: Math.round(process.uptime()),
     pid: process.pid,
-    store: vendorStore.ownership()
+    store: vendorStore.ownership(),
+    streams: liveStreams.health()
   });
 });
 
@@ -513,39 +524,16 @@ app.get('/api/license/status', (req, res) => {
   });
 });
 
-// Log Streaming Route (supports both /logs/stream and /api/logs/stream)
+// Log Streaming Route (supports both /logs/stream and /api/logs/stream).
+// Lifecycle, heartbeats and the connection cap are owned by liveStreams so a
+// stale socket can never permanently lock a dashboard out of the feed.
 const handleLogStream = (req, res) => {
-  if (sseClients.length >= 25) {
-    return res.status(503).json({ error: 'too_many_streams', message: 'Close an old dashboard tab and retry.' });
+  try {
+    liveStreams.attachLog(req, res, systemLogs);
+  } catch (err) {
+    console.error('[SSE] log stream attach failed:', err.message);
+    try { res.end(); } catch (e) { /* already closed */ }
   }
-  res.set({
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-  if (typeof res.flushHeaders === 'function') {
-    res.flushHeaders();
-  }
-
-  res.write('event: init\n');
-  res.write(`data: ${JSON.stringify(systemLogs).replace(/\n/g, '\\n')}\n\n`);
-
-  sseClients.push(res);
-
-  // Periodic heartbeat every 15s to keep Vite proxy & browser EventSource active
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(':ping\n\n');
-    } catch (e) {
-      clearInterval(heartbeat);
-    }
-  }, 15000);
-
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    sseClients = sseClients.filter(r => r !== res);
-  });
 };
 
 app.get('/api/logs/stream', handleLogStream);
@@ -557,38 +545,12 @@ app.get('/logs/stream', handleLogStream);
 app.get('/api/scrape/stream/:sessionId', (req, res) => {
   const sessionId = String(req.params.sessionId || '').trim();
   if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
-  if (sessionStreams.size >= 50) {
-    return res.status(503).json({ error: 'too_many_streams' });
+  try {
+    liveStreams.attachSession(req, res, sessionId);
+  } catch (err) {
+    console.error('[SSE] session stream attach failed:', err.message);
+    try { res.end(); } catch (e) { /* already closed */ }
   }
-  const existing = sessionStreams.get(sessionId);
-  if (existing && existing.size >= 10) {
-    return res.status(503).json({ error: 'too_many_streams', message: 'This run already has 10 live viewers.' });
-  }
-  res.set({
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-  if (typeof res.flushHeaders === 'function') res.flushHeaders();
-  res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, status: 'listening' })}\n\n`);
-
-  let clients = sessionStreams.get(sessionId);
-  if (!clients) {
-    clients = new Set();
-    sessionStreams.set(sessionId, clients);
-  }
-  clients.add(res);
-
-  const heartbeat = setInterval(() => {
-    try { res.write(':ping\n\n'); } catch (e) { clearInterval(heartbeat); }
-  }, 15000);
-
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    clients.delete(res);
-    if (!clients.size) sessionStreams.delete(sessionId);
-  });
 });
 
 // ---------------------------------------------------------------------------

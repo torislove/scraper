@@ -24,6 +24,7 @@ import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
   relativeTime
 } from './ui';
+import { createLiveStream } from './liveStream';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
 import {
@@ -2555,6 +2556,8 @@ export default function CommandCenter() {
   }, []);
   const [logs, setLogs] = useState(['[BOOT] command center initialised.', '[WAIT] connecting to backend signal…']);
   const [sseStatus, setSseStatus] = useState('connecting');
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const reconnectStreamRef = useRef(null);
   const [progress, setProgress] = useState(null);
   const [runLeadCount, setRunLeadCount] = useState(0);
   const [run, setRun] = useState(null);
@@ -2750,9 +2753,7 @@ export default function CommandCenter() {
 
   // SSE: logs, vendor events, progress.
   useEffect(() => {
-    let es;
     let flushTimer;
-    let bufferTimer;
     const vendorBuffer = [];
     const logBuffer = [];
 
@@ -2762,12 +2763,10 @@ export default function CommandCenter() {
       lastEventRef.current = Date.now();
     };
 
-    try {
-      es = new EventSource(streamUrl());
-      setSseStatus('connecting');
-      es.addEventListener('open', () => setSseStatus('open'));
-      es.addEventListener('error', () => setSseStatus('error'));
-
+    // A fresh EventSource is created on every reconnect, so the data handlers
+    // are bound each time. Transport, backoff and liveness live in
+    // createLiveStream — the old code never reconnected at all.
+    const bindSource = es => {
       es.addEventListener('init', event => {
         try {
           const data = JSON.parse(event.data);
@@ -2844,8 +2843,9 @@ export default function CommandCenter() {
       });
 
       es.onmessage = event => pushLog(event.data);
+    };
 
-      flushTimer = setInterval(() => {
+    flushTimer = setInterval(() => {
         if (vendorBuffer.length) {
           const incoming = vendorBuffer.splice(0, vendorBuffer.length);
           setVendors(prev => {
@@ -2905,17 +2905,18 @@ export default function CommandCenter() {
         }
       }, 420);
 
-      bufferTimer = setInterval(() => {
-        lastEventRef.current = Date.now();
-      }, 15000);
-    } catch (error) {
-      setSseStatus('error');
-    }
+    const stream = createLiveStream({
+      url: streamUrl(),
+      onSource: bindSource,
+      onStatus: status => setSseStatus(status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error'),
+      onAttempt: count => setReconnectAttempts(count)
+    });
+    reconnectStreamRef.current = () => stream.reconnect();
+    stream.start();
 
     return () => {
       if (flushTimer) clearInterval(flushTimer);
-      if (bufferTimer) clearInterval(bufferTimer);
-      if (es) es.close();
+      stream.stop();
     };
   }, []);
 
@@ -3721,6 +3722,55 @@ export default function CommandCenter() {
   return (
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
+
+      {sseStatus !== 'open' && (
+        <div
+          className="v2-network-alert-banner is-error"
+          style={{
+            background: 'linear-gradient(90deg, #d97706 0%, #b45309 100%)',
+            color: '#FFFFFF',
+            padding: '7px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            fontSize: '12px',
+            fontWeight: 600,
+            zIndex: 9999,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            borderBottom: '1px solid rgba(255,255,255,0.2)'
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <RefreshCw size={14} className="v2-spin" />
+            <span>
+              <b>{sseStatus === 'connecting' ? 'Connecting to your engine:' : 'Engine stream reconnecting:'}</b>{' '}
+              {sseStatus === 'connecting'
+                ? 'opening the live lead feed…'
+                : `attempt #${reconnectAttempts || 1}. Leads on screen stay visible; new leads appear as soon as the engine answers.`}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={() => { if (reconnectStreamRef.current) reconnectStreamRef.current(); }}
+            style={{
+              background: '#FFFFFF',
+              color: '#B45309',
+              border: 'none',
+              borderRadius: 5,
+              padding: '3px 10px',
+              fontSize: 11,
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5
+            }}
+          >
+            <RefreshCw size={11} /> Reconnect Now
+          </button>
+        </div>
+      )}
 
       <header className="v2-cmd-top">
         <div className="v2-cmd-brand">

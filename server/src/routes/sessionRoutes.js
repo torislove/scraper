@@ -950,6 +950,125 @@ router.get(['/list', '/list/:userId'], (req, res) => {
   }
 });
 
+// -----------------------------------------------------------------------------
+// All-India Territory & Villages SEO API (633 Districts & 619,290 Villages)
+// -----------------------------------------------------------------------------
+const { getTerritorySummary, searchTerritory } = require('../utils/territoryHelper');
+
+router.get('/territory/summary', (req, res) => {
+  try {
+    const summary = getTerritorySummary();
+    res.json({
+      success: true,
+      totalStates: summary.length,
+      totalDistricts: summary.reduce((acc, s) => acc + s.districtCount, 0),
+      totalMandals: 5920,
+      totalVillages: 619290,
+      states: summary
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve territory summary' });
+  }
+});
+
+router.get('/territory/search', (req, res) => {
+  try {
+    const q = req.query.q || '';
+    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
+    const results = searchTerritory(q, limit);
+    res.json({
+      success: true,
+      query: q,
+      count: results.length,
+      results
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Territory search failed' });
+  }
+});
+
+// Download sample God-Level Excel workbook directly from landing page
+router.get('/export/sample-excel', async (req, res) => {
+  try {
+    const category = req.query.category || 'Dental Clinics';
+    const city = req.query.city || 'Guntur';
+    const { buildGodLevelExcelBuffer } = require('../utils/godLevelExcelGenerator');
+
+    const sampleLeads = [
+      {
+        name: 'Kalyani Multispeciality Dental Clinic',
+        owner: 'Dr. K. Srinivas Rao, MDS (Managing Director)',
+        phone: '+91 76750 71081',
+        secondaryPhone: '+91 98480 23145',
+        email: 'contact@kalyanidental.com',
+        address: '4th Line, Brodipet, Guntur - 522002',
+        rating: 4.9,
+        reviewsCount: 420,
+        socialProfile: 'https://instagram.com/kalyanidental',
+        waMessage: 'Hello Dr. Srinivas Rao, reaching out from Scraper.co.in regarding premium dental implants distribution in Guntur.'
+      },
+      {
+        name: 'Happy Dental Hospital & Implant Centre',
+        owner: 'Dr. P. Venkat Reddy (Chief Implantologist)',
+        phone: '+91 80084 91391',
+        secondaryPhone: '',
+        email: 'info@happydental.in',
+        address: 'Main Road, Arundelpet, Guntur - 522002',
+        rating: 4.8,
+        reviewsCount: 315,
+        socialProfile: '',
+        waMessage: 'Hi Dr. Venkat Reddy, connecting regarding dental digital imaging solutions and patient appointment CRM.'
+      },
+      {
+        name: 'Siri Super Speciality Dental Hospital',
+        owner: 'Dr. M. Chaitanya Kumar (Oral Surgeon)',
+        phone: '+91 70363 51100',
+        secondaryPhone: '+91 94401 55678',
+        email: 'support@siridental.com',
+        address: 'Opp. Hindu College, Guntur - 522003',
+        rating: 4.8,
+        reviewsCount: 260,
+        socialProfile: 'https://facebook.com/siridental',
+        waMessage: 'Hello Dr. Chaitanya, contacting you regarding specialized surgical tools and autoclave sterilization supplies.'
+      },
+      {
+        name: 'Guntur Dental Care & Laser Centre',
+        owner: 'Dr. Anusha Reddy (Owner & Cosmetologist)',
+        phone: '+91 99890 12344',
+        secondaryPhone: '',
+        email: 'care@gunturdental.com',
+        address: 'Lakshmipuram Main Road, Guntur - 522007',
+        rating: 4.7,
+        reviewsCount: 185,
+        socialProfile: '',
+        waMessage: 'Hello Dr. Anusha, reaching out regarding painless laser dentistry consumables and patient outreach.'
+      },
+      {
+        name: 'Venkateswara Dental Orthodontic Clinic',
+        owner: 'Dr. B. Prasad Rao (Consultant Orthodontist)',
+        phone: '+91 98495 67890',
+        secondaryPhone: '',
+        email: '',
+        address: 'Old Club Road, Kothapet, Guntur - 522001',
+        rating: 4.8,
+        reviewsCount: 220,
+        socialProfile: '',
+        waMessage: 'Namaste Dr. Prasad Rao, connecting regarding invisible aligners and orthodontic bracket wholesale pricing.'
+      }
+    ];
+
+    const buffer = await buildGodLevelExcelBuffer(sampleLeads, { city, category });
+    const cleanFilename = `God_Level_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${city.replace(/[^a-zA-Z0-9]/g, '_')}_Leads.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('Sample excel generation error:', err);
+    res.status(500).json({ error: 'Failed to generate sample Excel' });
+  }
+});
+
 // 3. Export a session by id alone (used by the V2 folder cards).
 router.get('/export/:sessionId', async (req, res) => {
   try {
@@ -1429,124 +1548,6 @@ router.get('/export/:userId/:sessionId', async (req, res) => {
   }
 });
 
-// -----------------------------------------------------------------------------
-// All-India Territory & Villages SEO API (633 Districts & 619,290 Villages)
-// -----------------------------------------------------------------------------
-const { getTerritorySummary, searchTerritory } = require('../utils/territoryHelper');
-
-router.get('/territory/summary', (req, res) => {
-  try {
-    const summary = getTerritorySummary();
-    res.json({
-      success: true,
-      totalStates: summary.length,
-      totalDistricts: summary.reduce((acc, s) => acc + s.districtCount, 0),
-      totalMandals: 5920,
-      totalVillages: 619290,
-      states: summary
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to retrieve territory summary' });
-  }
-});
-
-router.get('/territory/search', (req, res) => {
-  try {
-    const q = req.query.q || '';
-    const limit = Math.min(parseInt(req.query.limit) || 25, 100);
-    const results = searchTerritory(q, limit);
-    res.json({
-      success: true,
-      query: q,
-      count: results.length,
-      results
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Territory search failed' });
-  }
-});
-
-// Download sample God-Level Excel workbook directly from landing page
-router.get('/export/sample-excel', async (req, res) => {
-  try {
-    const category = req.query.category || 'Dental Clinics';
-    const city = req.query.city || 'Guntur';
-    const { buildGodLevelExcelBuffer } = require('../utils/godLevelExcelGenerator');
-
-    const sampleLeads = [
-      {
-        name: 'Kalyani Multispeciality Dental Clinic',
-        owner: 'Dr. K. Srinivas Rao, MDS (Managing Director)',
-        phone: '+91 76750 71081',
-        secondaryPhone: '+91 98480 23145',
-        email: 'contact@kalyanidental.com',
-        address: '4th Line, Brodipet, Guntur - 522002',
-        rating: 4.9,
-        reviewsCount: 420,
-        socialProfile: 'https://instagram.com/kalyanidental',
-        waMessage: 'Hello Dr. Srinivas Rao, reaching out from Scraper.co.in regarding premium dental implants distribution in Guntur.'
-      },
-      {
-        name: 'Happy Dental Hospital & Implant Centre',
-        owner: 'Dr. P. Venkat Reddy (Chief Implantologist)',
-        phone: '+91 80084 91391',
-        secondaryPhone: '',
-        email: 'info@happydental.in',
-        address: 'Main Road, Arundelpet, Guntur - 522002',
-        rating: 4.8,
-        reviewsCount: 315,
-        socialProfile: '',
-        waMessage: 'Hi Dr. Venkat Reddy, connecting regarding dental digital imaging solutions and patient appointment CRM.'
-      },
-      {
-        name: 'Siri Super Speciality Dental Hospital',
-        owner: 'Dr. M. Chaitanya Kumar (Oral Surgeon)',
-        phone: '+91 70363 51100',
-        secondaryPhone: '+91 94401 55678',
-        email: 'support@siridental.com',
-        address: 'Opp. Hindu College, Guntur - 522003',
-        rating: 4.8,
-        reviewsCount: 260,
-        socialProfile: 'https://facebook.com/siridental',
-        waMessage: 'Hello Dr. Chaitanya, contacting you regarding specialized surgical tools and autoclave sterilization supplies.'
-      },
-      {
-        name: 'Guntur Dental Care & Laser Centre',
-        owner: 'Dr. Anusha Reddy (Owner & Cosmetologist)',
-        phone: '+91 99890 12344',
-        secondaryPhone: '',
-        email: 'care@gunturdental.com',
-        address: 'Lakshmipuram Main Road, Guntur - 522007',
-        rating: 4.7,
-        reviewsCount: 185,
-        socialProfile: '',
-        waMessage: 'Hello Dr. Anusha, reaching out regarding painless laser dentistry consumables and patient outreach.'
-      },
-      {
-        name: 'Venkateswara Dental Orthodontic Clinic',
-        owner: 'Dr. B. Prasad Rao (Consultant Orthodontist)',
-        phone: '+91 98495 67890',
-        secondaryPhone: '',
-        email: '',
-        address: 'Old Club Road, Kothapet, Guntur - 522001',
-        rating: 4.8,
-        reviewsCount: 220,
-        socialProfile: '',
-        waMessage: 'Namaste Dr. Prasad Rao, connecting regarding invisible aligners and orthodontic bracket wholesale pricing.'
-      }
-    ];
-
-    const buffer = await buildGodLevelExcelBuffer(sampleLeads, { city, category });
-    const cleanFilename = `God_Level_${category.replace(/[^a-zA-Z0-9]/g, '_')}_${city.replace(/[^a-zA-Z0-9]/g, '_')}_Leads.xlsx`;
-
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"`);
-    return res.send(buffer);
-  } catch (err) {
-    console.error('Sample excel generation error:', err);
-    res.status(500).json({ error: 'Failed to generate sample Excel' });
-  }
-});
 
 router.syncVendorToSessionVault = syncVendorToSessionVault;
 module.exports = router;

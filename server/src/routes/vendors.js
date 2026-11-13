@@ -380,15 +380,9 @@ router.post('/push', (req, res) => {
   }
 });
 
-// API: Clear all vendors (scraped data)
-router.post('/clear-all', (req, res) => {
-  try {
-    dbAdapter.replaceVendors([]);
-    res.json({ success: true, message: 'All scraped vendors cleared' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+// NOTE: `/clear-all` is defined once, near the top of this router. A second
+// copy used to live here; Express always ran the first one, so this duplicate
+// was dead code that skipped the out-of-bounds clear and the disk flush.
 
 const cheerio = require('cheerio');
 
@@ -408,15 +402,20 @@ async function dorkPhoneNumbers(vendorName, city) {
     const $ = cheerio.load(html);
     const bodyText = $('body').text();
 
-    // Indian mobile phone regex
-    const phoneRegex = /(?:\+91|0)?[ -]?[6789]\d{9}\b|(?:\d{3,5}[ -]\d{6,8})\b/g;
-    const matches = bodyText.match(phoneRegex) || [];
-    
-    // Clean and filter duplicates
-    const cleanPhones = [...new Set(matches.map(p => p.replace(/\s+/g, '').replace(/-/g, '')))]
-      .filter(p => p.replace(/\D/g, '').length >= 10);
-      
-    return cleanPhones;
+    // Phone classification is owned by the parser. A bare [6-9]\d{9} regex
+    // used to promote order ids, landlines and other businesses' numbers into
+    // the primary-phone slot; extractPhones validates every candidate and
+    // sorts mobiles first.
+    const { extractPhones } = require('../utils/phoneUtils');
+    const parsed = extractPhones(bodyText);
+    const seen = new Set();
+    return parsed.filter((phone) => {
+      if (!phone || !phone.isMobile) return false;
+      const key = phone.e164;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch (error) {
     console.error(`[Deep Phone Dork] Failed for ${vendorName}:`, error.message);
     return [];
@@ -437,28 +436,33 @@ router.post('/:id/deep-lookup', async (req, res) => {
     console.log(`[Deep Phone Lookup] Triggered for vendor: ${vendor.name} in ${vendor.city}`);
     
     const phones = await dorkPhoneNumbers(vendor.name, vendor.city || '');
-    if (phones && phones.length > 0) {
-      const foundPhone = phones[0];
-      let formattedPhone = foundPhone;
-      if (foundPhone.length === 10) {
-        formattedPhone = `+91 ${foundPhone}`;
-      } else if (foundPhone.startsWith('0') && foundPhone.length === 11) {
-        formattedPhone = `+91 ${foundPhone.substring(1)}`;
-      }
-      
-      vendor.phone = formattedPhone;
-      
+    const mobile = phones.find(phone => phone && phone.isMobile);
+    if (mobile) {
+      const existingPhones = Array.isArray(vendor.phones)
+        ? vendor.phones
+        : (vendor.phone ? [vendor.phone] : []);
+      const digits = String(mobile.e164 || '').replace(/\D/g, '');
+
+      vendor.phone = mobile.displayPhone || mobile.national || mobile.e164;
+      vendor.phones = Array.from(new Set([vendor.phone, ...existingPhones])).filter(Boolean);
+      vendor.phoneType = 'mobile';
+      vendor.isMobile = true;
+      vendor.isLandline = false;
+      vendor.callUrl = `tel:+${digits}`;
+      // Only a parser-validated mobile may ever produce a WhatsApp link.
+      vendor.whatsappLink = `https://wa.me/${digits}`;
+      vendor.whatsappAvailable = true;
+
       if (vendor.qualityScore) {
         vendor.qualityScore = Math.min(100, vendor.qualityScore + 30);
       }
-      
+
       vendors[idx] = vendor;
       dbAdapter.saveVendors(vendors);
-      
-      return res.json({ success: true, phone: formattedPhone, vendor });
-    } else {
-      return res.status(404).json({ error: 'No phone numbers resolved via web search.' });
+
+      return res.json({ success: true, phone: vendor.phone, vendor });
     }
+    return res.status(404).json({ error: 'No validated mobile number resolved via web search.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error: ' + error.message });
   }

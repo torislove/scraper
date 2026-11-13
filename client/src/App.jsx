@@ -1,21 +1,23 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
+import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import '@ui3d/tokens.css';
 import '@ui3d/kit.css';
 import './v2/v2.css';
 import './v2/ui3d.css';
 
 // scraper.co.in has exactly one workspace: the command center.
-const LandingV2 = lazy(() => import('./v2/LandingV2'));
-const CommandCenter = lazy(() => import('./v2/CommandCenter'));
+// lazyRetry keeps a single flaky chunk download from taking down the workspace.
+const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
+const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 // Dev-only surface gallery. `import.meta.env.DEV` is statically false in every
 // build, so this import is removed from production and desktop bundles.
-const Lab = import.meta.env.DEV ? lazy(() => import('./v2/Lab')) : null;
+const Lab = import.meta.env.DEV ? lazyRetry(() => import('./v2/Lab')) : null;
 
 function PageLoader() {
   return (
@@ -56,6 +58,20 @@ class ErrorBoundary extends React.Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error('App Uncaught Error:', error, errorInfo);
+    // A chunk that cannot be fetched is almost always transient (offline blip,
+    // proxy hiccup, or a stale tab holding pre-deploy asset names). Reload once
+    // automatically instead of parking the user on a crash screen.
+    if (isChunkLoadError(error)) {
+      try {
+        const last = Number(sessionStorage.getItem('chunkReloadAt') || 0);
+        if (Date.now() - last > 15000) {
+          sessionStorage.setItem('chunkReloadAt', String(Date.now()));
+          window.location.reload();
+        }
+      } catch (e) {
+        // sessionStorage unavailable: fall through to the manual reload screen.
+      }
+    }
   }
   render() {
     if (this.state.hasError) {

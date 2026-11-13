@@ -18,21 +18,45 @@ client.interceptors.request.use(config => {
   return config;
 });
 
-// Response interceptor: monitor connection health and dispatch recovery/offline events
+/* Connection events are EDGE-TRIGGERED.
+ *
+ * The first version dispatched `leadharvest:server_online` on every successful
+ * response. The command centre listened for that event, reconnected the event
+ * stream and refreshed every panel. Each refresh produced another successful
+ * response, which fired the event again — a self-feeding loop that exhausted
+ * the API rate limit within a minute, made the stream flap, and surfaced to the
+ * customer as "Reconnecting to Swarm Server … Attempt #473" while the engine
+ * was perfectly healthy.
+ *
+ * The event now fires only on a real offline -> online transition, so it is a
+ * genuine recovery signal that a listener may act on once.
+ */
+let serverReachable = true;
+
+function markOffline(error) {
+  if (typeof window === 'undefined') return;
+  const status = error?.response?.status;
+  const isOffline = !error?.response || status === 503 || status === 502
+    || error?.code === 'ERR_NETWORK' || error?.code === 'ECONNREFUSED'
+    || error?.code === 'ERR_INSUFFICIENT_RESOURCES';
+  // A 429 means the engine is alive and merely asking us to slow down; treating
+  // it as "offline" is what turned a throttle into a reconnect storm.
+  if (!isOffline) return;
+  if (!serverReachable) return;
+  serverReachable = false;
+  window.dispatchEvent(new CustomEvent('leadharvest:server_offline', { detail: { error } }));
+}
+
 client.interceptors.response.use(
   response => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !serverReachable) {
+      serverReachable = true;
       window.dispatchEvent(new CustomEvent('leadharvest:server_online'));
     }
     return response;
   },
   error => {
-    if (typeof window !== 'undefined') {
-      const isOffline = !error.response || error.response?.status === 503 || error.code === 'ERR_NETWORK';
-      if (isOffline) {
-        window.dispatchEvent(new CustomEvent('leadharvest:server_offline', { detail: { error } }));
-      }
-    }
+    markOffline(error);
     return Promise.reject(error);
   }
 );

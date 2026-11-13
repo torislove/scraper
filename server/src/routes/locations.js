@@ -229,6 +229,8 @@ router.get('/stats', (req, res) => {
     res.json(indiaGeoIndex.getStats());
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/locations/hierarchy
@@ -287,9 +289,6 @@ router.get('/hierarchy', (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
   }
 });
 

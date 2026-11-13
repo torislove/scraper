@@ -18,40 +18,60 @@ let globalDeps = {
 
 let inMemoryQueue = [];
 let queueWriteTimeout = null;
+let queueLoaded = false;
 
 function loadQueue() {
   if (fs.existsSync(JOBS_FILE)) {
     try {
-      inMemoryQueue = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf-8')) || [];
-      globalDeps.logger(`[Queue] Resumed ${inMemoryQueue.length} jobs from persistent disk store.`);
+      const parsed = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf-8'));
+      inMemoryQueue = Array.isArray(parsed) ? parsed : [];
+      if (inMemoryQueue.length) {
+        globalDeps.logger(`[Queue] Resumed ${inMemoryQueue.length} job(s) from disk.`);
+      }
     } catch (e) {
+      // A truncated jobs file must never stop the engine from booting; the
+      // queue is a resume hint, not the source of truth for any lead.
       inMemoryQueue = [];
+      try {
+        fs.renameSync(JOBS_FILE, `${JOBS_FILE}.corrupt-${Date.now()}`);
+      } catch (renameError) { /* ignore */ }
+      console.error('[Queue] jobs.json was unreadable; started with an empty queue.');
     }
   } else {
     inMemoryQueue = [];
   }
 }
 
+// Atomic write: temp file + rename. A process killed mid-write used to leave a
+// half-written jobs.json, which the next boot read as an empty queue.
 function _flushQueueToDisk() {
+  const tmp = `${JOBS_FILE}.tmp`;
   try {
-    fs.writeFile(JOBS_FILE, JSON.stringify(inMemoryQueue), (err) => {
-      if (err) console.error('[Queue] Failed to write persistent jobs file:', err.message);
-    });
+    fs.writeFileSync(tmp, JSON.stringify(inMemoryQueue));
+    fs.renameSync(tmp, JOBS_FILE);
   } catch (err) {
-    console.error('[Queue] Sync write error:', err.message);
+    console.error('[Queue] Failed to write persistent jobs file:', err.message);
+    try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
   }
 }
 
 function savePersistentQueue() {
   clearTimeout(queueWriteTimeout);
   queueWriteTimeout = setTimeout(_flushQueueToDisk, 500);
+  if (typeof queueWriteTimeout.unref === 'function') queueWriteTimeout.unref();
 }
 
 function initQueue(deps) {
+  // Called from both index.js and the scrape router on purpose (each wants its
+  // own deps wired). Only the first call may load the queue and arm the resume
+  // timer; a second load would overwrite jobs enqueued in between.
   globalDeps = { ...globalDeps, ...deps };
+  if (queueLoaded) return;
+  queueLoaded = true;
   loadQueue();
-  // Resume any jobs that were pending/running when the server restarted
-  setTimeout(processQueue, 2000);
+  // Resume any jobs that were pending/running when the server restarted.
+  const resumeTimer = setTimeout(processQueue, 2000);
+  if (typeof resumeTimer.unref === 'function') resumeTimer.unref();
 }
 
 // Map of task types to actual execution functions

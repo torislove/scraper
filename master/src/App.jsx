@@ -1,22 +1,24 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
+import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import '@ui3d/tokens.css';
 import '@ui3d/kit.css';
 import './v2/v2.css';
 
 // scraper.co.in has exactly one workspace: the command center.
-const LandingV2 = lazy(() => import('./v2/LandingV2'));
-const CommandCenter = lazy(() => import('./v2/CommandCenter'));
-const FeatureShell = lazy(() => import('./v2/FeatureShell'));
-const WhatsAppPage = lazy(() => import('./v2/whatsapp/WhatsAppPage'));
-const MasterClients = lazy(() => import('./v2/MasterClients'));
-const LearningCenter = lazy(() => import('./v2/LearningCenter'));
-const LiveAnimationTheater = lazy(() => import('./v2/LiveAnimationTheater'));
+// lazyRetry keeps a single flaky chunk download from taking down the workspace.
+const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
+const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
+const FeatureShell = lazyRetry(() => import('./v2/FeatureShell'));
+const WhatsAppPage = lazyRetry(() => import('./v2/whatsapp/WhatsAppPage'));
+const MasterClients = lazyRetry(() => import('./v2/MasterClients'));
+const LearningCenter = lazyRetry(() => import('./v2/LearningCenter'));
+const LiveAnimationTheater = lazyRetry(() => import('./v2/LiveAnimationTheater'));
 
 function WhatsAppRoute() {
   const navigate = useNavigate();
@@ -81,6 +83,20 @@ class ErrorBoundary extends React.Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error('Master App Uncaught Error:', error, errorInfo);
+    // A chunk that cannot be fetched is almost always transient (offline blip,
+    // proxy hiccup, or a stale tab holding pre-deploy asset names). Reload once
+    // automatically instead of parking the operator on a crash screen.
+    if (isChunkLoadError(error)) {
+      try {
+        const last = Number(sessionStorage.getItem('chunkReloadAt') || 0);
+        if (Date.now() - last > 15000) {
+          sessionStorage.setItem('chunkReloadAt', String(Date.now()));
+          window.location.reload();
+        }
+      } catch (e) {
+        // sessionStorage unavailable: fall through to the manual reload screen.
+      }
+    }
   }
   render() {
     if (this.state.hasError) {

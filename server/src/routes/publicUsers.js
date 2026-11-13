@@ -287,38 +287,9 @@ router.post('/buy-credits', (req, res) => {
   }
 });
 
-// 10. Public: Reveal/Unlock a Lead
-router.post('/reveal', (req, res) => {
-  try {
-    const { userId, vendorId } = req.body;
-    if (!userId || !vendorId) return res.status(400).json({ error: 'Missing userId or vendorId' });
-
-    const users = dbAdapter.getPublicUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    
-    if (userIndex === -1) return res.status(404).json({ error: 'User not found' });
-
-    const user = users[userIndex];
-    
-    // Check if already unlocked
-    if (user.unlockedLeads.includes(vendorId)) {
-      return res.json({ success: true, message: 'Already unlocked' });
-    }
-
-    if (user.credits < 1) {
-      return res.status(403).json({ error: 'Out of credits' });
-    }
-
-    user.credits -= 1;
-    user.unlockedLeads.push(vendorId);
-    
-    users[userIndex] = user;
-    dbAdapter.savePublicUsers(users);
-
-    res.json({ success: true, message: 'Unlocked successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+// NOTE: `/reveal` is defined once at the top of this router. A second copy
+// used to live here and was unreachable — Express always ran the first — but
+// it returned no vendor payload, so anyone reading the file could believe a
+// reveal had succeeded while the caller got nothing back.
 
 module.exports = router;
