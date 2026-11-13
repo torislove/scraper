@@ -124,6 +124,43 @@ client city search could run far longer than the UI promised.
 
 Implementation: `server/src/services/sweepScopePolicy.js` → `buildScopeZones(scope, name)`.
 
+### 3.5a Engine plan by scope (`services/scopeEngines/`)
+
+The zone map decides *where* to search. A separate, testable layer decides *which engines*
+run for that territory, because the two used to be tangled inside the 1,600-line
+orchestrator as inline `isMaster && scope === …` conditionals:
+
+| Scope | Directory engines | JustDial fan-out | Client |
+|---|---|---|---|
+| `city` (city / town / village / locality) | Google Search, wedding portals for wedding intent, social dorks, IndiaMART | none — one query at the settlement | ✅ (64-zone cap) |
+| `mandal` | same as city | none — the zone map walks every village | ✅ (64-zone cap) |
+| `district` | same as city | district HQ + up to **6** mandal towns | Master only |
+| `state` | same as city | state HQ + up to **8** district cities | Master only |
+
+Files:
+
+- `scopeEngines/engineMatch.js` — one alias table for engine labels (`Google Maps`,
+  `JustDial`, `local-finder`, `Deep SERP`…). The scope plan and the orchestrator share it.
+- `scopeEngines/base.js` — directory jobs common to every scope (Search, wedding portals,
+  social dorks, IndiaMART, Brave when explicitly chosen).
+- `scopeEngines/city.js`, `mandal.js`, `district.js`, `state.js` — one module per
+  territory; district/state add the JustDial swarm with a hard cap.
+- `scopeEngines/index.js` — `planScopeEngines({ scope, isMaster, engines, zones, … })`.
+  A client run that somehow arrives with a district/state plan falls back to the city plan
+  and logs why, instead of starting a multi-hour sweep.
+
+Every run logs its plan once, so the Terminal shows exactly what was dispatched:
+
+```
+[Scope Engines] district plan for this Master run: 6 directory job(s), zone budget 2600, 6 JustDial swarm centre(s).
+```
+
+Brave is deliberately **not** part of auto mode: it rate-limits this network, and auto mode
+must not add a request the previous planner never made. Select it explicitly to queue it.
+
+Checks: `node scripts/verify/scope-engines.test.cjs` (pure) and
+`node scripts/verify/scope-engines-live.cjs` (real Master mandal sweep).
+
 District containment is territorial, not radial. A district plan carries `boundary`
 (one surveyed circle per sub-district anchor, radius derived from its nearest neighbour).
 Every write path — live snapshot, late reconciliation, final folder — rejects a row that

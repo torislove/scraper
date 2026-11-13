@@ -25,6 +25,8 @@ const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
 const { clearStaleQueue, getPersistentQueue, getActiveJobs, addScrapeJob: queueAddScrapeJob, getConcurrencyMetrics } = require('../utils/queue');
 const etaModel = require('../utils/etaModel');
 const { normalizePhone: parsePhone } = require('../utils/phoneUtils');
+const { planScopeEngines } = require('./scopeEngines');
+const { makeHasEngine } = require('./scopeEngines/engineMatch');
 const { scrapeWebContact } = require('../scrapers/engine-web-contact');
 const { isListingRelevantToQuery, warmZoneContextPool } = require('../scrapers/engine-google-places');
 
@@ -833,37 +835,9 @@ async function runOmniSearchOrchestrator(
 
     const geocodeCache = getGeoCache();
     const radiusKm = Number(radius) || 5;
-    const normEngines = (Array.isArray(activeEngines) ? activeEngines : []).map(e => String(e).toLowerCase().replace(/[^a-z0-9]/g, ''));
-    const isAutoMode = normEngines.length === 0 || normEngines.includes('auto');
-
-    const hasEngine = (key) => {
-      if (isAutoMode) return true;
-      switch (key) {
-        case 'local_finder':
-          return normEngines.some(e => e.includes('localfinder') || (e.includes('local') && !e.includes('social')) || e.includes('finder') || e.includes('deepserp'));
-        case 'google-serp':
-        case 'serp':
-          return normEngines.some(e => e.includes('googleserp') || (e.includes('serp') && !e.includes('local')) || e.includes('webpage') || e.includes('organic'));
-        case 'maps':
-          return normEngines.some(e => e.includes('map') || e.includes('place') || e.includes('geospatial') || e.includes('mesh') || e.includes('radar') || e.includes('gps'));
-        case 'justdial':
-          return normEngines.some(e => e.includes('justdial') || e.includes('jd') || e.includes('telecom') || e.includes('mobile') || e.includes('direct'));
-        case 'openstreetmap':
-          return normEngines.some(e => e.includes('openstreetmap') || e.includes('osm') || e.includes('openmap') || e.includes('nominatim') || e.includes('overpass'));
-        case 'indiamart':
-          return normEngines.some(e => e.includes('indiamart') || e.includes('mart') || e.includes('b2b') || e.includes('enterprise') || e.includes('supplier'));
-        case 'social':
-          return normEngines.some(e => e.includes('dork') || e.includes('social') || e.includes('duckduckgo') || e.includes('ddg') || e.includes('instagram') || e.includes('facebook') || e.includes('footprint') || e.includes('digital'));
-        case 'weddingbazaar':
-          return normEngines.some(e => e.includes('weddingbazaar') || e.includes('bazaar') || e.includes('hospitality') || e.includes('venue'));
-        case 'weddingwire':
-          return normEngines.some(e => e.includes('weddingwire') || e.includes('wedding-wire') || e.includes('hospitality') || e.includes('venue'));
-        case 'mandap':
-          return normEngines.some(e => e.includes('mandap') || e.includes('hospitality') || e.includes('venue'));
-        default:
-          return normEngines.includes(String(key).toLowerCase().replace(/[^a-z0-9]/g, ''));
-      }
-    };
+    // Engine alias matching lives in scopeEngines/engineMatch.js, so the scope
+    // plan and the orchestrator can never disagree about what is enabled.
+    const hasEngine = makeHasEngine(activeEngines);
 
     // 2a. TIER 0 TURBO-BURST: Instant Sub-Second Leads (<1.2s)
     // Runs direct keyless HTTP engines (JustDial Mobile JSON + OSM Overpass POI) immediately
@@ -946,63 +920,29 @@ async function runOmniSearchOrchestrator(
         })()
       : Promise.resolve();
 
-    // 2b. City-scoped directory & marketplace engines (Simultaneous Parallel Second-0 Dispatch).
-    const directoryJobs = [];
-    const weddingIntent = /wedding|marriage|shaadi|shadi|vivah|pelli|kalyana|kalyan|banquet|mandap|reception|engagement|haldi|sangeet|mehendi|bridal|bride|groom|caterer|catering|decorat|florist|invitation|lehenga|saree|jewel|honeymoon|event planner|event management|tent house|venue|function hall|convention/i.test(category);
+    // 2b. Directory & marketplace engines, planned by territory.
+    //     City/mandal: one query at the settlement.
+    //     District/state (Master): JustDial also queried from the largest towns.
+    //     The plan lives in services/scopeEngines so client and Master runs use
+    //     explicit, testable rules instead of inline conditionals.
+    const enginePlan = planScopeEngines({
+      engines: activeEngines,
+      category,
+      searchPhrase,
+      baseLocation,
+      sessionId,
+      zones,
+      plan,
+      isMaster
+    });
+    for (const note of enginePlan.notes) addLog(note);
+    addLog(`[Scope Engines] ${enginePlan.scope} plan for this ${isMaster ? 'Master' : 'client'} run: `
+      + `${enginePlan.jobs.length} directory job(s), zone budget ${isMaster ? enginePlan.limits.zoneBudget.master : enginePlan.limits.zoneBudget.client}`
+      + `${enginePlan.swarmTowns.length ? `, ${enginePlan.swarmTowns.length} JustDial swarm centre(s)` : ''}.`);
 
-    if (hasEngine('google-serp') || hasEngine('serp')) {
-      directoryJobs.push(['scrapeGoogleSerp', [`${searchPhrase} in ${baseLocation}`, category, baseLocation, sessionId]]);
-      directoryJobs.push(['scrapeGoogleSerp', [`top ${searchPhrase} in ${baseLocation} official website`, category, baseLocation, sessionId]]);
-    }
-
-    if (hasEngine('justdial') && isMaster && plan && (plan.resolvedScope === 'district' || plan.resolvedScope === 'state')) {
-      const cleanBase = baseLocation.replace(/\s*\([^)]*SWEEP\)/gi, '').trim();
-      const topTowns = [];
-      if (plan.resolvedScope === 'district') {
-        const otherMandals = (zones || [])
-          .map(z => z.zoneName)
-          .filter(zName => zName && zName.toLowerCase() !== (plan.district || '').toLowerCase() && zName.toLowerCase() !== cleanBase.toLowerCase())
-          .slice(0, 6);
-        topTowns.push(...otherMandals);
-      } else if (plan.resolvedScope === 'state') {
-        const majorCities = (zones || [])
-          .filter(z => z.kind === 'district')
-          .map(z => z.zoneName)
-          .filter(zName => zName && zName.toLowerCase() !== cleanBase.toLowerCase())
-          .slice(0, 8);
-        topTowns.push(...majorCities);
-      }
-      const uniqueTowns = [...new Set(topTowns.filter(Boolean))];
-      if (uniqueTowns.length) {
-        addLog(`[Orchestrator] 🚀 Swarming JustDial across ${uniqueTowns.length} additional centers: ${uniqueTowns.join(', ')}`);
-        for (const town of uniqueTowns) {
-          directoryJobs.push(['scrapeJustDial', [category, town, 'omni', sessionId]]);
-        }
-      }
-    }
-
-    if (hasEngine('weddingbazaar') && weddingIntent) {
-      directoryJobs.push(['scrapeWeddingBazaar', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('weddingwire') && weddingIntent) {
-      directoryJobs.push(['scrapeWeddingWire', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('mandap') && weddingIntent) {
-      directoryJobs.push(['scrapeMandap', [category, baseLocation, 'omni', sessionId]]);
-    }
-    if (hasEngine('social')) {
-      directoryJobs.push(['scrapeDuckDuckGoDork', ['instagram.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-      directoryJobs.push(['scrapeDuckDuckGoDork', ['facebook.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-    }
-    if (normEngines.some(e => e.includes('brave'))) {
-      directoryJobs.push(['scrapeBraveDork', ['instagram.com', `${category} ${baseLocation}`, category, baseLocation, sessionId]]);
-    }
-
-    if (hasEngine('indiamart') && !weddingIntent) {
-      directoryJobs.push(['scrapePuppeteerIndiaMart', [category, baseLocation, 'omni', sessionId]]);
-    }
-
-    for (const [taskName, args] of directoryJobs) {
+    for (const job of enginePlan.jobs) {
+      const taskName = job.task;
+      const args = job.args;
       try {
         await addScrapeJob(taskName, args, 12, {
           lat: baseGeo?.lat || null,
