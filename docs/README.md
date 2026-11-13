@@ -43,14 +43,25 @@ All 9 engines operate with zero API keys and 100% free scraping adapters:
 
 ## 📞 Phone Classification & Rules
 
-All parsed phone numbers follow strict Indian telecom classification:
+Every number is classified by libphonenumber (`libphonenumber-js/max`) through
+`server/src/utils/phoneUtils.js` and `client/src/utils/phoneClassify.js`. There is no
+`^[6-9]\d{9}$` shortcut: that pattern rejects valid new mobile series and mislabels
+fixed-line series that happen to start with 6–9.
+
 1. **STD Landlines**:
-   - Must preserve the leading `0` (e.g. `08632233444` for Guntur, `04066778899` for Hyderabad).
+   - Preserve the leading `0` (e.g. `0863 223 4444` for Guntur, `040 6677 8899` for Hyderabad).
    - **NEVER** prefix with `+91`.
-   - Labeled as **Call Only**; WhatsApp buttons are disabled.
+   - Labelled **Call Only**; WhatsApp links are not generated.
 2. **Mobile Numbers**:
-   - 10-digit Indian mobile numbers beginning with 6, 7, 8, or 9.
-   - Formatted with `+91` international dialing prefix for calling and WhatsApp quick chat (`wa.me/91XXXXXXXXXX`).
+   - Only when the parser reports a mobile/fixed-line-or-mobile number that is valid for India.
+   - Formatted with the `+91` dialling prefix for calling and WhatsApp (`wa.me/91XXXXXXXXXX`).
+   - `isMobile` / `isLandline` / `phoneType` / `whatsappLink` are all derived from that one
+     parse by `syncPhoneFlags()`, so an old row cannot disagree with itself.
+
+Exports follow the same rule: **Primary Phone is a validated mobile only**; extra
+numbers and landlines go to **Secondary Phone**.
+See [DATA-CORRECTNESS.md](./DATA-CORRECTNESS.md) for the rules, the repair script and the
+verification commands.
 
 ---
 
