@@ -49,7 +49,7 @@ logStreamCap, sessionStreams, sessionCap, droppedTotal, lastDropReason }`.
 
 ## Verification
 
-```bash
+```powershell
 # helper behaviour (single-flight, backoff, heartbeat, stop)
 node ..\Temp\opencode\liveStream.test.mjs
 
@@ -57,8 +57,12 @@ node ..\Temp\opencode\liveStream.test.mjs
 node ..\Temp\opencode\sse-test.cjs
 node ..\Temp\opencode\session-sse-test.cjs
 
-# live kill/restart: stream must heal itself with no page reload
-node ..\Temp\opencode\reconnect-e2e.mjs
+# real browser kill/restart (Chromium via Playwright), no page reload
+node scripts\verify\browser-connectivity.cjs http://127.0.0.1:5174/command
+node scripts\verify\browser-connectivity.cjs http://127.0.0.1:5173/command
+
+# jobs that survive a restart and can be resumed
+node scripts\verify\deep-jobs-durability.cjs
 ```
 
 Expected customer-facing sequence when the engine restarts:

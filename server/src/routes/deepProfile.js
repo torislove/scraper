@@ -197,4 +197,18 @@ router.post('/jobs/:id/stop', (req, res) => {
   res.json({ ok: true, job });
 });
 
+// POST /api/deep-profile/jobs/:id/resume — continue an interrupted job
+router.post('/jobs/:id/resume', (req, res) => {
+  try {
+    const job = deepProfileService.resumeJob(req.params.id);
+    if (!job) return res.status(404).json({ ok: false, error: 'Job not found' });
+    // 202 means a new attempt was queued; 200 means there was nothing left to do.
+    const resumed = job.resumedFrom === req.params.id;
+    res.status(resumed ? 202 : 200).json({ ok: true, resumed, job });
+  } catch (err) {
+    console.error('[DeepProfile Resume]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;

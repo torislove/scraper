@@ -18,7 +18,7 @@ import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
-  startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, updateVendorCrm, streamUrl,
+  startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
@@ -1192,6 +1192,22 @@ export default function CommandCenter() {
       }
     } catch (error) {
       toast.error('Could not stop deep job.');
+    }
+  };
+
+  // Continue an interrupted job from the ledger. The engine returns a new job
+  // record that starts at the last persisted vendor index, so a restart never
+  // costs the work that was already queued.
+  const resumeDeep = async jobId => {
+    try {
+      const job = await resumeDeepJob(jobId);
+      if (job) {
+        setDeepJob(job);
+        setDeepJobs(prev => [job, ...prev.filter(item => item.id !== job.id)]);
+        toast.success('Deep job resumed from the last saved vendor.');
+      }
+    } catch (error) {
+      toast.error('Could not resume deep job.');
     }
   };
 
@@ -2639,6 +2655,7 @@ export default function CommandCenter() {
                 deepJob={deepJob}
                 deepJobs={deepJobs}
                 stopDeep={stopDeep}
+      resumeDeep={resumeDeep}
                 recentProfiles={recentProfiles}
                 setSelectedVendor={setSelectedVendor}
               />

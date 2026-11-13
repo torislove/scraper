@@ -17,7 +17,7 @@ import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
-  startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, updateVendorCrm, streamUrl,
+  startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
@@ -3215,6 +3215,22 @@ export default function CommandCenter() {
     }
   };
 
+  // Continue an interrupted job from the ledger. The engine returns a new job
+  // record that starts at the last persisted vendor index, so a restart never
+  // costs the work that was already queued.
+  const resumeDeep = async jobId => {
+    try {
+      const job = await resumeDeepJob(jobId);
+      if (job) {
+        setDeepJob(job);
+        setDeepJobs(prev => [job, ...prev.filter(item => item.id !== job.id)]);
+        toast.success('Deep job resumed from the last saved vendor.');
+      }
+    } catch (error) {
+      toast.error('Could not resume deep job.');
+    }
+  };
+
   const quickDeep = async vendor => {
     if (!vendor?.id || vendorJobs[vendor.id]) return;
     setVendorJobs(prev => ({ ...prev, [vendor.id]: { status: 'queued', progressPercent: 0 } }));
@@ -4537,7 +4553,7 @@ export default function CommandCenter() {
                 </div>
                 <div className="v2-deep-jobs-list">
                   {(deepJob ? [deepJob, ...deepJobs.filter(job => job.id !== deepJob.id)] : deepJobs).slice(0, 8).map(job => (
-                    <DeepJobRow key={job.id} job={job} onStop={stopDeep} active={job.id === deepJob?.id} />
+                    <DeepJobRow key={job.id} job={job} onStop={stopDeep} onResume={resumeDeep} active={job.id === deepJob?.id} />
                   ))}
                   {deepJobs.length === 0 && !deepJob && (
                     <EmptyState

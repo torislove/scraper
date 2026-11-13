@@ -77,25 +77,40 @@ export function MapLegend() {
   );
 }
 
-export function DeepJobRow({ job, onStop, active = false }) {
-  const tone = job.status === 'completed' ? 'lime' : job.status === 'failed' ? 'red' : job.status === 'stopped' ? 'amber' : 'cyan';
+export function DeepJobRow({ job, onStop, onResume, active = false }) {
+  const tone = job.status === 'completed' ? 'lime'
+    : job.status === 'failed' ? 'red'
+      : ['stopped', 'interrupted'].includes(job.status) ? 'amber'
+        : 'cyan';
+  const processed = Number.isFinite(Number(job.processed)) ? Number(job.processed) : (Number(job.completed) || 0);
+  const enriched = Number.isFinite(Number(job.enriched)) ? Number(job.enriched) : (Number(job.succeeded) || 0);
+  const percent = job.total ? Math.min(100, Math.round((processed / job.total) * 100)) : 0;
+  const canResume = job.resumable === true || job.status === 'interrupted';
   return (
     <div className={cx('v2-deep-job-row', active && 'is-active')}>
       <div className="v2-deep-job-head">
         <span className="v2-deep-job-mark"><Zap size={13} /></span>
         <span>
           <b>{job.id}</b>
-          <small>{job.updatedAt || relativeTime(job.createdAt)} · {job.total} vendors</small>
+          <small>
+            {job.updatedAt || relativeTime(job.createdAt)} · {job.total} vendors
+            {job.status === 'interrupted' ? ' · stopped by an engine restart' : ''}
+          </small>
         </span>
         <StatusPill tone={tone} pulse={['queued', 'running', 'stopping'].includes(job.status)}>{job.status}</StatusPill>
       </div>
       <div className="v2-deep-job-bar">
-        <span style={{ width: `${job.total ? Math.round((job.processed / job.total) * 100) : 0}%` }} />
+        <span style={{ width: `${percent}%` }} />
       </div>
       <div className="v2-deep-job-foot">
-        <small>{job.processed} / {job.total} processed · {job.enriched} enriched</small>
+        <small>{processed} / {job.total} processed · {enriched} enriched</small>
         {['queued', 'running'].includes(job.status) && onStop && (
           <button type="button" className="v2-btn v2-btn-xs" onClick={() => onStop(job.id)}>Stop</button>
+        )}
+        {canResume && !['queued', 'running', 'stopping'].includes(job.status) && onResume && (
+          <button type="button" className="v2-btn v2-btn-xs v2-btn-lime" onClick={() => onResume(job.id)}>
+            Resume remaining
+          </button>
         )}
       </div>
     </div>

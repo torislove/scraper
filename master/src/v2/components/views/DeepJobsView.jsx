@@ -19,6 +19,7 @@ export default function DeepJobsView({
   deepJob,
   deepJobs = [],
   stopDeep,
+  resumeDeep,
   recentProfiles = [],
   setSelectedVendor
 }) {
@@ -87,7 +88,7 @@ export default function DeepJobsView({
       </div>
       <div className="v2-deep-jobs-list">
         {(deepJob ? [deepJob, ...deepJobs.filter(job => job.id !== deepJob.id)] : deepJobs).slice(0, 8).map(job => (
-          <DeepJobRow key={job.id} job={job} onStop={stopDeep} active={job.id === deepJob?.id} />
+          <DeepJobRow key={job.id} job={job} onStop={stopDeep} onResume={resumeDeep} active={job.id === deepJob?.id} />
         ))}
         {deepJobs.length === 0 && !deepJob && (
           <EmptyState

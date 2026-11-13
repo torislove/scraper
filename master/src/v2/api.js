@@ -245,6 +245,11 @@ export async function stopDeepJob(jobId) {
   return data?.job || null;
 }
 
+export async function resumeDeepJob(jobId) {
+  const { data } = await client.post(`/deep-profile/jobs/${encodeURIComponent(jobId)}/resume`);
+  return data?.job || null;
+}
+
 export async function updateCrmStatus(vendorId, crmStatus, notes = '') {
   const { data } = await client.put(`/vendors/${encodeURIComponent(vendorId)}/crm`, { crmStatus, notes });
   return data;

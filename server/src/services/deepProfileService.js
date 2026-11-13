@@ -25,9 +25,17 @@ const {
 } = require('../utils/phoneUtils');
 
 const VERSION = '2.0.0';
-const { DEEP_PROFILES_DIR: DEEP_DIR } = require('../config/paths');
+const { DEEP_PROFILES_DIR: DEEP_DIR, DATA_DIR } = require('../config/paths');
 const JOB_RETENTION_MS = 12 * 60 * 60 * 1000;
 const MAX_ARRAY = 60;
+
+// Deep jobs used to live only in memory. A restart in the middle of a batch
+// erased the queue: the ledger showed nothing, the customer saw a job vanish,
+// and the work had to be queued again from scratch. The job record (not the
+// vendor profiles, which are already file-backed per vendor) is now persisted
+// so an interrupted run can be seen and resumed.
+const JOBS_FILE = path.join(DATA_DIR, 'deep-profile-jobs.json');
+const JOBS_PERSIST_DEBOUNCE_MS = 400;
 
 if (!fs.existsSync(DEEP_DIR)) {
   try { fs.mkdirSync(DEEP_DIR, { recursive: true }); } catch (e) {}
@@ -160,6 +168,121 @@ const CONFLICT_FIELDS = new Set([
 
 const jobs = new Map();
 const vendorLocks = new Set();
+
+let jobsPersistTimer = null;
+let jobsPersistRunning = false;
+
+/* A persisted record is a job without the bulky per-vendor result list. */
+function serialiseJob(job) {
+  const doneIds = job.doneIds instanceof Set ? job.doneIds : null;
+  const pendingIds = doneIds
+    ? (job.vendorIds || []).filter(id => !doneIds.has(id))
+    : (job.pendingIds || []);
+  const record = {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    finishedAt: job.finishedAt,
+    interruptedAt: job.interruptedAt || null,
+    total: job.total,
+    completed: job.completed || 0,
+    succeeded: job.succeeded || 0,
+    failed: job.failed || 0,
+    skipped: job.skipped || 0,
+    cursor: job.cursor || 0,
+    currentVendor: '',
+    options: job.options || {},
+    stopReason: job.stopReason || null,
+    resumedFrom: job.resumedFrom || null,
+    errors: (job.errors || []).slice(-20),
+    // Only an unfinished job needs its work list. `pendingIds` is the exact
+    // remainder: a vendor that was mid-extraction when the engine died is still
+    // pending, so a resume can never silently drop it.
+    vendorIds: (job.vendorIds || []),
+    pendingIds: ['queued', 'running', 'stopping', 'interrupted', 'stopped', 'failed'].includes(job.status)
+      ? pendingIds
+      : []
+  };
+  return record;
+}
+
+function persistJobsNow() {
+  if (jobsPersistRunning) return;
+  jobsPersistRunning = true;
+  try {
+    const now = Date.now();
+    const records = Array.from(jobs.values())
+      .filter(job => !job.finishedAt || now - new Date(job.finishedAt).getTime() <= JOB_RETENTION_MS)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 25)
+      .map(serialiseJob);
+    const tmp = `${JOBS_FILE}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ version: 1, savedAt: new Date().toISOString(), jobs: records }), 'utf8');
+    fs.renameSync(tmp, JOBS_FILE);
+  } catch (e) {
+    console.error('[DeepProfile] Could not persist job ledger:', e.message);
+  } finally {
+    jobsPersistRunning = false;
+  }
+}
+
+function persistJobsSoon() {
+  if (jobsPersistTimer) return;
+  jobsPersistTimer = setTimeout(() => {
+    jobsPersistTimer = null;
+    persistJobsNow();
+  }, JOBS_PERSIST_DEBOUNCE_MS);
+  if (typeof jobsPersistTimer.unref === 'function') jobsPersistTimer.unref();
+}
+
+function loadPersistedJobs() {
+  try {
+    if (!fs.existsSync(JOBS_FILE)) return;
+    const parsed = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf8'));
+    const records = Array.isArray(parsed) ? parsed : (parsed.jobs || []);
+    const now = Date.now();
+    let restored = 0;
+    for (const record of records) {
+      if (!record || !record.id) continue;
+      if (record.finishedAt && now - new Date(record.finishedAt).getTime() > JOB_RETENTION_MS) continue;
+      const job = {
+        results: [],
+        errors: Array.isArray(record.errors) ? record.errors : [],
+        stopRequested: false,
+        ...record
+      };
+      if (['queued', 'running', 'stopping'].includes(job.status)) {
+        // Nothing can be running in a process that just booted.
+        job.status = 'interrupted';
+        job.interruptedAt = new Date().toISOString();
+        job.finishedAt = job.interruptedAt;
+        job.stopReason = job.stopReason || 'engine_restart';
+      }
+      const pending = Array.isArray(record.pendingIds)
+        ? record.pendingIds
+        : (job.vendorIds || []).slice(Math.max(0, Number(record.cursor) || 0));
+      job.pendingIds = pending;
+      job.doneIds = new Set((job.vendorIds || []).filter(id => !pending.includes(id)));
+      job.resumable = ['interrupted', 'stopped', 'failed'].includes(job.status) && pending.length > 0;
+      jobs.set(job.id, job);
+      restored += 1;
+    }
+    if (restored) {
+      const resumable = Array.from(jobs.values()).filter(j => j.resumable).length;
+      console.log(`[DeepProfile] Restored ${restored} job record(s)${resumable ? `, ${resumable} resumable` : ''}.`);
+    }
+  } catch (e) {
+    // A half-written file must never stop the engine from booting.
+    try {
+      const bad = `${JOBS_FILE}.corrupt-${Date.now()}`;
+      fs.renameSync(JOBS_FILE, bad);
+      console.error(`[DeepProfile] Job ledger was unreadable (${e.message}); moved to ${path.basename(bad)}.`);
+    } catch (renameErr) {
+      console.error('[DeepProfile] Job ledger was unreadable:', e.message);
+    }
+  }
+}
 
 function safeId(id) {
   return String(id || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 120);
@@ -1237,8 +1360,11 @@ function startJob(options = {}) {
     succeeded: 0,
     failed: 0,
     skipped: 0,
+    cursor: 0,
     currentVendor: '',
     vendorIds: ids,
+    pendingIds: [...ids],
+    doneIds: new Set(),
     options: {
       force: Boolean(options.force),
       includeWebsite: options.includeWebsite !== false,
@@ -1249,31 +1375,70 @@ function startJob(options = {}) {
     },
     results: [],
     errors: [],
-    stopRequested: false
+    stopRequested: false,
+    resumedFrom: options.resumedFrom || null
   };
 
   jobs.set(id, job);
+  persistJobsNow();
 
   if (ids.length) {
     setImmediate(() => runJob(job));
   } else {
     job.finishedAt = new Date().toISOString();
+    persistJobsSoon();
   }
 
   return sanitizeJob(job);
 }
 
+/**
+ * Resume an interrupted / stopped / failed deep job from where it stopped.
+ * The returned record is a NEW job so the ledger keeps both attempts, and the
+ * already-enriched vendors are skipped unless the original run used force.
+ */
+function resumeJob(jobId) {
+  const prior = jobs.get(jobId);
+  if (!prior) return null;
+  if (['queued', 'running', 'stopping'].includes(prior.status)) return sanitizeJob(prior);
+
+  const remaining = Array.isArray(prior.pendingIds) && prior.pendingIds.length
+    ? prior.pendingIds
+    : (prior.vendorIds || []).slice(Math.max(0, Number(prior.cursor) || 0));
+  if (!remaining.length) {
+    prior.status = 'completed';
+    prior.finishedAt = new Date().toISOString();
+    prior.resumable = false;
+    persistJobsNow();
+    return sanitizeJob(prior);
+  }
+
+  return startJob({
+    vendorIds: remaining,
+    force: true,
+    includeWebsite: prior.options?.includeWebsite !== false,
+    includeGoogle: prior.options?.includeGoogle !== false,
+    websiteUrl: prior.options?.websiteUrl || null,
+    concurrency: prior.options?.concurrency,
+    limit: remaining.length,
+    resumedFrom: jobId
+  });
+}
+
 async function runJob(job) {
   job.status = 'running';
   job.startedAt = new Date().toISOString();
+  persistJobsNow();
+  const queue = (Array.isArray(job.pendingIds) && job.pendingIds.length ? job.pendingIds : job.vendorIds).slice();
   let index = 0;
   const concurrency = Math.max(1, Math.min(8, Number(job.options.concurrency) || 6));
 
   const worker = async () => {
     while (!job.stopRequested) {
       const current = index++;
-      if (current >= job.vendorIds.length) break;
-      const vendorId = job.vendorIds[current];
+      if (current >= queue.length) break;
+      const vendorId = queue[current];
+      job.cursor = current + 1;
       job.currentVendor = vendorId;
 
       try {
@@ -1291,6 +1456,8 @@ async function runJob(job) {
         if (job.errors.length < 50) job.errors.push({ vendorId, error: e.message });
       } finally {
         job.completed++;
+        if (job.doneIds instanceof Set) job.doneIds.add(vendorId);
+        persistJobsSoon();
       }
     }
   };
@@ -1304,6 +1471,9 @@ async function runJob(job) {
   } finally {
     job.finishedAt = new Date().toISOString();
     job.currentVendor = '';
+    job.pendingIds = (job.vendorIds || []).filter(id => !(job.doneIds instanceof Set) || !job.doneIds.has(id));
+    job.resumable = ['stopped', 'failed'].includes(job.status) && job.pendingIds.length > 0;
+    persistJobsNow();
   }
 }
 
@@ -1314,6 +1484,14 @@ function sanitizeJob(job) {
     createdAt: job.createdAt,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
+    interruptedAt: job.interruptedAt || null,
+    stopReason: job.stopReason || null,
+    resumedFrom: job.resumedFrom || null,
+    resumable: Boolean(
+      ['interrupted', 'stopped', 'failed'].includes(job.status)
+      && ((Array.isArray(job.pendingIds) && job.pendingIds.length > 0)
+        || (job.vendorIds || []).length > (Number(job.cursor) || 0))
+    ),
     total: job.total,
     completed: job.completed,
     succeeded: job.succeeded,
@@ -1345,6 +1523,7 @@ function stopJob(jobId) {
   if (['queued', 'running'].includes(job.status)) {
     job.stopRequested = true;
     job.status = 'stopping';
+    persistJobsSoon();
   }
   return sanitizeJob(job);
 }
@@ -1364,6 +1543,7 @@ function stopAll(reason = 'superseded') {
       stopped += 1;
     }
   }
+  if (stopped) persistJobsSoon();
   return stopped;
 }
 
@@ -1385,6 +1565,7 @@ function stopJobsForVendorIds(vendorIds) {
     job.stopReason = 'folder deleted';
     stopped += 1;
   }
+  if (stopped) persistJobsSoon();
   return stopped;
 }
 
@@ -1425,6 +1606,7 @@ module.exports = {
   deepExtractVendor,
   getVendorProfile,
   startJob,
+  resumeJob,
   getJob,
   listJobs,
   stopJob,
@@ -1433,6 +1615,11 @@ module.exports = {
   getHealth,
   computeCompleteness,
   baseGroups,
+  flushJobs: persistJobsNow,
   // exported for tests
   _internal: { meaningful, safePincode, classifyGoogleAttributes, mergeNamed, addressTokens, addressSimilarity }
 };
+
+// Restore the ledger once the module is loaded so /api/deep-profile/jobs shows
+// what was running before the last restart, and can be resumed from the UI.
+loadPersistedJobs();

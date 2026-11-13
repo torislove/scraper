@@ -16,4 +16,5 @@ const crmActivitySchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now, index: true }
 });
 
-module.exports = mongoose.model('CrmActivity', crmActivitySchema);
+// Idempotent registration: a second require must not throw OverwriteModelError.
+module.exports = mongoose.models.CrmActivity || mongoose.model('CrmActivity', crmActivitySchema);

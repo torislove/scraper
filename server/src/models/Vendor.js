@@ -81,4 +81,9 @@ vendorSchema.index({ normalizedPhone: 1, city: 1 });
 vendorSchema.index({ folderId: 1, crmStage: 1 });
 vendorSchema.index({ name: 'text', address: 'text', category: 'text' });
 
-module.exports = mongoose.model('Vendor', vendorSchema);
+// Idempotent model registration. dbAdapter already registers a permissive
+// "Vendor" model for the dual-persistence layer; registering a second one with
+// the same name throws OverwriteModelError, which used to be swallowed here and
+// left the CRM router without a model at all (and printed a scary warning on
+// every boot). Reuse whatever is already compiled.
+module.exports = mongoose.models.Vendor || mongoose.model('Vendor', vendorSchema);
