@@ -5,6 +5,7 @@ const { getBrowser } = require('./browserFactory');
 const dbAdapter = require('../config/dbAdapter');
 const fidelity = require('../services/categoryFidelity');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
+const { normalizePhone } = require('../utils/phoneUtils');
 
 const AGGREGATOR_DOMAINS = [
   'google.', 'justdial.com', 'indiamart.com', 'sulekha.com', 'weddingwire.in',
@@ -64,6 +65,9 @@ function extractContactInfo(text) {
 
 async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy') {
   addLog(`[Cyber Search Matrix] Starting index scan for: "${query}"`);
+
+  const countryCode = (require('../services/localBrain/countries').detectCountry(location || query) || { code: 'IN' }).code;
+  const countryGl = String(countryCode).toLowerCase();
   
   let browser = null;
   let context = null;
@@ -75,7 +79,7 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
     const page = await context.newPage();
     
     // Navigate to Google
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20`;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&hl=en&gl=${countryGl}`;
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     
     // Check if consent button appears
@@ -134,9 +138,13 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
     
     const scanPromises = results.map(async (result) => {
       try {
-        const webData = await fastWebsiteExtract(result.url, result.title);
-        const hasMobile = webData.mobiles && webData.mobiles.length > 0;
-        const mobile10 = hasMobile ? webData.mobiles[0] : null;
+        const webData = await fastWebsiteExtract(result.url, result.title, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
+        const parsedMobiles = (webData.mobiles || [])
+          .map(raw => normalizePhone(raw, { context: 'phone mobile', defaultCountry: countryCode, allowInternational: countryCode !== 'IN', trusted: true }))
+          .filter(n => n && n.isMobile);
+        const primaryMobile = parsedMobiles[0] || null;
+        const secondaryMobile = parsedMobiles[1] || null;
+        const hasMobile = Boolean(primaryMobile);
 
         const vendorObj = {
           id: `serp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
@@ -146,9 +154,9 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
           category: category,
           city: location || 'Unknown',
           address: result.description,
-          phone: mobile10 ? `+91 ${mobile10.slice(0, 5)} ${mobile10.slice(5)}` : (webData.phone || null),
+          phone: primaryMobile ? primaryMobile.displayPhone : (webData.phone || null),
           phones: webData.phones || [],
-          secondaryPhone: webData.mobiles.length > 1 ? `+91 ${webData.mobiles[1].slice(0, 5)} ${webData.mobiles[1].slice(5)}` : null,
+          secondaryPhone: secondaryMobile ? secondaryMobile.displayPhone : null,
           email: webData.email || (webData.emails && webData.emails[0]) || null,
           emails: webData.emails || [],
           website: result.url,
@@ -157,11 +165,11 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
           gstin: webData.gstin || '',
           pincode: webData.pincode || '',
           source: 'Cyber Intelligence Matrix',
-          verified: Boolean(hasMobile),
+          verified: hasMobile,
           pushed: false,
           qualityScore: hasMobile ? 90 : 60,
-          whatsappLink: mobile10 ? `https://wa.me/91${mobile10}?text=Hi%20${encodeURIComponent(result.title || '')}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.` : null,
-          whatsappAvailable: Boolean(hasMobile),
+          whatsappLink: primaryMobile ? `https://wa.me/${primaryMobile.digits}?text=Hi%20${encodeURIComponent(result.title || '')}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.` : null,
+          whatsappAvailable: hasMobile,
           scrapedAt: new Date().toISOString()
         };
         

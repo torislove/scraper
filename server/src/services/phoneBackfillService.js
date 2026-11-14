@@ -17,14 +17,28 @@
 const dbAdapter = require('../config/dbAdapter');
 const { getBrowser, applyAdvancedStealth, optimizePageForSpeed } = require('../scrapers/browserFactory');
 const { normalizePhone } = require('../utils/phoneUtils');
+const { detectCountry, COUNTRIES } = require('../services/localBrain/countries');
 const browserBudget = require('../utils/browserBudget');
+
+/**
+ * The lead's own location decides the phone rules. A lead from Austin must be
+ * parsed as US and a lead from Tenali as India, regardless of where the app is
+ * running. Unknown leads fall back to India, the home market.
+ */
+function countryForLead(lead) {
+  if (!lead) return 'IN';
+  const explicit = String(lead.country || '').trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(explicit) && COUNTRIES.some(c => c.code === explicit)) return explicit;
+  const hit = detectCountry([lead.country, lead.city, lead.district, lead.state].filter(Boolean).join(', '));
+  return hit ? hit.code : 'IN';
+}
 
 const DEFAULT_BUDGET_MS = 90_000;
 const DEFAULT_CONCURRENCY = 4;
 const PAGE_TIMEOUT_MS = 12_000;
 
-function hasValidMobile(value) {
-  const parsed = normalizePhone(value);
+function hasValidMobile(value, countryCode = 'IN') {
+  const parsed = normalizePhone(value, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
   return Boolean(parsed && parsed.isMobile);
 }
 
@@ -306,10 +320,10 @@ function determineTier(score) {
   return 'Bronze';
 }
 
-function pickNumbers(rawValues) {
+function pickNumbers(rawValues, countryCode = 'IN') {
   const all = [];
   for (const raw of rawValues || []) {
-    const parsed = normalizePhone(raw, { context: 'phone tel' });
+    const parsed = normalizePhone(raw, { context: 'phone tel', defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
     if (!parsed) continue;
     if (all.some(p => p.national === parsed.national)) continue;
     all.push(parsed);
@@ -396,13 +410,13 @@ async function backfillPhones(options = {}) {
     .filter(item => {
       if (!item || !item.url) return false;
       const { lead } = item;
-      const needsPhone = !hasValidMobile(lead.phone);
+      const needsPhone = !hasValidMobile(lead.phone, countryForLead(lead));
       const needsProfile = !lead.website || !lead.address || lead.address === 'Unknown' || !lead.operatingHours;
       return needsPhone || needsProfile;
     })
-    .sort((a, b) => Number(!hasValidMobile(a.lead.phone)) === Number(!hasValidMobile(b.lead.phone))
+    .sort((a, b) => Number(!hasValidMobile(a.lead.phone, countryForLead(a.lead))) === Number(!hasValidMobile(b.lead.phone, countryForLead(b.lead)))
       ? 0
-      : (hasValidMobile(a.lead.phone) ? 1 : -1));
+      : (hasValidMobile(a.lead.phone, countryForLead(a.lead)) ? 1 : -1));
 
   const summary = {
     sessionId,
@@ -469,15 +483,14 @@ async function backfillPhones(options = {}) {
             }
           }
 
-          const numbers = pickNumbers(details.rawPhones);
+          const countryCode = countryForLead(lead);
+          const numbers = pickNumbers(details.rawPhones, countryCode);
           summary.attempted++;
 
           const mobiles = numbers.filter(n => n.isMobile);
           const landlines = numbers.filter(n => n.isLandline);
           const existingPhones = Array.isArray(lead.phones) ? lead.phones : [];
-          const formatted = numbers.map(n => n.isMobile
-            ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}`
-            : (n.displayPhone || n.e164));
+          const formatted = numbers.map(n => n.displayPhone || n.e164);
           const mergedPhones = [...new Set([...existingPhones, ...formatted])];
 
           let changed = false;
@@ -490,17 +503,17 @@ async function backfillPhones(options = {}) {
             lead.callUrl = bestPhoneObj.callUrl || `tel:${bestPhoneObj.digits || bestPhoneObj.national}`;
             if (bestPhoneObj.isMobile) {
               lead.whatsappAvailable = true;
-              lead.whatsappLink = `https://wa.me/91${bestPhoneObj.national}`;
+              lead.whatsappLink = `https://wa.me/${bestPhoneObj.digits}`;
             }
             lead.verified = true;
             lead.aiVerified = true;
             changed = true;
-          } else if (mobiles.length && !hasValidMobile(lead.phone)) {
+          } else if (mobiles.length && !hasValidMobile(lead.phone, countryCode)) {
             lead.phone = mobiles[0].e164;
             lead.phoneType = 'mobile';
             lead.whatsappAvailable = true;
-            lead.whatsappLink = `https://wa.me/91${mobiles[0].national}`;
-            lead.callUrl = `tel:${mobiles[0].national}`;
+            lead.whatsappLink = `https://wa.me/${mobiles[0].digits}`;
+            lead.callUrl = `tel:${mobiles[0].digits}`;
             lead.verified = true;
             lead.aiVerified = true;
             changed = true;
@@ -527,7 +540,7 @@ async function backfillPhones(options = {}) {
             try {
               const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
               const webData = await Promise.race([
-                fastWebsiteExtract(effectiveUrl, lead.name),
+                fastWebsiteExtract(effectiveUrl, lead.name, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' }),
                 new Promise(res => setTimeout(() => res(null), 1500))
               ]);
               if (webData) {
@@ -540,17 +553,17 @@ async function backfillPhones(options = {}) {
                 if (webData.facebook && !lead.facebook) { lead.facebook = webData.facebook; changed = true; }
                 if (webData.logo && !lead.logo) { lead.logo = webData.logo; lead.avatar = webData.logo; changed = true; }
                 if (webData.phones && webData.phones.length > 0) {
-                  const morePhones = pickNumbers(webData.phones);
+                  const morePhones = pickNumbers(webData.phones, countryCode);
                   if (morePhones.length > 0) {
                     const newMobiles = morePhones.filter(n => n.isMobile);
-                    if (newMobiles.length && !hasValidMobile(lead.phone)) {
+                    if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
                       lead.phone = newMobiles[0].e164;
                       lead.whatsappAvailable = true;
-                      lead.whatsappLink = `https://wa.me/91${newMobiles[0].national}`;
+                      lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
                       lead.verified = true;
                       changed = true;
                     }
-                    const moreFormatted = morePhones.map(n => n.isMobile ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}` : n.e164);
+                    const moreFormatted = morePhones.map(n => n.displayPhone || n.e164);
                     lead.phones = [...new Set([...(lead.phones || []), ...moreFormatted])];
                     changed = true;
                   }
@@ -712,7 +725,7 @@ class StreamingEnrichmentManager {
     const isGoogleMaps = /google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(url);
     if (!isGoogleMaps && !url.includes('google.com')) return;
     
-    const needsMobile = !hasValidMobile(lead.phone);
+    const needsMobile = !hasValidMobile(lead.phone, countryForLead(lead));
     const needsAddress = !lead.address || lead.address.length < 15;
     const needsWebsite = !lead.website || !lead.website.startsWith('http');
     if (!needsMobile && !needsAddress && !needsWebsite) return;
@@ -757,7 +770,8 @@ class StreamingEnrichmentManager {
     if (!url || !url.startsWith('http')) return;
     try {
       const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
-      const webData = await fastWebsiteExtract(url, lead.name);
+      const countryCode = countryForLead(lead);
+      const webData = await fastWebsiteExtract(url, lead.name, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
       if (!webData) return;
 
       let changed = false;
@@ -781,7 +795,7 @@ class StreamingEnrichmentManager {
       }
 
       if (Array.isArray(webData.phones) && webData.phones.length > 0) {
-        const moreNumbers = pickNumbers(webData.phones);
+        const moreNumbers = pickNumbers(webData.phones, countryCode);
         if (moreNumbers.length > 0) {
           const newMobiles = moreNumbers.filter(n => n.isMobile);
           const newLandlines = moreNumbers.filter(n => n.isLandline);
@@ -793,20 +807,20 @@ class StreamingEnrichmentManager {
             lead.callUrl = bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`;
             if (bestPhone.isMobile) {
               lead.whatsappAvailable = true;
-              lead.whatsappLink = `https://wa.me/91${bestPhone.national}`;
+              lead.whatsappLink = `https://wa.me/${bestPhone.digits}`;
             }
             lead.verified = true;
             changed = true;
-          } else if (newMobiles.length && !hasValidMobile(lead.phone)) {
+          } else if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
             lead.phone = newMobiles[0].e164;
             lead.phoneType = 'mobile';
             lead.whatsappAvailable = true;
-            lead.whatsappLink = `https://wa.me/91${newMobiles[0].national}`;
-            lead.callUrl = `tel:${newMobiles[0].national}`;
+            lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
+            lead.callUrl = `tel:${newMobiles[0].digits}`;
             lead.verified = true;
             changed = true;
           }
-          const formatted = moreNumbers.map(n => n.isMobile ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}` : (n.displayPhone || n.e164));
+          const formatted = moreNumbers.map(n => n.displayPhone || n.e164);
           lead.phones = [...new Set([...(Array.isArray(lead.phones) ? lead.phones : []), ...formatted])];
           changed = true;
         }
@@ -875,13 +889,12 @@ class StreamingEnrichmentManager {
         const url = lead.mapsLink || lead.googleMapsUrl || lead.sourceUrl;
         page = await openDetailPage(this.context, url, lead);
         const details = await readPlaceDetails(page);
-        const numbers = pickNumbers(details.rawPhones);
+        const countryCode = countryForLead(lead);
+        const numbers = pickNumbers(details.rawPhones, countryCode);
         const mobiles = numbers.filter(n => n.isMobile);
         const landlines = numbers.filter(n => n.isLandline);
         const existingPhones = Array.isArray(lead.phones) ? lead.phones : [];
-        const formatted = numbers.map(n => n.isMobile
-          ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}`
-          : (n.displayPhone || n.e164));
+        const formatted = numbers.map(n => n.displayPhone || n.e164);
         const mergedPhones = [...new Set([...existingPhones, ...formatted])];
 
         let changed = false;
@@ -894,17 +907,17 @@ class StreamingEnrichmentManager {
           lead.callUrl = bestPhoneObj.callUrl || `tel:${bestPhoneObj.digits || bestPhoneObj.national}`;
           if (bestPhoneObj.isMobile) {
             lead.whatsappAvailable = true;
-            lead.whatsappLink = `https://wa.me/91${bestPhoneObj.national}`;
+            lead.whatsappLink = `https://wa.me/${bestPhoneObj.digits}`;
           }
           lead.verified = true;
           lead.aiVerified = true;
           changed = true;
-        } else if (mobiles.length && !hasValidMobile(lead.phone)) {
+        } else if (mobiles.length && !hasValidMobile(lead.phone, countryCode)) {
           lead.phone = mobiles[0].e164;
           lead.phoneType = 'mobile';
           lead.whatsappAvailable = true;
-          lead.whatsappLink = `https://wa.me/91${mobiles[0].national}`;
-          lead.callUrl = `tel:${mobiles[0].national}`;
+          lead.whatsappLink = `https://wa.me/${mobiles[0].digits}`;
+          lead.callUrl = `tel:${mobiles[0].digits}`;
           lead.verified = true;
           lead.aiVerified = true;
           changed = true;
@@ -928,7 +941,7 @@ class StreamingEnrichmentManager {
         if (effectiveUrl && effectiveUrl.startsWith('http') && !effectiveUrl.includes('google.com')) {
           try {
             const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
-            const webData = await fastWebsiteExtract(effectiveUrl, lead.name);
+            const webData = await fastWebsiteExtract(effectiveUrl, lead.name, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
             if (webData) {
               if (webData.emails && webData.emails.length > 0) {
                 lead.emails = [...new Set([...(lead.emails || []), ...webData.emails])];
@@ -947,17 +960,17 @@ class StreamingEnrichmentManager {
                 changed = true;
               }
               if (webData.phones && webData.phones.length > 0) {
-                const morePhones = pickNumbers(webData.phones);
+                const morePhones = pickNumbers(webData.phones, countryCode);
                 if (morePhones.length > 0) {
                   const newMobiles = morePhones.filter(n => n.isMobile);
-                  if (newMobiles.length && !hasValidMobile(lead.phone)) {
+                  if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
                     lead.phone = newMobiles[0].e164;
                     lead.whatsappAvailable = true;
-                    lead.whatsappLink = `https://wa.me/91${newMobiles[0].national}`;
+                    lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
                     lead.verified = true;
                     changed = true;
                   }
-                  const moreFormatted = morePhones.map(n => n.isMobile ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}` : n.e164);
+                  const moreFormatted = morePhones.map(n => n.displayPhone || n.e164);
                   lead.phones = [...new Set([...(lead.phones || []), ...moreFormatted])];
                   changed = true;
                 }

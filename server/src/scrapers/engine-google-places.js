@@ -6,7 +6,7 @@ const geoAI = require('../utils/geoAI');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const { getBrowser, chromium, applyAdvancedStealth, optimizePageForSpeed } = require('./browserFactory');
 const { verifyWithAI } = require('../utils/aiParser');
-const { normalizePhone } = require('../utils/phoneUtils');
+const { normalizePhone, extractPhones } = require('../utils/phoneUtils');
 const fidelity = require('../services/categoryFidelity');
 
 /**
@@ -692,6 +692,14 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
   // "Gunur Central Commercial"). The city stored on a vendor must stay the
   // real base location, never that generated zone phrase.
   const vendorCity = cityHint || location || 'Global';
+  // Country bias for the Maps feed and for phone parsing. The location text is
+  // the source of truth; unknown places fall back to India (home market), so
+  // behaviour there is unchanged while searches abroad stop returning Indian
+  // formatting and WhatsApp links.
+  const countryCode = (require('../services/localBrain/countries').detectCountry(
+    [location, cityHint, district, stateName].filter(Boolean).join(', ')
+  ) || { code: 'IN' }).code;
+  const countryGl = String(countryCode).toLowerCase();
   const resolvedMandal = mandal || (scope === 'mandal' ? location : '') || (location && !location.toLowerCase().includes('district') ? location.replace(/\b(mandal|taluk|tehsil|block)\b/gi, '').trim() : '');
   addLog(`[Cyber Core] Dispatching autonomous stealth crawler for query: "${exactQuery}"`);
 
@@ -735,7 +743,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const km = Number(radiusKm) || 5;
           const zoom = Math.max(11, Math.min(16, Math.round(14 - Math.log2(Math.max(0.5, km / 2)))));
           return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
-        })()}`;
+        })()}?hl=en&gl=${countryGl}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
     // Wait for load with rapid timeout
     // Measured: 'domcontentloaded' returns ~1.3 s earlier but the feed then
@@ -788,7 +796,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       }
       let parsedPhone = null;
       if (phone) {
-        parsedPhone = normalizePhone(phone, { context: 'phone tel' });
+        parsedPhone = normalizePhone(phone, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
         phone = parsedPhone ? parsedPhone.displayPhone : phone;
       }
 
@@ -889,7 +897,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             operatingHours: '',
             topReviews: [],
             whatsappLink: (parsedPhone && parsedPhone.isMobile) 
-              ? `https://wa.me/91${parsedPhone.national}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
+              ? `https://wa.me/${parsedPhone.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
               : '',
             whatsappAvailable: Boolean(parsedPhone && parsedPhone.isMobile),
             isMobile: Boolean(parsedPhone && parsedPhone.isMobile),
@@ -905,7 +913,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             locality: location,
             mandal: resolvedMandal,
             district: district || '',
-            state: stateName || 'India',
+            state: stateName || (countryCode === 'IN' ? 'India' : ''),
             strategy
           };
 
@@ -924,7 +932,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               existing.callUrl = parsedPhone?.callUrl || existing.callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : '');
               if (parsedPhone?.isMobile) {
                 existing.whatsappAvailable = true;
-                existing.whatsappLink = `https://wa.me/91${parsedPhone.national}`;
+                existing.whatsappLink = `https://wa.me/${parsedPhone.digits}`;
               }
               updated = true;
             }
@@ -1006,14 +1014,21 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             const fullText = card.innerText || '';
 
             // Extract Phone Numbers:
-            // Landlines: 080 4148 9746, 08041489746, 040 12345678, etc.
-            // Mobiles: 086600 17739, 096552 14888, 9845012345, +91 99008 51000
-            const phoneRegex = /(?:(?:\+91|0091)[- ]?)?[6-9]\d{4}[- ]?\d{5}|0[6-9]\d{4}[- ]?\d{5}|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]?\d{6,8}/g;
+            // India keeps the strict local patterns (landlines like
+            // 080 4148 9746 and mobiles like +91 99008 51000). Everywhere else
+            // the shared parser validates numbers against that country's rules.
             const phones = [];
-            let m;
-            while ((m = phoneRegex.exec(fullText)) !== null) {
-              const cleaned = m[0].trim();
-              if (cleaned.length >= 8) phones.push(cleaned);
+            if (countryCode === 'IN') {
+              const phoneRegex = /(?:(?:\+91|0091)[- ]?)?[6-9]\d{4}[- ]?\d{5}|0[6-9]\d{4}[- ]?\d{5}|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]?\d{6,8}/g;
+              let m;
+              while ((m = phoneRegex.exec(fullText)) !== null) {
+                const cleaned = m[0].trim();
+                if (cleaned.length >= 8) phones.push(cleaned);
+              }
+            } else {
+              for (const parsed of extractPhones(fullText, { defaultCountry: countryCode, allowInternational: true })) {
+                phones.push(parsed.displayPhone || parsed.e164);
+              }
             }
 
             // Extract Website link from card
@@ -1183,7 +1198,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           // rest away (Google often lists a landline plus a mobile).
           const exposedNumbers = [];
           for (const rawNumber of [rawItem.phone, ...(rawItem.allPhones || [])]) {
-            const parsed = normalizePhone(rawNumber, { context: 'phone tel' });
+            const parsed = normalizePhone(rawNumber, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
             if (parsed && !exposedNumbers.some(n => n.national === parsed.national)) {
               exposedNumbers.push(parsed);
             }
@@ -1197,7 +1212,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             phone = primaryNumber.displayPhone;
             callUrl = primaryNumber.callUrl;
             if (primaryNumber.isMobile) {
-              whatsappLink = `https://wa.me/91${primaryNumber.national}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
+              whatsappLink = `https://wa.me/${primaryNumber.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
               whatsappAvailable = true;
             } else {
               whatsappLink = '';
@@ -1222,7 +1237,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
           // Background Website Deep Crawl for Email, Phone, Socials
           if (websiteUrl && websiteUrl.startsWith('http')) {
-            fastWebsiteExtract(websiteUrl, name).then(enriched => {
+            fastWebsiteExtract(websiteUrl, name, { defaultCountry: countryCode, allowInternational: true }).then(enriched => {
               const existing = dbAdapter.findMatch({ name, website: websiteUrl });
               if (existing) {
                 let updated = false;
@@ -1278,9 +1293,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             name,
             address,
             phone: phone || '',
-            phones: exposedNumbers.map(n => n.isMobile
-              ? `+91 ${n.national.slice(0, 5)} ${n.national.slice(5)}`
-              : n.e164),
+            phones: exposedNumbers.map(n => n.displayPhone || n.e164),
             phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
             rating,
             reviewsCount,
@@ -1316,7 +1329,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             locality: location,
             mandal: resolvedMandal,
             district: district || '',
-            state: stateName || 'India',
+            state: stateName || (countryCode === 'IN' ? 'India' : ''),
             source: 'Google Maps',
             sourceEngine: 'google-places',
             verified: Boolean(phone),
@@ -1420,14 +1433,15 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               place.sessionId = sessionId;
               place.strategy = strategy; // Store strategy so UI knows how to group folders
 
-              // Auto-generate 1-Click WhatsApp Direct Launcher
-              if (place.phone && place.phone.length >= 10) {
-                const cleanPhone = place.phone.replace(/[^0-9]/g, '');
-                const clean10 = cleanPhone.slice(-10);
-                if (clean10.length === 10) {
-                  place.whatsappLink = `https://wa.me/91${clean10}?text=Hi%20${encodeURIComponent(place.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
-                  place.whatsappAvailable = true;
-                }
+              // Auto-generate 1-Click WhatsApp Direct Launcher.
+              // Only mobiles get WhatsApp, and the parser already validated the
+              // number against the search country, so no hardcoded +91 prefix.
+              const waPhone = primaryNumber?.isMobile
+                ? primaryNumber
+                : normalizePhone(place.phone, { context: 'phone mobile', defaultCountry: countryCode, allowInternational: true });
+              if (waPhone?.isMobile) {
+                place.whatsappLink = `https://wa.me/${waPhone.digits}?text=Hi%20${encodeURIComponent(place.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
+                place.whatsappAvailable = true;
               }
               
               // Apply GeoAI reverse geocoding for deep location folders

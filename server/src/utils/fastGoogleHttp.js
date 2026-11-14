@@ -87,7 +87,13 @@ async function fetchGoogleLocalHttp(query, pageIndex = 0, categoryFallback = 'Bu
       cached: true
     };
   }
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=in`;
+  // Country bias comes from the query itself, so a search for "plumbers in
+  // Austin" is answered with US results and a search in Tenali with Indian
+  // results. Unknown places fall back to India, the home market.
+  const country = require('../services/localBrain/countries').detectCountry(query);
+  const gl = (country?.code || 'IN').toLowerCase();
+  const acceptLanguage = gl === 'in' ? 'en-IN,en-US;q=0.9,en;q=0.8' : 'en-US,en;q=0.9';
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=${gl}`;
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
   try {
@@ -95,7 +101,7 @@ async function fetchGoogleLocalHttp(query, pageIndex = 0, categoryFallback = 'Bu
       headers: {
         'User-Agent': ua,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8',
+        'Accept-Language': acceptLanguage,
         'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
         'sec-ch-ua-mobile': ua.includes('Mobile') ? '?1' : '?0',
         'sec-ch-ua-platform': ua.includes('Windows') ? '"Windows"' : ua.includes('Mac') ? '"macOS"' : '"Android"'

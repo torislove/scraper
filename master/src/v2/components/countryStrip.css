@@ -65,6 +65,15 @@
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
 }
 
+/* India is the home market: a deliberately bigger flag and name. */
+.country-strip-current.is-home .country-strip-flag {
+  font-size: 44px;
+}
+
+.country-strip-current.is-home .country-strip-name b {
+  font-size: 18px;
+}
+
 .country-strip-name {
   display: flex;
   flex-direction: column;
@@ -139,6 +148,11 @@
 
 .country-pill.is-home {
   border-color: rgba(249, 115, 22, 0.42);
+  background: linear-gradient(120deg, rgba(249, 115, 22, 0.16), rgba(34, 197, 94, 0.12));
+}
+
+.country-pill.is-home .country-pill-flag {
+  font-size: 19px;
 }
 
 .country-pill-flag {
@@ -298,9 +312,79 @@
   padding: 14px 4px;
 }
 
+/* Featured India card: bigger flag, full width, above the 245-country grid. */
+.country-feature {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(249, 115, 22, 0.55);
+  background:
+    radial-gradient(120% 200% at 0% 0%, rgba(249, 115, 22, 0.28), transparent 60%),
+    linear-gradient(120deg, rgba(34, 197, 94, 0.16), rgba(34, 211, 238, 0.12));
+  color: #f8fafc;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.country-feature:hover,
+.country-feature.is-active {
+  transform: translateY(-1px);
+  border-color: rgba(250, 204, 21, 0.8);
+  box-shadow: 0 10px 26px rgba(249, 115, 22, 0.22);
+}
+
+.country-feature-flag {
+  font-size: 42px;
+  line-height: 1;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5));
+}
+
+.country-feature-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.country-feature-text b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+
+.country-feature-text small {
+  font-size: 11px;
+  color: #cbd5e1;
+  line-height: 1.35;
+}
+
+.country-feature-cta {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #052e16;
+  background: linear-gradient(90deg, #f97316, #facc15, #22c55e);
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
 @media (max-width: 720px) {
   .country-strip { margin: 8px 8px 2px; padding: 10px; }
   .country-strip-flag { font-size: 24px; }
+  .country-strip-current.is-home .country-strip-flag { font-size: 34px; }
   .country-strip-name b { font-size: 13px; }
+  .country-strip-current.is-home .country-strip-name b { font-size: 15px; }
   .country-picker-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .country-feature { flex-wrap: wrap; }
+  .country-feature-flag { font-size: 32px; }
+  .country-feature-cta { margin-left: 0; }
 }

@@ -60,7 +60,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect }) {
 
       <div className="country-strip-main">
         <span className="country-strip-kicker"><Globe2 size={13} /> SEARCH COUNTRY</span>
-        <div className="country-strip-current">
+        <div className={`country-strip-current${current?.code === 'IN' ? ' is-home' : ''}`}>
           <span className="country-strip-flag" aria-hidden="true">{flag}</span>
           <div className="country-strip-name">
             <b>{current?.name || 'India'}</b>
@@ -128,6 +128,20 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect }) {
           </div>
 
           <div className="country-picker-grid">
+            {!query.trim() && (
+              <button
+                type="button"
+                className={`country-feature${current?.code === 'IN' ? ' is-active' : ''}`}
+                onClick={() => choose(findCountry('IN'))}
+              >
+                <span className="country-feature-flag" aria-hidden="true">{flagOf('IN')}</span>
+                <span className="country-feature-text">
+                  <b>India <em className="country-card-home">HOME</em></b>
+                  <small>Primary market · 9 engines · JustDial, WeddingBazaar, WeddingWire, Mandap plus the global stack</small>
+                </span>
+                <span className="country-feature-cta">Search India</span>
+              </button>
+            )}
             {results.map(country => (
               <button
                 type="button"

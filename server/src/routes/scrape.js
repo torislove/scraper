@@ -1334,7 +1334,10 @@ router.post('/deep-enrich', async (req, res) => {
           if (!lead || !lead.website || !lead.website.startsWith('http')) continue;
 
           try {
-            const webData = await fastWebsiteExtract(lead.website, lead.name);
+            const leadCountry = (require('../services/localBrain/countries').detectCountry(
+              [lead.country, lead.city, lead.district, lead.state].filter(Boolean).join(', ')
+            ) || { code: 'IN' }).code;
+            const webData = await fastWebsiteExtract(lead.website, lead.name, { defaultCountry: leadCountry, allowInternational: leadCountry !== 'IN' });
             if (webData && (webData.emails?.length > 0 || webData.instagram || webData.facebook || webData.phones?.length > 0 || webData.logo)) {
               const currentVendors = dbAdapter.getVendors();
               const targetIdx = currentVendors.findIndex(v => v.id === lead.id);

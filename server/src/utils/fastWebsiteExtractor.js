@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const https = require('https');
+const { normalizePhone, extractPhones } = require('./phoneUtils');
 
 // Dedicated agent ignoring SSL errors common on local business websites with keepAlive
 const httpsAgent = new https.Agent({
@@ -23,7 +24,7 @@ const EMAIL_BLACKLIST = [
 /**
  * Extracts phones, emails, socials, and contact metadata from raw HTML.
  */
-function extractFromHtml(html, pageUrl) {
+function extractFromHtml(html, pageUrl, opts = {}) {
   const data = {
     emails: [],
     phones: [],
@@ -84,23 +85,38 @@ function extractFromHtml(html, pageUrl) {
 
     // Direct WhatsApp Links
     if (lower.includes('wa.me/') || lower.includes('api.whatsapp.com/send')) {
-      const waDigits = lower.replace(/\D/g, '').slice(-10);
-      if (waDigits.length === 10 && /^[6-9]/.test(waDigits)) {
-        data.whatsappLink = `https://wa.me/91${waDigits}`;
-        if (!data.mobiles.includes(waDigits)) data.mobiles.push(waDigits);
-        const formatted = `+91 ${waDigits.slice(0, 5)} ${waDigits.slice(5)}`;
-        if (!data.phones.includes(formatted)) data.phones.push(formatted);
+      const rawWa = lower.includes('wa.me/')
+        ? lower.split('wa.me/')[1].split(/[?&]/)[0]
+        : (() => {
+            try { return new URL(href, 'https://wa.me').searchParams.get('phone') || ''; }
+            catch (e) { return ''; }
+          })();
+      const wa = normalizePhone(rawWa, {
+        context: 'phone whatsapp',
+        defaultCountry: opts.defaultCountry || 'IN',
+        allowInternational: opts.allowInternational === true,
+        trusted: true
+      });
+      if (wa?.isMobile) {
+        data.whatsappLink = `https://wa.me/${wa.digits}`;
+        if (!data.mobiles.includes(wa.national || wa.digits)) data.mobiles.push(wa.national || wa.digits);
+        if (!data.phones.includes(wa.displayPhone)) data.phones.push(wa.displayPhone);
       }
     }
 
     // Direct tel: links
     if (lower.startsWith('tel:')) {
-      const telDigits = lower.replace('tel:', '').replace(/\D/g, '').slice(-10);
-      if (telDigits.length === 10) {
-        const isMobile = /^[6-9]/.test(telDigits);
-        if (isMobile && !data.mobiles.includes(telDigits)) data.mobiles.push(telDigits);
-        const formatted = `+91 ${telDigits.slice(0, 5)} ${telDigits.slice(5)}`;
-        if (!data.phones.includes(formatted)) data.phones.push(formatted);
+      const rawTel = decodeURIComponent(href.slice(4)).split(/[;,]/)[0];
+      const tel = normalizePhone(rawTel, {
+        context: 'phone tel',
+        defaultCountry: opts.defaultCountry || 'IN',
+        allowInternational: opts.allowInternational === true
+      });
+      if (tel) {
+        if (tel.isMobile && !data.mobiles.includes(tel.national || tel.digits)) {
+          data.mobiles.push(tel.national || tel.digits);
+        }
+        if (!data.phones.includes(tel.displayPhone)) data.phones.push(tel.displayPhone);
       }
     }
 
@@ -117,17 +133,36 @@ function extractFromHtml(html, pageUrl) {
     }
   });
 
-  // 3. Indian Phone / Mobile regex directly from text
+  // 3. Phone / mobile extraction from page text.
+  // India keeps its strict regex. Other countries use the shared parser, which
+  // understands local trunk prefixes and validates the number's country.
   const textContent = $('body').text() || html;
-  const mobileRegex = /(?:(?:\+|0{0,2})91[\s-]?)?([6-9]\d{4}[\s-]?\d{5})\b/g;
-  let match;
-  while ((match = mobileRegex.exec(textContent)) !== null) {
-    const digits = match[1].replace(/\D/g, '');
-    if (digits.length === 10 && /^[6-9]/.test(digits)) {
-      if (!data.mobiles.includes(digits)) data.mobiles.push(digits);
-      const formatted = `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
-      if (!data.phones.includes(formatted)) data.phones.push(formatted);
-      if (!data.whatsappLink) data.whatsappLink = `https://wa.me/91${digits}`;
+  if (opts.allowInternational) {
+    const parsed = extractPhones(textContent, {
+      defaultCountry: opts.defaultCountry || 'IN',
+      allowInternational: true,
+      trusted: false,
+      context: 'phone contact'
+    });
+    for (const phone of parsed) {
+      const national = phone.national || phone.digits;
+      if (phone.isMobile) {
+        if (!data.mobiles.includes(national)) data.mobiles.push(national);
+        if (!data.whatsappLink) data.whatsappLink = `https://wa.me/${phone.digits}`;
+      }
+      if (!data.phones.includes(phone.displayPhone)) data.phones.push(phone.displayPhone);
+    }
+  } else {
+    const mobileRegex = /(?:(?:\+|0{0,2})91[\s-]?)?([6-9]\d{4}[\s-]?\d{5})\b/g;
+    let match;
+    while ((match = mobileRegex.exec(textContent)) !== null) {
+      const digits = match[1].replace(/\D/g, '');
+      if (digits.length === 10 && /^[6-9]/.test(digits)) {
+        if (!data.mobiles.includes(digits)) data.mobiles.push(digits);
+        const formatted = `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+        if (!data.phones.includes(formatted)) data.phones.push(formatted);
+        if (!data.whatsappLink) data.whatsappLink = `https://wa.me/91${digits}`;
+      }
     }
   }
 
@@ -169,7 +204,7 @@ function extractFromHtml(html, pageUrl) {
  * Ultra-Fast Parallel Multi-Page Website Contact & Asset Extractor
  * Crawls home page + contact page in parallel (<800ms) to harvest mobile numbers and contacts.
  */
-async function fastWebsiteExtract(url, businessName = '') {
+async function fastWebsiteExtract(url, businessName = '', opts = {}) {
   const result = {
     emails: [],
     phones: [],
@@ -229,7 +264,7 @@ async function fastWebsiteExtract(url, businessName = '') {
       const html = typeof resp.value.data === 'string' ? resp.value.data : '';
       if (!html) continue;
 
-      const extracted = extractFromHtml(html, uniqueUrls[i]);
+      const extracted = extractFromHtml(html, uniqueUrls[i], opts);
 
       // Merge results
       for (const email of extracted.emails) {
@@ -255,11 +290,20 @@ async function fastWebsiteExtract(url, businessName = '') {
     // Graceful fallback
   }
 
-  // Prioritize Indian mobile number for primary phone
+  // Primary phone: a validated mobile first, then a landline. The parser knows
+  // the country, so this is correct outside India too.
   if (result.mobiles.length > 0) {
-    result.phone = `+91 ${result.mobiles[0].slice(0, 5)} ${result.mobiles[0].slice(5)}`;
-    if (!result.whatsappLink) {
-      result.whatsappLink = `https://wa.me/91${result.mobiles[0]}`;
+    const mobile = normalizePhone(result.mobiles[0], {
+      context: 'phone mobile',
+      defaultCountry: opts.defaultCountry || 'IN',
+      allowInternational: opts.allowInternational === true,
+      trusted: true
+    });
+    if (mobile) {
+      result.phone = mobile.displayPhone || mobile.e164;
+      if (!result.whatsappLink) result.whatsappLink = `https://wa.me/${mobile.digits}`;
+    } else {
+      result.phone = result.mobiles[0];
     }
   } else if (result.phones.length > 0) {
     result.phone = result.phones[0];

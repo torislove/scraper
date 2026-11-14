@@ -232,14 +232,14 @@ export default function EnginesMatrix() {
       {/* Intro Header */}
       <div className="engines-intro" style={{ textAlign: "center", maxWidth: "780px", margin: "0 auto 40px" }}>
         <span className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
-          <Sparkles size={14} className="text-mint" /> 10 KEYLESS DISCOVERY NETWORKS · 16 COUNTRIES
+          <Sparkles size={14} className="text-mint" /> 9 KEYLESS ENGINES · 245 COUNTRIES
         </span>
         <h2 style={{ fontSize: "clamp(30px, 4vw, 44px)", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em", margin: "0 0 14px" }}>
           How Scraper.co.in Searches The Open Web, Maps<br />
           <span className="gradient-text">And Directories For Real Business Owners.</span>
         </h2>
         <p style={{ color: "#94A3B8", fontSize: "15px", lineHeight: 1.7, margin: 0 }}>
-          India, United States, United Kingdom, Canada, Australia, UAE, Singapore, New Zealand, Ireland, Malaysia, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman. Every enabled network runs against your target city and its neighbourhoods — and any source that blocks automation is shown as blocked, never faked.
+          India is the home market and keeps its own directories. Every other country runs the keyless global stack: OpenStreetMap, Google Maps, Google Local Finder, Web Discovery and official business websites. All 245 countries are selectable. Any source that blocks automation is shown as blocked, never faked — the sites set their own rate limits, and we answer by running independent sources in parallel instead of pretending the limits do not exist.
         </p>
       </div>
 
@@ -446,10 +446,10 @@ export default function EnginesMatrix() {
           </div>
           <div>
             <b style={{ display: "block", fontSize: "16px", fontWeight: 800, color: "#FFFFFF", marginBottom: "4px" }}>
-              Built For India First — Now Open To The US, UK, Canada, Australia &amp; The Gulf
+              Built For India First — Now Every Country
             </b>
             <p style={{ fontSize: "13.5px", color: "#94A3B8", margin: 0, lineHeight: 1.5 }}>
-              Direct mobile lines where the country uses them, verified business names, and complete shop locations. Blocked directories stay listed as blocked instead of being counted as coverage.
+              Direct mobile lines where the country uses them, verified business names, and complete shop locations across all 245 countries. Blocked directories stay listed as blocked instead of being counted as coverage. Site rate limits are respected; speed comes from caching, dedupe and parallel keyless sources.
             </p>
           </div>
         </div>

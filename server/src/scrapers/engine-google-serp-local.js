@@ -22,18 +22,13 @@ function setDeps({ logger, abortSignal, emitVendorEvent: evt }) {
 
 const { isListingRelevantToQuery, calculateLeadScore, determineTier } = require('./engine-google-places');
 
-function isIndianMobileNumber(val) {
-  if (!val) return false;
-  const digits = String(val).replace(/\D/g, '').slice(-10);
-  return digits.length === 10 && /^[6-9]/.test(digits);
-}
-
 /**
  * Scrapes a single page of Google Local Finder in an isolated, ultra-fast tab.
  */
-async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) {
+async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory, countryCode = 'IN') {
   const startIndex = pageIndex * 20;
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=in`;
+  const gl = String(countryCode || 'IN').toLowerCase();
+  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=${gl}`;
 
   let tab = null;
   try {
@@ -61,8 +56,13 @@ async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) 
 
     await tab.waitForSelector('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"], div.rllt__details, #rso', { timeout: 3000 }).catch(() => {});
 
-    const pageLeads = await tab.evaluate(({ categoryFallback }) => {
+    const pageLeads = await tab.evaluate(({ categoryFallback, countryCode }) => {
       const items = [];
+      // India uses its strict mobile/STD pattern. Other countries use a broad
+      // candidate pattern here and are validated by libphonenumber in Node.
+      const PHONE_RE = countryCode === 'IN'
+        ? /(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/
+        : /\+?\d[\d\s().-]{5,20}\d/;
       const cardElements = document.querySelectorAll('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"]');
 
       cardElements.forEach(card => {
@@ -107,13 +107,13 @@ async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) 
             const callEl = card.querySelector('[aria-label*="Call" i], button[aria-label*="Call" i]');
             if (callEl) {
               const label = callEl.getAttribute('aria-label') || '';
-              const m = label.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+              const m = label.match(PHONE_RE);
               if (m) phone = m[0].trim();
             }
           }
           if (!phone) {
             const cardText = (card.innerText || '') + ' ' + (card.getAttribute('aria-label') || '');
-            const phoneMatch = cardText.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+            const phoneMatch = cardText.match(PHONE_RE);
             if (phoneMatch) phone = phoneMatch[0].trim();
           }
 
@@ -194,7 +194,7 @@ async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) 
             const phoneContainer = document.querySelector('[data-attrid*="phone"], [data-item-id*="phone"], a[href^="tel:"]');
             if (phoneContainer) {
               const pText = phoneContainer.innerText || phoneContainer.getAttribute('aria-label') || phoneContainer.getAttribute('href') || '';
-              const pm = pText.match(/(?:(?:\+91|0091)[\s-]?)?[6-9]\d{4}[\s-]?\d{5}|\b0[6-9]\d{4}[\s-]?\d{5}\b|\b0[1-9]\d{1,4}[\s-]?\d{5,8}\b/);
+              const pm = pText.match(PHONE_RE);
               if (pm) kgPhone = pm[0].trim();
             }
             if (!kgPhone) {
@@ -276,7 +276,7 @@ async function fetchSingleLocalPage(context, query, pageIndex, defaultCategory) 
       } catch (kgErr) {}
 
       return items;
-    }, { categoryFallback: defaultCategory });
+    }, { categoryFallback: defaultCategory, countryCode });
 
     return { leads: pageLeads, captcha: false, pageIndex };
   } catch (err) {
@@ -307,6 +307,9 @@ async function scrapeGoogleLocalFinder(
   addLog(`[Local Finder Core] ⚡ Launching ultra-fast parallel surface harvest for: "${query}" (Target: up to ${maxPages * 20} leads)`);
 
   const vendorCity = cityHint || location || 'India';
+  // Country bias for Google results and phone parsing. The location text is the
+  // source of truth; unknown places fall back to India (home market).
+  const countryCode = (require('../services/localBrain/countries').detectCountry(location || cityHint || '') || { code: 'IN' }).code;
 
   if (!chromium) {
     addLog('[Local Finder Core] Playwright Chromium not available on this server.');
@@ -390,7 +393,7 @@ async function scrapeGoogleLocalFinder(
         const cleanName = lead.name.toLowerCase().trim();
         if (!fidelity.isVendorRelevant(lead, category)) continue;
 
-        const parsedLeadPhone = lead.phone ? normalizePhone(lead.phone, { context: 'phone tel' }) : null;
+        const parsedLeadPhone = lead.phone ? normalizePhone(lead.phone, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true }) : null;
         const isLandline = Boolean(parsedLeadPhone && parsedLeadPhone.isLandline);
         const isMobile = Boolean(parsedLeadPhone && parsedLeadPhone.isMobile);
         const displayPhone = parsedLeadPhone ? parsedLeadPhone.displayPhone : (lead.phone || '');
@@ -435,8 +438,8 @@ async function scrapeGoogleLocalFinder(
             suburb: leadLocality,
             mandal: district || location || '',
             district: district || location || '',
-            state: stateName || 'India',
-            address: lead.address || `${district || location}, India`,
+            state: stateName || (countryCode === 'IN' ? 'India' : ''),
+            address: lead.address || [district || location, countryCode === 'IN' ? 'India' : ''].filter(Boolean).join(', '),
             phone: displayPhone,
             phoneType: isMobile ? 'mobile' : (isLandline ? 'landline' : 'unknown'),
             isMobile,
@@ -460,7 +463,7 @@ async function scrapeGoogleLocalFinder(
             reservations: lead.reservations || [],
             serviceOptions: lead.serviceOptions || '',
             whatsappLink: isMobile && parsedLeadPhone
-              ? `https://wa.me/91${parsedLeadPhone.national}?text=Hi%20${encodeURIComponent(lead.name)}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.`
+              ? `https://wa.me/${parsedLeadPhone.digits}?text=Hi%20${encodeURIComponent(lead.name)}%2C%20I%20found%20your%20business%20and%20wanted%20to%20connect.`
               : '',
             whatsappAvailable: isMobile,
             zoneName: location || district || cityHint || '',
@@ -481,7 +484,7 @@ async function scrapeGoogleLocalFinder(
 
           // Immediate parallel website enrichment (<600ms multi-page crawler)
           if (formattedLead.website && formattedLead.website.startsWith('http')) {
-            fastWebsiteExtract(formattedLead.website, formattedLead.name)
+            fastWebsiteExtract(formattedLead.website, formattedLead.name, { defaultCountry: countryCode, allowInternational: true })
               .then(webData => {
                 if (webData.emails.length > 0 || webData.instagram || webData.facebook || webData.phones.length > 0 || webData.mobiles.length > 0 || webData.logo) {
                   formattedLead.emails = webData.emails;
@@ -492,11 +495,14 @@ async function scrapeGoogleLocalFinder(
                   if (webData.gstin && !formattedLead.gstin) formattedLead.gstin = webData.gstin;
                   if (webData.contactPerson && !formattedLead.contactPerson) formattedLead.contactPerson = webData.contactPerson;
                   if (webData.pincode && !formattedLead.pincode) formattedLead.pincode = webData.pincode;
-                  
-                  if (webData.mobiles.length > 0 && !isIndianMobileNumber(formattedLead.phone)) {
-                    const m10 = webData.mobiles[0];
-                    formattedLead.phone = `+91 ${m10.slice(0, 5)} ${m10.slice(5)}`;
-                    formattedLead.whatsappLink = `https://wa.me/91${m10}`;
+
+                  const currentMobile = normalizePhone(formattedLead.phone, { context: 'phone mobile', defaultCountry: countryCode, allowInternational: true })?.isMobile;
+                  const webMobile = webData.mobiles.length
+                    ? normalizePhone(webData.mobiles[0], { context: 'phone mobile', defaultCountry: countryCode, allowInternational: true, trusted: true })
+                    : null;
+                  if (webMobile?.isMobile && !currentMobile) {
+                    formattedLead.phone = webMobile.displayPhone || webMobile.e164;
+                    formattedLead.whatsappLink = `https://wa.me/${webMobile.digits}`;
                     formattedLead.whatsappAvailable = true;
                   } else if (webData.whatsappLink && !formattedLead.whatsappLink) {
                     formattedLead.whatsappLink = webData.whatsappLink;
@@ -532,7 +538,7 @@ async function scrapeGoogleLocalFinder(
     let page0Yield = p0Count;
     if (page0Yield < 6) {
       addLog(`[Local Finder Core] 🚀 Fetching Page 1 via stealth tab for full surface coverage...`);
-      const page0Result = await fetchSingleLocalPage(context, query, 0, category || 'Business');
+      const page0Result = await fetchSingleLocalPage(context, query, 0, category || 'Business', countryCode);
 
       if (page0Result.captcha) {
         const tripped = serpBreaker.recordCaptcha();
@@ -561,7 +567,7 @@ async function scrapeGoogleLocalFinder(
 
       addLog(`[Local Finder Core] ⚡ Streaming Pages ${nextPages.map(p => p + 1).join(', ')} in parallel for deep yield...`);
       const pagePromises = nextPages.map(pageIdx => 
-        fetchSingleLocalPage(context, query, pageIdx, category || 'Business')
+        fetchSingleLocalPage(context, query, pageIdx, category || 'Business', countryCode)
           .then(res => {
             if (res && !res.captcha && res.leads && res.leads.length) {
               processPageResult(res);

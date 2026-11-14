@@ -92,17 +92,25 @@ function normalizePhone(raw, opts = {}) {
   if (/^0{3,}/.test(compact)) return null;
 
   if (!compact.startsWith('+')) {
+    const defaultCountry = String(opts.defaultCountry || 'IN').toUpperCase();
     if (compact.startsWith('00')) {
       compact = '+' + compact.slice(2);
-    } else if (compact.length === 12 && compact.startsWith('91')) {
-      compact = '+' + compact;
-    } else if (compact.length === 11 && compact.startsWith('0')) {
-      compact = '+91' + compact.slice(1);
-    } else if (compact.length === 10) {
-      compact = '+91' + compact;
-    } else if (compact.length === 13 && compact.startsWith('091')) {
-      compact = '+91' + compact.slice(3);
+    } else if (defaultCountry === 'IN') {
+      // India keeps its historical prefix handling: 10 digits are a local
+      // mobile, a leading 0 is a trunk call, 91 is the country code.
+      if (compact.length === 12 && compact.startsWith('91')) {
+        compact = '+' + compact;
+      } else if (compact.length === 11 && compact.startsWith('0')) {
+        compact = '+91' + compact.slice(1);
+      } else if (compact.length === 10) {
+        compact = '+91' + compact;
+      } else if (compact.length === 13 && compact.startsWith('091')) {
+        compact = '+91' + compact.slice(3);
+      }
     }
+    // Everywhere else the national form is passed through unchanged.
+    // libphonenumber applies the default country and its own trunk-prefix
+    // rules, so a US "(512) 555-0134" stays +1 and a German "030 …" stays +49.
   }
 
   let parsed;
