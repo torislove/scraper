@@ -13,6 +13,8 @@ import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
 import InstrumentPanel from './components/InstrumentPanel';
+import CountryFlagStrip from './components/CountryFlagStrip';
+import { findCountry } from './data/countries';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
@@ -2592,6 +2594,23 @@ export default function CommandCenter() {
     deepLimit: 100
   });
 
+  // Country context for the flag bar. India is home; every other country runs
+  // the keyless global engines. The choice only pre-fills an empty location box,
+  // so a user can still type any city and let the engine detect the country.
+  const [searchCountry, setSearchCountry] = useState(() => {
+    try { return localStorage.getItem('scraper-country') || 'IN'; } catch (e) { return 'IN'; }
+  });
+
+  const handleCountrySelect = useCallback((code, country) => {
+    setSearchCountry(code);
+    try { localStorage.setItem('scraper-country', code); } catch (e) {}
+    toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
+    setForm(prev => {
+      if (prev.location && prev.location.trim()) return prev;
+      return { ...prev, location: code === 'IN' ? '' : country.name };
+    });
+  }, []);
+
   // The default flow is one free-text query. Category, engines, zones and
   // post-run deep extraction are resolved server-side by the category router.
   const [runMode, setRunMode] = useState('auto');
@@ -3805,7 +3824,7 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
-          <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · India</span>
+          <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}</span>
 
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
@@ -3850,6 +3869,8 @@ export default function CommandCenter() {
           </div>
         </div>
       </header>
+
+      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} />
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <aside className="v2-cmd-rail">

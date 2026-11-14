@@ -27,6 +27,8 @@ const etaModel = require('../utils/etaModel');
 const { normalizePhone: parsePhone } = require('../utils/phoneUtils');
 const { planScopeEngines } = require('./scopeEngines');
 const { makeHasEngine } = require('./scopeEngines/engineMatch');
+const brain = require('./localBrain');
+const sources = require('./sources/registry');
 const { scrapeWebContact } = require('../scrapers/engine-web-contact');
 const { isListingRelevantToQuery, warmZoneContextPool } = require('../scrapers/engine-google-places');
 
@@ -394,9 +396,31 @@ async function runOmniSearchOrchestrator(
   const requestedEngines = Array.isArray(enabledEngines) ? enabledEngines.filter(Boolean) : [];
   const classification = categoryRouter.classifyCategory(category);
   const autoMode = !requestedEngines.length || requestedEngines.some(engine => /^auto$/i.test(String(engine)));
-  const activeEngines = autoMode
-    ? categoryRouter.pickAutoEngines(classification)
+
+  // Country-aware dispatch. India keeps its own bundle and category router;
+  // every other country runs the keyless global bundle. Sources marked
+  // blocked/untested never run anywhere (see sources/registry).
+  const countryProfile = brain.countryProfile(baseLocation) || { code: 'IN', name: 'India' };
+  const countryCode = countryProfile.code;
+  const requestedActive = autoMode
+    ? (countryCode === 'IN'
+        ? categoryRouter.pickAutoEngines(classification)
+        : sources.enginesForCountry(countryCode))
     : [...new Set(requestedEngines)];
+
+  const activeEngines = requestedActive.filter(engine => sources.engineSupportedInCountry(engine, countryCode));
+  // Auto runs always include the keyless global discovery engine. It is what
+  // gives US/UK/CA/AU runs coverage when their directories block automation.
+  if (autoMode && sources.engineSupportedInCountry('web-discovery', countryCode) && !activeEngines.includes('web-discovery')) {
+    activeEngines.push('web-discovery');
+  }
+  const droppedEngines = requestedActive.filter(engine => !activeEngines.includes(engine));
+  if (droppedEngines.length) {
+    addLog(`[Orchestrator] ${countryProfile.name}: skipped ${droppedEngines.length} engine(s) not available there — ${droppedEngines.join(', ')}.`);
+  }
+  const regionLabel = countryCode === 'IN'
+    ? 'India'
+    : (brain.analyzeScope(baseLocation).label || countryProfile.name);
 
   // Product/brand intent is searched with the dealer phrase that directories
   // actually index ("graphic card dealer", "Tamarind wholesaler"), while the
@@ -647,7 +671,8 @@ async function runOmniSearchOrchestrator(
             lat: Number(hub.lat),
             lng: Number(hub.lng),
             district: baseLocation,
-            state: 'India'
+            state: regionLabel,
+            country: countryCode
           };
         }
       }
@@ -842,7 +867,7 @@ async function runOmniSearchOrchestrator(
     // 2a. TIER 0 TURBO-BURST: Instant Sub-Second Leads (<1.2s)
     // Runs direct keyless HTTP engines (JustDial Mobile JSON + OSM Overpass POI) immediately
     // without queuing delays, streaming 30–120 rich leads into SSE right at second 0!
-    if (hasEngine('justdial') || hasEngine('openstreetmap')) {
+    if (hasEngine('justdial') || hasEngine('openstreetmap') || hasEngine('web-discovery')) {
       // Health and politeness must be recorded on this path too. These engines
       // are invoked directly here (not through the queued task wrappers), and
       // the board used to keep showing an old "empty" badge for an engine that
@@ -893,7 +918,18 @@ async function runOmniSearchOrchestrator(
               sessionId,
               baseGeo?.lat || null,
               baseGeo?.lng || null,
-              Math.max(6, radiusKm + 5)
+              Math.max(6, radiusKm + 5),
+              countryCode
+            )));
+          }
+          if (hasEngine('web-discovery')) {
+            const { scrapeWebDiscovery, setDeps: setWdDeps } = require('../scrapers/engine-web-discovery');
+            if (typeof setWdDeps === 'function') setWdDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
+            burstTasks.push(runBurst('web-discovery', 'Web Discovery', () => scrapeWebDiscovery(
+              category,
+              cleanBaseCity,
+              sessionId,
+              { countryCode, limit: 8 }
             )));
           }
           await Promise.allSettled(burstTasks);
@@ -950,7 +986,8 @@ async function runOmniSearchOrchestrator(
           zoneName: baseLocation,
           locationName: baseLocation,
           district: baseLocation,
-          state: 'India',
+          state: regionLabel,
+          country: countryCode,
           sessionId,
           active: true,
           cityScope: true

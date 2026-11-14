@@ -109,6 +109,26 @@ const ENGINES = [
     }
   },
   {
+    id: "webdiscovery",
+    badge: "Global Open Web",
+    speed: "Any country",
+    name: "Open Web Business Discovery",
+    tagline: "Keyless Global Discovery",
+    desc: "Finds a business's own website from public search results, then reads that site for its real phone and email. This is the fallback that keeps US, UK, Canada, Australia, UAE, Singapore, Ireland, New Zealand, South Africa and Malaysia covered when a local directory blocks automation.",
+    target: "Official Domain, On-Site Phone, Email, Address, Social Profiles",
+    icon: Globe2,
+    color: "#22D3EE",
+    simpleTitle: "Any Country, No API Key",
+    simpleExplain: "Searches the open web for the business itself instead of a directory. Works in the US, UK, Canada, Australia, New Zealand, UAE, Singapore, Ireland, Malaysia, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman without an API key.",
+    sampleLead: {
+      business: "Hargrove & Sons Plumbing",
+      owner: "Official website · Austin, TX",
+      location: "Austin, Texas, United States",
+      phone: "+1 (512) 555-0148",
+      rating: "Public site · robots.txt respected"
+    }
+  },
+  {
     id: "webcontact",
     badge: "Official Website Checker",
     speed: "80 domains / min",
@@ -212,14 +232,14 @@ export default function EnginesMatrix() {
       {/* Intro Header */}
       <div className="engines-intro" style={{ textAlign: "center", maxWidth: "780px", margin: "0 auto 40px" }}>
         <span className="eyebrow" style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
-          <Sparkles size={14} className="text-mint" /> 9 PUBLIC INTERNET DISCOVERY NETWORKS
+          <Sparkles size={14} className="text-mint" /> 10 KEYLESS DISCOVERY NETWORKS · 16 COUNTRIES
         </span>
         <h2 style={{ fontSize: "clamp(30px, 4vw, 44px)", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em", margin: "0 0 14px" }}>
-          How Scraper.co.in Searches The Entire Internet<br />
-          <span className="gradient-text">To Find Real Business Owners For You.</span>
+          How Scraper.co.in Searches The Open Web, Maps<br />
+          <span className="gradient-text">And Directories For Real Business Owners.</span>
         </h2>
         <p style={{ color: "#94A3B8", fontSize: "15px", lineHeight: 1.7, margin: 0 }}>
-          You don&apos;t need to know anything technical. Our system automatically checks all 9 public networks simultaneously across your target city and all its mandals — dropping receptionists and saving the owner&apos;s direct WhatsApp mobile to your list.
+          India, United States, United Kingdom, Canada, Australia, UAE, Singapore, New Zealand, Ireland, Malaysia, Saudi Arabia, Qatar, Kuwait, Bahrain and Oman. Every enabled network runs against your target city and its neighbourhoods — and any source that blocks automation is shown as blocked, never faked.
         </p>
       </div>
 
@@ -253,7 +273,7 @@ export default function EnginesMatrix() {
             </span>
             <div>
               <div style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.1em", color: selectedEngine.color }}>
-                NETWORK {ENGINES.findIndex(e => e.id === selectedEngine.id) + 1} OF 9 · LIVE SIMULATION
+                NETWORK {ENGINES.findIndex(e => e.id === selectedEngine.id) + 1} OF {ENGINES.length} · LIVE SIMULATION
               </div>
               <h3 style={{ fontSize: "20px", fontWeight: 800, color: "#FFFFFF", margin: "2px 0 0" }}>
                 {selectedEngine.name} <span style={{ color: "#94A3B8", fontWeight: 400, fontSize: "15px" }}>({selectedEngine.simpleTitle})</span>
@@ -426,10 +446,10 @@ export default function EnginesMatrix() {
           </div>
           <div>
             <b style={{ display: "block", fontSize: "16px", fontWeight: 800, color: "#FFFFFF", marginBottom: "4px" }}>
-              Built Exclusively for Indian Business Lead Generation
+              Built For India First — Now Open To The US, UK, Canada, Australia &amp; The Gulf
             </b>
             <p style={{ fontSize: "13.5px", color: "#94A3B8", margin: 0, lineHeight: 1.5 }}>
-              Direct personal mobile lines (+91 WhatsApp), verified proprietor names, and complete shop locations ready for your sales team.
+              Direct mobile lines where the country uses them, verified business names, and complete shop locations. Blocked directories stay listed as blocked instead of being counted as coverage.
             </p>
           </div>
         </div>
@@ -449,7 +469,7 @@ export default function EnginesMatrix() {
             gap: "8px"
           }}
         >
-          <CheckCircle2 size={16} /> 100% PERSONAL MOBILES · ZERO GATEKEEPERS
+          <CheckCircle2 size={16} /> REAL CONTACTS · NO GATEKEEPERS · HONEST COVERAGE
         </div>
       </div>
 

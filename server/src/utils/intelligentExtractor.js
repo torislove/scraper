@@ -1,7 +1,8 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const { getNvidiaApiKey } = require('../config/settingsManager');
+const brain = require('../services/localBrain');
+const { extractPhones } = require('./phoneUtils');
 
 const cachePath = path.join(require('../config/paths').DATA_DIR, 'resolved_hierarchies.json');
 let resolvedCache = {};
@@ -29,34 +30,6 @@ function saveCache() {
   }
 }
 
-async function nvidiaPost(payload, timeout = 30000, maxRetries = 3) {
-  const apiKey = getNvidiaApiKey();
-  let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await axios.post(
-        'https://integrate.api.nvidia.com/v1/chat/completions',
-        payload,
-        {
-          headers: { 
-            'Authorization': `Bearer ${apiKey}`, 
-            'Content-Type': 'application/json' 
-          },
-          timeout
-        }
-      );
-      return response;
-    } catch (err) {
-      lastError = err;
-      console.warn(`[Nvidia API] Attempt ${attempt} failed: ${err.message}. Retrying in ${attempt * 2}s...`);
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, attempt * 2000));
-      }
-    }
-  }
-  throw lastError;
-}
-
 let indiaGeoData = null;
 try {
   const dbPath = path.join(__dirname, '../../db/india_villages.json');
@@ -68,7 +41,12 @@ try {
 }
 
 /**
- * Intelligent Agent Extractor using Nvidia's DeepSeek-V4-Pro API
+ * Heuristic profile extraction from a vendor's own website.
+ *
+ * This has always been a local regex/heuristic pass — the old comment claiming
+ * it called "DeepSeek-V4-Pro" was wrong. It now also uses the shared phone
+ * parser, so mobile vs landline is decided by libphonenumber rather than by a
+ * `[6-9]` shape regex.
  */
 async function extractData(rawText, domainHint = '') {
   const defaultData = {
@@ -86,10 +64,17 @@ async function extractData(rawText, domainHint = '') {
   if (!rawText || rawText.trim().length === 0) return defaultData;
 
   try {
-    const phoneRegex = /(?:\+91|0)?\s?[6-9]\d{9}/g;
     const emailRegex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}/g;
     
-    const phonesMatches = [...new Set(rawText.match(phoneRegex) || [])].slice(0, 3);
+    // Country-aware parser: pass { defaultCountry, allowInternational } from the
+    // caller when the search is outside India. Defaults stay India-first.
+    const parsedPhones = extractPhones(rawText, {
+      allowInternational: true,
+      trusted: false,
+      context: 'phone contact call',
+      defaultCountry: 'IN'
+    }).slice(0, 3).map(p => p.e164);
+    const phonesMatches = [...new Set(parsedPhones)];
     const emailsMatches = [...new Set(rawText.match(emailRegex) || [])].slice(0, 3);
     
     let score = 0;
@@ -252,130 +237,50 @@ async function generateLocalities(broadLocation, stateHint = '') {
 }
 
 /**
- * Generates nearby towns/localities within a given radius.
+ * Nearby places for a radius, resolved entirely from the local gazetteer.
+ *
+ * This used to ask an LLM to invent 5–10 towns, which is exactly the kind of
+ * thing a language model gets subtly wrong. Now:
+ *   - mandal/village -> sibling mandals in the same district
+ *   - district        -> its mandals
+ *   - state           -> its districts
+ *   - unknown         -> just the location itself
+ * The radius only caps how many results are returned.
  */
 async function generateNearbyLocations(location, radiusKm) {
-  const lowerLoc = location.toLowerCase().trim();
-  const cacheKey = `nearby_${lowerLoc}_${radiusKm}`;
-  if (!resolvedCache[cacheKey]) {
-    loadCache();
+  const name = String(location || '').trim();
+  if (!name) return [];
+  const cacheKey = `nearby_${name.toLowerCase()}_${radiusKm}`;
+  if (!resolvedCache[cacheKey]) loadCache();
+  if (resolvedCache[cacheKey]) return resolvedCache[cacheKey];
+
+  const hit = brain._gazetteer.lookup(name);
+  let places = [name];
+  if (hit.level === 'mandal') {
+    places = [name, ...brain._gazetteer.subDistrictsOfDistrict(hit.district).filter(p => p.toLowerCase() !== name.toLowerCase())];
+  } else if (hit.level === 'district') {
+    places = [name, ...(hit.subDistricts || [])];
+  } else if (hit.level === 'state') {
+    places = [name, ...brain._gazetteer.districtsOfState(hit.state)];
   }
-  if (resolvedCache[cacheKey]) {
-    console.log(`[Geographic AI Cache] Nearby Cache hit for "${location}"`);
-    return resolvedCache[cacheKey];
-  }
 
-  const prompt = `You are a geographic AI assistant. The user wants to search for vendors within ${radiusKm}km of "${location}".
-Return a JSON array of 5 to 10 major towns, cities, or prominent neighborhoods that fall within this radius. Include the original location as the first element.
-Return ONLY a valid JSON array of strings. Do not include markdown formatting or any other text.
-Example format: ["Guntur City", "Tenali", "Mangalagiri", "Bapatla"]`;
+  // ~1.2 places per radius-km keeps dense districts bounded (max 12).
+  const cap = Math.max(1, Math.min(12, Math.round((Number(radiusKm) || 10) * 1.2)));
+  const result = [...new Set(places)].slice(0, cap);
 
-  try {
-    const response = await nvidiaPost({
-      model: 'meta/llama-3.3-70b-instruct',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 300,
-      stream: false
-    }, 45000);
-
-    let parsed = response.data.choices[0].message.content.trim();
-    if (parsed.includes('```')) {
-      const match = parsed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (match) parsed = match[1];
-    }
-    const result = JSON.parse(parsed.trim());
-    const finalResult = Array.isArray(result) ? result : [location];
-
-    resolvedCache[cacheKey] = finalResult;
-    saveCache();
-
-    return finalResult;
-  } catch (err) {
-    console.error(`[Intelligent Extractor] generateNearbyLocations failed: ${err.message}`);
-    return [location]; // Fallback to original
-  }
+  resolvedCache[cacheKey] = result;
+  saveCache();
+  return result;
 }
 
 /**
- * Analyzes a location to determine its geographic scope and returns culturally accurate subdivisions.
+ * Analyzes a location to determine its geographic scope and returns
+ * culturally accurate subdivisions. Answered locally by the gazetteer and the
+ * curated country table — no network round trip, no key.
  */
 async function analyzeGeographicScope(location) {
-  if (!location || typeof location !== 'string') return { type: "specific" };
-  const lowerLoc = location.toLowerCase().trim();
-  
-  // Fast Path: Check local database first to bypass AI completely
-  if (indiaGeoData) {
-    const isState = indiaGeoData.some(s => s.state && s.state.toLowerCase() === lowerLoc);
-    if (isState) {
-      const stateObj = indiaGeoData.find(s => s.state && s.state.toLowerCase() === lowerLoc);
-      return {
-        type: "broad",
-        options: ["Search Entire State", `Search Only Major Districts`, "Search All Mandals"]
-      };
-    }
-    
-    let matchedDistrict = null;
-    for (const state of indiaGeoData) {
-      if (state.districts) {
-        const dMatch = state.districts.find(d => d.district && d.district.toLowerCase() === lowerLoc);
-        if (dMatch) {
-          matchedDistrict = dMatch.district;
-          break;
-        }
-      }
-    }
-    if (matchedDistrict) {
-      return {
-        type: "broad",
-        options: ["Search Entire District", `Search Only ${matchedDistrict} City`, "Search All Mandals"]
-      };
-    }
-  }
-
-  const cacheKey = `scope_${lowerLoc}`;
-  if (!resolvedCache[cacheKey]) {
-    loadCache();
-  }
-  if (resolvedCache[cacheKey]) {
-    console.log(`[Geographic AI Cache] Scope Cache hit for "${location}"`);
-    return resolvedCache[cacheKey];
-  }
-
-  const prompt = `You are a geographic intelligence AI. The user wants to search for vendors in "${location}".
-Determine if this location is a broad region (like a District, State, County, or Province) or a specific localized town/city.
-If it is a specific localized town/city, return: {"type": "specific"}
-If it is a broad region, you must provide exactly 3 culturally accurate search scope options for the user. 
-For example:
-- If "Guntur", return: {"type": "broad", "options": ["Search Entire District", "Search Only Guntur City", "Search All Mandals"]}
-- If "New York", return: {"type": "broad", "options": ["Search Entire State", "Search Only NYC", "Search All Counties"]}
-- If "London", return: {"type": "broad", "options": ["Search Greater London", "Search City of London", "Search All Boroughs"]}
-Return ONLY valid JSON format. Do not use markdown wrappers.`;
-
-  try {
-    const response = await nvidiaPost({
-      model: 'meta/llama-3.3-70b-instruct',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 300,
-      stream: false
-    }, 45000);
-
-    let parsed = response.data.choices[0].message.content.trim();
-    if (parsed.includes('```')) {
-      const match = parsed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (match) parsed = match[1];
-    }
-    const result = JSON.parse(parsed.trim());
-
-    resolvedCache[cacheKey] = result;
-    saveCache();
-
-    return result;
-  } catch (err) {
-    console.error(`[Intelligent Extractor] analyzeGeographicScope failed: ${err.message}`);
-    return { type: "specific" }; // Safe fallback
-  }
+  if (!location || typeof location !== 'string') return { type: 'specific' };
+  return brain.analyzeScope(location);
 }
 
 /**
@@ -633,97 +538,23 @@ async function resolveHierarchy(locationName) {
     }
   }
 
-  // Fallback to Ola Maps Geocoding before calling external LLMs
-  try {
-    const { geocodeLocation } = require('./olaMaps');
-    const geo = await geocodeLocation(locationName);
-    if (geo && geo.lat != null) {
-      console.log(`[Geographic AI] Resolved via Ola Maps: "${locationName}" -> ${geo.formattedLocation} (${geo.lat}, ${geo.lng})`);
-      return {
-        level: 'specific',
-        stateName: geo.formattedLocation || locationName,
-        hierarchy: [{
-          districtName: locationName,
-          mandals: [locationName]
-        }]
-      };
-    }
-  } catch(e) {}
-
-  // Engage DeepSeek AI for global/reorganized resolution
-  console.log(`[Geographic AI] Database miss or new region: "${locationName}". Engaging DeepSeek AI...`);
-  
-  // Decide whether the query is state-level or district-level for AI fallback
-  const knownIndianStates = ['telangana', 'andhra pradesh', 'karnataka', 'tamil nadu', 'maharashtra', 'kerala', 'gujarat', 'rajasthan', 'punjab', 'haryana', 'uttar pradesh', 'bihar', 'west bengal', 'odisha', 'madhya pradesh', 'assam', 'himachal pradesh', 'uttarakhand', 'jharkhand', 'chhattisgarh', 'goa', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'sikkim', 'tripura', 'arunachal pradesh', 'delhi', 'jammu and kashmir', 'ladakh', 'chandigarh', 'puducherry'];
-  const isStateQuery = searchName.includes('state') || knownIndianStates.includes(searchName);
-
-  let prompt = '';
-  if (isStateQuery) {
-    prompt = `You are a highly precise Global Geographic Intelligence AI.
-The user wants to find divisions of the state: "${locationName}".
-Generate a JSON object with this EXACT structure:
-{
-  "level": "state",
-  "stateName": "${locationName}",
-  "hierarchy": [
-    { "districtName": "District 1", "mandals": [] },
-    { "districtName": "District 2", "mandals": [] }
-  ]
-}
-Return the actual current list of reorganized administrative districts (as of 2026, e.g. 33 districts for Telangana, 26 districts for Andhra Pradesh). Leave the "mandals" array empty for all districts.
-Return ONLY valid JSON. Do not include markdown code block formatting (no \`\`\`json wrappers).`;
-  } else {
-    prompt = `You are a highly precise Global Geographic Intelligence AI.
-The user wants to find divisions of the district: "${locationName}".
-Generate a JSON object with this EXACT structure:
-{
-  "level": "district",
-  "stateName": "Name of State",
-  "hierarchy": [
-    {
-      "districtName": "${locationName}",
-      "mandals": ["Mandal 1", "Mandal 2", "Mandal 3", "Mandal 4"]
-    }
-  ]
-}
-Return the actual current administrative mandals (up to 20-30 mandals) in this district.
-Return ONLY valid JSON. Do not include markdown code block formatting (no \`\`\`json wrappers).`;
+  // Outside the Indian gazetteer: resolve country/region locally so the UI can
+  // still offer a sensible scope, and never invent administrative divisions.
+  const country = brain.detectCountry(locationName);
+  if (country) {
+    return {
+      level: 'specific',
+      stateName: null,
+      country: country.code,
+      countryName: country.name,
+      hierarchy: [{ districtName: locationName, mandals: [locationName] }]
+    };
   }
 
-  try {
-    const response = await nvidiaPost({
-      model: 'meta/llama-3.3-70b-instruct',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      max_tokens: 1500,
-      stream: false
-    }, 45000);
-    const rawContent = response.data.choices[0].message.content;
-    let cleanJson = rawContent.trim();
-    if (cleanJson.includes('```')) {
-      const match = cleanJson.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      if (match) {
-        cleanJson = match[1];
-      }
-    }
-    const parsed = JSON.parse(cleanJson.trim());
-    if (parsed && parsed.level && Array.isArray(parsed.hierarchy)) {
-      resolvedCache[searchName] = parsed;
-      saveCache();
-      return parsed;
-    }
-  } catch(e) {
-    console.error('[Geographic AI] AI hierarchy resolution failed:', e.message);
-  }
-
-  // Fallback if AI fails
   return {
     level: 'specific',
     stateName: null,
-    hierarchy: [{
-      districtName: locationName,
-      mandals: [locationName]
-    }]
+    hierarchy: [{ districtName: locationName, mandals: [locationName] }]
   };
 }
 

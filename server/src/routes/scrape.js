@@ -372,34 +372,20 @@ router.post('/resolve-intervention', (req, res) => {
 
 router.get('/settings', (req, res) => {
   const settings = getSettings();
-  const maskedNvidia = settings.nvidiaApiKey 
-    ? settings.nvidiaApiKey.substring(0, 8) + '*'.repeat(20) + settings.nvidiaApiKey.slice(-4) 
-    : '';
-  const maskedOla = settings.olaMapsApiKey 
-    ? settings.olaMapsApiKey.substring(0, 6) + '*'.repeat(16) + settings.olaMapsApiKey.slice(-4) 
-    : '';
-  res.json({ 
-    ...settings, 
-    nvidiaApiKey: maskedNvidia,
-    olaMapsApiKey: maskedOla,
-    mapsProvider: 'CartoDB Dark Basemaps (Free, Zero Key Required)',
-    geocodingProvider: 'OpenStreetMap Nominatim (Free, Zero Key Required)'
+  res.json({
+    ...settings,
+    aiProvider: 'Local brain (offline, no key required)',
+    mapsProvider: 'OpenStreetMap (free, no key)',
+    geocodingProvider: 'OpenStreetMap Nominatim (free, no key)',
+    searchProvider: 'Public web results (free, no key)'
   });
 });
 
 router.post('/settings', (req, res) => {
-  const { nvidiaApiKey, olaMapsApiKey } = req.body;
-  
-  const updates = {};
-  if (nvidiaApiKey && !nvidiaApiKey.includes('**')) {
-    updates.nvidiaApiKey = nvidiaApiKey;
-  }
-  if (olaMapsApiKey && !olaMapsApiKey.includes('**')) {
-    updates.olaMapsApiKey = olaMapsApiKey;
-  }
-  
-  const newSettings = updateSettings(updates);
-  res.json({ success: true, message: 'Settings saved successfully.', settings: newSettings });
+  // This product has no API keys. Anything secret-looking is ignored so an old
+  // client cannot write a key back into settings.json.
+  const newSettings = updateSettings({});
+  res.json({ success: true, message: 'No keys are needed. Nothing to save.', settings: newSettings });
 });
 
 const activeCronJobs = {};

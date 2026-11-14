@@ -9,13 +9,6 @@ const ui3dRoot = fileURLToPath(new URL('./src/ui3d', import.meta.url))
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
-  // Map key: env first (CI / release builds inject it as a secret). Locally it
-  // comes from client/.env.local; nothing secret is committed.
-  const olaMapsKey = env.VITE_OLA_MAPS_API_KEY || ''
-  if (!olaMapsKey) {
-    console.warn('[vite] VITE_OLA_MAPS_API_KEY is not set - map search will fall back to OSM.')
-  }
-
   return {
     server: {
       host: '0.0.0.0',
@@ -137,12 +130,19 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'process.env': {},
-      'import.meta.env.VITE_OLA_MAPS_API_KEY': JSON.stringify(olaMapsKey),
       // Tells the bundle it is running inside the Windows shell.
       'import.meta.env.VITE_DESKTOP': JSON.stringify(env.VITE_DESKTOP || ''),
     },
     build: {
       chunkSizeWarningLimit: 30000,
+      // The build is already fast. Rolldown's timing report is noise, not an
+      // error; turn it off so a clean build prints only the result.
+      rolldownOptions: {
+        checks: {
+          bundlerTimings: false,
+          pluginTimings: false,
+        },
+      },
     }
   }
 })

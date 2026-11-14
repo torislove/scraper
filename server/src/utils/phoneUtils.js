@@ -128,18 +128,32 @@ function normalizePhone(raw, opts = {}) {
   const rawTrimmed = String(original || '').trim();
   const startsWithZeroTrunk = rawTrimmed.startsWith('0') || rawTrimmed.startsWith('+910') || rawTrimmed.startsWith('(0');
 
-  const isLandline = type === 'FIXED_LINE' || (
-    type === 'FIXED_LINE_OR_MOBILE' && (startsWithZeroTrunk || !indianMobileShape || national.startsWith('8644') || national.startsWith('891'))
-  ) || (startsWithZeroTrunk && type !== 'MOBILE');
+  // India keeps its stricter mobile/landline rules. Every other country trusts
+  // libphonenumber's own type, because trunk prefixes differ everywhere.
+  let isLandline;
+  let isMobile;
+  if (country === 'IN') {
+    isLandline = type === 'FIXED_LINE' || (
+      type === 'FIXED_LINE_OR_MOBILE' && (startsWithZeroTrunk || !indianMobileShape || national.startsWith('8644') || national.startsWith('891'))
+    ) || (startsWithZeroTrunk && type !== 'MOBILE');
 
-  const isMobile =
-    !isLandline &&
-    (type === 'MOBILE' ||
-      (type === 'FIXED_LINE_OR_MOBILE' && indianMobileShape && !startsWithZeroTrunk) ||
-      (type === 'UNKNOWN' && indianMobileShape && !startsWithZeroTrunk));
+    isMobile =
+      !isLandline &&
+      (type === 'MOBILE' ||
+        (type === 'FIXED_LINE_OR_MOBILE' && indianMobileShape && !startsWithZeroTrunk) ||
+        (type === 'UNKNOWN' && indianMobileShape && !startsWithZeroTrunk));
+  } else {
+    isLandline = type === 'FIXED_LINE' || (type === 'FIXED_LINE_OR_MOBILE' && startsWithZeroTrunk);
+    isMobile = !isLandline && (
+      type === 'MOBILE' ||
+      type === 'FIXED_LINE_OR_MOBILE' ||
+      (type === 'UNKNOWN' && national.length >= 7)
+    );
+  }
   const isTollFree = type === 'TOLL_FREE';
 
   if (country === 'IN' && !isMobile && !isLandline && !isTollFree) return null;
+  if (country !== 'IN' && !isMobile && !isLandline && !isTollFree) return null;
 
   // Free-text landlines need phone context ("call", "tel", "contact", ...) or phone formatting.
   // This is the main guard against 10-digit order ids being promoted to leads.
@@ -153,7 +167,11 @@ function normalizePhone(raw, opts = {}) {
 
   let displayPhone = '';
   let callUrl = '';
-  if (isLandline) {
+  if (country !== 'IN') {
+    // International numbers already carry their own national format.
+    displayPhone = parsed.formatInternational();
+    callUrl = `tel:${parsed.number}`;
+  } else if (isLandline) {
     const nationalFmt = parsed.formatNational ? parsed.formatNational() : '';
     displayPhone = (nationalFmt && nationalFmt.startsWith('0')) ? nationalFmt : ('0' + national);
     callUrl = `tel:0${national}`;
@@ -180,7 +198,7 @@ function normalizePhone(raw, opts = {}) {
     isTollFree,
     isValid: true,
     digits: digitsOnly(parsed.number),
-    whatsapp: isMobile && country === 'IN' && INDIAN_MOBILE_RE.test(national)
+    whatsapp: isMobile && (country !== 'IN' || INDIAN_MOBILE_RE.test(national))
   };
 }
 
@@ -233,7 +251,7 @@ function extractPhones(text, opts = {}) {
   const result = [];
   const seen = new Set();
   for (const [candidate, context] of candidates.entries()) {
-    const parsed = normalizePhone(candidate, { ...opts, defaultCountry: 'IN', trusted: opts.trusted === true, context });
+    const parsed = normalizePhone(candidate, { ...opts, defaultCountry: opts.defaultCountry || 'IN', trusted: opts.trusted === true, context });
     if (!parsed) continue;
     const key = parsed.national || parsed.e164;
     if (seen.has(key)) continue;

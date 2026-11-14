@@ -71,11 +71,11 @@ router.get('/location/search', async (req, res) => {
       }));
     }
 
-    // 2. FALLBACK TO OSM NOMINATIM (Network Delay)
+    // 2. FALLBACK TO OSM NOMINATIM (works worldwide, not just India)
     let parsedLocations = [];
     try {
       const response = await require('axios').get(`https://nominatim.openstreetmap.org/search`, {
-        params: { q: query, format: 'json', addressdetails: 1, limit: 5, countrycodes: 'in' },
+        params: { q: query, format: 'json', addressdetails: 1, limit: 6, 'accept-language': 'en' },
         headers: {
           'User-Agent': 'GomandapScraper/1.0 (contact@gomandap.com)',
         },
@@ -86,6 +86,7 @@ router.get('/location/search', async (req, res) => {
         name: item.name,
         display: item.display_name,
         type: item.type,
+        country: (item.address && item.address.country_code || '').toUpperCase() || undefined,
         lat: item.lat,
         lon: item.lon
       })).filter(loc => loc.name);
@@ -114,6 +115,34 @@ router.get('/location/search', async (req, res) => {
 // Logs are passed from app state into this router
 let getLogs = () => [];
 router.get('/logs', (req, res) => res.json(getLogs()));
+
+// Offline brain diagnostics: proves there is no key and no network dependency.
+router.get('/brain', (req, res) => {
+  try {
+    res.json(require('../services/localBrain').status());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Which lead sources run in each country, and which are blocked/key-gated.
+// The client shows this so coverage is never implied.
+router.get('/sources', (req, res) => {
+  try {
+    const registry = require('../services/sources/registry');
+    const country = req.query.country ? registry.normaliseCountry(req.query.country) : null;
+    if (country) {
+      return res.json({
+        country,
+        engines: registry.enginesForCountry(country),
+        sources: registry.sourcesForCountry(country)
+      });
+    }
+    res.json({ countries: registry.coverageReport() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = {
   apiRouter: router,

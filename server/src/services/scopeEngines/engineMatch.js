@@ -44,6 +44,8 @@ function makeHasEngine(engines) {
         return normEngines.some(e => e.includes('weddingwire') || e.includes('wedding-wire') || e.includes('hospitality') || e.includes('venue'));
       case 'mandap':
         return normEngines.some(e => e.includes('mandap') || e.includes('hospitality') || e.includes('venue'));
+      case 'web-discovery':
+        return normEngines.some(e => e.includes('webdiscovery') || e.includes('websites') || e.includes('websearch'));
       case 'brave':
         return normEngines.some(e => e.includes('brave'));
       default:

@@ -19,6 +19,11 @@ server/data/
 server/db/user_sessions/
 data/
 db/
+# ...but the generated country list is source code, not customer data.
+!client/src/v2/data/
+!client/src/v2/data/**
+!master/src/v2/data/
+!master/src/v2/data/**
 scraped_vendors.json
 out_of_bounds.json
 activity_logs.json

@@ -38,8 +38,6 @@ jobs:
 
       - name: Build web bundle (desktop flavour, no landing page)
         run: npm run build:desktop --prefix client
-        env:
-          VITE_OLA_MAPS_API_KEY: ${{ secrets.OLA_MAPS_API_KEY }}
 
       - name: Install engine dependencies
         run: npm install --prefix server --omit=dev --no-audit --no-fund

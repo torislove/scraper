@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const dv = require('./directoryVendor');
 const { normalizePhone } = require('../utils/phoneUtils');
+const { COUNTRIES, detectCountry, findRegion } = require('../services/localBrain/countries');
 const { DATA_DIR, ensureDir } = require('../config/paths');
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
@@ -224,16 +225,31 @@ function buildFilters(category) {
 
 /* ── geocoding fallback ──────────────────────────────────────────────────── */
 
-async function geocode(city) {
-  const key = `geo-${city}`;
+/**
+ * Which country is this search in? Location text wins ("Austin, USA",
+ * "London, UK", "Texas"), otherwise India (the default install base).
+ */
+function resolveCountry(location) {
+  const direct = detectCountry(location);
+  if (direct) return direct;
+  const region = findRegion(location);
+  if (region) return region.country;
+  return COUNTRIES.find(c => c.code === 'IN') || COUNTRIES[0];
+}
+
+async function geocode(city, country) {
+  const cc = (country && country.code) || 'IN';
+  const key = `geo-${cc}-${city}`;
   const cached = readCache(key);
   if (cached) return cached;
   try {
+    const query = cc === 'IN' ? `${city}, India` : `${city}, ${country.name}`;
     const response = await politeGet(NOMINATIM_URL, {
-      q: `${city}, India`,
+      q: query,
       format: 'json',
       limit: 1,
-      addressdetails: 1
+      addressdetails: 1,
+      countrycodes: cc.toLowerCase()
     });
     const hit = Array.isArray(response.data) ? response.data[0] : null;
     if (!hit) return null;
@@ -241,7 +257,8 @@ async function geocode(city) {
       lat: Number(hit.lat),
       lng: Number(hit.lon),
       district: hit.address?.state_district || hit.address?.county || '',
-      state: hit.address?.state || ''
+      state: hit.address?.state || '',
+      country: cc
     };
     writeCache(key, result);
     return result;
@@ -261,7 +278,7 @@ function tag(element, ...keys) {
   return '';
 }
 
-function pickPhones(element) {
+function pickPhones(element, countryCode = 'IN') {
   const raw = [
     tag(element, 'phone', 'contact:phone', 'mobile', 'contact:mobile', 'telephone'),
     tag(element, 'phone:mobile', 'contact:phone:mobile')
@@ -269,7 +286,11 @@ function pickPhones(element) {
   const phones = [];
   for (const value of raw) {
     for (const part of value.split(/[;,/]/)) {
-      const parsed = normalizePhone(part, { context: 'osm' });
+      const parsed = normalizePhone(part, {
+        context: 'osm',
+        defaultCountry: countryCode,
+        allowInternational: true
+      });
       if (parsed && parsed.isValid !== false && !phones.some(p => p.e164 === parsed.e164)) {
         phones.push(parsed);
       }
@@ -293,7 +314,7 @@ function buildAddress(element, fallbackCity, fallbackState) {
 
 /* ── main entry ──────────────────────────────────────────────────────────── */
 
-async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', centerLat = null, centerLng = null, radiusKm = 8) {
+async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', centerLat = null, centerLng = null, radiusKm = 8, countryHint = null) {
   const baseCategory = dv.cleanText(category, 120) || 'Business';
   const city = dv.cleanText(location, 120) || '';
   const filters = buildFilters(baseCategory);
@@ -302,12 +323,17 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0 };
   }
 
+  const country = countryHint
+    ? (COUNTRIES.find(c => c.code === String(countryHint).toUpperCase()) || resolveCountry(city))
+    : resolveCountry(city);
+  const countryCode = country.code;
+
   let center = (Number.isFinite(Number(centerLat)) && Number.isFinite(Number(centerLng)))
     ? { lat: Number(centerLat), lng: Number(centerLng) }
     : null;
   let geo = center ? { district: '', state: '' } : null;
   if (!center) {
-    geo = await geocode(city);
+    geo = await geocode(city, country);
     if (!geo) {
       deps.logger(`[OpenStreetMap] Could not find "${city}" — skipping.`);
       return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0 };
@@ -315,14 +341,14 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     center = { lat: geo.lat, lng: geo.lng };
   }
 
-  const isMetro = /hyderabad|bangalore|bengaluru|mumbai|delhi|chennai|kolkata|pune|ahmedabad|guntur|vijayawada/i.test(city);
+  const isMetro = /hyderabad|bangalore|bengaluru|mumbai|delhi|chennai|kolkata|pune|ahmedabad|guntur|vijayawada|new york|london|los angeles|chicago|toronto|sydney|melbourne|dubai|singapore|houston|dallas|miami|manchester|birmingham/i.test(city);
   const defaultKm = isMetro ? 32 : 12;
   const radiusMeters = Math.max(1000, Math.min(35000, (Number(radiusKm) || defaultKm) * 1000));
   const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(5)},${center.lng.toFixed(5)})`;
   const body = filters.map(filter => `nwr${filter}${around};`).join('\n  ');
   const query = `[out:json][timeout:12];\n(\n  ${body}\n);\nout center tags ${MAX_RESULTS};`;
 
-  const cacheKey = `osm-${city}-${baseCategory}-${Math.round(radiusMeters / 1000)}`;
+  const cacheKey = `osm-${countryCode}-${city}-${baseCategory}-${Math.round(radiusMeters / 1000)}`;
   let payload = readCache(cacheKey);
   if (!payload) {
     try {
@@ -358,7 +384,7 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     if (seen.has(identity)) continue;
     seen.add(identity);
 
-    const phones = pickPhones(element);
+    const phones = pickPhones(element, countryCode);
     const website = tag(element, 'website', 'contact:website', 'url');
     const email = tag(element, 'email', 'contact:email');
 
@@ -411,8 +437,8 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
 
     const primaryMobile = phones.find(phone => phone.isMobile);
     if (primaryMobile) {
-      const tenDigits = String(primaryMobile.national || primaryMobile.e164).replace(/\D/g, '').slice(-10);
-      vendor.whatsapp = `https://wa.me/91${tenDigits}`;
+      // digits already contains the country code; never assume +91.
+      vendor.whatsapp = `https://wa.me/${primaryMobile.digits}`;
       vendor.whatsappLink = vendor.whatsapp;
       vendor.whatsappAvailable = true;
       if (!vendor.phone) vendor.phone = primaryMobile.e164;
