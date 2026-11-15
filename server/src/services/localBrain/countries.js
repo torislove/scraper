@@ -13,6 +13,7 @@
  */
 
 const { WORLD_COUNTRIES } = require('./worldCountries');
+const { adminForCountry, adminPath, indiaSubdivisionTerm } = require('./adminDivisions');
 
 const COUNTRIES = [
   {
@@ -256,6 +257,19 @@ for (const country of WORLD_COUNTRIES) {
     aliases: [country.name.toLowerCase()],
     regions: []
   });
+}
+
+// The administrative vocabulary is owned by adminDivisions.js. Curated terms in
+// this file are only the seed; this loop makes every country agree with the
+// single table and attaches the full `admin` block the API returns.
+for (const country of COUNTRIES) {
+  const admin = adminForCountry(country.code);
+  country.topTerm = admin.top;
+  country.secondTerm = admin.second;
+  country.localTerm = admin.local;
+  country.subdivisionTerm = admin.subdivision;
+  country.admin = admin;
+  country.adminPath = admin.levels.join(' → ');
 }
 
 // Major cities that users type instead of their parent region. Without this,
@@ -523,16 +537,18 @@ function scopeOptions(place) {
   if (alias) {
     const country = COUNTRIES.find(c => c.code === alias.country);
     if (country) {
+      const admin = adminForCountry(country.code, { state: alias.region });
       return {
         type: 'broad',
         country: country.code,
         level: 'city',
         label: alias.region,
         city: place,
+        admin,
         options: [
-          `Search Entire ${country.topTerm} (${alias.region})`,
+          `Search Entire ${admin.top} (${alias.region})`,
           `Search Only ${place}`,
-          `Search All ${country.subdivisionTerm}`
+          `Search All ${admin.subdivision}`
         ]
       };
     }
@@ -540,19 +556,30 @@ function scopeOptions(place) {
   const match = findRegion(place) || (detectCountry(place) ? { country: detectCountry(place), region: null, level: 'country' } : null);
   if (!match) return null;
   const { country, region } = match;
+  const admin = adminForCountry(country.code, { state: region });
   const label = region || country.name;
   const options = region
     ? [
-        `Search Entire ${country.topTerm} (${label})`,
+        `Search Entire ${admin.top} (${label})`,
         `Search Only ${label}`,
-        `Search All ${country.subdivisionTerm}`
+        `Search All ${admin.subdivision}`
       ]
     : [
         `Search Entire Country (${country.name})`,
         `Search Only ${country.name}`,
-        `Search All ${country.topTerm}s`
+        `Search All ${admin.top}s`
       ];
-  return { type: 'broad', country: country.code, level: match.level, label, options };
+  return { type: 'broad', country: country.code, level: match.level, label, admin, options };
 }
 
-module.exports = { COUNTRIES, CITY_ALIASES, detectCountry, findRegion, scopeOptions, normalise };
+module.exports = {
+  COUNTRIES,
+  CITY_ALIASES,
+  detectCountry,
+  findRegion,
+  scopeOptions,
+  normalise,
+  adminForCountry,
+  adminPath,
+  indiaSubdivisionTerm
+};

@@ -4145,6 +4145,19 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 
 /* --------------------------- command polish ------------------------------ */
 .v2-cmd-top-status .v2-cmd-context { font-family: var(--v2-mono); font-size: 9.5px; letter-spacing: 0.06em; color: var(--v2-dim); }
+
+/* Country hierarchy in the header: Province → Census division → City */
+.v2-cmd-hierarchy {
+  display: inline-block;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
+  color: #7dd3fc;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 .v2-rail-help .v2-rail-head { margin-bottom: 10px; }
 .v2-cmd-header { gap: 14px; }
 .v2-run-card footer button { white-space: nowrap; }
@@ -10839,3 +10852,42 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 .v2-source-badge.is-practo { background: #ECFEFF; border-color: #A5F3FC; color: #0E7490; }
 .v2-source-badge.is-bing { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
 .v2-source-badge.is-social { background: #FAF5FF; border-color: #E9D5FF; color: #7E22CE; }
+
+/* -----------------------------------------------------------------------
+   PROFESSIONAL MASTER PASS
+   Calmer surfaces, consistent radii, tabular numbers, one accent.
+   ----------------------------------------------------------------------- */
+.v2-root .v2-cmd-stats { gap: 10px; }
+.v2-root .v2-metric-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(160deg, rgba(17, 26, 38, 0.92), rgba(11, 17, 26, 0.96));
+  box-shadow: none;
+}
+.v2-root .v2-metric-card:hover { border-color: rgba(102, 230, 189, 0.35); }
+.v2-root .v2-metric-copy b { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.v2-root .v2-cmd-body { gap: 14px; }
+.v2-root .v2-cmd-main { gap: 14px; }
+.v2-root .country-strip { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
+.v2-root .country-strip-glow { opacity: 0.35 !important; }
+.v2-root .country-card,
+.v2-root .country-feature { box-shadow: none; }
+.v2-root button:focus-visible,
+.v2-root a:focus-visible,
+.v2-root input:focus-visible,
+.v2-root select:focus-visible,
+.v2-root textarea:focus-visible {
+  outline: 2px solid rgba(102, 230, 189, 0.7);
+  outline-offset: 2px;
+}
+.v2-root ::-webkit-scrollbar { width: 10px; height: 10px; }
+.v2-root ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.v2-root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.36);
+  background-clip: padding-box;
+}

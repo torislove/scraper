@@ -20,7 +20,7 @@
  * card, and nothing stops working when a key expires.
  */
 
-const { COUNTRIES } = require('../localBrain/countries');
+const { COUNTRIES, adminForCountry } = require('../localBrain/countries');
 
 const C = (...codes) => codes;
 
@@ -421,11 +421,14 @@ function coverageReport() {
   return COUNTRIES.map(country => {
     const list = sourcesForCountry(country.code);
     const count = status => list.filter(s => s.access === status).length;
+    const admin = adminForCountry(country.code);
     return {
       code: country.code,
       name: country.name,
       currency: country.currency,
       phoneCode: country.phone,
+      admin,
+      adminPath: admin.levels.join(' → '),
       runningEngines: enginesForCountry(country.code),
       sources: list.map(s => ({
         id: s.id,

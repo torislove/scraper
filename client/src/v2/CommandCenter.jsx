@@ -2600,6 +2600,9 @@ export default function CommandCenter() {
   const [searchCountry, setSearchCountry] = useState(() => {
     try { return localStorage.getItem('scraper-country') || 'IN'; } catch (e) { return 'IN'; }
   });
+  // Filled by CountryFlagStrip after it reads /api/sources?country=XX. It carries
+  // the country's own admin vocabulary (Province → Census division → City, …).
+  const [countryMeta, setCountryMeta] = useState(null);
 
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
@@ -3824,7 +3827,10 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
-          <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}</span>
+          <span className="v2-cmd-context">
+            {formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}
+            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
+          </span>
 
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
@@ -3870,7 +3876,7 @@ export default function CommandCenter() {
         </div>
       </header>
 
-      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} />
+      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <aside className="v2-cmd-rail">

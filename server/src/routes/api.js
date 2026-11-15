@@ -126,19 +126,53 @@ router.get('/brain', (req, res) => {
 });
 
 // Which lead sources run in each country, and which are blocked/key-gated.
-// The client shows this so coverage is never implied.
+// The client shows this so coverage is never implied. Each response also
+// carries the country's administrative vocabulary, so both dashboards label
+// "State / Province / Prefecture / Emirate" from one backend table.
 router.get('/sources', (req, res) => {
   try {
     const registry = require('../services/sources/registry');
+    const countries = require('../services/localBrain/countries');
     const country = req.query.country ? registry.normaliseCountry(req.query.country) : null;
     if (country) {
+      const admin = countries.adminForCountry(country, { state: req.query.state });
       return res.json({
         country,
         engines: registry.enginesForCountry(country),
-        sources: registry.sourcesForCountry(country)
+        sources: registry.sourcesForCountry(country),
+        admin,
+        adminPath: admin.levels.join(' → ')
       });
     }
     res.json({ countries: registry.coverageReport() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// The whole administrative table, used by tests, exports and future clients.
+router.get('/admin-divisions', (req, res) => {
+  try {
+    const { COUNTRIES, adminForCountry } = require('../services/localBrain/countries');
+    const state = req.query.state || null;
+    const country = req.query.country ? String(req.query.country).toUpperCase() : null;
+    if (country) {
+      return res.json({ country, admin: adminForCountry(country, { state }) });
+    }
+    res.json({
+      default: { top: 'Region', second: 'District', local: 'City', subdivision: 'Districts' },
+      countries: COUNTRIES.map(item => {
+        const admin = adminForCountry(item.code);
+        return {
+          code: item.code,
+          name: item.name,
+          currency: item.currency,
+          phoneCode: item.phone,
+          admin,
+          adminPath: admin.levels.join(' → ')
+        };
+      })
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

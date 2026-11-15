@@ -7299,6 +7299,19 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   font-size: 10px !important;
 }
 
+/* Country hierarchy in the header: Province → Census division → City */
+.v2-cmd-hierarchy {
+  display: inline-block;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(148, 163, 184, 0.25);
+  color: #7dd3fc;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 /* Search Console Container */
 .v2-console,
 .v2-root.v2-executive-canvas .v2-console {
@@ -7953,3 +7966,48 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 .v2-source-badge.is-practo { background: #ECFEFF; border-color: #A5F3FC; color: #0E7490; }
 .v2-source-badge.is-bing { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
 .v2-source-badge.is-social { background: #FAF5FF; border-color: #E9D5FF; color: #7E22CE; }
+
+/* -----------------------------------------------------------------------
+   PROFESSIONAL DASHBOARD PASS
+   Calmer surfaces, consistent radii, tabular numbers, one accent.
+   Data first — decoration only where it communicates state.
+   ----------------------------------------------------------------------- */
+.v2-root.v2-executive-canvas .v2-cmd-stats { gap: 10px; }
+.v2-root.v2-executive-canvas .v2-metric-card {
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: linear-gradient(160deg, rgba(17, 26, 38, 0.92), rgba(11, 17, 26, 0.96));
+  box-shadow: none;
+}
+.v2-root.v2-executive-canvas .v2-metric-card:hover {
+  border-color: rgba(102, 230, 189, 0.35);
+}
+.v2-root.v2-executive-canvas .v2-metric-copy b {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.v2-root.v2-executive-canvas .v2-cmd-body { gap: 14px; }
+.v2-root.v2-executive-canvas .v2-cmd-main { gap: 14px; }
+.v2-root.v2-executive-canvas .country-strip { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
+.v2-root.v2-executive-canvas .country-strip-glow { opacity: 0.35 !important; }
+.v2-root.v2-executive-canvas .country-card,
+.v2-root.v2-executive-canvas .country-feature { box-shadow: none; }
+.v2-root.v2-executive-canvas button:focus-visible,
+.v2-root.v2-executive-canvas a:focus-visible,
+.v2-root.v2-executive-canvas input:focus-visible,
+.v2-root.v2-executive-canvas select:focus-visible,
+.v2-root.v2-executive-canvas textarea:focus-visible {
+  outline: 2px solid rgba(102, 230, 189, 0.7);
+  outline-offset: 2px;
+}
+.v2-root.v2-executive-canvas ::-webkit-scrollbar { width: 10px; height: 10px; }
+.v2-root.v2-executive-canvas ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.v2-root.v2-executive-canvas ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.36);
+  background-clip: padding-box;
+}

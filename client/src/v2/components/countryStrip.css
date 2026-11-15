@@ -94,6 +94,15 @@
   gap: 6px;
 }
 
+/* The country's real administrative chain: Province → Census division → City */
+.country-strip-path {
+  margin-top: 2px;
+  font-size: 10px !important;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #7dd3fc !important;
+}
+
 .country-home,
 .country-card-home {
   font-style: normal;
@@ -299,6 +308,24 @@
 .country-card-text small {
   font-size: 10px;
   color: #94a3b8;
+}
+
+.country-card-path {
+  font-style: normal;
+  font-size: 9.5px;
+  line-height: 1.25;
+  color: #7dd3fc;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+.country-feature-path {
+  color: #7dd3fc !important;
+  font-weight: 600;
+  font-size: 10.5px !important;
 }
 
 .country-card-home {

@@ -26,7 +26,23 @@ const { normalizePhone } = require('../utils/phoneUtils');
 const { COUNTRIES, detectCountry, findRegion } = require('../services/localBrain/countries');
 const { DATA_DIR, ensureDir } = require('../config/paths');
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+/**
+ * Overpass is run by volunteers, so a single instance goes down regularly
+ * (502/504 is the normal failure). These three are independent public mirrors
+ * with the same API. A run tries them in order and stops at the first answer;
+ * a mirror that just failed is moved to the back so one bad host cannot stall
+ * every later search.
+ */
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter'
+];
+const OVERPASS_TIMEOUT_MS = 20000;
+const MIRROR_COOLDOWN_MS = 10 * 60 * 1000;
+// A host that just failed is skipped for ten minutes, so a dead mirror costs
+// one timeout per ten minutes instead of one per search.
+const mirrorDownUntil = new Map();
 const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
 const USER_AGENT = 'Scraper.co.in-LeadFinder/1.0 (+https://scraper.co.in; contact: support@scraper.co.in)';
 const CACHE_DIR = path.join(DATA_DIR, 'osm-cache');
@@ -68,34 +84,63 @@ async function politeGet(url, params, { timeout = 12000 } = {}) {
 }
 
 /**
- * One polite retry for a transient upstream answer. A timeout is not retried:
- * doubling the wait would only make the run feel stuck. 429/5xx get a short
- * pause, then the guard records the block and the job moves on.
+ * Overpass with mirror fallback.
+ *
+ * The old version retried the same host once, which is exactly the wrong move
+ * when that host is the one returning 502. Now each mirror gets one attempt:
+ * a 429/5xx/timeout moves to the next host, and the host that answered is
+ * promoted so the next search starts there. If every mirror fails the last
+ * error is thrown so the caller can log an honest "source unavailable".
+ *
+ * Pacing is unchanged: one request slot per MIN_REQUEST_GAP_MS, no parallel
+ * hammering, no retry storm.
  */
 async function politeOverpass(query) {
   const wait = MIN_REQUEST_GAP_MS - (Date.now() - lastRequestAt);
   if (wait > 0) await sleep(wait);
   lastRequestAt = Date.now();
 
-  const request = () => axios.post(OVERPASS_URL, `data=${encodeURIComponent(query)}`, {
-    timeout: 15000,
-    httpsAgent,
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Content-Type': 'application/x-www-form-urlencoded',
-      Accept: 'application/json'
-    }
-  });
-
-  try {
-    return await request();
-  } catch (err) {
-    const status = err.response?.status;
-    const retryable = status === 429 || (status >= 500 && status <= 599);
-    if (!retryable) throw err;
-    await sleep(1500);
-    return request();
+  const now = Date.now();
+  const candidates = OVERPASS_MIRRORS.filter(url => (mirrorDownUntil.get(url) || 0) <= now);
+  if (!candidates.length) {
+    throw new Error('All Overpass mirrors are cooling down after failures');
   }
+
+  let lastError = null;
+
+  for (let i = 0; i < candidates.length; i += 1) {
+    const url = candidates[i];
+    try {
+      const response = await axios.post(url, `data=${encodeURIComponent(query)}`, {
+        timeout: OVERPASS_TIMEOUT_MS,
+        httpsAgent,
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json'
+        }
+      });
+
+      mirrorDownUntil.delete(url);
+      // Promote the healthy mirror so later searches start there.
+      const at = OVERPASS_MIRRORS.indexOf(url);
+      if (at > 0) {
+        OVERPASS_MIRRORS.splice(at, 1);
+        OVERPASS_MIRRORS.unshift(url);
+      }
+      return response;
+    } catch (err) {
+      lastError = err;
+      const status = err.response?.status;
+      const transient = !status || status === 429 || (status >= 500 && status <= 599);
+      deps.logger(`[OpenStreetMap] Mirror ${new URL(url).host} failed (${status || err.code || 'network'}); trying next.`);
+      if (!transient) throw err;
+      mirrorDownUntil.set(url, Date.now() + MIRROR_COOLDOWN_MS);
+      await sleep(500);
+    }
+  }
+
+  throw lastError || new Error('Overpass unavailable');
 }
 
 function cachePath(key) {
@@ -256,6 +301,7 @@ async function geocode(city, country) {
     const result = {
       lat: Number(hit.lat),
       lng: Number(hit.lon),
+      bbox: Array.isArray(hit.boundingbox) ? hit.boundingbox : null,
       district: hit.address?.state_district || hit.address?.county || '',
       state: hit.address?.state || '',
       country: cc
@@ -266,6 +312,125 @@ async function geocode(city, country) {
     deps.logger(`[OpenStreetMap] Geocode failed for "${city}": ${error.message}`);
     return null;
   }
+}
+
+/* ── Nominatim POI fallback ──────────────────────────────────────────────── */
+
+/**
+ * Overpass is the right tool, but it is volunteer-run and sometimes the whole
+ * public network is unreachable from a given ISP. Nominatim is the same OSM
+ * data behind a different service, so instead of returning an empty search we
+ * ask it for places matching the category inside the city box.
+ *
+ * Coverage is narrower than Overpass (Nominatim ranks named places, it does
+ * not dump every node), but it is keyless, legal, and returns the same fields:
+ * name, phone, website, email, opening hours, coordinates and OSM id.
+ */
+const NON_BUSINESS_CLASSES = new Set([
+  'boundary', 'place', 'highway', 'railway', 'waterway', 'natural',
+  'landuse', 'building', 'man_made', 'admin', 'aeroway', 'route'
+]);
+
+/**
+ * Nominatim matches names, not categories, so "computer stores" finds nothing
+ * while "computer shop" finds the shops. Strip the generic tail word and ask
+ * for the concrete trade instead, plus the original phrase as a second try.
+ */
+function nominatimTerms(category) {
+  const clean = String(category || '').trim();
+  if (!clean) return [];
+  const stripped = clean.replace(/\b(stores?|shops?|dealers?|centres?|centers?|suppliers?|companies|services?|vendors?)\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  const terms = [];
+  if (stripped) terms.push(`${stripped} shop`);
+  if (clean && clean.toLowerCase() !== `${stripped} shop`.toLowerCase()) terms.push(clean);
+  return [...new Set(terms)].slice(0, 2);
+}
+
+async function nominatimPlaces(category, city, country, center, radiusKm, bbox = null) {
+  // A city's own bounding box beats a guessed radius: Austin's box reaches the
+  // suburbs that a fixed 8 km circle misses. Fall back to a radius square when
+  // the geocoder gave us no box.
+  let viewbox = '';
+  if (Array.isArray(bbox) && bbox.length === 4) {
+    const [south, north, west, east] = bbox.map(Number);
+    if ([south, north, west, east].every(Number.isFinite)) {
+      viewbox = [west, north, east, south].map(value => value.toFixed(5)).join(',');
+    }
+  }
+  if (!viewbox) {
+    const delta = Math.min(0.6, Math.max(0.05, (Number(radiusKm) || 12) / 111));
+    viewbox = [
+      center.lng - delta,
+      center.lat + delta,
+      center.lng + delta,
+      center.lat - delta
+    ].map(value => value.toFixed(5)).join(',');
+  }
+
+  const terms = nominatimTerms(category);
+  if (!terms.length) return [];
+
+  const elements = [];
+  const seen = new Set();
+
+  for (const term of terms) {
+    let hits = [];
+    try {
+      const response = await politeGet(NOMINATIM_URL, {
+        q: term,
+        format: 'jsonv2',
+        limit: 50,
+        addressdetails: 1,
+        extratags: 1,
+        namedetails: 1,
+        bounded: 1,
+        viewbox,
+        countrycodes: country.code.toLowerCase()
+      }, { timeout: 20000 });
+      hits = Array.isArray(response.data) ? response.data : [];
+    } catch (error) {
+      deps.logger(`[OpenStreetMap] Nominatim term "${term}" failed: ${error.message}`);
+      continue;
+    }
+
+    for (const hit of hits) {
+      const klass = String(hit.category || hit.class || '');
+      if (!hit || NON_BUSINESS_CLASSES.has(klass)) continue;
+      const name = hit.namedetails?.name || hit.name || '';
+      if (!name) continue;
+
+      const key = `${hit.osm_type || 'node'}/${hit.osm_id || hit.place_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const address = hit.address || {};
+      const extratags = hit.extratags || {};
+      const tags = {
+        name,
+        ...extratags,
+        'addr:housenumber': address.house_number || '',
+        'addr:street': address.road || '',
+        'addr:suburb': address.suburb || address.neighbourhood || address.quarter || '',
+        'addr:city': address.city || address.town || address.village || '',
+        'addr:district': address.county || address.state_district || '',
+        'addr:state': address.state || '',
+        'addr:postcode': address.postcode || ''
+      };
+      if (klass && hit.type) tags[klass] = hit.type;
+
+      elements.push({
+        type: hit.osm_type || 'node',
+        id: hit.osm_id || hit.place_id,
+        lat: Number(hit.lat),
+        lon: Number(hit.lon),
+        tags
+      });
+    }
+
+    if (elements.length >= 40) break;
+  }
+
+  return elements;
 }
 
 /* ── tag extraction ──────────────────────────────────────────────────────── */
@@ -328,7 +493,11 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     : resolveCountry(city);
   const countryCode = country.code;
 
-  let center = (Number.isFinite(Number(centerLat)) && Number.isFinite(Number(centerLng)))
+  // `Number(null)` is 0, so a plain null check is not enough: without this,
+  // every "no coordinates supplied" call silently searched the Gulf of Guinea
+  // and returned nothing. Only treat a value as a centre when it is real.
+  const hasCoord = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  let center = (hasCoord(centerLat) && hasCoord(centerLng))
     ? { lat: Number(centerLat), lng: Number(centerLng) }
     : null;
   let geo = center ? { district: '', state: '' } : null;
@@ -346,25 +515,36 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
   const radiusMeters = Math.max(1000, Math.min(35000, (Number(radiusKm) || defaultKm) * 1000));
   const around = `(around:${Math.round(radiusMeters)},${center.lat.toFixed(5)},${center.lng.toFixed(5)})`;
   const body = filters.map(filter => `nwr${filter}${around};`).join('\n  ');
-  const query = `[out:json][timeout:12];\n(\n  ${body}\n);\nout center tags ${MAX_RESULTS};`;
+  const query = `[out:json][timeout:25];\n(\n  ${body}\n);\nout center tags ${MAX_RESULTS};`;
 
   const cacheKey = `osm-${countryCode}-${city}-${baseCategory}-${Math.round(radiusMeters / 1000)}`;
   let payload = readCache(cacheKey);
+  let sourcePath = 'overpass';
   if (!payload) {
     try {
       const response = await politeOverpass(query);
       payload = response.data;
       writeCache(cacheKey, payload);
     } catch (error) {
-      deps.logger(`[OpenStreetMap] Query failed: ${error.message}`);
-      return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0 };
+      deps.logger(`[OpenStreetMap] Overpass unavailable (${error.message}); switching to Nominatim for the same city box.`);
+      try {
+        const fallback = await nominatimPlaces(baseCategory, city, country, center, radiusMeters / 1000, geo?.bbox);
+        payload = { elements: fallback, via: 'nominatim' };
+        sourcePath = 'nominatim';
+        if (fallback.length) writeCache(cacheKey, payload);
+        deps.logger(`[OpenStreetMap] Nominatim returned ${fallback.length} named places for "${baseCategory}" in ${city}.`);
+      } catch (fallbackError) {
+        deps.logger(`[OpenStreetMap] Both Overpass and Nominatim failed: ${fallbackError.message}`);
+        return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0, sourceUnavailable: true };
+      }
     }
   } else {
+    sourcePath = payload?.via === 'nominatim' ? 'nominatim (cached)' : 'overpass (cached)';
     deps.logger(`[OpenStreetMap] Reusing today's cached answer for "${baseCategory}" in "${city}".`);
   }
 
   const elements = Array.isArray(payload?.elements) ? payload.elements : [];
-  deps.logger(`[OpenStreetMap] ${elements.length} public OSM places matched "${baseCategory}" within ${Math.round(radiusMeters / 1000)} km of ${city}.`);
+  deps.logger(`[OpenStreetMap] ${elements.length} public OSM places matched "${baseCategory}" within ${Math.round(radiusMeters / 1000)} km of ${city} · via ${sourcePath}.`);
 
   let created = 0;
   let updated = 0;
@@ -409,6 +589,7 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
       city: tag(element, 'addr:city', 'addr:town', 'addr:village') || city,
       district,
       state: tag(element, 'addr:state') || state,
+      country: countryCode,
       pincode: tag(element, 'addr:postcode'),
       latitude,
       longitude,
@@ -469,8 +650,9 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     newInserted: created,
     updated,
     phoneCount,
-    mobileCount
+    mobileCount,
+    sourcePath
   };
 }
 
-module.exports = { scrapeOpenStreetMap, setDeps };
+module.exports = { scrapeOpenStreetMap, setDeps, nominatimPlaces };

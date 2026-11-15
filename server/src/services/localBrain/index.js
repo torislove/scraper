@@ -428,15 +428,20 @@ function detectCountry(text) {
 function countryProfile(text) {
   const country = detectCountry(text);
   if (!country) return null;
+  const region = countries.findRegion(text);
+  const state = region && region.country.code === country.code ? region.region : null;
+  const admin = countries.adminForCountry(country.code, { state });
   return {
     code: country.code,
     name: country.name,
     currency: country.currency,
     phoneCode: country.phone,
-    topTerm: country.topTerm,
-    secondTerm: country.secondTerm,
-    localTerm: country.localTerm,
-    subdivisionTerm: country.subdivisionTerm
+    topTerm: admin.top,
+    secondTerm: admin.second,
+    localTerm: admin.local,
+    subdivisionTerm: admin.subdivision,
+    admin,
+    adminPath: admin.levels.join(' → ')
   };
 }
 

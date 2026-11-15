@@ -677,7 +677,7 @@ export default function LandingV2() {
                 transition={{ duration: 0.55, delay: 0.04, ease: EASE }}
               >
                 <Compass size={13} color="#059669" />
-                ALL INDIA COVERAGE · 28 STATES &amp; 8 UTs · 660+ DISTRICTS · 5,900+ MANDALS · 600,000+ VILLAGES
+                INDIA HOME · 245 COUNTRIES · 660+ DISTRICTS · 5,900+ MANDALS · 0 API KEYS
               </motion.div>
             </div>
 
@@ -687,8 +687,8 @@ export default function LandingV2() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.65, delay: 0.08, ease: EASE }}
             >
-              Find Every Business Owner in Town.
-              <span className="lp-embossed-sub">Close Real Clients Directly on WhatsApp.</span>
+              Find Every Business Owner, In Any Country.
+              <span className="lp-embossed-sub">India first. Then the UK, US, Canada, UAE and 240 more.</span>
             </motion.h1>
 
             <motion.p
@@ -697,7 +697,7 @@ export default function LandingV2() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.16, ease: EASE }}
             >
-              Stop wasting days calling receptionists, fake numbers, and dead landlines. <b>Scraper.co.in</b> gives you the direct personal WhatsApp mobile numbers of real business proprietors in any city, district, or mandal — formatted in seconds.
+              Stop wasting days calling receptionists, fake numbers, and dead landlines. <b>Scraper.co.in</b> gives you the direct personal WhatsApp mobile numbers of real business proprietors in any city, county, province, prefecture or mandal — parsed in the country's own phone format and labelled with its own hierarchy.
             </motion.p>
 
             <motion.div

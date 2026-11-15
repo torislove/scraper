@@ -294,6 +294,9 @@ export default function CommandCenter() {
   const [searchCountry, setSearchCountry] = useState(() => {
     try { return localStorage.getItem('scraper-country') || 'IN'; } catch (e) { return 'IN'; }
   });
+  // Filled by CountryFlagStrip from /api/sources?country=XX. The Master uses it
+  // to label scope buttons in the country's own words.
+  const [countryMeta, setCountryMeta] = useState(null);
 
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
@@ -1780,39 +1783,86 @@ export default function CommandCenter() {
   const runTotal = progress?.totalMandalsAcrossAll || progress?.totalMandals || estimate?.zones?.count || 0;
   const runDone = progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0;
 
-  // Launchpad copy adapts to the chosen administrative level so an operator
-  // never sees "District" while sweeping a mandal.
-  const masterPlaceLabel = masterSweepForm.scope === 'state'
-    ? 'State'
-    : masterSweepForm.scope === 'mandal'
-      ? 'Mandal / Taluk / Tehsil / Block'
-      : masterSweepForm.scope === 'city'
-        ? 'City or Town'
-        : 'District';
-  const masterPlacePlaceholder = masterSweepForm.scope === 'state'
-    ? 'e.g. Andhra Pradesh, Telangana, Tamil Nadu'
-    : masterSweepForm.scope === 'mandal'
-      ? 'e.g. Tenali Mandal, Pollachi Taluk'
-      : masterSweepForm.scope === 'city'
-        ? 'e.g. Tenali, Coimbatore, Srirangapatna'
-        : 'e.g. Guntur District, Coimbatore, NTR';
+  // Launchpad copy adapts to the country's own administrative vocabulary.
+  // Scope ids stay stable (state / district / mandal / city) so saved runs and
+  // the sweep planner keep working; only the display words change.
+  const countryName = (findCountry(searchCountry) || { name: 'India' }).name;
+  const admin = countryMeta?.admin || (searchCountry === 'IN'
+    ? { top: 'State', second: 'District', local: 'Mandal / Taluka / Tehsil', subdivision: 'Mandals / Talukas / Tehsils' }
+    : { top: 'Region', second: 'District', local: 'City', subdivision: 'Districts' });
+  const plural = term => {
+    if (!term) return '';
+    if (/[^aeiou]y$/i.test(term)) return `${term.slice(0, -1)}ies`;
+    if (/(s|x|z|ch|sh)$/i.test(term)) return `${term}es`;
+    return `${term}s`;
+  };
+  const masterScopeOptions = [
+    { id: 'state', label: admin.top, hint: `Every ${admin.second.toLowerCase()} + ${admin.local.toLowerCase()}` },
+    { id: 'district', label: admin.second, hint: `Every ${admin.local.toLowerCase()}` },
+    { id: 'mandal', label: admin.local, hint: 'Every village, ward and locality' },
+    { id: 'city', label: 'City or locality', hint: 'Localities + street grid + ring' }
+  ];
+  const COUNTRY_PLACE_EXAMPLES = {
+    IN: {
+      state: 'Andhra Pradesh, Telangana, Tamil Nadu',
+      district: 'Guntur District, Coimbatore, NTR',
+      mandal: 'Tenali Mandal, Pollachi Taluk',
+      city: 'Tenali, Coimbatore, Srirangapatna'
+    },
+    US: {
+      state: 'Texas, California, New York',
+      district: 'Travis County, Los Angeles County',
+      mandal: 'Austin, Los Angeles, New York City',
+      city: 'Downtown Austin, Brooklyn'
+    },
+    GB: {
+      state: 'England, Scotland, Wales',
+      district: 'Greater London, Kent, Essex',
+      mandal: 'London, Manchester, Leeds',
+      city: 'Camden, Soho, Shoreditch'
+    },
+    CA: {
+      state: 'Ontario, Quebec, British Columbia',
+      district: 'Toronto Division, Peel Region',
+      mandal: 'Toronto, Mississauga, Ottawa',
+      city: 'Downtown Toronto, Scarborough'
+    },
+    AU: {
+      state: 'New South Wales, Victoria, Queensland',
+      district: 'City of Sydney, Brisbane City',
+      mandal: 'Sydney, Melbourne, Brisbane',
+      city: 'Surry Hills, Fitzroy'
+    },
+    AE: {
+      state: 'Dubai, Abu Dhabi, Sharjah',
+      district: 'Dubai Municipality, Abu Dhabi Municipality',
+      mandal: 'Deira, Bur Dubai, Al Barsha',
+      city: 'Downtown Dubai, JLT'
+    }
+  };
+  const examples = COUNTRY_PLACE_EXAMPLES[searchCountry] || {};
+  const masterPlaceLabel = masterScopeOptions.find(option => option.id === masterSweepForm.scope)?.label || admin.second;
+  const masterPlacePlaceholder = examples[masterSweepForm.scope]
+    || `e.g. ${masterPlaceLabel} in ${countryName}`;
   const masterCoverageText = (() => {
     const coverage = masterPreview?.coverage;
     if (!coverage) return '—';
+    const secondPlural = plural(admin.second).toLowerCase();
+    const localPlural = plural(admin.local).toLowerCase();
     if (masterPreview.scope === 'state' || coverage.districts > 1) {
-      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} districts · ${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${masterPreview.unitTerm || 'units'}`;
+      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} ${secondPlural} · ${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${localPlural}`;
     }
     if (coverage.localities != null) {
       return `${formatNumber(coverage.localitiesCovered ?? 0)}/${formatNumber(coverage.localities ?? 0)} localities`;
     }
     if (masterPreview.scope === 'district') {
-      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${(masterPreview.unitTerm || 'units').toLowerCase()} · ${formatNumber(coverage.villagesCovered ?? 0)}/${formatNumber(coverage.villages ?? 0)} villages`;
+      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${localPlural} · ${formatNumber(coverage.villagesCovered ?? 0)}/${formatNumber(coverage.villages ?? 0)} villages`;
     }
     if (coverage.subDistricts != null) {
-      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${masterPreview.unitTerm || 'units'}`;
+      return `${formatNumber(coverage.subDistrictsCovered ?? 0)}/${formatNumber(coverage.subDistricts ?? 0)} ${localPlural}`;
     }
     if (coverage.districts != null) {
-      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} district`;
+      return `${formatNumber(coverage.districtsCovered ?? 0)}/${formatNumber(coverage.districts ?? 0)} ${secondPlural}`;
     }
     return '—';
   })();
@@ -1951,7 +2001,10 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
-          <span className="v2-cmd-context">{formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}</span>
+          <span className="v2-cmd-context">
+            {formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}
+            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
+          </span>
 
           <button
             type="button"
@@ -2015,7 +2068,7 @@ export default function CommandCenter() {
         </div>
       </header>
 
-      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} />
+      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <aside className="v2-cmd-rail">
@@ -2455,18 +2508,13 @@ export default function CommandCenter() {
                         <div className="v2-master-launcher-head">
                           <div>
                             <span className="v2-badge-gold">🗺️ MASTER GEO-COVERAGE SWEEP LAUNCHPAD</span>
-                            <h3>State · District · Mandal · City — every unit, no gaps</h3>
-                            <p>Pick a scope, type a place, and see the exact zones, coverage and ETA before you launch. Auto mode routes each category to the best free engines.</p>
+                            <h3>{admin.top} · {admin.second} · {admin.local} · Locality — every unit, no gaps</h3>
+                            <p>Pick a scope, type a place, and see the exact zones, coverage and ETA before you launch. {countryName} runs its own hierarchy; auto mode routes each category to the best free engines.</p>
                           </div>
                         </div>
 
                         <div className="v2-master-scope-row">
-                          {[
-                            { id: 'state', label: 'State', hint: 'Every district + sub-district' },
-                            { id: 'district', label: 'District', hint: 'Every mandal / taluk / tehsil' },
-                            { id: 'mandal', label: 'Mandal', hint: 'Every village and ward' },
-                            { id: 'city', label: 'City', hint: 'Localities + street grid + ring' }
-                          ].map(option => (
+                          {masterScopeOptions.map(option => (
                             <button
                               key={option.id}
                               type="button"

@@ -47,7 +47,22 @@ const DISTRICT_TICKER = [
   "Jaipur · Solar & Commercial Hub"
 ];
 
+// The country band is the landing page's proof that the app is not India-only.
+// Each market shows its real administrative chain, not a generic "district".
+const WORLD_MARKETS = [
+  { code: "IN", flag: "🇮🇳", name: "India", home: true, path: "State → District → Mandal / Taluka / Tehsil", example: "Guntur, Vijayawada, Tenali" },
+  { code: "US", flag: "🇺🇸", name: "United States", path: "State → County → City", example: "Austin, Los Angeles, New York" },
+  { code: "GB", flag: "🇬🇧", name: "United Kingdom", path: "Nation → County → Town", example: "London, Manchester, Leeds" },
+  { code: "CA", flag: "🇨🇦", name: "Canada", path: "Province → Census division → City", example: "Toronto, Vancouver, Calgary" },
+  { code: "AU", flag: "🇦🇺", name: "Australia", path: "State → Local government area → Suburb", example: "Sydney, Melbourne, Brisbane" },
+  { code: "AE", flag: "🇦🇪", name: "United Arab Emirates", path: "Emirate → Municipality → Area", example: "Dubai, Abu Dhabi, Sharjah" }
+];
+
 const faqs = [
+  [
+    "Does this work outside India?",
+    "Yes. All 245 countries are selectable. India is the home market and runs 9 engines (including JustDial, WeddingBazaar, WeddingWire and Mandap). Every other country runs the keyless global stack: OpenStreetMap, Google Maps, Google Local Finder, Web Discovery and official business websites. Phone numbers are parsed in the local format (+1, +44, +49, +91) and the admin labels follow the country — Province in Canada, Prefecture in Japan, Emirate in the UAE, State → District → Mandal / Taluka / Tehsil in India."
+  ],
   [
     "Why is Scraper.co.in better than buying old Excel sheets or JustDial?",
     "Data brokers sell outdated lists where 65% of numbers are dead landlines, switchboards, or disconnected lines. JustDial sells the exact same inquiry to 10 of your competitors at once. With Scraper.co.in, every search is performed live on-demand, exclusive to you, and delivers verified personal WhatsApp mobile numbers with zero gatekeepers."
@@ -125,6 +140,7 @@ export default function LandingV2() {
   const goWorkspace = () => navigate('/command');
 
   const nav = [
+    ["Countries", "#countries"],
     ["2D Radar", "#radar"],
     ["Live Discovery", "#theater"],
     ["Territory Folders", "#folders"],
@@ -141,7 +157,7 @@ export default function LandingV2() {
       {/* Top Notification Announcement */}
       <div className="announcement">
         <span className="announce-spark"><Sparkles size={13} /></span>
-        <b>Scraper.co.in Live:</b> Personal mobiles first · Verified Indian Proprietor WhatsApp Access · 660+ Districts
+        <b>Scraper.co.in Live:</b> 245 countries · India HOME · personal mobiles first · no API keys · no accounts
         <button
           type="button"
           onClick={goWorkspace}
@@ -220,16 +236,16 @@ export default function LandingV2() {
           <div className="hero-content">
             <motion.div initial="hidden" animate="show" variants={stagger}>
               <motion.div className="hero-pill" variants={fadeUp}>
-                <span className="pill-pulse" /> 🇮🇳 SEARCH ALL OVER THE INTERNET FOR LEADS ACROSS ANY CITY &amp; ALL MANDALS
+                <span className="pill-pulse" /> 🇮🇳 INDIA FIRST · 245 COUNTRIES · NO API KEYS · NO ACCOUNTS
               </motion.div>
 
               <motion.h1 variants={fadeUp}>
                 Stop Calling Receptionists.<br />
-                <span className="gradient-text">WhatsApp The Real Business Owner Directly.</span>
+                <span className="gradient-text">WhatsApp The Real Business Owner — In 245 Countries.</span>
               </motion.h1>
 
               <motion.p className="hero-copy" variants={fadeUp}>
-                Scraper.co.in searches all over the internet to find verified business owner leads for you — whether you are a <b>Startup</b>, an established <b>Business</b>, or launching <b>New Products</b>. In the Client App, search any city and all surrounding mandals with validated mobiles, with landlines kept out of the primary column.
+                Scraper.co.in searches the open web for verified business owner leads — whether you are a <b>Startup</b>, an established <b>Business</b>, or launching <b>New Products</b>. Search any city, county, province, prefecture or mandal. India stays home with State → District → Mandal / Taluka / Tehsil; Canada uses Province → Census division → City; the UK uses Nation → County → Town. Every number is parsed in the country's own format, and blocked directories are shown as blocked — never faked.
               </motion.p>
 
               {/* Action Buttons */}
@@ -443,6 +459,50 @@ export default function LandingV2() {
             <span>ORGANIZED FOLDERS</span>
             <span className="hero-bottom-line" />
             <span>1-CLICK WHATSAPP</span>
+          </div>
+        </section>
+
+        {/* COUNTRY BAND: 245 countries, each with its real hierarchy */}
+        <section className="country-band" id="countries">
+          <div className="country-band-inner">
+            <div className="country-band-head">
+              <span className="eyebrow"><Globe2 size={13} /> 245 COUNTRIES · ONE KEYLESS ENGINE</span>
+              <h2>India first. Then wherever your customers are.</h2>
+              <p>
+                Every country runs the keyless global stack — OpenStreetMap, Google Maps,
+                Google Local Finder, Web Discovery and official business websites. India
+                adds its own directories. The scope words change with the country, so you
+                type the place the way locals actually name it.
+              </p>
+            </div>
+
+            <div className="country-band-grid">
+              {WORLD_MARKETS.map(market => (
+                <button
+                  key={market.code}
+                  type="button"
+                  className={`country-market${market.home ? " is-home" : ""}`}
+                  onClick={goWorkspace}
+                >
+                  <span className="country-market-flag" aria-hidden="true">{market.flag}</span>
+                  <span className="country-market-body">
+                    <b>
+                      {market.name}
+                      {market.home && <em className="country-market-home">HOME</em>}
+                    </b>
+                    <small className="country-market-path">{market.path}</small>
+                    <small className="country-market-example">{market.example}</small>
+                  </span>
+                  <ArrowUpRight size={14} className="country-market-arrow" />
+                </button>
+              ))}
+            </div>
+
+            <div className="country-band-foot">
+              <span><ShieldCheck size={13} /> No keys, no logins, no credit card</span>
+              <span><Globe2 size={13} /> {WORLD_MARKETS.length} featured · 245 selectable</span>
+              <span><Database size={13} /> Phones parsed as +1, +44, +49, +91…</span>
+            </div>
           </div>
         </section>
 

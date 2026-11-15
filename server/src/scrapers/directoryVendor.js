@@ -264,6 +264,7 @@ function buildDirectoryVendor(input = {}) {
     city = '',
     district = '',
     state = '',
+    country = '',
     pincode = '',
     latitude = null,
     longitude = null,
@@ -352,6 +353,7 @@ function buildDirectoryVendor(input = {}) {
     city: cleanCity || cleanLocality,
     district: cleanText(district, 120),
     state: cleanText(state, 120),
+    country: cleanText(country, 2).toUpperCase(),
     pincode: cleanPincode,
     coordinates: {
       lat: Number.isFinite(Number(latitude)) ? Number(latitude) : null,
