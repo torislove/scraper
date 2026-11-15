@@ -617,6 +617,7 @@ export default function LandingV2() {
           />
 
           <nav className="lp-nav-links">
+            <button type="button" className="lp-nav-link" onClick={() => scrollToSection('world')}>245 Countries</button>
             <button type="button" className="lp-nav-link" onClick={() => scrollToSection('how-it-works')}>How It Works</button>
             <button type="button" className="lp-nav-link" onClick={() => scrollToSection('playground')}>Live Scraper</button>
             <button type="button" className="lp-nav-link" onClick={() => scrollToSection('roi-calculator')}>Cash Calculator</button>
@@ -866,6 +867,60 @@ export default function LandingV2() {
             ))}
           </div>
         </div>
+
+        {/* --------------------------------------------------------------------
+           245 countries — each with its own administrative vocabulary
+           -------------------------------------------------------------------- */}
+        <motion.section
+          className="lp-world-section"
+          id="world"
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: '-40px' }}
+          transition={{ duration: 0.6, ease: EASE }}
+        >
+          <div className="lp-container">
+            <div className="lp-section-header">
+              <span className="lp-section-pill">245 Countries · India First</span>
+              <h2 className="lp-section-title">Every Country Keeps Its Own Hierarchy</h2>
+              <p className="lp-section-desc">
+                India runs State → District → Mandal / Taluka / Tehsil. Canada runs Province →
+                Census division → City. The UK runs Nation → County → Town. You type the place the
+                way locals name it, and the sweep walks every unit underneath it.
+              </p>
+            </div>
+
+            <div className="lp-world-grid">
+              {[
+                { flag: '🇮🇳', name: 'India', home: true, path: 'State → District → Mandal / Taluka / Tehsil', engines: '9 engines' },
+                { flag: '🇺🇸', name: 'United States', path: 'State → County → City', engines: '5 engines' },
+                { flag: '🇬🇧', name: 'United Kingdom', path: 'Nation → County → Town', engines: '5 engines' },
+                { flag: '🇨🇦', name: 'Canada', path: 'Province → Census division → City', engines: '5 engines' },
+                { flag: '🇦🇺', name: 'Australia', path: 'State → Local government area → Suburb', engines: '5 engines' },
+                { flag: '🇦🇪', name: 'UAE', path: 'Emirate → Municipality → Area', engines: '5 engines' }
+              ].map(market => (
+                <div className={`lp-world-card${market.home ? ' is-home' : ''}`} key={market.name}>
+                  <span className="lp-world-flag" aria-hidden="true">{market.flag}</span>
+                  <div className="lp-world-body">
+                    <b>
+                      {market.name}
+                      {market.home && <em className="lp-world-home">HOME</em>}
+                    </b>
+                    <small className="lp-world-path">{market.path}</small>
+                    <small className="lp-world-meta">{market.engines} · keyless · no accounts</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <p className="lp-world-note">
+              All 245 countries are selectable. The global stack is OpenStreetMap, Google Maps,
+              Google Local Finder, Web Discovery and official business websites. Phone numbers are
+              parsed in the country's own format (+1, +44, +49, +91). Blocked directories stay
+              marked blocked — never faked.
+            </p>
+          </div>
+        </motion.section>
 
         {/* --------------------------------------------------------------------
            Simple 3-Step Explanation

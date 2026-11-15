@@ -24,7 +24,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetch(`${API_URL}/api/sources?country=${encodeURIComponent(current?.code || 'IN')}`)
+    fetch(`${API_URL}/sources?country=${encodeURIComponent(current?.code || 'IN')}`)
       .then(response => (response.ok ? response.json() : null))
       .then(data => {
         if (!alive || !data) return;
@@ -41,7 +41,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
   useEffect(() => {
     if (!open || Object.keys(adminTable).length) return;
     let alive = true;
-    fetch(`${API_URL}/api/admin-divisions`)
+    fetch(`${API_URL}/admin-divisions`)
       .then(response => (response.ok ? response.json() : null))
       .then(data => {
         if (!alive || !data || !Array.isArray(data.countries)) return;

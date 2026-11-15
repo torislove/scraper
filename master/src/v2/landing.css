@@ -1282,3 +1282,100 @@ html.lp-page, body.lp-page {
   .lp-pricing-grid { grid-template-columns: 1fr; }
   .lp-nav-links { display: none; }
 }
+
+/* ==========================================================================
+   WORLD COVERAGE — 245 countries, each with its real hierarchy
+   ========================================================================== */
+.lp-world-section {
+  padding: 84px 0;
+  background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.lp-world-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.lp-world-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.lp-world-card:hover {
+  transform: translateY(-2px);
+  border-color: #CBD5E1;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
+
+.lp-world-card.is-home {
+  border-color: #A7F3D0;
+  background: linear-gradient(120deg, #ECFDF5, #F0FDFA);
+}
+
+.lp-world-flag {
+  font-size: 30px;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.lp-world-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lp-world-body b {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+}
+
+.lp-world-home {
+  font-style: normal;
+  font-size: 8.5px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #052E16;
+  background: #6EE7B7;
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.lp-world-path {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: #0369A1;
+}
+
+.lp-world-meta {
+  font-size: 10.5px;
+  color: #64748B;
+}
+
+.lp-world-note {
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #64748B;
+}
+
+@media (max-width: 720px) {
+  .lp-world-section { padding: 60px 0; }
+  .lp-world-grid { grid-template-columns: 1fr; }
+}
