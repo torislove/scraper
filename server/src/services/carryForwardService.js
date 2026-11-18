@@ -29,6 +29,10 @@ const DEFAULT_LIMIT = 250;
 const REPEAT_WINDOW_HOURS = 24;
 const REPEAT_MIN_MOBILE_LEADS = 3;
 
+// A stale row from a half-finished run must never be inherited by a fresh
+// search. Anything below this stored quality score is treated as noise.
+const MIN_QUALITY_SCORE = 35;
+
 function text(value) {
   return String(value == null ? '' : value).trim();
 }
@@ -61,6 +65,38 @@ function mobileNational(lead) {
     } catch (e) {}
   }
   return '';
+}
+
+/**
+ * Carry-forward quality guard.
+ *
+ * `hasStrongCategorySignal` proves the row belongs to the category, but a row
+ * can still be useless: an abandoned run can leave a name with no phone, no
+ * website, no email and no address, and a low stored quality score means the
+ * quality engine already judged it thin. Reusing those made a brand-new search
+ * look like it had results when it had nothing callable.
+ *
+ * @returns {{ ok: boolean, reason: string }}
+ */
+function carryForwardQuality(row) {
+  const stored = Number(row?.profileQuality?.score ?? row?.qualityScore);
+  if (Number.isFinite(stored) && stored > 0 && stored < MIN_QUALITY_SCORE) {
+    return { ok: false, reason: 'low-score' };
+  }
+
+  const phone = mobileNational(row)
+    || text(row.phone)
+    || text(row.primaryPhone)
+    || (Array.isArray(row.phones) && row.phones.length > 0 ? 'phone' : '');
+  const website = text(row.website) || text(row.websiteUrl) || text(row.domain);
+  const email = text(row.email)
+    || (Array.isArray(row.emails) && row.emails.length > 0 ? 'email' : '');
+  const address = text(row.address) || text(row.formattedAddress) || text(row.street);
+
+  if (!phone && !website && !email && !address) {
+    return { ok: false, reason: 'no-contact' };
+  }
+  return { ok: true, reason: '' };
 }
 
 function mapsIdentity(lead) {
@@ -153,6 +189,7 @@ function collectCarryForward(options = {}) {
   }
 
   const candidates = [];
+  let skippedQuality = 0;
   for (const row of store) {
     if (!row || !row.id) continue;
     if (row.sessionId === sessionId || row.lastSessionId === sessionId) continue;
@@ -163,6 +200,12 @@ function collectCarryForward(options = {}) {
 
     if (!sameCity(row, location)) continue;
     if (!hasStrongCategorySignal(row, category)) continue;
+
+    // Quality guard: never inherit a row that is thin or unreachable.
+    if (!carryForwardQuality(row).ok) {
+      skippedQuality += 1;
+      continue;
+    }
 
     const coords = (row.latitude && row.longitude)
       ? { lat: Number(row.latitude), lng: Number(row.longitude) }
@@ -237,7 +280,7 @@ function collectCarryForward(options = {}) {
     };
   });
 
-  return { leads, fromSessions: [...fromSessions], scanned: store.length };
+  return { leads, fromSessions: [...fromSessions], scanned: store.length, skippedQuality };
 }
 
 /**
@@ -293,5 +336,5 @@ module.exports = {
   collectCarryForward,
   findRepeatCoveredZones,
   // exported for tests
-  _internals: { sameCity, mobileNational, mapsIdentity, zoneKey }
+  _internals: { sameCity, mobileNational, mapsIdentity, zoneKey, carryForwardQuality }
 };

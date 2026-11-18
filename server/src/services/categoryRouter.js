@@ -351,12 +351,18 @@ function classifyCategory(category) {
   // are commercial B2B supplier services. They MUST run on IndiaMART even if the word
   // "wedding" is present in the query (e.g. "wedding album printing").
   const isPrintingOrAlbum = /\b(album|printing|print|color lab|colour lab|press|photobook|karizma|canvera|offset|flex)\b/i.test(raw);
+  const isWeddingIntent = /\b(wedding|marriage|matrimony|bride|bridal|groom|banquet|mandap)\b/i.test(raw);
   const intent = brandIntel.detect(raw);
   const engines = [...definition.engines];
   const cityEngines = [...definition.cityEngines];
   if ((intent.brand || intent.product || intent.genericProduct || isPrintingOrAlbum) && (bestFamily !== 'wedding' || isPrintingOrAlbum)) {
     if (!engines.includes('indiamart')) engines.push('indiamart');
     if (!cityEngines.includes('indiamart')) cityEngines.push('indiamart');
+  }
+
+  if (isWeddingIntent && !isPrintingOrAlbum) {
+    if (!engines.includes('weddingwire')) engines.push('weddingwire');
+    if (!cityEngines.includes('weddingwire')) cityEngines.push('weddingwire');
   }
 
   return {
@@ -368,7 +374,7 @@ function classifyCategory(category) {
     confidence,
     score: bestScore,
     matched: bestMatched,
-    wedding: bestFamily === 'wedding',
+    wedding: bestFamily === 'wedding' || isWeddingIntent,
     category: raw,
     intent
   };
@@ -386,15 +392,21 @@ function pickAutoEngines(classification, options = {}) {
   const mode = String(options.mode || 'auto').toLowerCase();
   let engines = [...(info.engines || FAMILY_DEFINITIONS.generic.engines)];
 
-  // Category fidelity: Mandap.com, WeddingBazaar and WeddingWire publicly list
-  // *venues*. Running them for a photographer, caterer or decorator search is
-  // what produced banquet halls for "wedding photographers". Only venue
-  // searches may use those directories.
+  // Category fidelity: Mandap.com lists only venues.
+  // WeddingWire supports venues, photographers, caterers, planners, makeup.
   try {
     const fidelity = require('./categoryFidelity');
     const isPrintingOrAlbum = /\b(album|printing|print|color lab|colour lab|press|photobook|karizma|canvera|offset|flex)\b/i.test(info.category);
-    if ((info.family === 'wedding' && !fidelity.isVenueCategory(info.category)) || isPrintingOrAlbum) {
+    const isWwSupported = /photo|video|shoot|cater|food|plan|decor|event|makeup|mehendi|bridal|venue|banquet|mandap|hall/i.test(info.category);
+    if (isPrintingOrAlbum) {
       engines = engines.filter(engine => !['mandap', 'weddingbazaar', 'weddingwire'].includes(engine));
+    } else {
+      if (!fidelity.isVenueCategory(info.category)) {
+        engines = engines.filter(engine => !['mandap', 'weddingbazaar'].includes(engine));
+      }
+      if (!isWwSupported) {
+        engines = engines.filter(engine => engine !== 'weddingwire');
+      }
     }
   } catch (e) {
     // The fidelity module is optional at boot; keep the base engine list.

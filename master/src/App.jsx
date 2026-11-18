@@ -9,6 +9,10 @@ import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import '@ui3d/tokens.css';
 import '@ui3d/kit.css';
 import './v2/v2.css';
+import './v2/revamp.css';
+import './v2/glass3d.css';
+import './v2/whiteTheme.css';
+import './v2/retroEmboss.css';
 
 // scraper.co.in has exactly one workspace: the command center.
 // lazyRetry keeps a single flaky chunk download from taking down the workspace.
@@ -107,37 +111,37 @@ class ErrorBoundary extends React.Component {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#0a0d14',
-          color: '#f8fafc',
+          backgroundColor: '#f8fafc',
+          color: '#0f172a',
           padding: '24px',
-          fontFamily: 'Inter, sans-serif'
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif'
         }}>
           <div style={{
             maxWidth: '520px',
-            background: 'rgba(15, 23, 42, 0.95)',
-            border: '1px solid rgba(239, 68, 68, 0.4)',
+            background: '#ffffff',
+            border: '1.5px solid #cbd5e1',
             borderRadius: '16px',
             padding: '28px',
-            boxShadow: '0 16px 40px rgba(0,0,0,0.7)',
+            boxShadow: '0 16px 40px rgba(15, 23, 42, 0.08)',
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#f87171', marginBottom: '8px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>
               Master Command Center Encountered a Problem
             </h2>
-            <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '20px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
               {this.state.error?.message || 'An unexpected rendering error occurred.'}
             </p>
             <button
               onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
               style={{
-                background: 'linear-gradient(135deg, #0284c7, #00f0ff)',
-                color: '#0a0d14',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: '#ffffff',
                 fontWeight: 700,
-                fontSize: '12px',
+                fontSize: '13px',
                 border: 'none',
                 padding: '10px 24px',
-                borderRadius: '8px',
+                borderRadius: '9px',
                 cursor: 'pointer'
               }}
             >
@@ -158,17 +162,17 @@ export default function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: '#0d1526',
-            color: '#e6edf7',
-            border: '1px solid rgba(37,99,235,0.3)',
-            fontFamily: 'Inter, sans-serif',
+            background: '#ffffff',
+            color: '#0f172a',
+            border: '1.5px solid #e2e8f0',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif',
             fontSize: '13px',
-            fontWeight: 600,
+            fontWeight: 650,
             borderRadius: '12px',
-            boxShadow: '0 8px 32px rgba(2,6,23,0.55)',
+            boxShadow: '0 8px 30px rgba(15, 23, 42, 0.12)',
           },
-          success: { iconTheme: { primary: '#22d3ee', secondary: '#0d1526' } },
-          error: { iconTheme: { primary: '#fb7185', secondary: '#0d1526' } },
+          success: { iconTheme: { primary: '#10b981', secondary: '#ffffff' } },
+          error: { iconTheme: { primary: '#ef4444', secondary: '#ffffff' } },
         }}
       />
 

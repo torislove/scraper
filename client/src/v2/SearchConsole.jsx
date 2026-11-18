@@ -10,6 +10,7 @@ import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch } from './api';
 import { cx } from './ui';
 import { tokenizeQuery, matchesFolder } from '../utils/universalSearchEngine';
+import { parseQuerySemantic } from './utils/semanticClient';
 
 
 const EXAMPLES = [
@@ -92,7 +93,7 @@ const SPEED_PRESETS = [
 const localSuggestCache = new Map();
 const MAX_LOCAL_CACHE = 300;
 
-function useDebouncedSuggestion(query, onResolve) {
+function useDebouncedSuggestion(query, onResolve, country = 'IN') {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
   const timer = useRef(null);
@@ -114,7 +115,7 @@ function useDebouncedSuggestion(query, onResolve) {
       return undefined;
     }
 
-    const cacheKey = text.toLowerCase();
+    const cacheKey = `${String(country || 'IN').toUpperCase()}|${text.toLowerCase()}`;
     if (localSuggestCache.has(cacheKey)) {
       const cached = localSuggestCache.get(cacheKey);
       setResponse(cached);
@@ -127,6 +128,42 @@ function useDebouncedSuggestion(query, onResolve) {
       return undefined;
     }
 
+    // Instant on-device semantic evaluation (<0.5ms) via Web Worker
+    parseQuerySemantic(text, country).then(localParsed => {
+      if (localParsed && localParsed.ready) {
+        startTransition(() => {
+          setResponse(prev => {
+            if (!prev || !prev.ready) {
+              return {
+                ok: true,
+                query: text,
+                ready: true,
+                category: localParsed.category,
+                location: localParsed.location,
+                parsed: localParsed,
+                suggestions: []
+              };
+            }
+            return prev;
+          });
+        });
+        const resolveKey = `${text}|1`;
+        if (resolveKey !== lastResolveKey.current) {
+          lastResolveKey.current = resolveKey;
+          startTransition(() => {
+            resolveRef.current?.({
+              ok: true,
+              query: text,
+              ready: true,
+              category: localParsed.category,
+              location: localParsed.location,
+              parsed: localParsed
+            });
+          });
+        }
+      }
+    }).catch(() => {});
+
     clearTimeout(timer.current);
     const requestId = ++requestRef.current;
 
@@ -137,7 +174,7 @@ function useDebouncedSuggestion(query, onResolve) {
       setLoading(true);
 
       try {
-        const data = await suggestSearch({ q: text, isMaster: false }, { signal: controller.signal });
+        const data = await suggestSearch({ q: text, isMaster: false, country }, { signal: controller.signal });
         if (requestRef.current !== requestId) return;
 
         // Cache result for ultra-fast 0ms backspace & repeat keystrokes
@@ -168,7 +205,7 @@ function useDebouncedSuggestion(query, onResolve) {
       clearTimeout(timer.current);
       if (controllerRef.current) controllerRef.current.abort();
     };
-  }, [query]);
+  }, [query, country]);
 
   return { response, loading };
 }
@@ -216,6 +253,10 @@ function SuggestionList({ groups, active, onPick, onHover }) {
                             {item.detail === 'Mandal' ? '📍 Mandal Swarm'
                               : item.detail === 'City' ? '🏙️ City Sweep'
                               : item.detail === 'Village' ? '🏡 Village'
+                              : item.detail === 'District' ? '🏛️ District Sweep'
+                              : item.detail === 'State' ? '🗺️ State Sweep'
+                              : item.detail === 'County' ? '🏛️ County Sweep'
+                              : item.detail === 'Province' ? '🗺️ Province Sweep'
                               : item.detail}
                           </span>
                         )}
@@ -243,6 +284,7 @@ function SuggestionList({ groups, active, onPick, onHover }) {
 function SearchConsole({
   value = '',
   onChange,
+  country = 'IN',
   category = '',
   location = '',
   onCategoryChange,
@@ -266,11 +308,10 @@ function SearchConsole({
   const deferredDraft = React.useDeferredValue(draft);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
-  const [showPrecisionDrawer, setShowPrecisionDrawer] = useState(false);
   const [activePreset, setActivePreset] = useState('auto');
   const [selectedEngines, setSelectedEngines] = useState(form.engines || ['auto']);
   const [radius, setRadius] = useState(form.radius || 5);
-  const [coverageMode, setCoverageMode] = useState(form.coverageMode === 'deep' ? 'deep' : 'fast');
+  const [coverageMode, setCoverageMode] = useState(form.coverageMode === 'fast' ? 'fast' : 'deep');
   const [etaRemaining, setEtaRemaining] = useState(38);
 
   const inputRef = useRef(null);
@@ -301,7 +342,7 @@ function SearchConsole({
     }
   }, [value]);
 
-  const { response, loading } = useDebouncedSuggestion(deferredDraft, onResolve);
+  const { response, loading } = useDebouncedSuggestion(deferredDraft, onResolve, country);
 
   // Check if draft matches any saved vault folder for instant shortcut
   const matchedSavedFolder = useMemo(() => {
@@ -337,6 +378,22 @@ function SearchConsole({
     return '~8–12 min (Full Sweep)';
   }, [locClassification, parsedZones]);
 
+  const placeholderText = useMemo(() => {
+    const c = String(country || 'IN').toUpperCase();
+    if (c === 'US') return 'Type anything (e.g. HVAC contractors in Dallas TX, wedding venues in Orange County, plumbers in Austin)...';
+    if (c === 'GB') return 'Type anything (e.g. luxury caterers in Westminster London, photographers in Manchester, venues in Leeds)...';
+    if (c === 'CA') return 'Type anything (e.g. corporate caterers in Mississauga ON, wedding planners in Toronto, electricians in Vancouver)...';
+    if (c === 'AU') return 'Type anything (e.g. function centres in Parramatta, wedding hire in Melbourne CBD, caterers in Sydney)...';
+    if (c === 'AE') return 'Type anything (e.g. luxury event organizers in Business Bay Dubai, caterers in Abu Dhabi, sound hire in Deira)...';
+    if (c === 'SG') return 'Type anything (e.g. corporate caterers in Downtown Core Singapore, event venues in Orchard, photographers in Tampines)...';
+    if (c === 'NZ') return 'Type anything (e.g. wedding venues in Auckland Region, event planners in Wellington, caterers in Christchurch)...';
+    if (c === 'ZA') return 'Type anything (e.g. conference venues in Sandton Johannesburg, caterers in Cape Town, sound hire in Durban)...';
+    if (c === 'IE') return 'Type anything (e.g. corporate caterers in Dublin City Centre, wedding venues in County Cork, photographers in Galway)...';
+    if (c === 'MY') return 'Type anything (e.g. event organizers in Kuala Lumpur, caterers in Petaling Jaya, decorators in Johor Bahru)...';
+    if (c === 'DE') return 'Type anything (e.g. catering in Berlin Mitte, event agents in Munich, corporate caterers in Frankfurt)...';
+    return 'Type anything (e.g. wedding photographers in Guntur, computer stores in Brodipet, manufacturers in Auto Nagar)...';
+  }, [country]);
+
   // Dynamic Animated Favicon State Sync
   useEffect(() => {
     if (running) {
@@ -360,12 +417,11 @@ function SearchConsole({
 
   const groups = useMemo(() => {
     const list = response?.suggestions || [];
-    const locationItems = list.filter(item => item.type === 'location' && (!item.level || (item.level !== 'district' && item.level !== 'state')));
+    const locationItems = list.filter(item => item.type === 'location');
     const categoryItems = list.filter(item => item.type === 'category' || item.detail === 'VERIFIED' || item.detail === 'AC HALLS' || item.detail === 'HERITAGE' || item.detail === 'BANQUETS' || (!item.type && item.label));
 
-    // Also include territorial options from disambiguation (filtered for city, mandal, village)
+    // Also include territorial options from disambiguation
     const disambiguationItems = (response?.disambiguation?.options || [])
-      .filter(opt => opt.level === 'mandal' || opt.level === 'city' || opt.level === 'town' || opt.level === 'village')
       .map(opt => ({
         type: 'location',
         value: opt.value,
@@ -385,7 +441,7 @@ function SearchConsole({
 
     return [
       {
-        title: 'CITIES, MANDALS & VILLAGES',
+        title: 'CITIES, MANDALS, DISTRICTS & STATES',
         icon: MapPin,
         items: mergedLocations
       },
@@ -471,8 +527,7 @@ function SearchConsole({
     inputRef.current?.focus();
   }, [parsedCategory, parsedLocation, category, location, onChange, onCategoryChange, onLocationChange]);
 
-  const isWideAreaBlocked = !onMasterSweep && (locClassification?.type === 'district' || locClassification?.type === 'state');
-  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3) && !isWideAreaBlocked;
+  const canDeploy = Boolean(parsedCategory || draft.trim().length >= 3);
 
   const submit = useCallback((overrideQuery = null) => {
     if (running) {
@@ -485,10 +540,6 @@ function SearchConsole({
       ? overrideQuery.trim()
       : draft.trim();
 
-    if (isWideAreaBlocked) {
-      toast.error(`Client searches are restricted to individual cities and mandals. District and state-wide sweeps (${locClassification?.name || ''}) require Master Command Center. Choose an individual city or mandal below!`);
-      return;
-    }
     if ((!canDeploy && !overrideQuery) || busy || !currentDraft) return;
     if (parsedCategory) onCategoryChange?.(parsedCategory);
     if (parsedLocation) onLocationChange?.(parsedLocation);
@@ -502,7 +553,7 @@ function SearchConsole({
       targetLeads,
       coverageMode
     });
-  }, [running, canDeploy, busy, isWideAreaBlocked, locClassification, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads, coverageMode]);
+  }, [running, canDeploy, busy, locClassification, onStop, onDeploy, draft, parsedCategory, parsedLocation, radius, selectedEngines, targetLeads, coverageMode]);
 
   const onKeyDown = useCallback(event => {
     if (!open || !visible.length) {
@@ -559,154 +610,7 @@ function SearchConsole({
       <div className="v2-console-aura" aria-hidden="true" />
       <div className="v2-console-scan" aria-hidden="true" />
 
-      {/* Top Header Strip */}
-      <div className="v2-console-head">
-        <div className="v2-console-live">
-          <span className="v2-radar-pill-3d">
-            <span className={cx('v2-radar-pulse-dot', running && 'is-pulsing')} />
-            <Compass size={13} className="v2-radar-icon" />
-            <span>TERRITORY RADAR</span>
-          </span>
-          <i />
-          <span>AUTONOMOUS MULTI-VECTOR INTELLIGENCE CORE</span>
-          <b>619,287 VILLAGES & MANDALS INDEXED</b>
-        </div>
-        <div className="v2-console-head-actions">
-          <button
-            type="button"
-            className={cx('v2-engine-toggle-pill', showPrecisionDrawer && 'is-open')}
-            onClick={() => setShowPrecisionDrawer(prev => !prev)}
-            title="Configure Precision Radius, Vectors & Target Speed"
-          >
-            <SlidersHorizontal size={12} />
-            <span>Precision & Tuning: <b>{radius}km Radius · {coverageMode === 'fast' ? '⚡ Fast' : '🗺️ Deep'} · {selectedEngines.includes('auto') ? 'Auto AI' : `${selectedEngines.length} Vectors`}</b></span>
-            {showPrecisionDrawer ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
-        </div>
-      </div>
-
-      {/* Expandable Precision Matrix Drawer */}
-      {showPrecisionDrawer && (
-        <div className="v2-engine-drawer">
-          <div className="v2-engine-drawer-header">
-            <span className="v2-drawer-title"><Cpu size={13} /> PROPRIETARY MULTI-VECTOR INTELLIGENCE GRID</span>
-            <div className="v2-speed-presets">
-              {SPEED_PRESETS.map(preset => (
-                <button
-                  type="button"
-                  key={preset.id}
-                  className={cx('v2-speed-preset-btn', activePreset === preset.id && 'is-active')}
-                  onClick={() => applyPreset(preset)}
-                >
-                  {preset.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Proprietary Vector Cards (Zero 3rd-Party Names) */}
-          <div className="v2-engine-cards-grid">
-            {PROPRIETARY_VECTORS.map(vector => {
-              const active = selectedEngines.includes('auto') || selectedEngines.includes(vector.id);
-              return (
-                <button
-                  type="button"
-                  key={vector.id}
-                  className={cx('v2-engine-card', active && 'is-selected', `theme-${vector.color}`)}
-                  onClick={() => toggleVector(vector.id)}
-                >
-                  <div className="v2-engine-card-top">
-                    <span className="v2-engine-badge">{vector.badge}</span>
-                    <span className={cx('v2-engine-checkbox', active && 'is-checked')}>
-                      {active && <Check size={11} />}
-                    </span>
-                  </div>
-                  <b className="v2-engine-name">{vector.name}</b>
-                  <small className="v2-engine-desc">{vector.desc}</small>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Tuning Sliders: Radius Sweep + Target Leads */}
-          <div className="v2-tuning-bar">
-            <div className="v2-tuning-control">
-              <span className="v2-tuning-label">
-                <Compass size={12} /> SWEEP RADIUS PER CONSTITUENT POINT: <b>{radius} KM</b>
-              </span>
-              <div className="v2-radius-slider-wrap">
-                <input
-                  type="range"
-                  min="1"
-                  max="25"
-                  step="1"
-                  value={radius}
-                  onChange={e => setRadius(Number(e.target.value))}
-                  className="v2-radius-slider"
-                />
-                <div className="v2-radius-ticks">
-                  <span>1 km (Hyperlocal)</span>
-                  <span className="is-mid">5 km (Benchmark)</span>
-                  <span>15 km (Suburbs)</span>
-                  <span>25 km (District)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="v2-tuning-control">
-              <span className="v2-tuning-label">
-                <Target size={12} /> TARGET LEADS HARVEST:
-              </span>
-              <div className="v2-adv-chips">
-                {TARGETS.map(t => (
-                  <button
-                    type="button"
-                    key={t}
-                    className={cx('v2-adv-chip', Number(targetLeads) === t && 'is-on')}
-                    onClick={() => onTargetChange?.(t)}
-                  >
-                    {Number(targetLeads) === t && <Check size={10} />}
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="v2-tuning-control">
-              <span className="v2-tuning-label">
-                <Zap size={12} /> COVERAGE PASS: <b>{coverageMode === 'fast' ? 'FAST' : 'DEEP'}</b>
-              </span>
-              <div className="v2-adv-chips">
-                <button
-                  type="button"
-                  className={cx('v2-adv-chip', coverageMode === 'fast' && 'is-on')}
-                  onClick={() => setCoverageMode('fast')}
-                  title="Named localities and query vectors. About 97% of leads, usually under a minute."
-                >
-                  {coverageMode === 'fast' && <Check size={10} />}
-                  ⚡ Fast · named areas
-                </button>
-                <button
-                  type="button"
-                  className={cx('v2-adv-chip', coverageMode === 'deep' && 'is-on')}
-                  onClick={() => setCoverageMode('deep')}
-                  title="Adds the full coordinate grid for complete street-level coverage. Slower, but leaves no street unsearched."
-                >
-                  {coverageMode === 'deep' && <Check size={10} />}
-                  🗺️ Deep · full grid
-                </button>
-              </div>
-              <small className="v2-tuning-hint">
-                {coverageMode === 'fast'
-                  ? 'Fast finds the businesses that matter first. Switch to Deep for street-by-street coverage.'
-                  : 'Deep sweeps every grid cell. Best for complete coverage of a large city.'}
-              </small>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* The Unified Omnibox Field */}
+      {/* The Unified Autonomous Omnibox Field */}
       <div className="v2-console-field">
         <div className={cx('v2-console-bar', open && visible.length > 0 && 'is-open', parsed && 'is-ready')}>
           <span className="v2-console-glyph"><Search size={20} /></span>
@@ -714,7 +618,7 @@ function SearchConsole({
             ref={inputRef}
             id="cmd-console-query"
             className="v2-console-input"
-            style={{ color: '#FFFFFF', caretColor: '#66E6BD', background: 'transparent' }}
+            style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A', caretColor: '#059669', background: 'transparent' }}
             value={draft}
             onChange={event => handleQuery(event.target.value)}
             onFocus={() => {
@@ -726,7 +630,7 @@ function SearchConsole({
               setTimeout(() => { isFocusedRef.current = false; }, 200);
             }}
             onKeyDown={onKeyDown}
-            placeholder="Type anything (e.g. urgent wedding photographers near benz circle vijayawada under 5km with phone)..."
+            placeholder={placeholderText}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -749,29 +653,27 @@ function SearchConsole({
               'v2-console-go',
               'v2-btn-deploy-3d',
               running && 'is-stop',
-              busy && 'is-busy',
-              isWideAreaBlocked && 'is-blocked'
+              busy && 'is-busy'
             )}
             onClick={submit}
             disabled={busy || (!running && !canDeploy)}
-            title={isWideAreaBlocked ? 'Pick one city, town, village or mandal. District and state searches are available in the Master app.' : undefined}
           >
             <span className="v2-btn-shimmer" />
             {busy
               ? <Loader2 size={16} className="v2-spin" />
               : running
                 ? <Square size={14} />
-                : isWideAreaBlocked
-                  ? <AlertTriangle size={15} />
-                  : <Zap size={16} />}
+                : <Zap size={16} />}
             <span>
               {busy
-                ? 'STARTING SWARM...'
+                ? 'STARTING...'
                 : running
-                  ? `STOP SWARM (${progress?.overallCompletedMandals ?? 0}/${progress?.totalMandalsAcrossAll || parsedZones || 1} ZONES)`
-                  : isWideAreaBlocked
-                    ? 'SELECT CITY OR MANDAL'
-                    : 'SWARM LEADS'}
+                  ? `STOP (${Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0)}/${Number(progress?.totalMandalsAcrossAll || progress?.totalMandals || parsedZones || 1)})`
+                  : locClassification?.type === 'district'
+                    ? 'SWEEP DISTRICT'
+                    : locClassification?.type === 'state'
+                      ? 'SWEEP STATE'
+                      : 'FIND LEADS'}
             </span>
           </button>
         </div>
@@ -894,7 +796,7 @@ function SearchConsole({
               <span className="v2-geo-badge-tag">{locClassification.badge || '🗺️ GEO'}</span>
               <span>Hierarchy:</span>
               <b>{locClassification.name}</b>
-              <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : 'mandals'})</span>
+              <span className="v2-geo-sub-count">({locClassification.zoneCount} {locClassification.type === 'state' ? 'districts' : locClassification.type === 'district' ? 'mandals' : 'zones'})</span>
               {onMasterSweep && (locClassification.type === 'district' || locClassification.type === 'state' || locClassification.type === 'mandal') && (
                 <button
                   type="button"
@@ -907,7 +809,7 @@ function SearchConsole({
                   })}
                   title={'Launch full ' + locClassification.type + ' master sweep'}
                 >
-                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Mandal'}
+                  <Compass size={11} /> Sweep Entire {locClassification.type === 'state' ? 'State' : locClassification.type === 'district' ? 'District' : 'Territory'}
                 </button>
               )}
             </div>
@@ -927,21 +829,20 @@ function SearchConsole({
         </div>
       </div>
 
-      {/* Client Restriction Alert: Suggest Individual Cities & Mandals */}
-      {isWideAreaBlocked && (
+      {/* Territorial Subzones Quick-Pills (Optional quick selection) */}
+      {(locClassification?.type === 'district' || locClassification?.type === 'state') && (locClassification?.subzones || []).length > 0 && (
         <div className="v2-widearea-block-box">
           <div className="v2-widearea-flex">
             <SignalOrb
-              size={46}
-              tone="#fbbf24"
-              title="Client scope is limited to one city, town or mandal"
+              size={40}
+              tone="#10b981"
+              title="Territorial sweep enabled"
             />
             <div className="v2-widearea-block-body">
               <div className="v2-widearea-block-head">
-                <AlertTriangle size={15} className="v2-text-amber" />
+                <Compass size={15} className="v2-text-emerald" />
                 <span>
-                  <b>Client search is restricted to individual cities and mandals only.</b>{' '}
-                  District &amp; state-wide sweeps require Master Command Center. Choose an individual city or mandal in {locClassification?.name}:
+                  <b>Territorial Swarm Enabled:</b> Sweeping all constituent centers in {locClassification?.name}. Or click to narrow to an individual town:
                 </span>
               </div>
               <div className="v2-widearea-subzones-pills">

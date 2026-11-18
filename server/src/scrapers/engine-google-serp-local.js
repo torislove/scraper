@@ -302,14 +302,18 @@ async function scrapeGoogleLocalFinder(
   cityHint = null,
   mapsBackup = false,
   isMaster = false,
-  scope = null
+  scope = null,
+  countryHint = null
 ) {
   addLog(`[Local Finder Core] ⚡ Launching ultra-fast parallel surface harvest for: "${query}" (Target: up to ${maxPages * 20} leads)`);
 
   const vendorCity = cityHint || location || 'India';
-  // Country bias for Google results and phone parsing. The location text is the
-  // source of truth; unknown places fall back to India (home market).
-  const countryCode = (require('../services/localBrain/countries').detectCountry(location || cityHint || '') || { code: 'IN' }).code;
+  // Country bias for Google results and phone parsing. Prioritize explicit countryHint,
+  // then detectCountry from location tokens, fallback to 'IN'.
+  const detected = require('../services/localBrain/countries').detectCountry(location || cityHint || '');
+  const countryCode = (countryHint && String(countryHint).trim())
+    ? String(countryHint).toUpperCase()
+    : (detected ? detected.code : 'IN');
 
   if (!chromium) {
     addLog('[Local Finder Core] Playwright Chromium not available on this server.');
@@ -557,27 +561,38 @@ async function scrapeGoogleLocalFinder(
       }
     }
 
-    // Step 2: If Page 0 had high yield, stream next pages concurrently with instant per-page emission
-    const totalPagesToScrape = Math.min(6, Math.max(1, maxPages));
-    if (page0Yield >= 10 && totalPagesToScrape > 1 && !globalAbortSignal.aborted) {
-      const nextPages = [];
-      for (let p = 1; p < Math.min(totalPagesToScrape, 4); p++) {
-        nextPages.push(p);
+    // Step 2: If Page 0 had valid yield, stream subsequent pages in parallel batches up to maxPages (up to 10 pages)
+    const totalPagesToScrape = Math.min(10, Math.max(1, maxPages));
+    if (page0Yield >= 2 && totalPagesToScrape > 1 && !globalAbortSignal.aborted) {
+      const BATCH_SIZE = 2;
+      for (let batchStart = 1; batchStart < totalPagesToScrape; batchStart += BATCH_SIZE) {
+        if (globalAbortSignal.aborted || serpBreaker.isBlocked()) break;
+        const currentBatch = [];
+        for (let p = batchStart; p < Math.min(batchStart + BATCH_SIZE, totalPagesToScrape); p++) {
+          currentBatch.push(p);
+        }
+        if (!currentBatch.length) break;
+
+        addLog(`[Local Finder Core] ⚡ Streaming Pages ${currentBatch.map(p => p + 1).join(', ')} in parallel for deep yield...`);
+        const batchPromises = currentBatch.map(pageIdx =>
+          fetchSingleLocalPage(context, query, pageIdx, category || 'Business', countryCode)
+            .then(res => {
+              if (res && !res.captcha && res.leads && res.leads.length) {
+                return processPageResult(res);
+              }
+              return 0;
+            })
+            .catch(() => 0)
+        );
+
+        const results = await Promise.allSettled(batchPromises);
+        const batchYield = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? Number(r.value) || 0 : 0), 0);
+        // If the entire batch yielded zero new listings, we have reached the end of Google's local-pack results
+        if (batchYield === 0) {
+          addLog(`[Local Finder Core] Reached end of local listings feed at page ${currentBatch[currentBatch.length - 1] + 1}.`);
+          break;
+        }
       }
-
-      addLog(`[Local Finder Core] ⚡ Streaming Pages ${nextPages.map(p => p + 1).join(', ')} in parallel for deep yield...`);
-      const pagePromises = nextPages.map(pageIdx => 
-        fetchSingleLocalPage(context, query, pageIdx, category || 'Business', countryCode)
-          .then(res => {
-            if (res && !res.captcha && res.leads && res.leads.length) {
-              processPageResult(res);
-            }
-            return res;
-          })
-          .catch(() => null)
-      );
-
-      await Promise.allSettled(pagePromises);
     }
   } catch (err) {
     addLog(`[Local Finder Core] Scraping exception: ${err.message}`);

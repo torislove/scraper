@@ -332,18 +332,81 @@ const NON_BUSINESS_CLASSES = new Set([
 ]);
 
 /**
- * Nominatim matches names, not categories, so "computer stores" finds nothing
- * while "computer shop" finds the shops. Strip the generic tail word and ask
- * for the concrete trade instead, plus the original phrase as a second try.
+ * Nominatim matches names and its own special phrases, not arbitrary tags.
+ * "photographers shop" returns nothing, while "photographer" returns the real
+ * photo studios around Troy. So: map the trade to the phrase Nominatim actually
+ * understands, then fall back to the singular trade and the original words.
  */
+const CATEGORY_SYNONYMS = [
+  [/photograph|videograph|photo studio|photo lab|portrait/i, ['photographer', 'photo studio', 'camera shop']],
+  [/plumb/i, ['plumber']],
+  [/electric/i, ['electrician']],
+  [/carpent|joinery/i, ['carpenter']],
+  [/dentist|dental/i, ['dentist']],
+  [/doctor|clinic|physician|hospital/i, ['clinic', 'doctor']],
+  [/restaurant|cafe|coffee|bakery|food/i, ['restaurant', 'cafe']],
+  [/gym|fitness/i, ['gym', 'fitness centre']],
+  [/salon|beauty|hair|spa/i, ['hairdresser', 'beauty shop']],
+  [/lawyer|advocate|attorney|legal/i, ['lawyer']],
+  [/real estate|realtor|property/i, ['estate agent', 'real estate']],
+  [/mechanic|car repair|garage|auto/i, ['car repair', 'mechanic']],
+  [/florist|flower/i, ['florist']],
+  [/tailor|stitch/i, ['tailor']],
+  [/laundry|dry clean/i, ['laundry', 'dry cleaning']],
+  [/hotel|guest house|lodge/i, ['hotel', 'guest house']],
+  [/travel|tour operator|ticket/i, ['travel agency']],
+  [/insurance/i, ['insurance']],
+  [/bank|finance/i, ['bank']],
+  [/supermarket|grocery|kirana/i, ['supermarket', 'convenience store']],
+  [/computer|electronics|laptop|mobile phone|cell phone/i, ['computer shop', 'electronics shop', 'mobile phone shop']],
+  [/furniture/i, ['furniture shop']],
+  [/jewel/i, ['jeweller']],
+  [/shoe|footwear/i, ['shoe shop']],
+  [/clothing|boutique|apparel/i, ['clothes shop']],
+  [/pharmac|chemist|medical store/i, ['pharmacy', 'chemist']],
+  [/pet /i, ['pet shop', 'veterinary']],
+  [/school|tuition|coaching/i, ['school', 'college']]
+];
+
+function singularise(value) {
+  const word = String(value || '').trim();
+  if (!word) return '';
+  if (/ies$/i.test(word)) return word.replace(/ies$/i, 'y');
+  if (/ches|shes|sses|xes$/i.test(word)) return word.replace(/es$/i, '');
+  if (/s$/i.test(word) && !/ss$/i.test(word)) return word.replace(/s$/i, '');
+  return word;
+}
+
 function nominatimTerms(category) {
   const clean = String(category || '').trim();
   if (!clean) return [];
-  const stripped = clean.replace(/\b(stores?|shops?|dealers?|centres?|centers?|suppliers?|companies|services?|vendors?)\b/gi, ' ').replace(/\s+/g, ' ').trim();
   const terms = [];
-  if (stripped) terms.push(`${stripped} shop`);
-  if (clean && clean.toLowerCase() !== `${stripped} shop`.toLowerCase()) terms.push(clean);
-  return [...new Set(terms)].slice(0, 2);
+
+  for (const [pattern, phrases] of CATEGORY_SYNONYMS) {
+    if (pattern.test(clean)) terms.push(...phrases);
+  }
+
+  const stripped = clean
+    .replace(/\b(stores?|shops?|dealers?|centres?|centers?|suppliers?|companies|services?|vendors?|providers?|agencies)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (stripped) {
+    terms.push(singularise(stripped));
+    // Some Nominatim phrases are literally "<thing> shop" (computer shop).
+    terms.push(`${stripped} shop`);
+  }
+  terms.push(clean);
+
+  const seen = new Set();
+  const out = [];
+  for (const term of terms) {
+    const key = term.toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(term.trim());
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 async function nominatimPlaces(category, city, country, center, radiusKm, bbox = null) {

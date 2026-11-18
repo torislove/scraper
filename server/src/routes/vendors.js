@@ -155,6 +155,20 @@ router.post('/clear-all', (req, res) => {
     if (typeof dbAdapter.flushSync === 'function') {
       dbAdapter.flushSync();
     }
+    // Also clean session folders and stale backups so healFromSessions doesn't resurrect deleted leads
+    try {
+      const { DATA_DIR, SESSIONS_DIR } = require('../config/paths');
+      if (fs.existsSync(SESSIONS_DIR)) {
+        fs.rmSync(SESSIONS_DIR, { recursive: true, force: true });
+        fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+      }
+      fs.readdirSync(DATA_DIR).forEach(file => {
+        if (/^scraped_vendors\.backup-.*\.json$/.test(file)) {
+          try { fs.unlinkSync(path.join(DATA_DIR, file)); } catch (e) {}
+        }
+      });
+    } catch (e) {}
+
     res.json({ success: true, message: 'All leads cleared completely', count: 0 });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -465,6 +479,22 @@ router.post('/:id/deep-lookup', async (req, res) => {
     return res.status(404).json({ error: 'No validated mobile number resolved via web search.' });
   } catch (error) {
     res.status(500).json({ error: 'Server error: ' + error.message });
+  }
+});
+
+// API: Aggressive Multi-Vector Mobile & Details Enrichment
+router.post('/:id/deep-enrich', async (req, res) => {
+  try {
+    const { enrichSingleVendorAggressive } = require('../services/aggressivePhoneEnricher');
+    const vendors = dbAdapter.getVendors();
+    const vendor = vendors.find(v => v.id === req.params.id);
+    if (!vendor) return res.status(404).json({ ok: false, error: 'Vendor not found' });
+
+    const result = await enrichSingleVendorAggressive(vendor, req.body || {});
+    return res.json(result);
+  } catch (error) {
+    console.error('[Aggressive Enrich Error]', error.message);
+    return res.status(500).json({ ok: false, error: error.message });
   }
 });
 

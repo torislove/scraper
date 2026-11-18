@@ -28,7 +28,25 @@ const SOURCE_MAP = {
   instagram: { key: 'social', label: 'Social (Instagram)', short: 'Social', tone: 'social' },
   facebook: { key: 'social', label: 'Social (Facebook)', short: 'Social', tone: 'social' },
   'social dork (instagram)': { key: 'social', label: 'Social (Instagram)', short: 'Social', tone: 'social' },
-  'social dork': { key: 'social', label: 'Social Search', short: 'Social', tone: 'social' }
+  'social dork': { key: 'social', label: 'Social Search', short: 'Social', tone: 'social' },
+  yelp: { key: 'yelp', label: 'Yelp', short: 'Yelp', tone: 'red' },
+  'bing-places': { key: 'bing-places', label: 'Bing Places', short: 'Bing Places', tone: 'cyan' },
+  'bing places': { key: 'bing-places', label: 'Bing Places', short: 'Bing Places', tone: 'cyan' },
+  tripadvisor: { key: 'tripadvisor', label: 'TripAdvisor', short: 'TripAdvisor', tone: 'lime' },
+  'trip advisor': { key: 'tripadvisor', label: 'TripAdvisor', short: 'TripAdvisor', tone: 'lime' },
+  wikidata: { key: 'wikidata', label: 'Wikidata', short: 'Wikidata', tone: 'blue' },
+  'wikidata-businesses': { key: 'wikidata', label: 'Wikidata', short: 'Wikidata', tone: 'blue' },
+  yellowpages: { key: 'yellowpages', label: 'YellowPages', short: 'YellowPages', tone: 'amber' },
+  'yellow pages': { key: 'yellowpages', label: 'YellowPages', short: 'YellowPages', tone: 'amber' },
+  yell: { key: 'yellowpages', label: 'Yell (UK)', short: 'Yell', tone: 'amber' },
+  'freeindex-uk': { key: 'freeindex', label: 'FreeIndex (UK)', short: 'FreeIndex', tone: 'blue' },
+  freeindex: { key: 'freeindex', label: 'FreeIndex (UK)', short: 'FreeIndex', tone: 'blue' },
+  'goldenpages-ie': { key: 'goldenpages', label: 'GoldenPages (IE)', short: 'GoldenPages', tone: 'amber' },
+  goldenpages: { key: 'goldenpages', label: 'GoldenPages (IE)', short: 'GoldenPages', tone: 'amber' },
+  cylex: { key: 'cylex', label: 'Cylex', short: 'Cylex', tone: 'cyan' },
+  trustpilot: { key: 'trustpilot', label: 'Trustpilot', short: 'Trustpilot', tone: 'lime' },
+  'social-dork-intl': { key: 'social-dork-intl', label: 'Social Dork', short: 'Social Dork', tone: 'social' },
+  'social dork intl': { key: 'social-dork-intl', label: 'Social Dork', short: 'Social Dork', tone: 'social' }
 };
 
 const UNKNOWN = { key: 'unknown', label: 'Unknown source', short: 'Unknown', tone: 'other' };

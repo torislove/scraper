@@ -13,6 +13,134 @@
 
 const { normalizePrepositionTypos, ALL_STATES, MAJOR_CITIES } = require('./queryParser');
 const { resolveUniversalZones } = require('./universalGeoCluster');
+const { detectCountry, COUNTRIES } = require('../services/localBrain/countries');
+const gazetteer = require('../services/localBrain/gazetteer');
+const { COUNTRY_ENGINE_MAP } = require('../services/scopeEngines/countryEngineMap');
+
+/**
+ * Compiles exact tailored search parameters for all 10 international engines.
+ */
+function compileEngineQueries(category, location, countryCode = 'IN', modifiers = {}) {
+  const cat = String(category || 'Businesses').trim();
+  const loc = String(location || '').trim();
+  const cCode = String(countryCode || 'IN').toUpperCase();
+
+  const catSlug = cat.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const locSlug = loc.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const cylexDomains = {
+    US: 'cylex.us.com',
+    GB: 'cylex-uk.co.uk',
+    CA: 'cylex-canada.ca',
+    AU: 'cylex.com.au',
+    DE: 'cylex.de',
+    FR: 'cylex-locale.fr',
+    ZA: 'cylex.net.za'
+  };
+
+  const wikidataClasses = {
+    photographer: 'wd:Q33231',
+    photography: 'wd:Q33231',
+    studio: 'wd:Q33231',
+    doctor: 'wd:Q39631',
+    dentist: 'wd:Q27349',
+    hospital: 'wd:Q16917',
+    clinic: 'wd:Q16917',
+    restaurant: 'wd:Q11707',
+    hotel: 'wd:Q27686',
+    school: 'wd:Q3914',
+    college: 'wd:Q3914',
+    university: 'wd:Q3914',
+    bakery: 'wd:Q274393',
+    bar: 'wd:Q187456',
+    cafe: 'wd:Q11707',
+    salon: 'wd:Q1135248',
+    plumber: 'wd:Q18644535',
+    electrician: 'wd:Q165077',
+    lawyer: 'wd:Q40348',
+    accountant: 'wd:Q581774',
+    gym: 'wd:Q1078716',
+    caterer: 'wd:Q2943261'
+  };
+  const matchedWd = Object.keys(wikidataClasses).find(k => cat.toLowerCase().includes(k));
+  const wdClass = matchedWd ? wikidataClasses[matchedWd] : 'wd:Q4830453';
+
+  const osmTags = {
+    photographer: 'craft=photographer',
+    studio: 'craft=photographer',
+    plumber: 'craft=plumber',
+    electrician: 'craft=electrician',
+    carpenter: 'craft=carpenter',
+    painter: 'craft=painter',
+    restaurant: 'amenity=restaurant',
+    cafe: 'amenity=cafe',
+    bakery: 'shop=bakery',
+    bar: 'amenity=bar',
+    doctor: 'amenity=doctors',
+    dentist: 'amenity=dentist',
+    hospital: 'amenity=hospital',
+    clinic: 'amenity=clinic',
+    pharmacy: 'amenity=pharmacy',
+    salon: 'shop=hairdresser',
+    beauty: 'shop=beauty',
+    gym: 'leisure=fitness_centre',
+    hotel: 'tourism=hotel',
+    school: 'amenity=school',
+    lawyer: 'office=lawyer',
+    accountant: 'office=accountant',
+    car: 'shop=car_repair'
+  };
+  const matchedOsm = Object.keys(osmTags).find(k => cat.toLowerCase().includes(k));
+  const osmTag = matchedOsm ? osmTags[matchedOsm] : 'shop=yes';
+
+  return {
+    yelp: {
+      find_desc: cat,
+      find_loc: loc ? `${loc}, ${cCode}` : cCode,
+      category_alias: catSlug
+    },
+    bing: {
+      query: loc ? `${cat} in ${loc}` : cat,
+      location: loc
+    },
+    tripadvisor: {
+      geoName: loc,
+      category: catSlug
+    },
+    wikidata: {
+      category: cat,
+      location: loc,
+      country: cCode,
+      sparqlClass: wdClass
+    },
+    yellowpages: {
+      search_terms: cat,
+      geo_location_terms: loc,
+      country: cCode
+    },
+    cylex: {
+      q: cat,
+      c: loc,
+      domain: cylexDomains[cCode] || 'cylex.us.com'
+    },
+    trustpilot: {
+      search: cat,
+      country: cCode
+    },
+    openstreetmap: {
+      tag: osmTag,
+      city: loc,
+      country: cCode
+    },
+    justdial: {
+      city: locSlug,
+      category: catSlug
+    },
+    socialDork: {
+      query: `site:instagram.com OR site:facebook.com "${cat}" "${loc}" ("phone" OR "mobile" OR "contact" OR "whatsapp")`
+    }
+  };
+}
 
 // Internal proprietary vector definitions (Strictly zero external brand names)
 const PROPRIETARY_VECTORS = {
@@ -107,12 +235,15 @@ const STOPWORDS_FLUFF = [
  * @param {string} rawInput 
  * @returns {object} Full parsed execution contract
  */
-function parseUniversalQuery(rawInput) {
+function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
   if (!rawInput || typeof rawInput !== 'string') {
     return {
       query: '',
       category: '',
       location: '',
+      country: { code: defaultCountry || 'IN', name: defaultCountry === 'US' ? 'United States' : 'India' },
+      recommendedEngines: COUNTRY_ENGINE_MAP[defaultCountry || 'IN'] || COUNTRY_ENGINE_MAP.IN,
+      engineQueries: compileEngineQueries('', '', defaultCountry || 'IN'),
       radius: 5,
       landmark: null,
       modifiers: { phoneOnly: false, minRating: 0, urgent: false, isB2B: false },
@@ -325,10 +456,45 @@ function parseUniversalQuery(rawInput) {
   const expectedMax = zonesCount * (uniqueVectors.length >= 4 ? 40 : 25);
   const coverageKind = zonesCount > 10 ? 'whole-city' : 'locality';
 
+  // 7. Resolve Country Intelligence & Multi-Engine Queries
+  let resolvedCountryCode = (defaultCountry && defaultCountry !== 'IN') ? defaultCountry.toUpperCase() : null;
+  if (!resolvedCountryCode) {
+    const locHit = detectCountry(rawLocation || text);
+    if (locHit && locHit.code) {
+      resolvedCountryCode = locHit.code;
+    } else {
+      try {
+        const gzHit = gazetteer.lookup(rawLocation || text);
+        if (gzHit) resolvedCountryCode = 'IN';
+      } catch (e) {}
+    }
+  }
+  if (!resolvedCountryCode) resolvedCountryCode = 'IN';
+
+  const countryProfile = COUNTRIES.find(c => c.code === resolvedCountryCode) || {
+    code: resolvedCountryCode,
+    name: resolvedCountryCode === 'US' ? 'United States' : (resolvedCountryCode === 'GB' ? 'United Kingdom' : 'India'),
+    phone: resolvedCountryCode === 'US' ? '+1' : (resolvedCountryCode === 'GB' ? '+44' : '+91'),
+    currency: resolvedCountryCode === 'US' ? 'USD' : (resolvedCountryCode === 'GB' ? 'GBP' : 'INR')
+  };
+
+  const engineQueries = compileEngineQueries(formattedCategory, formattedLocation, resolvedCountryCode, modifiers);
+  const recommendedEngines = COUNTRY_ENGINE_MAP[resolvedCountryCode] || COUNTRY_ENGINE_MAP.US;
+
   return {
     raw: text,
     category: formattedCategory || (ready ? 'Businesses' : text),
     location: formattedLocation,
+    country: {
+      code: countryProfile.code,
+      name: countryProfile.name,
+      phonePrefix: countryProfile.phone,
+      currency: countryProfile.currency,
+      topTerm: countryProfile.topTerm || 'State',
+      localTerm: countryProfile.localTerm || 'City'
+    },
+    recommendedEngines,
+    engineQueries,
     landmark: matchedLandmark ? matchedLandmark.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : null,
     radius,
     modifiers,

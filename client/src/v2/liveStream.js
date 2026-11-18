@@ -25,9 +25,9 @@
  *   • immediate reconnect when the tab becomes visible or the network returns.
  */
 
-const MAX_BACKOFF_MS = 30000;
-const SILENCE_LIMIT_MS = 45000;
-const WATCHDOG_MS = 10000;
+const MAX_BACKOFF_MS = 8000;
+const SILENCE_LIMIT_MS = 15000;
+const WATCHDOG_MS = 3000;
 
 export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
   let source = null;
@@ -73,19 +73,42 @@ export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
       console.error('Live stream listener registration failed:', e);
     }
 
-    next.addEventListener('open', () => {
+    const markOpen = () => {
       if (stopped || source !== next) return;
       attempt = 0;
       emitAttempt(0);
       touch();
       emitStatus('open');
+    };
+
+    next.onopen = markOpen;
+    next.addEventListener('open', markOpen);
+
+    // Named heartbeat or any incoming data frame proves the pipe is live
+    next.addEventListener('heartbeat', () => {
+      touch();
+      markOpen();
+    });
+    next.addEventListener('init', () => {
+      touch();
+      markOpen();
+    });
+    next.addEventListener('message', () => {
+      touch();
+      markOpen();
     });
 
-    // Named heartbeat is visible to JavaScript; SSE comments are not.
-    next.addEventListener('heartbeat', touch);
+    if (next.readyState === 1) {
+      markOpen();
+    }
+
+    const checkTimer = setTimeout(() => {
+      if (next && next.readyState === 1) markOpen();
+    }, 400);
 
     next.addEventListener('error', () => {
       if (stopped || source !== next) return;
+      clearTimeout(checkTimer);
       emitStatus('error');
       scheduleReconnect(false);
     });

@@ -8,6 +8,8 @@ import {
   SlidersHorizontal, Smartphone, Sparkles, Square, Star, Table2, Tag,
   Trash2, Users, Wifi, WifiOff, X, Zap
 } from 'lucide-react';
+import ParallelEnginesStatus from '../ParallelEnginesStatus';
+import ConcentricZoneRadar from '../ConcentricZoneRadar';
 import FilterBar from '../cards/FilterBar';
 import CommandMap from '../../CommandMap';
 import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
@@ -18,6 +20,8 @@ import { CRM_STAGES, crmStageOf, formatInr } from '../../CrmBoard';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber, relativeTime } from '../../ui';
+import OdometerCounter from '../cards/OdometerCounter';
+import FloatingActionDock from '../cards/FloatingActionDock';
 
 export default function CockpitView({
   vendors = [],
@@ -45,6 +49,7 @@ export default function CockpitView({
   onPage,
   onPageSize,
   run = null,
+  progress = null,
   stats = {},
   onOpenWhatsApp,
   selectedAreaFilter = 'all',
@@ -94,8 +99,10 @@ export default function CockpitView({
     const rawPhones = target.map(l => {
       const p = getDisplayPhone(l);
       if (!p) return null;
-      const digits = whatsappNumber(p);
-      return digits ? `+91 ${digits}` : null;
+      const digits = whatsappNumber(p, l.country);
+      if (!digits) return null;
+      if (digits.startsWith('91') || l.country === 'IN') return `+91 ${digits.replace(/^91/, '')}`;
+      return `+${digits}`;
     }).filter(Boolean);
     if (!rawPhones.length) {
       toast.error('No mobile numbers found in selected rows.');
@@ -103,6 +110,30 @@ export default function CockpitView({
     }
     navigator.clipboard?.writeText(rawPhones.join('\n'));
     toast.success(`Copied ${rawPhones.length} mobile numbers to clipboard!`);
+  };
+
+  const handleCockpitExportVcf = () => {
+    const target = pageRows.filter(v => cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`));
+    if (!target.length) {
+      toast.error('No leads selected for VCF export.');
+      return;
+    }
+    exportLeadsToVcf(target, `selected_leads_${target.length}`);
+    toast.success(`Exported ${target.length} leads to vCard (.vcf)!`);
+  };
+
+  const handleCockpitExportCsv = () => {
+    const target = pageRows.filter(v => cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`));
+    if (!target.length) {
+      toast.error('No leads selected for CSV export.');
+      return;
+    }
+    soundFx.playSuccess();
+    if (onExportFolder) {
+      onExportFolder({ leads: target, name: `selected_leads_${target.length}` }, 'csv');
+    } else {
+      toast.success(`Exporting ${target.length} selected leads...`);
+    }
   };
 
   const stageCounts = useMemo(() => {
@@ -222,10 +253,10 @@ export default function CockpitView({
             <span className="v2-cp-title">
               <CircleDot size={13} className={scanning ? 'v2-cp-live' : ''} />
               LIVE LEADS
-              <b>{formatNumber(filteredVendors.length)}</b>
+              <b><OdometerCounter value={filteredVendors.length} /></b>
             </span>
             <span className="v2-cp-sub">
-              {formatNumber(cockpitMobilesCount)} mobiles · {cockpitAvgQuality}% profile quality
+              <OdometerCounter value={cockpitMobilesCount} /> mobiles · {cockpitAvgQuality}% profile quality
             </span>
           </div>
           <button
@@ -274,6 +305,47 @@ export default function CockpitView({
             >
               <X size={11} /> Clear Filter
             </button>
+          </div>
+        )}
+
+        {scanning && (
+          <div className="v2-live-swarm-cockpit-hud">
+            <div className="v2-live-hud-main">
+              <span className="v2-live-hud-pulse"><i /></span>
+              <div className="v2-live-hud-info">
+                <span className="v2-live-hud-badge">ACTIVE SWARM SECTOR</span>
+                <b className="v2-live-hud-title">
+                  📍 {activeZone?.name || activeZone?.zoneName || progress?.activeMandal || 'Active Territory'}
+                </b>
+                {Number.isFinite(Number(activeZone?.lat)) && Number.isFinite(Number(activeZone?.lng)) && (
+                  <span className="v2-live-hud-coords">
+                    [{Number(activeZone.lat).toFixed(4)}, {Number(activeZone.lng).toFixed(4)}]
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="v2-live-hud-meta">
+              <span className="v2-live-hud-zone-pill">
+                ZONE {activeZone?.index || (progress?.completedMandals != null ? progress.completedMandals + 1 : 1)} / {progress?.totalMandalsAcrossAll || progress?.totalMandals || mapZones.length || '—'}
+              </span>
+              <span className="v2-live-hud-status">⚡ SWEEPING 5-ENGINE PARALLEL</span>
+            </div>
+          </div>
+        )}
+
+        {scanning && (
+          <div style={{ marginBottom: 12 }}>
+            <ParallelEnginesStatus
+              scanning={scanning}
+              totalHarvested={vendors.length}
+            />
+            <ConcentricZoneRadar
+              zones={mapZones}
+              activeZone={activeZone}
+              completedCount={mapZones.filter(z => z.completed).length}
+              totalCount={mapZones.length || 7}
+              scanning={scanning}
+            />
           </div>
         )}
 
@@ -450,9 +522,9 @@ export default function CockpitView({
                   <span className="v2-radar-ring r3" />
                   <RadarIcon size={26} className="v2-radar-center-icon v2-spin" />
                 </div>
-                <b className="v2-scanning-leads-title">Ultra-Blazing Multi-Vector Swarm In Progress</b>
+                <b className="v2-scanning-leads-title">Live 5-Engine Parallel Discovery In Progress</b>
                 <p className="v2-scanning-leads-desc">
-                  Sweeping Geospatial Radar Mesh, Direct Telecom Registry & Deep SERP Index. Direct verified mobile contacts streaming in...
+                  Concurrently sweeping Google Maps, Local Pack, OpenStreetMap, Directory Portals, and direct website verification. Verified contacts streaming live...
                 </p>
                 <div className="v2-leads-skeleton-grid">
                   <div className="v2-lead-skeleton-row" />
@@ -575,6 +647,15 @@ export default function CockpitView({
           </footer>
         </section>
       </aside>
+
+      <FloatingActionDock
+        selectedCount={cockpitSelectedIds.size}
+        onClear={() => setCockpitSelectedIds(new Set())}
+        onWhatsAppCampaign={() => setShowCockpitWaModal(true)}
+        onCopyMobiles={handleCockpitCopyMobiles}
+        onExportVcf={handleCockpitExportVcf}
+        onExportCsv={handleCockpitExportCsv}
+      />
     </div>
   );
 }

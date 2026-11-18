@@ -1,0 +1,859 @@
+/* ============================================================================
+   RETRO EMBOSS — WHITE GAME BOY 3D SYSTEM
+   ----------------------------------------------------------------------------
+   A warm off-white "handheld console" surface with hard 3D embossed edges:
+   light top-left, dark bottom-right, no soft blur. Buttons physically press
+   into the shell. The screen areas use the classic DMG green glass, but the
+   shell is white, not the original grey.
+
+   This file is imported LAST (after whiteTheme.css) so it is the final word on
+   colour and depth. It only touches presentation; no layout is moved.
+
+   Depth recipe (used everywhere, so the whole app feels like one moulded body):
+     1. a 2px frame in --gb-line-strong        (the bezel)
+     2. an inset white line on the top edge    (light catching the lip)
+     3. an inset dark line on the bottom edge  (the shadow inside the lip)
+     4. a hard 3px step of solid taupe         (the moulded side wall)
+     5. a wide low-alpha drop                  (the body sitting on the desk)
+   ========================================================================== */
+
+:root {
+  color-scheme: light !important;
+
+  /* Shell / paper -------------------------------------------------------- */
+  --gb-paper: #ded9c4;
+  --gb-paper-2: #d2ccb3;
+  --gb-shell: #fffef8;
+  --gb-shell-2: #f4f1e2;
+  --gb-shell-3: #e3dfc9;
+  --gb-shell-4: #d3ceb5;
+
+  /* Ink ------------------------------------------------------------------ */
+  --gb-ink: #232c1c;
+  --gb-ink-soft: #414c38;
+  --gb-ink-muted: #6e7863;
+  --gb-ink-faint: #9aa28c;
+
+  /* Edges ---------------------------------------------------------------- */
+  --gb-line: #c1bca2;
+  --gb-line-strong: #8f8b71;
+  --gb-line-dark: #6b6850;
+
+  /* Screen + accent ------------------------------------------------------ */
+  --gb-screen: #d8e4b6;
+  --gb-screen-mid: #c3d494;
+  --gb-screen-deep: #a9bd74;
+  --gb-green: #6f8c2c;
+  --gb-green-deep: #4f6619;
+  --gb-green-soft: #eef4da;
+  --gb-red: #c25a45;
+  --gb-red-deep: #9c3f2e;
+  --gb-amber: #bd8628;
+  --gb-blue: #4f7a8c;
+
+  /* Hard 3D depth — no blur, so it reads as moulded plastic -------------- */
+  --gb-emboss:
+    inset 0 2px 0 #ffffff,
+    inset 0 -2px 0 rgba(143, 139, 113, 0.55),
+    inset 2px 0 0 rgba(255, 255, 255, 0.8),
+    inset -2px 0 0 rgba(143, 139, 113, 0.4),
+    0 4px 0 var(--gb-line-strong),
+    0 9px 0 rgba(38, 48, 31, 0.10),
+    0 18px 26px rgba(38, 48, 31, 0.14);
+  --gb-emboss-sm:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(168, 164, 138, 0.5),
+    0 2px 0 var(--gb-line-strong),
+    0 4px 0 rgba(38, 48, 31, 0.08);
+  --gb-emboss-xs:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(168, 164, 138, 0.45),
+    0 1px 0 var(--gb-line-strong),
+    0 2px 0 rgba(38, 48, 31, 0.06);
+  --gb-inset:
+    inset 0 3px 7px rgba(56, 66, 40, 0.20),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.55),
+    0 1px 0 rgba(255, 255, 255, 0.8);
+  --gb-pressed:
+    inset 0 3px 8px rgba(56, 66, 40, 0.28),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 0 rgba(255, 255, 255, 0.5);
+  --gb-screen-inset:
+    inset 0 4px 10px rgba(52, 68, 26, 0.30),
+    inset 0 -2px 0 rgba(255, 255, 255, 0.40),
+    0 2px 0 var(--gb-green-deep),
+    0 4px 0 rgba(38, 48, 31, 0.12);
+
+  --gb-radius: 14px;
+  --gb-radius-sm: 10px;
+  --gb-font: ui-monospace, "Cascadia Mono", "Consolas", "Courier New", monospace;
+  --gb-ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* Re-point the white theme tokens at the retro palette so every component
+     that already reads --w-* inherits the new look. */
+  --w-bg: var(--gb-paper);
+  --w-bg-subtle: var(--gb-paper-2);
+  --w-surface: var(--gb-shell);
+  --w-surface-hover: var(--gb-shell-2);
+  --w-surface-active: var(--gb-shell-3);
+  --w-border: var(--gb-line);
+  --w-border-subtle: var(--gb-paper-2);
+  --w-border-strong: var(--gb-line-strong);
+  --w-border-focus: var(--gb-green);
+  --w-text-primary: var(--gb-ink);
+  --w-text-secondary: var(--gb-ink-soft);
+  --w-text-muted: var(--gb-ink-muted);
+  --w-text-dim: var(--gb-ink-faint);
+  --w-emerald: var(--gb-green);
+  --w-emerald-dark: var(--gb-green-deep);
+  --w-emerald-light: var(--gb-green-soft);
+  --w-emerald-border: var(--gb-screen-deep);
+  --w-blue: var(--gb-blue);
+  --w-blue-light: #eef2f4;
+  --w-blue-border: #c4d2d8;
+  --w-amber: var(--gb-amber);
+  --w-amber-light: #faf3e2;
+  --w-shadow-sm: var(--gb-emboss-sm);
+  --w-shadow-card: var(--gb-emboss);
+  --w-shadow-elevated: var(--gb-emboss);
+  --w-shadow-floating: var(--gb-emboss);
+  --w-shadow-inset: var(--gb-inset);
+}
+
+/* ── Canvas ──────────────────────────────────────────────────────────────── */
+html,
+body {
+  background-color: var(--gb-paper) !important;
+  color: var(--gb-ink) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif !important;
+}
+
+#root,
+.v2-root,
+.v2-root.v2-command,
+.v2-root.v2-executive-canvas {
+  background-color: var(--gb-paper) !important;
+  background-image:
+    radial-gradient(circle at 50% -14%, rgba(255, 255, 255, 0.55) 0%, transparent 58%),
+    radial-gradient(rgba(38, 48, 31, 0.10) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 16px 16px !important;
+  color: var(--gb-ink) !important;
+}
+
+/* The cockpit grid used to paint a cold slate behind the panels, which killed
+   the warm shell. Let the paper show through instead. */
+.v2-cockpit,
+.v2-cockpit-col,
+.v2-cockpit-col.v2-cp-left,
+.v2-cockpit-col.v2-cp-center,
+.v2-cockpit-col.v2-cp-right,
+.v2-cmd-body,
+.v2-cmd-main,
+.v2-cmd-content {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* ── Header / top bar: the console's top bezel ───────────────────────────── */
+.v2-cmd-top {
+  background:
+    linear-gradient(180deg, #fffef9 0%, #f0eddd 62%, #e6e2cd 100%) !important;
+  border-bottom: 2px solid var(--gb-line-strong) !important;
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    0 3px 0 var(--gb-line),
+    0 7px 0 rgba(38, 48, 31, 0.08) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-cmd-brand,
+.v2-cmd-breadcrumb {
+  color: var(--gb-ink-muted) !important;
+  font-family: var(--gb-font) !important;
+  letter-spacing: 0.10em !important;
+  text-transform: uppercase !important;
+}
+
+.v2-cmd-breadcrumb b,
+.v2-cmd-breadcrumb code,
+.v2-cmd-context {
+  color: var(--gb-ink) !important;
+}
+
+.v2-cmd-breadcrumb code {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-inset) !important;
+  border-radius: 7px !important;
+  font-family: var(--gb-font) !important;
+}
+
+/* ── Generic moulded panels ──────────────────────────────────────────────── */
+.v2-cp-panel,
+.v2-cp-center,
+.v2-cp-map,
+.v2-cp-folders,
+.v2-cp-crm,
+.v2-metric-card,
+.v2-analytics-card,
+.v2-analytics-localities-card,
+.v2-console,
+.v2-table-shell,
+.v2-table-scroll,
+.v2-cp-table,
+.v2-cp-foot,
+.v2-cp-crm-foot,
+.v2-deep-banner,
+.v2-empty-state,
+.v2-cp-empty {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, #fffef9 0%, #f0ecd8 100%) !important;
+  backdrop-filter: blur(12px) saturate(1.12) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.12) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius) !important;
+  box-shadow: var(--gb-emboss) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-cp-panel::before,
+.v2-cp-center::before,
+.v2-cp-map::before,
+.v2-console::before {
+  display: none !important;
+}
+
+.v2-metric-card:hover,
+.v2-cp-panel:hover,
+.v2-cp-center:hover,
+.v2-cp-map:hover {
+  transform: translateY(-1px) !important;
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -2px 0 rgba(143, 139, 113, 0.55),
+    0 4px 0 var(--gb-line-strong),
+    0 10px 0 rgba(38, 48, 31, 0.10),
+    0 22px 30px rgba(38, 48, 31, 0.16) !important;
+}
+
+/* Panel headers: a thin recessed seam under the title strip */
+.v2-cp-head,
+.v2-cp-center-head,
+.v2-cp-head-actions {
+  border-bottom: 1px solid var(--gb-line-strong) !important;
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.75) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-cp-head b,
+.v2-cp-title b,
+.v2-metric-copy b,
+.v2-cp-foot b {
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+  letter-spacing: 0.02em !important;
+}
+
+.v2-cp-sub,
+.v2-metric-copy small,
+.v2-metric-label,
+.v2-cp-folder-main small {
+  color: var(--gb-ink-muted) !important;
+}
+
+.v2-metric-label {
+  font-family: var(--gb-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.10em !important;
+}
+
+/* ── The search console: the Game Boy screen ─────────────────────────────── */
+.v2-console {
+  padding: 10px !important;
+}
+
+.v2-console-bar,
+.v2-filter-search input,
+.v2-omni-input {
+  background:
+    repeating-linear-gradient(0deg, rgba(60, 80, 30, 0.09) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, #dbe7ba 0%, var(--gb-screen-mid) 58%, var(--gb-screen-deep) 100%) !important;
+  border: 2px solid var(--gb-green-deep) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow: var(--gb-screen-inset) !important;
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) !important;
+}
+
+.v2-console-bar:focus-within,
+.v2-filter-search input:focus {
+  border-color: var(--gb-green-deep) !important;
+  box-shadow:
+    var(--gb-screen-inset),
+    0 0 0 3px rgba(111, 140, 44, 0.30) !important;
+  outline: none !important;
+}
+
+.v2-console-input {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--gb-ink) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+.v2-console-glyph {
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-console-examples,
+.v2-hud-chip {
+  color: var(--gb-ink-soft) !important;
+}
+
+/* ── Buttons: moulded, pressable ─────────────────────────────────────────── */
+.v2-btn,
+.v2-console-go,
+.v2-console-submit-btn,
+.v2-btn-deploy,
+.v2-filter-btn,
+.v2-tab-pill-btn,
+.v2-tools-trigger,
+.v2-cp-head > button,
+.v2-row-actions button,
+.v2-pagination button,
+.v2-bulk-clear,
+.v2-export-csv-btn,
+.v2-wa-direct-btn,
+.v2-cp-folder-tools button,
+.v2-source-chip,
+button.ui-btn,
+button.btn {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #fffef9 0%, var(--gb-shell-3) 100%) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.03em !important;
+  text-transform: uppercase !important;
+  text-shadow: 0 1px 0 #ffffff !important;
+  transition: transform 120ms var(--gb-ease), box-shadow 120ms var(--gb-ease), background 120ms var(--gb-ease) !important;
+}
+
+.v2-btn:hover,
+.v2-console-go:hover,
+.v2-console-submit-btn:hover,
+.v2-btn-deploy:hover,
+.v2-filter-btn:hover,
+.v2-tab-pill-btn:hover,
+.v2-tools-trigger:hover,
+.v2-row-actions button:hover,
+.v2-pagination button:hover,
+.v2-wa-direct-btn:hover,
+.v2-source-chip:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #ffffff 0%, #f3f0e0 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    inset 0 -1px 0 rgba(168, 164, 138, 0.5),
+    0 3px 0 var(--gb-line-strong),
+    0 5px 0 rgba(38, 48, 31, 0.10) !important;
+}
+
+.v2-btn:active,
+.v2-console-go:active,
+.v2-console-submit-btn:active,
+.v2-btn-deploy:active,
+.v2-filter-btn:active,
+.v2-tab-pill-btn:active,
+.v2-tools-trigger:active,
+.v2-row-actions button:active,
+.v2-pagination button:active,
+.v2-wa-direct-btn:active,
+.v2-source-chip:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: var(--gb-pressed) !important;
+}
+
+/* Primary = the green "screen" button */
+.v2-btn-lime,
+.v2-btn-green,
+.v2-btn-cyan,
+.v2-btn-primary,
+.v2-console-go,
+.v2-console-submit-btn,
+.v2-btn-deploy,
+.v2-white-cta-primary {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, var(--gb-screen) 0%, var(--gb-screen-mid) 60%, var(--gb-screen-deep) 100%) !important;
+  border: 2px solid var(--gb-green-deep) !important;
+  color: var(--gb-ink) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -2px 0 rgba(79, 102, 25, 0.55),
+    0 3px 0 var(--gb-green-deep),
+    0 6px 0 rgba(38, 48, 31, 0.14) !important;
+}
+
+/* A disabled control is a flat, sunk key — it should not look pressable */
+.v2-console-go:disabled,
+.v2-btn-deploy:disabled,
+.v2-btn-deploy-3d:disabled {
+  background: linear-gradient(180deg, var(--gb-shell-2), var(--gb-shell-3)) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  color: var(--gb-ink-faint) !important;
+  text-shadow: 0 1px 0 #ffffff !important;
+  box-shadow:
+    inset 0 1px 0 #ffffff,
+    0 2px 0 var(--gb-line) !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+}
+
+.v2-btn-danger,
+.v2-btn-red {
+  background: linear-gradient(180deg, #e79a89 0%, var(--gb-red) 100%) !important;
+  border: 2px solid var(--gb-red-deep) !important;
+  color: #fff8f4 !important;
+  text-shadow: 0 1px 0 var(--gb-red-deep) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -2px 0 rgba(156, 63, 46, 0.6),
+    0 3px 0 var(--gb-red-deep),
+    0 6px 0 rgba(38, 48, 31, 0.14) !important;
+}
+
+.v2-btn-ghost,
+.v2-btn-sm.v2-btn-ghost,
+.v2-btn-xs.v2-btn-ghost {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: var(--gb-ink-soft) !important;
+}
+
+.v2-btn-ghost:hover {
+  background: var(--gb-shell-2) !important;
+  border-color: var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+}
+
+/* ── Inputs: recessed into the shell ─────────────────────────────────────── */
+input,
+select,
+textarea {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow: var(--gb-inset) !important;
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+}
+
+input::placeholder,
+textarea::placeholder,
+.v2-console-input::placeholder,
+.v2-filter-search input::placeholder {
+  color: #5f6b4c !important;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--gb-green) !important;
+  box-shadow:
+    var(--gb-inset),
+    0 0 0 3px rgba(111, 140, 44, 0.28) !important;
+  outline: none !important;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.v2-cmd-tabs {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.v2-tab-pill-btn {
+  text-transform: uppercase !important;
+}
+
+.v2-tab-pill-btn.is-active,
+.v2-filter-btn.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, var(--gb-screen) 0%, var(--gb-screen-mid) 60%, var(--gb-screen-deep) 100%) !important;
+  border: 2px solid var(--gb-green-deep) !important;
+  color: var(--gb-ink) !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -2px 0 rgba(79, 102, 25, 0.5),
+    0 2px 0 var(--gb-green-deep),
+    0 4px 0 rgba(38, 48, 31, 0.12) !important;
+}
+
+/* ── Tables ──────────────────────────────────────────────────────────────── */
+.v2-cp-table,
+.v2-table-scroll,
+.v2-lead-table {
+  background: var(--gb-shell) !important;
+}
+
+.v2-lead-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-lead-table thead,
+.v2-lead-table th {
+  background: linear-gradient(180deg, var(--gb-shell-3) 0%, var(--gb-shell-4) 100%) !important;
+  color: var(--gb-ink-soft) !important;
+  border-bottom: 2px solid var(--gb-line-strong) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8) !important;
+  font-family: var(--gb-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.07em !important;
+}
+
+.v2-lead-table tbody tr {
+  background: var(--gb-shell) !important;
+  border-bottom: 1px solid var(--gb-line) !important;
+}
+
+.v2-lead-table tbody tr:nth-child(even) {
+  background: #fbf9ef !important;
+}
+
+.v2-lead-table tbody tr:hover {
+  background: var(--gb-green-soft) !important;
+}
+
+.v2-lead-table tbody tr.is-selected {
+  background: var(--gb-screen) !important;
+  box-shadow: inset 4px 0 0 var(--gb-green-deep) !important;
+}
+
+.v2-lead-table td,
+.v2-lead-proper-name,
+.v2-lead-address-line,
+.v2-lead-address,
+.v2-contact-cell {
+  color: var(--gb-ink) !important;
+}
+
+.v2-lead-phone-cell b,
+.v2-lead-phone-landline {
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+}
+
+/* ── Chips / badges / pills ──────────────────────────────────────────────── */
+.v2-badge,
+.v2-pill,
+.v2-source-badge,
+.v2-distance-badge,
+.v2-phone-mobile-pill,
+.v2-collision-badge,
+.globe-hud-pill {
+  background: linear-gradient(180deg, #fffef9, var(--gb-shell-3)) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink-soft) !important;
+  font-family: var(--gb-font) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  text-shadow: 0 1px 0 #ffffff !important;
+}
+
+.v2-badge-green,
+.v2-badge-cyan,
+.v2-pill.is-on,
+.v2-source-chip.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, var(--gb-screen), var(--gb-screen-deep)) !important;
+  border-color: var(--gb-green-deep) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-badge-amber {
+  background: linear-gradient(180deg, #f7e6bd, #e8c87c) !important;
+  border-color: #b8933c !important;
+  color: #4a3a12 !important;
+}
+
+/* Source filter strip sits in a shallow tray */
+.v2-source-bar,
+.v2-filter-bar {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow:
+    inset 0 2px 4px rgba(56, 66, 40, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+/* ── Folder rail / CRM rows ──────────────────────────────────────────────── */
+.v2-cp-folder,
+.v2-cp-folder-row,
+.v2-cp-crm-row {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, #fffef9, var(--gb-shell-2)) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-cp-folder:hover,
+.v2-cp-folder-row:hover,
+.v2-cp-crm-row:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, #ffffff, var(--gb-shell-3)) !important;
+  transform: translateY(-1px) !important;
+}
+
+.v2-cp-folder.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, var(--gb-screen), var(--gb-screen-deep)) !important;
+  border: 2px solid var(--gb-green-deep) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.65),
+    inset 0 -2px 0 rgba(79, 102, 25, 0.5),
+    0 2px 0 var(--gb-green-deep),
+    0 4px 0 rgba(38, 48, 31, 0.12) !important;
+}
+
+.v2-cp-folder-main b,
+.v2-cp-crm-row b {
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+}
+
+/* ── Country strip: a moulded cartridge slot ─────────────────────────────── */
+.country-strip {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #fffef9 0%, #f1eedd 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+}
+
+.country-strip-glow {
+  display: none !important;
+}
+
+.country-pill {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #fffef9, var(--gb-shell-3)) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink) !important;
+}
+
+.country-pill:hover {
+  background: linear-gradient(180deg, #ffffff, var(--gb-shell-2)) !important;
+  transform: translateY(-1px) !important;
+}
+
+.country-pill.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, var(--gb-screen), var(--gb-screen-deep)) !important;
+  border: 2px solid var(--gb-green-deep) !important;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.6),
+    0 2px 0 var(--gb-green-deep) !important;
+}
+
+.country-pill.is-home {
+  border-color: var(--gb-amber) !important;
+}
+
+.country-strip-name b,
+.country-strip-current .country-strip-name b {
+  color: var(--gb-ink) !important;
+}
+
+/* The full picker: a moulded drawer with a recessed search slot */
+.country-picker {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #fffef9 0%, #f0ecd8 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius) !important;
+  box-shadow: var(--gb-emboss) !important;
+  color: var(--gb-ink) !important;
+}
+
+.country-picker-search {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius-sm) !important;
+  box-shadow: var(--gb-inset) !important;
+}
+
+.country-picker-search input {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  color: var(--gb-ink) !important;
+}
+
+.country-picker-search input::placeholder {
+  color: var(--gb-ink-muted) !important;
+}
+
+.country-picker-search svg,
+.country-picker-close {
+  color: var(--gb-ink-soft) !important;
+}
+
+.country-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 48%),
+    linear-gradient(180deg, #fffef9, var(--gb-shell-2)) !important;
+  border: 1px solid var(--gb-line) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink) !important;
+}
+
+.country-card:hover {
+  background: linear-gradient(180deg, #ffffff, var(--gb-shell-3)) !important;
+  transform: translateY(-1px) !important;
+}
+
+.country-card.is-active {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0) 50%),
+    linear-gradient(180deg, var(--gb-screen), var(--gb-screen-deep)) !important;
+  border-color: var(--gb-green-deep) !important;
+}
+
+.country-picker-note {
+  color: var(--gb-ink-muted) !important;
+}
+
+/* ── Map panel chrome ────────────────────────────────────────────────────── */
+.v2-cp-map .leaflet-container {
+  border-radius: calc(var(--gb-radius) - 4px) !important;
+  filter: saturate(0.82) contrast(1.02) sepia(0.10) !important;
+}
+
+.globe-hud-pill,
+.v2-map-hud {
+  background: linear-gradient(180deg, #fffef9, var(--gb-shell-2)) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink) !important;
+  font-family: var(--gb-font) !important;
+}
+
+/* ── Modals, drawers, toasts ─────────────────────────────────────────────── */
+[role="dialog"],
+.v2-modal,
+.v2-modal-card,
+.v2-drawer,
+.v2-toast,
+.v2-sheet,
+.vendor-drawer,
+.v2-tools-menu {
+  background:
+    linear-gradient(158deg, rgba(255, 255, 255, 0.97) 0%, rgba(255, 255, 255, 0) 46%),
+    linear-gradient(180deg, #fffef9, #f2efdf) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  border-radius: var(--gb-radius) !important;
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    inset 0 -2px 0 rgba(168, 164, 138, 0.5),
+    0 4px 0 var(--gb-line-strong),
+    0 10px 0 rgba(38, 48, 31, 0.12),
+    0 22px 40px rgba(38, 48, 31, 0.18) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-tools-menu button {
+  color: var(--gb-ink) !important;
+  border-radius: var(--gb-radius-sm) !important;
+}
+
+.v2-tools-menu button:hover {
+  background: var(--gb-green-soft) !important;
+}
+
+/* ── Progress bars: screen fill ──────────────────────────────────────────── */
+.v2-an-bar-wrap,
+.v2-progress,
+.v2-progress-track {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--gb-inset) !important;
+  overflow: hidden !important;
+}
+
+.v2-an-bar-fill,
+.v2-progress-fill {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--gb-green) 0 8px,
+    var(--gb-screen-deep) 8px 12px
+  ) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────── */
+* {
+  scrollbar-color: var(--gb-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--gb-paper-2);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--gb-line-strong);
+  border-radius: 999px;
+  border: 2px solid var(--gb-paper-2);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--gb-ink-faint);
+}
+
+/* ── Motion: smooth but never bouncy ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

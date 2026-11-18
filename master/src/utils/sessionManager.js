@@ -450,7 +450,7 @@ export function exportSessionToCSV(session) {
     escapeCsv(l.category),
     escapeCsv(l.phone || l.primaryPhone),
     escapeCsv(l.secondaryPhone),
-    escapeCsv(l.whatsappLink || (l.phone ? `https://wa.me/91${l.phone.replace(/[^0-9]/g, '')}` : '')),
+    escapeCsv(l.whatsappLink || (l.phone ? `https://wa.me/${String(l.phone).replace(/\D/g, '').length === 10 ? `91${String(l.phone).replace(/\D/g, '')}` : String(l.phone).replace(/\D/g, '')}` : '')),
     escapeCsv(l.email),
     escapeCsv(l.website),
     escapeCsv(l.instagram),

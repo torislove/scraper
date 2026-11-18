@@ -206,13 +206,25 @@ router.post('/geocode', async (req, res) => {
   }
 });
 
-// Instant pan-India autocomplete (states → districts → mandals → villages)
-// Never calls Nominatim, so it is safe to run on every keystroke.
-router.get('/suggest', (req, res) => {
+// Instant pan-India autocomplete (states → districts → mandals → villages).
+// Never calls Nominatim for India, so it is safe to run on every keystroke.
+// When a non-Indian country is selected, the keyless OSM index answers instead
+// (cached and paced, so typing is still cheap).
+router.get('/suggest', async (req, res) => {
   try {
     const q = (req.query.q || '').trim();
     if (!q) return res.json([]);
     const limit = Math.max(1, Math.min(25, Number(req.query.limit) || 10));
+    const country = String(req.query.country || '').toUpperCase().slice(0, 2);
+
+    if (country && country !== 'IN') {
+      try {
+        const { searchPlaces } = require('../services/globalPlaceIndex');
+        const places = await searchPlaces(q, { country, limit });
+        if (places.length) return res.json(places);
+      } catch (error) {}
+    }
+
     const indiaGeoIndex = require('../utils/indiaGeoIndex');
     const results = indiaGeoIndex.searchLocations(q, limit);
     res.json(results);

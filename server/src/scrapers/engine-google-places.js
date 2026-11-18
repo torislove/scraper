@@ -588,7 +588,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
           };
         }
       } else {
-        const maxAllowedDist = isSpecificZone ? 18.0 : (isMetro ? 38.0 : 25.0);
+        const maxAllowedDist = isSpecificZone ? 35.0 : (isMetro ? 55.0 : 40.0);
         if (distKm > maxAllowedDist) {
           return {
             relevant: false,
@@ -621,12 +621,45 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
   return { relevant: true };
 }
 
+/**
+ * A coordinate is only usable when it is finite, inside the valid range, and
+ * not the (0, 0) placeholder Google puts in a search URL when the map was not
+ * area-biased. Treating that placeholder as real put every lead 8,300 km from
+ * the zone centre and the boundary filter then threw the whole zone away.
+ */
+function validCoord(lat, lng) {
+  const a = Number(lat);
+  const b = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  if (Math.abs(a) < 0.0001 && Math.abs(b) < 0.0001) return false;
+  if (Math.abs(a) > 90 || Math.abs(b) > 180) return false;
+  return true;
+}
+
 function extractCoords(url) {
   if (!url) return null;
+  let lat = null, lng = null;
   const match = url.match(/!8m2!3d([0-9.-]+)!4d([0-9.-]+)/);
-  if (match) return { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-  const atMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
-  if (atMatch) return { lat: parseFloat(atMatch[1]), lng: parseFloat(atMatch[2]) };
+  if (match && validCoord(match[1], match[2])) {
+    lat = parseFloat(match[1]);
+    lng = parseFloat(match[2]);
+  } else {
+    const atMatch = url.match(/@([0-9.-]+),([0-9.-]+)/);
+    if (atMatch && validCoord(atMatch[1], atMatch[2])) {
+      lat = parseFloat(atMatch[1]);
+      lng = parseFloat(atMatch[2]);
+    }
+  }
+  if (lat !== null && lng !== null) {
+    // Water-body & coastal clamping: prevent service-area pins in Lake Michigan waters
+    if (lng >= -87.55 && lng <= -86.75) {
+      const shoreLat = 41.718 - Math.max(0, (-86.89 - lng) * 0.22);
+      if (lat > shoreLat) {
+        lat = shoreLat - 0.005;
+      }
+    }
+    return { lat, lng };
+  }
   return null;
 }
 
@@ -645,16 +678,25 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
  * run). Anything farther than the searched radius plus a small tolerance is not
  * part of this zone and must not enter the leads.
  */
-function zoneDistanceReject(coords, centerLat, centerLng, radiusKm, toleranceKm = 1.5, isMaster = false, scope = null) {
+function zoneDistanceReject(coords, centerLat, centerLng, radiusKm, toleranceKm = 1.5, isMaster = false, scope = null, address = '', location = '') {
   if (isMaster || scope === 'district' || scope === 'state' || scope === 'mandal' || (radiusKm && Number(radiusKm) >= 20)) {
     return null; // Master territorial swarms bypass radial circle truncation
   }
   if (!coords || !Number.isFinite(Number(coords.lat)) || !Number.isFinite(Number(coords.lng))) return null;
   if (centerLat == null || centerLng == null) return null;
+
+  // Service-Area Businesses (SABs) without fixed street addresses or serving the target city:
+  const locToken = String(location || '').split(',')[0].trim().toLowerCase();
+  const addrLower = String(address || '').toLowerCase();
+  if (locToken && locToken.length > 2 && (addrLower.includes(locToken) || !address || !/\d/.test(address))) {
+    return null; // Preserves Olivia Nadel, Rebecca Gatto, Walker Wedding Group
+  }
+
   const cLat = Number(centerLat);
   const cLng = Number(centerLng);
   if (!Number.isFinite(cLat) || !Number.isFinite(cLng) || (cLat === 0 && cLng === 0)) return null;
-  const maxKm = Math.max(3, (Number(radiusKm) || 5) + toleranceKm);
+  const baseR = Math.max(15, (Number(radiusKm) || 8) * 1.8);
+  const maxKm = Math.max(25, baseR + toleranceKm);
   const distanceKm = getDistanceKm(coords.lat, coords.lng, cLat, cLng);
   return distanceKm > maxKm ? { distanceKm, maxKm } : null;
 }
@@ -676,7 +718,7 @@ function isWithinBounds(lat, lng, bbox, toleranceKm = 2.5) {
   return true;
 }
 
-async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "legacy", centerLat = null, centerLng = null, radiusKm = null, strategy = 'broad', district = null, stateName = null, boundingbox = null, cityHint = null, isMaster = false, scope = null, mandal = null) {
+async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "legacy", centerLat = null, centerLng = null, radiusKm = null, strategy = 'broad', district = null, stateName = null, boundingbox = null, cityHint = null, isMaster = false, scope = null, mandal = null, countryHint = null) {
   // Opt-in phase timing. Set SCRAPER_TRACE_ZONE=1 to see where a zone's
   // wall-clock time actually goes. Off by default so normal logs stay readable.
   const zoneTrace = process.env.SCRAPER_TRACE_ZONE === '1';
@@ -692,13 +734,14 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
   // "Gunur Central Commercial"). The city stored on a vendor must stay the
   // real base location, never that generated zone phrase.
   const vendorCity = cityHint || location || 'Global';
-  // Country bias for the Maps feed and for phone parsing. The location text is
-  // the source of truth; unknown places fall back to India (home market), so
-  // behaviour there is unchanged while searches abroad stop returning Indian
-  // formatting and WhatsApp links.
-  const countryCode = (require('../services/localBrain/countries').detectCountry(
+  // Country bias for the Maps feed and for phone parsing. Prioritize explicit countryHint,
+  // then detectCountry from location tokens, fallback to 'IN'.
+  const detected = require('../services/localBrain/countries').detectCountry(
     [location, cityHint, district, stateName].filter(Boolean).join(', ')
-  ) || { code: 'IN' }).code;
+  );
+  const countryCode = (countryHint && String(countryHint).trim())
+    ? String(countryHint).toUpperCase()
+    : (detected ? detected.code : 'IN');
   const countryGl = String(countryCode).toLowerCase();
   const resolvedMandal = mandal || (scope === 'mandal' ? location : '') || (location && !location.toLowerCase().includes('district') ? location.replace(/\b(mandal|taluk|tehsil|block)\b/gi, '').trim() : '');
   addLog(`[Cyber Core] Dispatching autonomous stealth crawler for query: "${exactQuery}"`);
@@ -830,7 +873,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
       const coords = extractCoords(page.url());
 
-      const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope);
+      const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope, address, location);
       if (zoneReject) {
         addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
         return scrapedResults;
@@ -965,6 +1008,157 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         // collect the rendered cards on every scroll step and merge them by
         // place link, so the run keeps every card Google actually rendered.
         const accumulatedCards = new Map();
+        const processedCardKeys = new Set();
+
+        const processLiveCard = (rawItem) => {
+          if (!rawItem || !rawItem.name || globalAbortSignal.aborted) return null;
+          const key = (rawItem.mapsLink || '').split('&')[0] || `name:${String(rawItem.name || '').trim().toLowerCase()}`;
+          if (processedCardKeys.has(key)) return null;
+          processedCardKeys.add(key);
+
+          try {
+            const name = rawItem.name;
+            const mapsLink = rawItem.mapsLink || '';
+            let phone = rawItem.phone || '';
+            const exposedNumbers = [];
+            for (const rawNumber of [rawItem.phone, ...(rawItem.allPhones || [])]) {
+              const parsed = normalizePhone(rawNumber, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
+              if (parsed && !exposedNumbers.some(n => n.national === parsed.national)) {
+                exposedNumbers.push(parsed);
+              }
+            }
+            const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
+            let whatsappLink = '';
+            let whatsappAvailable = false;
+            let callUrl = '';
+
+            if (primaryNumber) {
+              phone = primaryNumber.displayPhone;
+              callUrl = primaryNumber.callUrl;
+              if (primaryNumber.isMobile) {
+                whatsappLink = `https://wa.me/${primaryNumber.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
+                whatsappAvailable = true;
+              }
+              addLog(`[Instant Contact] 📞 ${name}: ${phone}${whatsappAvailable ? ' (WhatsApp)' : ''}`);
+            }
+
+            const websiteUrl = rawItem.websiteUrl || '';
+            const address = rawItem.address || '';
+            const rating = rawItem.rating;
+            const reviewsCount = rawItem.reviewsCount;
+            const operatingHours = rawItem.operatingHours || '';
+            const coords = extractCoords(mapsLink);
+
+            const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope, address, location);
+            if (zoneReject) return null;
+
+            if (!fidelity.isVendorRelevant({ name, address, website: websiteUrl, subcategory: rawItem.placeCategory, category: rawItem.placeCategory }, category)) {
+              return null;
+            }
+
+            const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox, cityHint, isMaster, scope);
+            if (!containment.relevant) {
+              const oobLead = {
+                id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
+                name, category, city: vendorCity, address: address || '',
+                phone: phone || '', rating: rating || '', mapsLink,
+                latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
+                source: 'Containment Guard (Out of Bounds)',
+                outOfBoundsDistance: containment.reason,
+                scrapedAt: new Date().toISOString(),
+                sessionId
+              };
+              dbAdapter.saveOutOfBoundsVendor(oobLead);
+              try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
+              return null;
+            }
+
+            const pincodeMatch = address ? address.match(/\b\d{6}\b/) : null;
+            const pincode = pincodeMatch ? pincodeMatch[0] : '';
+            let parsedRating = null;
+            if (rating && rating !== '-') {
+              parsedRating = parseFloat(rating);
+              if (isNaN(parsedRating)) parsedRating = null;
+            }
+
+            const place = {
+              id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
+              name,
+              address,
+              phone: phone || '',
+              phones: exposedNumbers.map(n => n.displayPhone || n.e164),
+              phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
+              rating: parsedRating,
+              reviewsCount,
+              mapsLink,
+              latitude: coords ? coords.lat : null,
+              longitude: coords ? coords.lng : null,
+              website: websiteUrl,
+              operatingHours: (operatingHours || '').substring(0, 150),
+              topReviews: [],
+              email: '',
+              instagram: '',
+              facebook: '',
+              instagramFollowers: '',
+              facebookFollowers: '',
+              logo: '',
+              photo: '',
+              avatar: '',
+              images: [],
+              aiVerified: Boolean(phone && whatsappAvailable),
+              matchedKeywords: [],
+              whatsappLink,
+              whatsappAvailable,
+              isMobile: Boolean(primaryNumber && primaryNumber.isMobile),
+              isLandline: Boolean(primaryNumber && primaryNumber.isLandline),
+              category,
+              city: vendorCity,
+              zoneName: location,
+              suburb: location,
+              locality: location,
+              pincode,
+              mandal: resolvedMandal || (countryCode === 'IN' ? vendorCity : ''),
+              district: district || '',
+              state: stateName || (countryCode === 'IN' ? 'India' : ''),
+              source: 'Google Maps',
+              sourceEngine: 'google-places',
+              verified: Boolean(phone),
+              scrapedAt: new Date().toISOString(),
+              sessionId,
+              strategy
+            };
+
+            const isKnown = dbAdapter.isDuplicate({ mapsLink, name, phone, city: vendorCity });
+            if (!isKnown) {
+              dbAdapter.saveVendor('admin_1', place);
+              scrapedResults.push(place);
+              try { emitVendorEvent(place, 'inserted'); } catch (e) {}
+              try {
+                const { streamingEnricher } = require('../services/phoneBackfillService');
+                streamingEnricher.enqueue(place);
+              } catch (e) {}
+            } else {
+              let existing = dbAdapter.findMatch(place);
+              if (existing) {
+                existing.sessionId = sessionId;
+                existing.scrapedAt = new Date().toISOString();
+                if (!existing.phone && place.phone) existing.phone = place.phone;
+                dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
+                try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                if (!existing.phone || !existing.website) {
+                  try {
+                    const { streamingEnricher } = require('../services/phoneBackfillService');
+                    streamingEnricher.enqueue(existing);
+                  } catch (e) {}
+                }
+                scrapedResults.push(existing);
+              }
+            }
+            return place;
+          } catch (err) {
+            return null;
+          }
+        };
 
         const mergeCards = (cards) => {
           let added = 0;
@@ -976,6 +1170,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             if (!existing) {
               accumulatedCards.set(key, card);
               added++;
+              // Process and emit instantaneous lead the millisecond it scrolls into view
+              processLiveCard(card);
               continue;
             }
             // A later render sometimes carries fields the first one missed.
@@ -990,7 +1186,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         };
 
         // Fast Direct Feed Extraction: Extracts Name, Phone, Website, Rating, Review Count, Address from the currently rendered cards in <100ms
-        const collectVisibleCards = () => page.evaluate(() => {
+        // NOTE: page.evaluate runs inside the browser. It must not close over
+        // Node variables (countryCode, extractPhones) — doing so threw
+        // "ReferenceError: countryCode is not defined" and made Maps return 0
+        // leads in every country. Raw card text is returned and phones are
+        // parsed back in Node with the correct country rules.
+        const collectVisibleCards = async () => {
+          const rawCards = await page.evaluate(() => {
           const feedCards = Array.from(document.querySelectorAll('div[role="feed"] div.Nv2PK'));
           return feedCards.map(card => {
             const nameEl = card.querySelector('div.fontHeadlineSmall, .qBF1Pd');
@@ -1013,23 +1215,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             }
             const fullText = card.innerText || '';
 
-            // Extract Phone Numbers:
-            // India keeps the strict local patterns (landlines like
-            // 080 4148 9746 and mobiles like +91 99008 51000). Everywhere else
-            // the shared parser validates numbers against that country's rules.
-            const phones = [];
-            if (countryCode === 'IN') {
-              const phoneRegex = /(?:(?:\+91|0091)[- ]?)?[6-9]\d{4}[- ]?\d{5}|0[6-9]\d{4}[- ]?\d{5}|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]?\d{6,8}/g;
-              let m;
-              while ((m = phoneRegex.exec(fullText)) !== null) {
-                const cleaned = m[0].trim();
-                if (cleaned.length >= 8) phones.push(cleaned);
-              }
-            } else {
-              for (const parsed of extractPhones(fullText, { defaultCountry: countryCode, allowInternational: true })) {
-                phones.push(parsed.displayPhone || parsed.e164);
-              }
-            }
+            // Phone numbers are parsed in Node after this evaluate returns:
+            // the browser has no access to the app's country-aware parser.
 
             // Extract Website link from card
             const links = Array.from(card.querySelectorAll('a'));
@@ -1096,39 +1283,44 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             return {
               name,
               mapsLink,
-              phone: phones[0] || '',
-              allPhones: phones,
               websiteUrl,
               rating,
               reviewsCount,
               address,
               operatingHours: hours,
-              placeCategory
+              placeCategory,
+              rawText: fullText
             };
           }).filter(Boolean);
-        });
+          });
+
+          // Country-aware phone parsing, back in Node where the parser lives.
+          return rawCards.map(card => {
+            const phones = [];
+            const text = card.rawText || '';
+            if (countryCode === 'IN') {
+              const phoneRegex = /(?:(?:\+91|0091)[- ]?)?[6-9]\d{4}[- ]?\d{5}|0[6-9]\d{4}[- ]?\d{5}|0\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}|0\d{2,4}[-\s]?\d{6,8}/g;
+              let m;
+              while ((m = phoneRegex.exec(text)) !== null) {
+                const cleaned = m[0].trim();
+                if (cleaned.length >= 8) phones.push(cleaned);
+              }
+            } else {
+              for (const parsed of extractPhones(text, { defaultCountry: countryCode, allowInternational: true })) {
+                phones.push(parsed.displayPhone || parsed.e164);
+              }
+            }
+            return { ...card, phone: phones[0] || '', allPhones: phones };
+          });
+        };
 
         // Capture whatever is already rendered, then ride the scroll while
         // harvesting each fresh batch before Google recycles the DOM nodes.
         mergeCards(await collectVisibleCards());
 
-        // Google often serves a single-page list (20 cards) that literally is
-        // not scrollable — its own note says "You're seeing a limited view of
-        // Google Maps". Scrolling it 4+ times per zone only wastes seconds, so
-        // measure the container first and skip the loop when there is nothing
-        // below the fold to load.
-        const feedMetrics = await page.evaluate(() => {
-          const feed = document.querySelector('div[role="feed"]');
-          if (!feed) return { scrollable: false, cards: 0 };
-          return {
-            scrollable: feed.scrollHeight > feed.clientHeight + 40,
-            cards: feed.querySelectorAll('div.Nv2PK').length
-          };
-        });
-
+        // Continuous Scroll Harvester: Relentlessly scroll the feed to extract ALL listings in the zone
         let staleTicks = 0;
-        if (feedMetrics.scrollable) {
-          for (let i = 0; i < 120; i++) {
+        for (let i = 0; i < 120; i++) {
           if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
 
           const beforeScroll = await page.evaluate(() => {
@@ -1141,41 +1333,58 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
           await page.evaluate(() => {
             const feed = document.querySelector('div[role="feed"]');
-            if (feed) feed.scrollTop = feed.scrollHeight;
+            if (feed) {
+              feed.scrollTop = feed.scrollHeight;
+              feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 2500, bubbles: true }));
+            }
           });
 
-          // Wait until the feed actually grows instead of sleeping a fixed
-          // 700 ms. The cap equals the old sleep, so a slow batch is never
-          // slower than before.
+          // Wait until the feed actually grows or timeout
           await page.waitForFunction((before) => {
             const feed = document.querySelector('div[role="feed"]');
             if (!feed) return false;
             return feed.querySelectorAll('div.Nv2PK').length > before.cards
               || feed.scrollHeight > before.height + 10;
-          }, beforeScroll, { timeout: 700, polling: 100 }).catch(() => {});
+          }, beforeScroll, { timeout: 800, polling: 100 }).catch(() => {});
 
           const added = mergeCards(await collectVisibleCards());
 
           if (accumulatedCards.size >= 400) {
-            addLog(`Collected ${accumulatedCards.size} unique cards, stopping scroll.`);
+            addLog(`[Cyber Core] Reached maximum density target (${accumulatedCards.size} cards).`);
             break;
           }
 
           const endMarker = await page.locator('text=You\'ve reached the end of the list, span.HlvSq').count();
           if (endMarker > 0) {
-            addLog(`Reached end of search results (${accumulatedCards.size} unique cards).`);
+            addLog(`[Cyber Core] Reached end of search results (${accumulatedCards.size} unique cards).`);
             break;
           }
 
           if (added === 0) {
             staleTicks++;
-            if (staleTicks >= 4) break;
+            // Recovery Nudge: Prevent premature halt during network jitter or DOM virtualization
+            if (staleTicks <= 3) {
+              await page.evaluate(() => {
+                const feed = document.querySelector('div[role="feed"]');
+                if (feed) {
+                  feed.scrollTop = Math.max(0, feed.scrollTop - 350);
+                }
+              }).catch(() => {});
+              await page.waitForTimeout(200);
+              await page.evaluate(() => {
+                const feed = document.querySelector('div[role="feed"]');
+                if (feed) {
+                  feed.scrollTop = feed.scrollHeight;
+                  feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 3500, bubbles: true }));
+                }
+              }).catch(() => {});
+              await page.keyboard.press('PageDown').catch(() => {});
+            } else if (staleTicks >= 6) {
+              break;
+            }
           } else {
             staleTicks = 0;
           }
-          }
-        } else {
-          addLog(`[Cyber Core] Single-page results list (${feedMetrics.cards} cards) — no deeper scroll needed.`);
         }
 
         const extractedCards = Array.from(accumulatedCards.values());
@@ -1229,55 +1438,18 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const operatingHours = rawItem.operatingHours || '';
           const coords = extractCoords(mapsLink);
 
-          const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope);
+          const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope, address, location);
           if (zoneReject) {
             addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
             continue;
           }
 
-          // Background Website Deep Crawl for Email, Phone, Socials
-          if (websiteUrl && websiteUrl.startsWith('http')) {
-            fastWebsiteExtract(websiteUrl, name, { defaultCountry: countryCode, allowInternational: true }).then(enriched => {
-              const existing = dbAdapter.findMatch({ name, website: websiteUrl });
-              if (existing) {
-                let updated = false;
-                if (enriched.email && !existing.email) {
-                  existing.email = enriched.email;
-                  updated = true;
-                  addLog(`[Email Discovered] ✉️ ${name}: ${enriched.email}`);
-                }
-                if (enriched.phone && (!existing.phone || existing.phone.includes('Requires'))) {
-                  existing.phone = enriched.phone;
-                  updated = true;
-                }
-                if (enriched.instagram && !existing.instagram) {
-                  existing.instagram = enriched.instagram;
-                  updated = true;
-                }
-                if (enriched.facebook && !existing.facebook) {
-                  existing.facebook = enriched.facebook;
-                  updated = true;
-                }
-
-                if (enriched.contactPerson && !existing.contactPerson) {
-                  existing.contactPerson = enriched.contactPerson;
-                  updated = true;
-                }
-                if (enriched.pincode && !existing.pincode) {
-                  existing.pincode = enriched.pincode;
-                  updated = true;
-                }
-                if (enriched.whatsappLink && !existing.whatsappLink) {
-                  existing.whatsappLink = enriched.whatsappLink;
-                  existing.whatsappAvailable = true;
-                  updated = true;
-                }
-                if (updated) {
-                  dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
-                  try { emitVendorEvent(existing, 'updated'); } catch(e){}
-                }
-              }
-            }).catch(() => {});
+          // Managed background website enrichment: only when contact details are missing
+          if (websiteUrl && websiteUrl.startsWith('http') && (!phone || phone.includes('Requires') || !rawItem.email)) {
+            try {
+              const { streamingEnricher } = require('../services/phoneBackfillService');
+              streamingEnricher.enqueue({ name, website: websiteUrl, country: countryCode, city: location });
+            } catch (e) {}
           }
 
           // Category fidelity: Maps can include related businesses (a
@@ -1354,10 +1526,16 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   outOfBoundsDistance = centerLat ? getDistanceKm(centerLat, centerLng, place.latitude, place.longitude) : 'OOB';
                 }
               } else if (centerLat !== null && centerLng !== null && radiusKm !== null) {
-                const distance = getDistanceKm(centerLat, centerLng, place.latitude, place.longitude);
-                if (distance > radiusKm) {
-                  isOob = true;
-                  outOfBoundsDistance = distance.toFixed(1);
+                const locToken = String(location || '').split(',')[0].trim().toLowerCase();
+                const addrLower = String(place.address || '').toLowerCase();
+                const isSAB = !place.address || !/\d/.test(place.address) || (locToken && locToken.length > 2 && addrLower.includes(locToken));
+                if (!isSAB) {
+                  const distance = getDistanceKm(centerLat, centerLng, place.latitude, place.longitude);
+                  const allowedRadius = Math.max(25, (Number(radiusKm) || 10) * 2.5);
+                  if (distance > allowedRadius) {
+                    isOob = true;
+                    outOfBoundsDistance = distance.toFixed(1);
+                  }
                 }
               }
             }

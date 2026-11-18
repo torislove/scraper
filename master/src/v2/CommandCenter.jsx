@@ -7,8 +7,10 @@ import {
   ExternalLink, FileSpreadsheet, FileText, Filter, Folder, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
-  Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus
+  Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus,
+  Volume2, VolumeX
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
@@ -25,7 +27,10 @@ import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
   relativeTime
 } from './ui';
-import { parseIndianPhone, isIndianMobile, isIndianLandline } from '../utils/phoneClassify';
+import {
+  parseAdaptivePhone, parseIndianPhone, isIndianMobile, isIndianLandline,
+  getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone
+} from '../utils/phoneClassify';
 import { createLiveStream } from './liveStream';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
@@ -86,8 +91,9 @@ import { extractLeadArea, CarriedBadge, qualityOf } from './utils/leadHelpers';
 import { leadSourceMeta } from './utils/leadSource';
 import InstrumentPanel from './components/InstrumentPanel';
 import CountryFlagStrip from './components/CountryFlagStrip';
+import TrashModal from './components/TrashModal';
 import { findCountry } from './data/countries';
-import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../utils/phoneClassify';
+
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, matchesFolder,
   scoreLead, highlightMatches
@@ -130,6 +136,7 @@ export default function CommandCenter() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef(null);
   const [selectedVendor, setSelectedVendor] = useState(null);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   // Tab state is mirrored to the URL. This keeps deep links, refreshes and the
   // browser back button working across the merged workspace.
@@ -348,6 +355,7 @@ export default function CommandCenter() {
   const mountedRef = useRef(true);
   const runRef = useRef(null);
   const runVendorIdsRef = useRef(new Set());
+  const activeSessionIdRef = useRef('');
   const lastEventRef = useRef(Date.now());
   const finishingRef = useRef(false);
   const deepJobRef = useRef(null);
@@ -357,8 +365,57 @@ export default function CommandCenter() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  const progressRef = useRef(null);
   useEffect(() => { runRef.current = run; }, [run]);
+  useEffect(() => { progressRef.current = progress; }, [progress]);
   useEffect(() => { deepJobRef.current = deepJob; }, [deepJob]);
+
+  // On mount: detect if an active scrape session is already running on the server
+  // and rehydrate run state so the STOP button stays persistently armed even after page refresh.
+  useEffect(() => {
+    let active = true;
+    async function rehydrateRunningSession() {
+      try {
+        const jobs = await getScrapeJobs();
+        if (!active || !mountedRef.current) return;
+        const list = Array.isArray(jobs)
+          ? jobs
+          : Array.isArray(jobs?.omniJobs) ? jobs.omniJobs : [];
+        const runningJob = list.find(job => (job.status === 'running' || job.sessionActive === true) && !job.finishedAt);
+        if (runningJob) {
+          const sid = runningJob.id || runningJob.sessionId;
+          activeSessionIdRef.current = sid;
+          setSessionFilter(sid);
+          setScanning(true);
+          setRun(prev => {
+            if (prev && prev.status === 'running') return prev;
+            return {
+              id: sid,
+              sessionId: sid,
+              category: runningJob.category || 'Vendors',
+              location: runningJob.location || '',
+              familyLabel: runningJob.category || 'Auto',
+              status: 'running',
+              startedAt: runningJob.startTime || Date.now(),
+              totalMandalsAcrossAll: runningJob.totalCount || 1,
+              completedMandals: runningJob.completedCount || 0
+            };
+          });
+          setProgress(prev => prev || {
+            sessionId: sid,
+            overallCompletedMandals: runningJob.completedCount || 0,
+            totalMandalsAcrossAll: runningJob.totalCount || 1,
+            activeMandal: runningJob.activeMandal || 'Scanning',
+            etaText: runningJob.etaText || '',
+            sessionActive: true
+          });
+          setActiveTab('cockpit');
+        }
+      } catch (e) { /* ignore */ }
+    }
+    rehydrateRunningSession();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -526,6 +583,29 @@ export default function CommandCenter() {
     form.targetLeads, form.serp, form.maps, form.postWebsite, form.postDeep
   ]);
 
+  // Ergonomic keyboard navigation shortcuts:
+  // Press '/' anywhere to focus search. Press 'Escape' to dismiss modals / drawer.
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        const searchInput = document.getElementById('cmd-console-query');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedVendor(null);
+        setTrashOpen(false);
+        setToolsOpen(false);
+        setMergeOpen(false);
+        setRenameTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   useEffect(() => {
     const unextracted = vendors.filter(vendor => !vendor.deepExtractedAt).length;
     setDeepEstimate({
@@ -572,11 +652,19 @@ export default function CommandCenter() {
                 ...(Array.isArray(v.phones) ? v.phones : (v.phone ? [v.phone] : []))
               ])).filter(Boolean);
 
+              const mergedSessionIds = Array.from(new Set([
+                ...(Array.isArray(existing.sessionIds) ? existing.sessionIds : (existing.sessionId ? [existing.sessionId] : [])),
+                ...(Array.isArray(v.sessionIds) ? v.sessionIds : (v.sessionId ? [v.sessionId] : []))
+              ])).filter(Boolean);
+
               map.set(v.id, {
                 ...existing,
                 ...v,
                 phone: mergedPhone,
                 phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
+                sessionId: v.sessionId || existing.sessionId,
+                lastSessionId: v.lastSessionId || v.sessionId || existing.lastSessionId,
+                sessionIds: mergedSessionIds,
                 website: v.website || existing.website,
                 email: v.email || existing.email,
                 emails: (Array.isArray(v.emails) && v.emails.length) ? v.emails : existing.emails,
@@ -586,9 +674,7 @@ export default function CommandCenter() {
                 crmNotes: existing.crmNotes || v.crmNotes,
                 crmTasks: existing.crmTasks || v.crmTasks
               });
-              if (runRef.current?.status === 'running') {
-                freshIds.push(v.id);
-              }
+              freshIds.push(v.id);
               hasChanges = true;
             } else {
               map.set(v.id, v);
@@ -608,7 +694,11 @@ export default function CommandCenter() {
     };
 
     const scheduleMicroFlush = () => {
-      flushBuffers();
+      if (microFlushTimer) return;
+      microFlushTimer = setTimeout(() => {
+        microFlushTimer = null;
+        flushBuffers();
+      }, 50);
     };
 
     const pushLog = line => {
@@ -637,15 +727,16 @@ export default function CommandCenter() {
           lastEventRef.current = Date.now();
           if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
 
-          if (runRef.current?.status === 'running') {
-            const currentSid = runRef.current.sessionId || runRef.current.id;
-            if (currentSid) {
-              vendor.sessionId = currentSid;
-              vendor.lastSessionId = currentSid;
-              vendor.sessionIds = Array.isArray(vendor.sessionIds)
-                ? Array.from(new Set([...vendor.sessionIds, currentSid]))
-                : [currentSid];
-            }
+          const activeSid = activeSessionIdRef.current || sessionFilter || runRef.current?.sessionId || runRef.current?.id;
+          if (activeSid) {
+            vendor.sessionId = activeSid;
+            vendor.lastSessionId = activeSid;
+            vendor.sessionIds = Array.isArray(vendor.sessionIds)
+              ? Array.from(new Set([...vendor.sessionIds, activeSid]))
+              : [activeSid];
+          }
+
+          if (runRef.current?.status === 'running' || activeSessionIdRef.current) {
             runVendorIdsRef.current.add(vendor.id);
             setRunLeadCount(runVendorIdsRef.current.size);
           }
@@ -692,6 +783,40 @@ export default function CommandCenter() {
               setScanning(true);
             }
           }
+          if (data?.activeZone) {
+            setActiveZone(prev => ({
+              ...(prev || {}),
+              ...data.activeZone,
+              name: data.activeZone.name || data.activeZone.zoneName || prev?.name,
+              lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
+              lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
+              radiusKm: Number(data.activeZone.radiusKm) || 3.5,
+              index: data.activeZone.index || prev?.index || 1
+            }));
+          } else if (data?.activeMandal) {
+            const zName = data.activeMandal;
+            const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanTarget = norm(zName);
+            setGridZones(currentGrid => {
+              const matched = currentGrid.find(z => norm(z.zoneName || z.name) === cleanTarget);
+              if (matched && Number.isFinite(Number(matched.lat)) && Number.isFinite(Number(matched.lng))) {
+                setActiveZone({
+                  name: matched.zoneName || matched.name || zName,
+                  lat: Number(matched.lat),
+                  lng: Number(matched.lng),
+                  radiusKm: Number(matched.radiusKm) || 3.5,
+                  index: matched.index || 1
+                });
+              } else {
+                setActiveZone(prev => ({
+                  name: zName,
+                  lat: prev?.name === zName ? prev?.lat : undefined,
+                  lng: prev?.name === zName ? prev?.lng : undefined
+                }));
+              }
+              return currentGrid;
+            });
+          }
         } catch (error) { /* ignore */ }
       });
 
@@ -707,9 +832,31 @@ export default function CommandCenter() {
           const points = JSON.parse(event.data);
           const grid = Array.isArray(points) ? points : [];
           const zoneEntry = grid.find(item => Array.isArray(item.zones) && item.zones.length);
-          if (zoneEntry) {
+          if (zoneEntry && zoneEntry.zones.length) {
             setGridZones(zoneEntry.zones);
             pushLog(`[GRID] ${zoneEntry.zones.length} coverage zones anchored.`);
+            setActiveZone(prev => {
+              if (prev && Number.isFinite(Number(prev.lat)) && Number.isFinite(Number(prev.lng))) return prev;
+              const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const matched = prev?.name ? zoneEntry.zones.find(z => norm(z.zoneName || z.name) === norm(prev.name)) : null;
+              if (matched) {
+                return {
+                  name: matched.zoneName || matched.name,
+                  lat: Number(matched.lat),
+                  lng: Number(matched.lng),
+                  radiusKm: Number(matched.radiusKm) || 3.5,
+                  index: matched.index || 1
+                };
+              }
+              const first = zoneEntry.zones[0];
+              return prev || (first ? {
+                name: first.zoneName || first.name,
+                lat: Number(first.lat),
+                lng: Number(first.lng),
+                radiusKm: Number(first.radiusKm) || 3.5,
+                index: 1
+              } : null);
+            });
           } else if (grid.length) {
             pushLog(`[GRID] ${grid.length} geocoded grid points received.`);
           }
@@ -723,14 +870,25 @@ export default function CommandCenter() {
           if (runRef.current?.status === 'stopped' || runRef.current?.status === 'complete') return;
           const lat = Number(point.lat);
           const lng = Number(point.lng);
-          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98;
-          if (point.zoneName) {
-            setActiveZone(prev => ({
-              name: point.zoneName,
-              lat: hasCoords ? lat : prev?.lat,
-              lng: hasCoords ? lng : prev?.lng
-            }));
-            pushLog(`[ZONE] searching ${point.zoneName}`);
+          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
+          const zLabel = point.zoneName || point.locationName;
+          if (zLabel) {
+            const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const clean = norm(zLabel);
+            setGridZones(currentGrid => {
+              const matched = currentGrid.find(z => norm(z.zoneName || z.name) === clean);
+              const finalLat = hasCoords ? lat : (matched && Number.isFinite(Number(matched.lat)) ? Number(matched.lat) : undefined);
+              const finalLng = hasCoords ? lng : (matched && Number.isFinite(Number(matched.lng)) ? Number(matched.lng) : undefined);
+              setActiveZone(prev => ({
+                name: zLabel,
+                lat: finalLat !== undefined ? finalLat : prev?.lat,
+                lng: finalLng !== undefined ? finalLng : prev?.lng,
+                radiusKm: point.boundaryKm || matched?.radiusKm || 3.5,
+                index: point.index || matched?.index || 1
+              }));
+              return currentGrid;
+            });
+            pushLog(`[ZONE] searching ${zLabel}`);
           }
           setScanning(true);
           lastEventRef.current = Date.now();
@@ -788,6 +946,18 @@ export default function CommandCenter() {
   const finishRun = useCallback(async status => {
     const current = runRef.current;
     if (!current || current.status !== 'running' || finishingRef.current) return;
+
+    // Safety guard: if completing naturally, ensure that if progress is reporting zones,
+    // all zones have completed or the run was explicitly aborted/stopped.
+    if (status === 'complete' && progressRef.current) {
+      const comp = Number(progressRef.current.overallCompletedMandals ?? progressRef.current.completedMandals ?? 0);
+      const tot = Number(progressRef.current.totalMandalsAcrossAll ?? progressRef.current.totalMandals ?? 0);
+      if (tot > 0 && comp < tot) {
+        // Prevent premature finish while zones are still being crawled!
+        return;
+      }
+    }
+
     finishingRef.current = true;
 
     const finishedAt = Date.now();
@@ -820,12 +990,20 @@ export default function CommandCenter() {
     }, 800);
   }, [refresh]);
 
-  // Progress completion and watchdog: never leave a run stuck in "running".
+  // Progress completion: only finish when this run's session is strictly finished
   useEffect(() => {
     if (run?.status === 'running' && progress && progress.sessionActive === false) {
-      finishRun(progress.error ? 'error' : 'complete');
+      // Guard: strictly ensure progress event belongs to current run
+      if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
+        const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
+        const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
+        const isAllZonesDone = tot > 0 ? (comp >= tot) : true;
+        if (isAllZonesDone || progress.aborted || (Date.now() - (run.startedAt || 0) > 20000)) {
+          finishRun(progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete');
+        }
+      }
     }
-  }, [progress, run?.status, finishRun]);
+  }, [progress, run?.status, run?.id, run?.sessionId, run?.startedAt, finishRun]);
 
   useEffect(() => {
     if (run?.status !== 'running') return undefined;
@@ -840,14 +1018,20 @@ export default function CommandCenter() {
           : Array.isArray(jobs?.omniJobs) ? jobs.omniJobs : [];
         const matching = list.find(job => job.id === run.id || job.sessionId === run.id);
         if (matching?.status === 'completed') {
-          finishRun('complete');
-        } else if (!matching && Date.now() - lastEventRef.current > 32000) {
+          const comp = Number(matching.completedCount || 0);
+          const tot = Number(matching.totalCount || 0);
+          if (!tot || comp >= tot) {
+            finishRun('complete');
+          }
+        } else if (matching?.status === 'failed') {
+          setMascotAlert({ id: Date.now(), text: 'That run hit an engine error. Check the engine board and try again.' });
+        } else if (!matching && (Date.now() - (run.startedAt || 0) > 120000) && (Date.now() - lastEventRef.current > 180000)) {
           finishRun('complete');
         }
       } catch (error) { /* ignore */ }
     }, 5000);
     return () => clearInterval(id);
-  }, [run?.status, run?.id, finishRun]);
+  }, [run?.status, run?.id, run?.startedAt, finishRun]);
 
   // Deep job polling.
   useEffect(() => {
@@ -950,7 +1134,8 @@ export default function CommandCenter() {
         minRating: Number(masterSweepForm.minRating) || 0,
         mobileOnly: masterSweepForm.mobileOnly === true,
         hasWebsite: masterSweepForm.hasWebsite === true,
-        verifiedOnly: masterSweepForm.verifiedOnly === true
+        verifiedOnly: masterSweepForm.verifiedOnly === true,
+        country: searchCountry
       });
 
       if (res?.sessionId) {
@@ -996,6 +1181,7 @@ export default function CommandCenter() {
 
     setLaunching(true);
     const sessionId = `cmd_${Date.now().toString(36)}`;
+    activeSessionIdRef.current = sessionId;
     if (overrides.query) setAutoQuery(overrides.query);
     runVendorIdsRef.current = new Set();
     finishingRef.current = false;
@@ -1005,6 +1191,22 @@ export default function CommandCenter() {
     setActiveTab('cockpit');
     setActiveZone(null);
     setGridZones([]);
+    setScanning(true);
+    setRun({
+      id: sessionId,
+      sessionId,
+      category: auto ? runQuery : runCategory,
+      location: auto ? '' : runLocation,
+      familyLabel: auto ? 'Auto' : runCategory,
+      strategy: form.strategy,
+      engines,
+      postWebsite: true,
+      postDeep: true,
+      targetLeads: overrides.targetLeads || form.targetLeads,
+      startedAt: Date.now(),
+      finishedAt: null,
+      status: 'running'
+    });
     setLogs(prev => [
       ...prev,
       auto
@@ -1021,15 +1223,31 @@ export default function CommandCenter() {
           radius: overrides.radius || form.radius || 5,
           gridDensity: coverageMode,
           engines,
+          country: searchCountry,
           sessionId
         });
         const plan = response?.plan || {};
+        if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
+          setGridZones(plan.zones);
+          const first = plan.zones[0];
+          if (first) {
+            setActiveZone({
+              name: first.zoneName || first.name || 'Zone 1',
+              lat: Number(first.lat ?? first.latitude),
+              lng: Number(first.lng ?? first.longitude),
+              radiusKm: Number(first.radiusKm) || 3.5,
+              index: 1,
+              total: plan.zones.length
+            });
+          }
+        }
         setForm(prev => ({
           ...prev,
           category: plan.category || prev.category,
           location: plan.location || prev.location
         }));
-        setRun({
+        setRun(prev => ({
+          ...(prev || {}),
           id: sessionId,
           sessionId,
           category: plan.category || runQuery,
@@ -1040,10 +1258,10 @@ export default function CommandCenter() {
           postWebsite: true,
           postDeep: true,
           targetLeads: overrides.targetLeads || form.targetLeads,
-          startedAt: Date.now(),
+          startedAt: prev?.startedAt || Date.now(),
           finishedAt: null,
           status: 'running'
-        });
+        }));
         setLogs(prev => [
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · ${(plan.engines || []).join(' + ') || 'auto'}`,
@@ -1065,10 +1283,26 @@ export default function CommandCenter() {
           strategy: form.strategy,
           gridDensity: coverageMode,
           engines,
+          country: searchCountry,
           sessionId
         });
         const plan = response?.plan || {};
-        setRun({
+        if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
+          setGridZones(plan.zones);
+          const first = plan.zones[0];
+          if (first) {
+            setActiveZone({
+              name: first.zoneName || first.name || 'Zone 1',
+              lat: Number(first.lat ?? first.latitude),
+              lng: Number(first.lng ?? first.longitude),
+              radiusKm: Number(first.radiusKm) || 3.5,
+              index: 1,
+              total: plan.zones.length
+            });
+          }
+        }
+        setRun(prev => ({
+          ...(prev || {}),
           id: sessionId,
           sessionId,
           category: plan.category || runCategory,
@@ -1078,10 +1312,10 @@ export default function CommandCenter() {
           postWebsite: true,
           postDeep: true,
           targetLeads: form.targetLeads,
-          startedAt: Date.now(),
+          startedAt: prev?.startedAt || Date.now(),
           finishedAt: null,
           status: 'running'
-        });
+        }));
         setLogs(prev => [
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · sources chosen automatically`,
@@ -1100,6 +1334,8 @@ export default function CommandCenter() {
       setActiveTab('cockpit');
     } catch (error) {
       setScanning(false);
+      setRun(null);
+      activeSessionIdRef.current = '';
       toast.error(error?.response?.data?.error || 'Search could not be started.');
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
     } finally {
@@ -1110,9 +1346,18 @@ export default function CommandCenter() {
   const stopRun = async () => {
     setStopping(true);
     try {
-      await stopAllScrapes(run?.sessionId || run?.id);
-      setRun(prev => prev ? { ...prev, status: 'aborted', finishedAt: Date.now() } : prev);
+      const sid = run?.sessionId || run?.id || activeSessionIdRef.current;
+      activeSessionIdRef.current = '';
+      setRun(prev => ({
+        ...(prev || {}),
+        id: sid,
+        sessionId: sid,
+        status: 'aborted',
+        finishedAt: Date.now()
+      }));
+      setProgress(prev => prev ? { ...prev, sessionActive: false } : null);
       setScanning(false);
+      await stopAllScrapes(sid);
       toast('Swarm paused safely. Completed leads preserved.', { icon: '⏹' });
       refresh();
     } catch (error) {
@@ -1368,10 +1613,56 @@ export default function CommandCenter() {
     }
   };
 
+  const backupFolder = runCard => {
+    if (!runCard?.id) return;
+    const link = document.createElement('a');
+    link.href = `/api/sessions/${runCard.id}/backup`;
+    link.rel = 'noreferrer';
+    link.download = `vault_backup_${runCard.id}_${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast.success(`Downloading backup for "${runCard.name || runCard.id}"...`);
+  };
+
+  const backupAllFolders = () => {
+    const link = document.createElement('a');
+    link.href = `/api/sessions/backup/all`;
+    link.rel = 'noreferrer';
+    link.download = `master_vault_complete_backup_${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    toast.success('Downloading complete Master vault backup archive...');
+  };
+
+  const handleRestoreBackup = async file => {
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      toast.loading('Restoring vault backup...', { id: 'restore-toast' });
+      const res = await fetch('/api/sessions/restore-backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-workspace-scope': 'master' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message || 'Backup restored successfully!', { id: 'restore-toast' });
+        await refresh();
+      } else {
+        toast.error(data.error || 'Failed to restore backup.', { id: 'restore-toast' });
+      }
+    } catch (err) {
+      toast.error(`Invalid backup file: ${err.message}`, { id: 'restore-toast' });
+    }
+  };
+
   const handleBatchDelete = async () => {
     if (!selectedFolderIds.size) return;
     const ids = Array.from(selectedFolderIds);
-    if (!window.confirm(`Permanently delete ${ids.length} selected search folders? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete ${ids.length} selected search folders? An offline backup archive will download automatically before deletion.`)) return;
+    backupAllFolders();
     try {
       const res = await batchDeleteSessions(ids);
       const deleted = Array.isArray(res?.deleted) ? res.deleted : [];
@@ -1385,7 +1676,7 @@ export default function CommandCenter() {
         if (run && deletedSet.has(run.sessionId || run.id)) {
           setRun(null);
         }
-        const bits = [`Deleted ${deleted.length} folders`];
+        const bits = [`Backed up and deleted ${deleted.length} folders`];
         if (res?.leadsRemoved) bits.push(`${res.leadsRemoved} leads removed`);
         if (res?.engagedKept) bits.push(`${res.engagedKept} engaged leads kept`);
         if (res?.missing?.length) bits.push(`${res.missing.length} already gone`);
@@ -1494,7 +1785,8 @@ export default function CommandCenter() {
 
   const deleteFolder = async runCard => {
     if (!runCard?.id) return;
-    if (!window.confirm(`Permanently delete folder "${runCard.name || runCard.id}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete folder "${runCard.name || runCard.id}"? An offline backup will download automatically before deletion.`)) return;
+    backupFolder(runCard);
     try {
       const res = await deleteSession(runCard.id);
       const deleted = Array.isArray(res?.deleted) ? res.deleted : [];
@@ -1508,7 +1800,7 @@ export default function CommandCenter() {
       if (folderView?.run?.id === runCard.id) setFolderView(null);
       if (run?.sessionId === runCard.id || run?.id === runCard.id) setRun(null);
 
-      const bits = [`Deleted folder "${runCard.name || runCard.id}"`];
+      const bits = [`Backed up and deleted folder "${runCard.name || runCard.id}"`];
       if (res?.leadsRemoved) bits.push(`${res.leadsRemoved} leads removed`);
       if (res?.engagedKept) bits.push(`${res.engagedKept} engaged leads kept`);
       toast.success(bits.join(' · '));
@@ -1538,103 +1830,6 @@ export default function CommandCenter() {
     setActiveTab('cockpit');
     toast.success(`Configured search for ${cat} in ${loc}. Click "FIND ALL LEADS" to swarm!`);
   };
-
-  const filteredVendors = useMemo(() => {
-    const query = filters.query.trim().toLowerCase();
-    const activeScrapeId = (run?.status === 'running' || run?.status === 'aborted' || run?.status === 'complete' || run?.status === 'completed') ? (run.sessionId || run.id) : null;
-    const effectiveSessionFilter = sessionFilter || activeScrapeId;
-
-    let list = vendors.filter(vendor => {
-      if (effectiveSessionFilter) {
-        // Instant Live Admission Guard:
-        // Any lead discovered or observed during the active run must NEVER be blocked by session mismatch
-        const isLiveIncoming = Boolean(
-          (run?.status === 'running' || runRef.current?.status === 'running') &&
-          runVendorIdsRef.current &&
-          runVendorIdsRef.current.has(vendor.id)
-        );
-
-        const matchesSession = isLiveIncoming ||
-          (vendor.sessionId === effectiveSessionFilter) ||
-          (vendor.lastSessionId === effectiveSessionFilter) ||
-          (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(effectiveSessionFilter));
-        if (!matchesSession) return false;
-      }
-
-      // Category Fidelity Guard (Frontend): e.g. prevent pharmacies from appearing when filtering doctors
-      const activeCategory = (run?.status === 'running' ? (run?.category || autoQuery || form.category) : (effectiveSessionFilter ? '' : (autoQuery || form.category))).toLowerCase();
-      if (activeCategory.includes('doctor') || activeCategory.includes('physician') || activeCategory.includes('clinic')) {
-        const vCombined = `${vendor.name || ''} ${vendor.subcategory || ''}`.toLowerCase();
-        if (/\b(pharmacy|chemist|druggist|medical store|medicals|medical shop|drug store|surgicals?)\b/i.test(vCombined)) {
-          return false;
-        }
-      }
-
-      if (filters.phoneOnly && !getDisplayPhone(vendor)) return false;
-      if (filters.primeOnly) {
-        const p = getDisplayPhone(vendor);
-        const isMob = isMobilePhone(p);
-        const rating = Number(vendor.rating) || 0;
-        const reviews = Number(vendor.reviewsCount) || 0;
-        if (!isMob || rating < 4.0 || reviews === 0) return false;
-      }
-      if (filters.websiteOnly && !vendor.website) return false;
-      if (filters.deepOnly && !vendor.deepExtractedAt) return false;
-      if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
-      if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
-      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
-      if (selectedAreaFilter && selectedAreaFilter !== 'all') {
-        const area = extractLeadArea(vendor);
-        if (area !== selectedAreaFilter) return false;
-      }
-      if (query) {
-        const haystack = [
-          vendor.name, vendor.category, vendor.city, vendor.village, vendor.mandal,
-          vendor.district, vendor.state, vendor.pincode, vendor.phone, vendor.email, vendor.address
-        ].filter(Boolean).join(' ').toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-
-    list = [...list].sort((a, b) => {
-      // Prioritize active live incoming leads right at the very top during a run
-      if (run?.status === 'running') {
-        const aLive = runVendorIdsRef.current?.has(a.id) ? 1 : 0;
-        const bLive = runVendorIdsRef.current?.has(b.id) ? 1 : 0;
-        if (aLive !== bLive) return bLive - aLive;
-        if (aLive && bLive) {
-          return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
-        }
-      }
-
-      // 1. Mobile Priority First: Verified 10-digit mobiles (score 3), Landlines with 0 (score 2), Other phone (score 1), No phone (0)
-      const pA = getDisplayPhone(a);
-      const pB = getDisplayPhone(b);
-      const scoreA = isMobilePhone(pA) ? 3 : (isIndianLandline(pA) ? 2 : (pA ? 1 : 0));
-      const scoreB = isMobilePhone(pB) ? 3 : (isIndianLandline(pB) ? 2 : (pB ? 1 : 0));
-      if (scoreB !== scoreA) return scoreB - scoreA;
-
-      if (filters.sort === 'rating') {
-        const rA = Number(a.rating) || 0;
-        const rB = Number(b.rating) || 0;
-        if (rB !== rA) return rB - rA;
-        return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
-      }
-      if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
-      if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
-      if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-      return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
-    });
-
-    return list;
-  }, [vendors, filters, sessionFilter, selectedAreaFilter, run?.status, run?.sessionId, run?.id, runLeadCount, autoQuery, form.category]);
-
-  useEffect(() => { setPage(1); }, [filters, sessionFilter, pageSize]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filteredVendors.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const effectiveRuns = useMemo(() => {
     const map = new Map();
@@ -1706,6 +1901,104 @@ export default function CommandCenter() {
     return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   }, [vendors, sessions]);
 
+  const activeScrapeId = (run?.status === 'running' || run?.status === 'aborted' || run?.status === 'complete' || run?.status === 'completed') ? (run.sessionId || run.id) : null;
+  const effectiveSessionFilter = sessionFilter || activeScrapeId || activeSessionIdRef.current || (effectiveRuns[0]?.id && effectiveRuns[0]?.id !== 'unassigned' ? effectiveRuns[0]?.id : null);
+
+  const filteredVendors = useMemo(() => {
+    const query = filters.query.trim().toLowerCase();
+
+    let list = vendors.filter(vendor => {
+      if (effectiveSessionFilter) {
+        // Instant Live Admission Guard:
+        // Any lead discovered or observed during the active run must NEVER be blocked by session mismatch
+        const isLiveIncoming = Boolean(
+          (runVendorIdsRef.current && runVendorIdsRef.current.has(vendor.id)) ||
+          (activeSessionIdRef.current && (vendor.sessionId === activeSessionIdRef.current || vendor.lastSessionId === activeSessionIdRef.current))
+        );
+
+        const matchesSession = isLiveIncoming ||
+          (vendor.sessionId === effectiveSessionFilter) ||
+          (vendor.lastSessionId === effectiveSessionFilter) ||
+          (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(effectiveSessionFilter)) ||
+          (vendor.sessionId && String(vendor.sessionId).startsWith(effectiveSessionFilter));
+        if (!matchesSession) return false;
+      }
+
+      // Category Fidelity Guard (Frontend): e.g. prevent pharmacies from appearing when filtering doctors
+      const activeCategory = (run?.status === 'running' ? (run?.category || autoQuery || form.category) : (effectiveSessionFilter ? '' : (autoQuery || form.category))).toLowerCase();
+      if (activeCategory.includes('doctor') || activeCategory.includes('physician') || activeCategory.includes('clinic')) {
+        const vCombined = `${vendor.name || ''} ${vendor.subcategory || ''}`.toLowerCase();
+        if (/\b(pharmacy|chemist|druggist|medical store|medicals|medical shop|drug store|surgicals?)\b/i.test(vCombined)) {
+          return false;
+        }
+      }
+
+      if (filters.phoneOnly && !getDisplayPhone(vendor)) return false;
+      if (filters.primeOnly) {
+        const p = getDisplayPhone(vendor);
+        const isMob = isMobilePhone(p);
+        const rating = Number(vendor.rating) || 0;
+        const reviews = Number(vendor.reviewsCount) || 0;
+        if (!isMob || rating < 4.0 || reviews === 0) return false;
+      }
+      if (filters.websiteOnly && !vendor.website) return false;
+      if (filters.deepOnly && !vendor.deepExtractedAt) return false;
+      if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
+      if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
+      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
+      if (selectedAreaFilter && selectedAreaFilter !== 'all') {
+        const area = extractLeadArea(vendor);
+        if (area !== selectedAreaFilter) return false;
+      }
+      if (query) {
+        const haystack = [
+          vendor.name, vendor.category, vendor.city, vendor.village, vendor.mandal,
+          vendor.district, vendor.state, vendor.pincode, vendor.phone, vendor.email, vendor.address
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+
+    list = [...list].sort((a, b) => {
+      // Prioritize active live incoming leads right at the very top during a run
+      if (run?.status === 'running') {
+        const aLive = runVendorIdsRef.current?.has(a.id) ? 1 : 0;
+        const bLive = runVendorIdsRef.current?.has(b.id) ? 1 : 0;
+        if (aLive !== bLive) return bLive - aLive;
+        if (aLive && bLive) {
+          return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
+        }
+      }
+
+      // 1. Mobile Priority First: Verified 10-digit mobiles (score 3), Landlines with 0 (score 2), Other phone (score 1), No phone (0)
+      const pA = getDisplayPhone(a);
+      const pB = getDisplayPhone(b);
+      const scoreA = isMobilePhone(pA, searchCountry) ? 3 : (isIndianLandline(pA) ? 2 : (pA ? 1 : 0));
+      const scoreB = isMobilePhone(pB, searchCountry) ? 3 : (isIndianLandline(pB) ? 2 : (pB ? 1 : 0));
+      if (scoreB !== scoreA) return scoreB - scoreA;
+
+      if (filters.sort === 'rating') {
+        const rA = Number(a.rating) || 0;
+        const rB = Number(b.rating) || 0;
+        if (rB !== rA) return rB - rA;
+        return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
+      }
+      if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
+      if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
+      if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
+    });
+
+    return list;
+  }, [vendors, filters, sessionFilter, selectedAreaFilter, run?.status, run?.sessionId, run?.id, runLeadCount, autoQuery, form.category]);
+
+  useEffect(() => { setPage(1); }, [filters, sessionFilter, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filteredVendors.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
   const folderCities = useMemo(() => {
     const set = new Set();
     effectiveRuns.forEach(r => {
@@ -1743,7 +2036,7 @@ export default function CommandCenter() {
     });
   }, [effectiveRuns, folderCity, folderSearch, folderSort]);
 
-  const targetSessionId = run?.sessionId || run?.id || folderView?.run?.id || sessionFilter;
+  const targetSessionId = run?.sessionId || run?.id || folderView?.run?.id || sessionFilter || effectiveSessionFilter;
   const sessionVendors = useMemo(() => {
     if (!targetSessionId && run?.status !== 'running') return vendors;
     return vendors.filter(v =>
@@ -1759,15 +2052,15 @@ export default function CommandCenter() {
   const runMobilesCount = useMemo(() => {
     return sessionVendors.filter(v => {
       const p = getDisplayPhone(v);
-      return isMobilePhone(p);
+      return isMobilePhone(p, searchCountry);
     }).length;
-  }, [sessionVendors]);
+  }, [sessionVendors, searchCountry]);
 
   const stats = useMemo(() => {
-    const target = (targetSessionId || run?.status === 'running') ? sessionVendors : vendors;
+    const target = sessionVendors || [];
     const phones = target.filter(vendor => {
       const p = getDisplayPhone(vendor);
-      return isMobilePhone(p);
+      return isMobilePhone(p, searchCountry);
     }).length;
     const websites = target.filter(vendor => vendor.website).length;
     const deep = target.filter(vendor => vendor.deepExtractedAt).length;
@@ -1779,7 +2072,16 @@ export default function CommandCenter() {
     return { phones, websites, deep, conflicts, avg };
   }, [vendors, targetSessionId, sessionVendors, run?.status]);
 
-  const runElapsed = run ? Math.max(0, Math.floor(((run.finishedAt || now) - run.startedAt) / 1000)) : 0;
+  const toEpochMs = value => {
+    if (value == null) return null;
+    const n = typeof value === 'number' ? value : new Date(value).getTime();
+    return Number.isFinite(n) ? n : null;
+  };
+  const runStartedMs = toEpochMs(run?.startedAt);
+  const runEndedMs = toEpochMs(run?.finishedAt);
+  const runElapsed = run && runStartedMs != null
+    ? Math.max(0, Math.floor(((runEndedMs != null ? runEndedMs : now) - runStartedMs) / 1000))
+    : 0;
   const runTotal = progress?.totalMandalsAcrossAll || progress?.totalMandals || estimate?.zones?.count || 0;
   const runDone = progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0;
 
@@ -1872,25 +2174,73 @@ export default function CommandCenter() {
     ? 100
     : runTotal ? Math.round((runDone / runTotal) * 100) : 0;
 
-  const mapCenter = useMemo(() => {
-    const lat = Number(estimate?.location?.lat);
-    const lng = Number(estimate?.location?.lng);
-    if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return [lat, lng];
-    const coords = filteredVendors
-      .map(vendor => [Number(vendor.latitude), Number(vendor.longitude)])
-      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && a >= 6 && a <= 38 && b >= 68 && b <= 98);
-    if (!coords.length) return [22.5937, 79.9629];
-    return [
-      coords.reduce((sum, pair) => sum + pair[0], 0) / coords.length,
-      coords.reduce((sum, pair) => sum + pair[1], 0) / coords.length
-    ];
-  }, [estimate, filteredVendors]);
-
-  const mapZoom = estimate?.location?.lat ? 10 : 5;
   const mapZones = useMemo(() => {
     if (gridZones.length) return gridZones;
     return (estimate?.zones?.preview || []).map(zone => ({ ...zone, zoneName: zone.zoneName || zone.name }));
   }, [gridZones, estimate]);
+
+  const effectiveActiveZone = useMemo(() => {
+    const raw = activeZone || (progress?.activeZone ? progress.activeZone : null);
+    const zName = raw?.name || raw?.zoneName || progress?.activeMandal || '';
+    if (!zName && !raw?.lat) return null;
+
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanName = norm(zName);
+
+    let lat = Number(raw?.lat ?? raw?.latitude);
+    let lng = Number(raw?.lng ?? raw?.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const matched = mapZones.find(z => norm(z.zoneName || z.name) === cleanName);
+      if (matched && Number.isFinite(Number(matched.lat)) && Number.isFinite(Number(matched.lng))) {
+        lat = Number(matched.lat);
+        lng = Number(matched.lng);
+      }
+    }
+
+    return {
+      name: zName || 'Active Territory',
+      zoneName: zName || 'Active Territory',
+      lat: Number.isFinite(lat) ? lat : undefined,
+      lng: Number.isFinite(lng) ? lng : undefined,
+      radiusKm: Number(raw?.radiusKm) || 3.5,
+      index: raw?.index || (progress?.completedMandals ? progress.completedMandals + 1 : 1)
+    };
+  }, [activeZone, progress?.activeZone, progress?.activeMandal, mapZones]);
+
+  const mapCenter = useMemo(() => {
+    // 1. If actively scanning an area, center map directly on active zone coordinate
+    if (effectiveActiveZone?.lat && effectiveActiveZone?.lng && Number.isFinite(Number(effectiveActiveZone.lat))) {
+      return [Number(effectiveActiveZone.lat), Number(effectiveActiveZone.lng)];
+    }
+    // 2. If radar grid zones are loaded for this search, focus on first/center zone
+    if (gridZones.length > 0 && gridZones[0]?.lat && gridZones[0]?.lng) {
+      return [Number(gridZones[0].lat), Number(gridZones[0].lng)];
+    }
+    const lat = Number(estimate?.location?.lat);
+    const lng = Number(estimate?.location?.lng);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) return [lat, lng];
+    if (estimate?.zones?.preview?.[0]?.lat && estimate?.zones?.preview?.[0]?.lng) {
+      return [Number(estimate.zones.preview[0].lat), Number(estimate.zones.preview[0].lng)];
+    }
+    const coords = filteredVendors
+      .map(vendor => [Number(vendor.latitude), Number(vendor.longitude)])
+      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && a >= -90 && a <= 90 && b >= -180 && b <= 180 && (a !== 0 || b !== 0));
+    if (!coords.length) {
+      if (searchCountry === 'CA') return [43.5890, -79.6441];
+      if (searchCountry === 'US') return [37.0902, -95.7129];
+      if (searchCountry === 'GB') return [51.5074, -0.1278];
+      if (searchCountry === 'AU') return [-33.8688, 151.2093];
+      if (searchCountry === 'AE') return [25.2048, 55.2708];
+      return [22.5937, 79.9629];
+    }
+    return [
+      coords.reduce((sum, pair) => sum + pair[0], 0) / coords.length,
+      coords.reduce((sum, pair) => sum + pair[1], 0) / coords.length
+    ];
+  }, [effectiveActiveZone, gridZones, estimate, filteredVendors, searchCountry]);
+
+  const mapZoom = (effectiveActiveZone?.lat || gridZones.length > 0 || estimate?.location?.lat) ? 12 : 5;
   const currentDeep = deepJob;
   const activeDeepJobs = deepJobs.filter(job => ['queued', 'running', 'stopping'].includes(job.status));
   const recentProfiles = vendors
@@ -1907,15 +2257,15 @@ export default function CommandCenter() {
   };
 
   return (
-    <div className="v2-root v2-command v2-executive-canvas">
+    <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
 
       {/* Real-time Network Offline & Reconnecting Supervisor Banner */}
-      {(!isOnline || sseStatus === 'error' || sseStatus === 'connecting') && (
+      {(!isOnline || (sseStatus === 'error' && reconnectAttemptCount >= 2)) && (
         <div
           className={cx(
             'v2-network-alert-banner',
-            !isOnline ? 'is-offline' : (sseStatus === 'error' ? 'is-error' : 'is-connecting')
+            !isOnline ? 'is-offline' : 'is-error'
           )}
           style={{
             background: !isOnline
@@ -1939,15 +2289,10 @@ export default function CommandCenter() {
                 <WifiOff size={15} style={{ animation: 'v2PulseDot 1.5s infinite' }} />
                 <span><b>Network Offline:</b> Internet connection appears disconnected. Leads and search stream are paused. Auto-reconnecting...</span>
               </>
-            ) : sseStatus === 'error' ? (
-              <>
-                <RefreshCw size={14} className="v2-spin" />
-                <span><b>Reconnecting to Swarm Server:</b> Backend data stream disconnected (Attempt #{reconnectAttemptCount || 1}). Re-establishing real-time connection...</span>
-              </>
             ) : (
               <>
                 <RefreshCw size={14} className="v2-spin" />
-                <span><b>Connecting to Swarm Server:</b> Establishing live event telemetry stream...</span>
+                <span><b>Reconnecting to Swarm Server:</b> Backend data stream disconnected (Attempt #{reconnectAttemptCount || 1}). Re-establishing real-time connection...</span>
               </>
             )}
             {connectionLatency && connectionLatency > 2500 && (
@@ -2002,27 +2347,22 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
           <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}
-            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
+            {formatNumber(vendors.length)} leads · {(() => {
+              const markets = new Set(vendors.map(v => String(v.country || 'IN').toUpperCase()));
+              if (markets.size > 1) return `${markets.size} markets`;
+              const only = [...markets][0] || searchCountry;
+              return (findCountry(only) || { name: 'India' }).name;
+            })()}
+            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">Next search: {countryMeta.adminPath}</em> : null}
           </span>
 
           <button
             type="button"
-            className="v2-btn v2-btn-sm"
+            className="v2-btn v2-btn-ghost v2-btn-sm"
             onClick={() => navigate('/master')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
-              color: '#fff',
-              fontWeight: 700,
-              border: 'none',
-              boxShadow: '0 2px 10px rgba(245, 158, 11, 0.4)'
-            }}
             title="Open Master Command Center for District, State, City-Mesh & Mandal sweeps"
           >
-            <Compass size={13} /> 🗺️ Master Command Center
+            <Compass size={13} /> Master Command Center
           </button>
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
@@ -2037,13 +2377,33 @@ export default function CommandCenter() {
             </button>
             {toolsOpen && (
               <div className="v2-tools-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('intelligence'); fetchTaxonomy(); }}>
+                  <Brain size={14} />
+                  <span><b>Intelligence Bank</b><small>Taxonomies & Geo-Hierarchy</small></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('engines'); }}>
+                  <Activity size={14} />
+                  <span><b>Parallel Engines</b><small>Inspect active scrapers</small></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('terminal'); }}>
+                  <Terminal size={14} />
+                  <span><b>System Terminal</b><small>Raw engine telemetry stream</small></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/whatsapp'); }}>
+                  <MessageSquare size={14} />
+                  <span><b>WhatsApp Campaigns</b><small>Broadcast & automated messaging</small></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/clients'); }}>
+                  <Users size={14} />
+                  <span><b>Client Accounts</b><small>Multi-tenant organization</small></span>
+                </button>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/learning'); }}>
+                  <Sparkles size={14} />
+                  <span><b>Learning Center</b><small>Engine memory & heuristics</small></span>
+                </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
                   <Zap size={14} />
-                  <span><b>Profile engine</b><small>Fill the 52-field vendor profiles</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
-                  <MapPin size={14} />
-                  <span><b>Coverage map</b><small>See every lead and search zone</small></span>
+                  <span><b>Profile Engine</b><small>52-field vendor enrichment</small></span>
                 </button>
                 <button
                   type="button"
@@ -2056,11 +2416,11 @@ export default function CommandCenter() {
                   }}
                 >
                   <Download size={14} />
-                  <span><b>Export CSV</b><small>Download the current search folder</small></span>
+                  <span><b>Export CSV</b><small>Download current folder</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Data refreshed.'); }}>
                   <RefreshCw size={14} />
-                  <span><b>Refresh data</b><small>Pull the latest leads and folders</small></span>
+                  <span><b>Refresh Data</b><small>Sync leads and folders</small></span>
                 </button>
               </div>
             )}
@@ -2070,123 +2430,89 @@ export default function CommandCenter() {
 
       <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
 
+      <nav className="v2-cmd-tabs">
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'cockpit' && 'is-active')}
+          onClick={() => setActiveTab('cockpit')}
+        >
+          {activeTab === 'cockpit' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <LayoutDashboard size={14} /> Workspace
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'leads' && 'is-active')}
+          onClick={() => setActiveTab('leads')}
+        >
+          {activeTab === 'leads' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'map' && 'is-active')}
+          onClick={() => setActiveTab('map')}
+        >
+          {activeTab === 'map' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'crm' && 'is-active')}
+          onClick={() => setActiveTab('crm')}
+        >
+          {activeTab === 'crm' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'runs' && 'is-active')}
+          onClick={() => setActiveTab('runs')}
+        >
+          {activeTab === 'runs' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <FolderArchive size={14} /> Saved Folders <b>{formatNumber(clientRuns.length + masterRuns.length)}</b>
+        </button>
+        <span className="v2-cmd-tabs-spacer" />
+        <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
+          <RefreshCw size={13} /> Refresh
+        </button>
+      </nav>
+
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
-        <aside className="v2-cmd-rail">
-          <section className="v2-rail-panel">
-            <div className="v2-rail-head">
-              <span><Crosshair size={14} /> YOUR SEARCH</span>
-              <b>{estimate?.zones?.count || '—'} AREAS</b>
-            </div>
-
-            <div className="v2-plan-card">
-              <div className="v2-plan-what">
-                <span>LOOKING FOR</span>
-                <b>{scanPlan?.category?.value || form.category || 'Waiting for a query'}</b>
-              </div>
-              <div className="v2-plan-where">
-                <MapPin size={12} />
-                <span>{scanPlan?.location?.display || scanPlan?.location?.value || form.location || 'Add a city or village'}</span>
-              </div>
-              <div className="v2-plan-tags">
-                {estimate?.family?.label && <span className="is-family">{estimate.family.label}</span>}
-                <span>Automatic sources</span>
-                <span>Fresh results</span>
-              </div>
-              <div className="v2-plan-note">
-                <RadarIcon size={12} />
-                <span>Autonomous Multi-Vector Swarm. Type any query into the unified Omnibox. Service category, constituent 5km zones, and proprietary vector routing are resolved automatically.</span>
-              </div>
-            </div>
-
-            {estimateError && <div className="v2-inline-error">{estimateError}</div>}
-
-            <div className="v2-rail-estimate">
-              <div className="v2-form-head">
-                <span>WHAT TO EXPECT</span>
-                <b>{estimating ? 'CALCULATING' : estimate?.calibration || 'READY'}</b>
-              </div>
-              {estimate ? (
-                <>
-                  <div className="v2-rail-estimate-grid">
-                    <div><span>LEADS</span><b>{formatNumber(estimate.expectedLeads?.expected || 0)}</b><small>estimated</small></div>
-                    <div><span>FIRST LEAD</span><b>{estimate.timing?.firstLeadLabel}</b><small>stream</small></div>
-                    <div><span>TOTAL TIME</span><b>{estimate.timing?.totalLabel}</b><small>full scan</small></div>
-                    <div><span>SPEED</span><b>{estimate.throughput?.leadsPerMinute || 0}</b><small>leads/min</small></div>
-                  </div>
-                  <div className="v2-rail-phases">
-                    {(estimate.phases || []).map(phase => (
-                      <div key={phase.name}>
-                        <span>{phase.name === 'Search' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
-                        <b>{phase.label}</b>
-                      </div>
-                    ))}
-                  </div>
-                  {estimate.warnings?.length > 0 && (
-                    <div className="v2-rail-warning"><AlertTriangle size={12} /> {estimate.warnings[0]}</div>
-                  )}
-                </>
-              ) : (
-                <div className="v2-rail-empty">{estimating ? 'Reading zone index…' : 'Add a location to estimate.'}</div>
-              )}
-            </div>
-          </section>
-
-          <section className="v2-rail-panel v2-run-panel">
-            <div className="v2-rail-head">
-              <span><RadarIcon size={14} /> CURRENT RUN</span>
-              <StatusPill tone={run?.status === 'running' ? 'cyan' : run?.status === 'complete' ? 'lime' : run ? 'amber' : 'neutral'} pulse={run?.status === 'running'}>
-                {run?.status || 'idle'}
-              </StatusPill>
-            </div>
-
-            {run ? (
-              <>
-                <div className="v2-run-big">
-                  <b>{formatNumber(runLeadCount || 0)}</b>
-                  <span>LEADS THIS RUN</span>
-                  <small>{formatClock(runElapsed)} elapsed</small>
-                </div>
-                <span className="v2-run-progress"><i style={{ width: `${runPercent}%` }} /></span>
-                <div className="v2-run-detail">
-                  <span><b>{runPercent}%</b> zones</span>
-                  <span><b>{runDone}/{runTotal || '—'}</b> complete</span>
-                  <span><b>{progress?.eta || '—'}</b> ETA</span>
-                </div>
-                <div className="v2-run-zone">
-                  <CircleDot size={12} />
-                  <span>{progress?.activeMandal || (run.status === 'running' ? 'Opening signal…' : 'Run finished')}</span>
-                </div>
-                <div className="v2-run-tags">
-                  {(Array.isArray(run?.engines) ? run.engines : []).map(engine => <span key={engine}>{engine}</span>)}
-                  {run?.postWebsite && <span>website</span>}
-                  {run?.postDeep && <span>deep</span>}
-                </div>
-              </>
-            ) : (
-              <div className="v2-rail-empty">No active run. Configure a category and a location, then dispatch.</div>
-            )}
-          </section>
-
-          <section className="v2-rail-panel v2-rail-help">
-            <div className="v2-rail-head">
-              <span><Sparkles size={14} /> HOW IT WORKS</span>
-            </div>
-            <ol className="v2-help-steps">
-              <li><b>1</b><span>Type what you need and where.</span></li>
-              <li><b>2</b><span>Watch verified businesses appear live.</span></li>
-              <li><b>3</b><span>Call, add notes and move them through CRM.</span></li>
-            </ol>
-            <div className="v2-exact-note">
-              <b>Exact-match guard is on</b>
-              <span>Only businesses that match the category you type are kept. Other vendor types and generic labels are rejected.</span>
-            </div>
-          </section>
-        </aside>
-
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>
           <SearchConsole
             mode={runMode}
             onModeChange={setRunMode}
+            country={searchCountry}
             value={autoQuery}
             onChange={setAutoQuery}
             category={form.category}
@@ -2203,12 +2529,15 @@ export default function CommandCenter() {
             onDeploy={startRun}
             onStop={stopRun}
             busy={launching}
-            running={run?.status === 'running'}
+            running={Boolean(
+              !(run?.status === 'aborted' || run?.status === 'stopped' || run?.status === 'complete') && (
+                run?.status === 'running' ||
+                (activeSessionIdRef.current && (scanning || progress?.sessionActive))
+              ) && !finishingRef.current
+            )}
             compact={activeTab === 'cockpit'}
             onResolve={setScanPlan}
             onMasterSweep={handleStartMasterSweep}
-            progress={progress}
-            eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
             progress={progress}
             eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
             runs={effectiveRuns}
@@ -2355,49 +2684,6 @@ export default function CommandCenter() {
             </div>
           )}
 
-          <nav className="v2-cmd-tabs">
-            <button type="button" className={cx(activeTab === 'cockpit' && 'is-active')} onClick={() => setActiveTab('cockpit')}>
-              <LayoutDashboard size={14} /> Workspace
-            </button>
-            <button type="button" className={cx(activeTab === 'leads' && 'is-active')} onClick={() => setActiveTab('leads')}>
-              <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'map' && 'is-active')} onClick={() => setActiveTab('map')}>
-              <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'crm' && 'is-active')} onClick={() => setActiveTab('crm')}>
-              <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'runs' && runsSubTab === 'client' && 'is-active')} onClick={() => { setActiveTab('runs'); setRunsSubTab('client'); }}>
-              <FolderArchive size={14} /> Client Folders <b>{formatNumber(clientRuns.length)}</b>
-            </button>
-            <button type="button" className={cx((activeTab === 'runs' && runsSubTab === 'master') || activeTab === 'master' ? 'is-active' : '')} onClick={() => { setActiveTab('runs'); setRunsSubTab('master'); }}>
-              <Compass size={14} /> 🗺️ Master Folders <b>{formatNumber(masterRuns.length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'intelligence' && 'is-active')} onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}>
-              <Brain size={14} /> Intelligence Bank
-            </button>
-            <button type="button" className={cx(activeTab === 'engines' && 'is-active')} onClick={() => setActiveTab('engines')}>
-              <Activity size={14} /> Engines
-            </button>
-            <button type="button" className={cx(activeTab === 'terminal' && 'is-active')} onClick={() => setActiveTab('terminal')}>
-              <Terminal size={14} /> Terminal
-            </button>
-            <button type="button" onClick={() => navigate('/whatsapp')}>
-              <MessageSquare size={14} /> WhatsApp
-            </button>
-            <button type="button" onClick={() => navigate('/clients')}>
-              <Users size={14} /> Clients
-            </button>
-            <button type="button" onClick={() => navigate('/learning')}>
-              <Sparkles size={14} /> Learning
-            </button>
-            <span className="v2-cmd-tabs-spacer" />
-            <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
-              <RefreshCw size={13} /> Refresh
-            </button>
-          </nav>
-
           <div className={cx('v2-cmd-content', activeTab === 'map' && 'is-map')}>
             {activeTab === 'cockpit' && (
               <CockpitView
@@ -2416,7 +2702,8 @@ export default function CommandCenter() {
                 onSelectVendor={setSelectedVendor}
                 onTab={setActiveTab}
                 mapZones={mapZones}
-                activeZone={activeZone}
+                activeZone={effectiveActiveZone}
+                progress={progress}
                 scanning={scanning}
                 mapCenter={mapCenter}
                 mapZoom={mapZoom}
@@ -2429,6 +2716,7 @@ export default function CommandCenter() {
                 stats={stats}
                 selectedAreaFilter={selectedAreaFilter}
                 onSelectArea={setSelectedAreaFilter}
+                onOpenTrash={() => setTrashOpen(true)}
               />
             )}
 
@@ -2451,6 +2739,7 @@ export default function CommandCenter() {
                 pageCount={pageCount}
                 setPage={setPage}
                 setPageSize={setPageSize}
+                country={searchCountry}
               />
             )}
 
@@ -2463,7 +2752,7 @@ export default function CommandCenter() {
                 run={run}
                 sessionFilter={sessionFilter}
                 mapZones={mapZones}
-                activeZone={activeZone}
+                activeZone={effectiveActiveZone}
                 scanning={scanning}
                 mapCenter={mapCenter}
                 mapZoom={mapZoom}
@@ -2696,6 +2985,9 @@ export default function CommandCenter() {
                 setRenamingFolder={setRenamingFolder}
                 exportFolder={exportFolder}
                 loadFolderToCockpit={loadFolderToCockpit}
+                backupFolder={backupFolder}
+                backupAllFolders={backupAllFolders}
+                onRestoreBackup={handleRestoreBackup}
                 deleteFolder={deleteFolder}
               />
             )}
@@ -2756,7 +3048,7 @@ export default function CommandCenter() {
           onUpdated={() => { loadVendors(); loadHealth(); }}
           onOpenWhatsApp={(v) => {
             const phone = getDisplayPhone(v);
-            if (!isMobilePhone(phone)) {
+            if (!isMobilePhone(phone, v.country || searchCountry)) {
               toast.error('This lead has no validated mobile number for WhatsApp.');
               return;
             }
@@ -2772,6 +3064,7 @@ export default function CommandCenter() {
           onClose={() => setFolderView(null)}
           onExport={exportFolder}
           onLoadToCockpit={loadFolderToCockpit}
+          onBackup={backupFolder}
           onDelete={deleteFolder}
           onReScrape={reScrapeFolder}
           onSelectVendor={setSelectedVendor}
@@ -2794,6 +3087,13 @@ export default function CommandCenter() {
           onClose={() => setShowMergeModal(false)}
           onMerge={handleMergeFolders}
           isMerging={isMerging}
+        />
+      )}
+
+      {trashOpen && (
+        <TrashModal
+          onClose={() => setTrashOpen(false)}
+          onRestored={() => { refresh(); }}
         />
       )}
     </div>

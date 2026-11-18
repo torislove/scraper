@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-  AlertTriangle, CheckSquare, FolderArchive, GitMerge, MapPin, Search, Square, Trash2, X
+  AlertTriangle, CheckSquare, FolderArchive, GitMerge, MapPin, Search, Square, Trash2, X,
+  ShieldCheck, UploadCloud
 } from 'lucide-react';
 import { formatNumber, relativeTime, cx } from '../../ui';
 import RunCard from '../cards/RunCard';
@@ -30,8 +31,12 @@ export default function FoldersGridView({
   setRenamingFolder,
   exportFolder,
   loadFolderToCockpit,
-  deleteFolder
+  deleteFolder,
+  backupFolder,
+  backupAllFolders,
+  onRestoreBackup
 }) {
+  const restoreInputRef = useRef(null);
   return (
     <section className="v2-runs-view">
       {headerExtra}
@@ -106,6 +111,36 @@ export default function FoldersGridView({
         </div>
 
         <div className="v2-runs-toolbar-right">
+          <button
+            type="button"
+            className="v2-btn v2-btn-ghost v2-btn-xs"
+            onClick={backupAllFolders}
+            title="Download complete Master vault backup archive of all folders"
+          >
+            <ShieldCheck size={12} /> Backup All
+          </button>
+          <input
+            type="file"
+            ref={restoreInputRef}
+            accept=".json"
+            style={{ display: 'none' }}
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) {
+                onRestoreBackup?.(file);
+                e.target.value = '';
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="v2-btn v2-btn-ghost v2-btn-xs"
+            onClick={() => restoreInputRef.current?.click()}
+            title="Upload and restore a vault backup (.json)"
+          >
+            <UploadCloud size={12} /> Restore
+          </button>
+
           <button
             type="button"
             className="v2-btn v2-btn-ghost v2-btn-xs"
@@ -185,6 +220,7 @@ export default function FoldersGridView({
             onRename={() => setRenamingFolder(runCard)}
             onExport={exportFolder}
             onLoadToCockpit={loadFolderToCockpit}
+            onBackup={backupFolder}
             onDelete={deleteFolder}
           />
         ))}

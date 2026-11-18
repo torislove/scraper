@@ -10,7 +10,7 @@ const { baseDirectoryJobs } = require('./base');
 
 const LIMITS = {
   scope: 'city',
-  zoneBudget: { client: 64, master: 80 },
+  zoneBudget: { client: Infinity, master: Infinity },
   justdialSwarm: 0,
   deepEnrich: true
 };

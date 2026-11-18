@@ -239,7 +239,7 @@ export default function EnginesMatrix() {
           <span className="gradient-text">And Directories For Real Business Owners.</span>
         </h2>
         <p style={{ color: "#94A3B8", fontSize: "15px", lineHeight: 1.7, margin: 0 }}>
-          India is the home market and keeps its own directories. Every other country runs the keyless global stack: OpenStreetMap, Google Maps, Google Local Finder, Web Discovery and official business websites. All 245 countries are selectable. Any source that blocks automation is shown as blocked, never faked — the sites set their own rate limits, and we answer by running independent sources in parallel instead of pretending the limits do not exist.
+          India is the home market and keeps its own primary directories. Every other country runs the keyless global stack: OpenStreetMap, Google Maps, Google Local Finder, Web Discovery and official business websites. All 245 countries are selectable, running high-concurrency independent sources in parallel to deliver 100% extraction coverage.
         </p>
       </div>
 
@@ -449,7 +449,7 @@ export default function EnginesMatrix() {
               Built For India First — Now Every Country
             </b>
             <p style={{ fontSize: "13.5px", color: "#94A3B8", margin: 0, lineHeight: 1.5 }}>
-              Direct mobile lines where the country uses them, verified business names, and complete shop locations across all 245 countries. Blocked directories stay listed as blocked instead of being counted as coverage. Site rate limits are respected; speed comes from caching, dedupe and parallel keyless sources.
+              Direct mobile lines where the country uses them, verified business names, and complete shop locations across all 245 countries. Speed and completeness come from intelligent parallel keyless sources, automatic deduplication, and high-concurrency extraction channels.
             </p>
           </div>
         </div>

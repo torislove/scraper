@@ -30,7 +30,7 @@
  *   – `retry: 5000` tells the browser how to space its own reconnects.
  */
 
-const HEARTBEAT_MS = 15000;
+const HEARTBEAT_MS = 2500;
 const MAX_LOG_STREAMS = 40;
 const MAX_SESSION_STREAMS = 80;
 const MAX_VIEWERS_PER_SESSION = 10;
@@ -67,7 +67,9 @@ class LiveStreamHub {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no'
+      'X-Accel-Buffering': 'no',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Cache-Control'
     });
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
@@ -90,7 +92,8 @@ class LiveStreamHub {
     res.on('error', cleanup);
 
     // Tell EventSource how long to wait before its own reconnect attempt.
-    this._write(client, 'retry: 5000\n\n');
+    this._write(client, 'retry: 3000\n\n');
+    this._write(client, `event: heartbeat\ndata: ${JSON.stringify({ t: Date.now(), streams: this.logClients.size + 1 })}\n\n`);
     return client;
   }
 

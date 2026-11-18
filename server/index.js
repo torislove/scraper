@@ -1,3 +1,4 @@
+process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -85,6 +86,7 @@ const crmRoutes = require('./src/routes/crm');
 const deepProfileRoutes = require('./src/routes/deepProfile');
 const searchRoutes = require('./src/routes/search');
 const whatsappRoutes = require('./src/routes/whatsapp');
+const openApiV2Routes = require('./src/routes/openApiV2');
 
 const app = express();
 app.disable('x-powered-by');
@@ -115,7 +117,7 @@ app.use(express.urlencoded({ limit: '2mb', extended: true }));
 // to produce an endless reconnect banner. The stream hub already bounds the
 // number of open sockets, so this is not an unbounded hole.
 const apiLimiter = security.createRateLimiter({ windowMs: 60_000, max: 2400, name: 'API' });
-const LIMIT_EXEMPT = /^\/(health|app\/info|logs\/stream|scrape\/stream\/)/;
+const LIMIT_EXEMPT = /^\/(health|app\/info|logs\/stream|events|scrape\/stream\/|v2\/leads\/stream)/;
 app.use('/api', (req, res, next) => {
   if (LIMIT_EXEMPT.test(req.path)) return next();
   return apiLimiter(req, res, next);
@@ -321,6 +323,7 @@ app.use('/api/crm', crmRoutes);
 app.use('/api/deep-profile', deepProfileRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/wa', whatsappRoutes);
+app.use('/api/v2', openApiV2Routes);
 
 // Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)
 const { getTerritorySummary, searchTerritory } = require('./src/utils/territoryHelper');
@@ -538,6 +541,8 @@ const handleLogStream = (req, res) => {
 
 app.get('/api/logs/stream', handleLogStream);
 app.get('/logs/stream', handleLogStream);
+app.get('/api/events', handleLogStream);
+app.get('/events', handleLogStream);
 
 // Dedicated per-session vendor stream. The global log stream broadcasts every
 // lead to every workspace; this one sends only the leads that belong to the

@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   AlertTriangle, ArrowUpRight, CheckSquare, Download, Edit3, FileSpreadsheet,
-  FolderArchive, Layers, Loader2, MapPin, Phone, Play, Square, Tag, Trash2
+  FolderArchive, Layers, Loader2, MapPin, Phone, Play, Square, Tag, Trash2, ShieldCheck
 } from 'lucide-react';
 import { StatusPill, cx, formatNumber, relativeTime } from '../../ui';
 import { formatInr } from '../../CrmBoard';
@@ -13,6 +13,7 @@ export default function RunCard({
   onLoadToCockpit,
   onDelete,
   onRename,
+  onBackup,
   active,
   loading = false,
   selected = false,
@@ -184,6 +185,15 @@ export default function RunCard({
           >
             <FileSpreadsheet size={10} />
             <span>XLSX</span>
+          </button>
+          <button
+            type="button"
+            className="v2-run-btn-tool"
+            onClick={(e) => { e.stopPropagation(); onBackup?.(run); }}
+            title="Download offline JSON vault backup snapshot"
+          >
+            <ShieldCheck size={10} />
+            <span>Backup</span>
           </button>
           <button
             type="button"

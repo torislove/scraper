@@ -8,7 +8,7 @@ import {
   LayoutDashboard, Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play,
   Radar as RadarIcon, RefreshCw, RotateCcw, Search, Settings, SlidersHorizontal,
   Smartphone, Sparkles, Square, Star, Table2, Tag, Trash2, Users, Wifi,
-  WifiOff, X, Zap, Edit3, GitMerge, Plus
+  WifiOff, X, Zap, Edit3, GitMerge, Plus, ShieldCheck
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
@@ -28,6 +28,7 @@ export default function FolderView({
   onExport,
   onLoadToCockpit,
   onDelete,
+  onBackup,
   onReScrape,
   onSelectVendor,
   onStageChange,
@@ -511,6 +512,14 @@ export default function FolderView({
           </div>
 
           <div className="v2-ribbon-group is-right">
+            <button
+              type="button"
+              className="v2-btn v2-btn-secondary v2-btn-xs"
+              onClick={() => onBackup?.(view.run)}
+              title="Download offline JSON vault backup snapshot"
+            >
+              <ShieldCheck size={11} /> Backup Vault
+            </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"

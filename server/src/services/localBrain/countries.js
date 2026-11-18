@@ -299,6 +299,13 @@ const CITY_ALIASES = {
   denver: { country: 'US', region: 'Colorado' },
   phoenix: { country: 'US', region: 'Arizona' },
   philadelphia: { country: 'US', region: 'Pennsylvania' },
+  troy: { country: 'US', region: 'New York' },
+  albany: { country: 'US', region: 'New York' },
+  schenectady: { country: 'US', region: 'New York' },
+  buffalo: { country: 'US', region: 'New York' },
+  rochester: { country: 'US', region: 'New York' },
+  syracuse: { country: 'US', region: 'New York' },
+  yonkers: { country: 'US', region: 'New York' },
   toronto: { country: 'CA', region: 'Ontario' },
   vancouver: { country: 'CA', region: 'British Columbia' },
   montreal: { country: 'CA', region: 'Quebec' },
@@ -478,6 +485,32 @@ const CITY_ALIASES = {
   panaji: { country: 'IN', region: 'Goa' }
 };
 
+const US_STATE_CODES = {
+  al: 'Alabama', ak: 'Alaska', az: 'Arizona', ar: 'Arkansas', ca: 'California',
+  co: 'Colorado', ct: 'Connecticut', de: 'Delaware', fl: 'Florida', ga: 'Georgia',
+  hi: 'Hawaii', id: 'Idaho', il: 'Illinois', in: 'Indiana', ia: 'Iowa',
+  ks: 'Kansas', ky: 'Kentucky', la: 'Louisiana', me: 'Maine', md: 'Maryland',
+  ma: 'Massachusetts', mi: 'Michigan', mn: 'Minnesota', ms: 'Mississippi', mo: 'Missouri',
+  mt: 'Montana', ne: 'Nebraska', nv: 'Nevada', nh: 'New Hampshire', nj: 'New Jersey',
+  nm: 'New Mexico', ny: 'New York', nc: 'North Carolina', nd: 'North Dakota', oh: 'Ohio',
+  ok: 'Oklahoma', or: 'Oregon', pa: 'Pennsylvania', ri: 'Rhode Island', sc: 'South Carolina',
+  sd: 'South Dakota', tn: 'Tennessee', tx: 'Texas', ut: 'Utah', vt: 'Vermont',
+  va: 'Virginia', wa: 'Washington', wv: 'West Virginia', wi: 'Wisconsin', wy: 'Wyoming',
+  dc: 'District of Columbia'
+};
+
+const CA_PROVINCE_CODES = {
+  ab: 'Alberta', bc: 'British Columbia', mb: 'Manitoba', nb: 'New Brunswick',
+  nl: 'Newfoundland and Labrador', ns: 'Nova Scotia', nt: 'Northwest Territories',
+  nu: 'Nunavut', on: 'Ontario', pe: 'Prince Edward Island', qc: 'Quebec',
+  sk: 'Saskatchewan', yt: 'Yukon'
+};
+
+const AU_STATE_CODES = {
+  nsw: 'New South Wales', vic: 'Victoria', qld: 'Queensland', wa: 'Western Australia',
+  sa: 'South Australia', tas: 'Tasmania', act: 'Australian Capital Territory', nt: 'Northern Territory'
+};
+
 function normalise(text) {
   return String(text || '')
     .normalize('NFD')
@@ -509,21 +542,127 @@ function detectCountry(text) {
     const country = COUNTRIES.find(item => item.code === cityAlias.country);
     if (country) return country;
   }
-  for (const country of COUNTRIES) {
-    if (value === country.code.toLowerCase()) return country;
-    if (country.aliases.some(alias => aliasMatches(value, alias))) return country;
+
+  // Exact ISO code wins outright.
+  const iso = COUNTRIES.find(country => value === country.code.toLowerCase());
+  if (iso) return iso;
+
+  // Direct country alias check takes priority over ambiguous sub-regions!
+  // If the text contains "India", "Bharat", "United States", "Australia", etc.,
+  // that country must win before checking if a landmark contains a foreign region name (e.g. "Victoria Memorial").
+  for (const { country, key } of countryAliasIndex()) {
+    if (aliasMatches(value, key)) return country;
   }
-  return null;
+
+  // Check state abbreviations and province patterns (e.g. "Troy, NY", "Austin, TX")
+  const regionMatch = findRegion(text);
+  if (regionMatch && regionMatch.country) return regionMatch.country;
+
+  // Score every match by the length of the matched name and take the longest.
+  let best = null;
+  const consider = (country, weight, kind) => {
+    if (!country) return;
+    if (!best
+      || weight > best.weight
+      || (weight === best.weight && kind === 'country' && best.kind === 'region')) {
+      best = { country, weight, kind };
+    }
+  };
+
+  for (const { country, key, weight } of countryAliasIndex()) {
+    if (aliasMatches(value, key)) consider(country, weight, 'country');
+  }
+  for (const { country, key, weight } of regionIndex()) {
+    if (value === key || value.startsWith(`${key} `) || value.endsWith(` ${key}`) || value.includes(` ${key} `)) {
+      consider(country, weight, 'region');
+    }
+  }
+
+  return best ? best.country : null;
+}
+
+let COUNTRY_ALIAS_CACHE = null;
+function countryAliasIndex() {
+  if (COUNTRY_ALIAS_CACHE) return COUNTRY_ALIAS_CACHE;
+  const rows = [];
+  for (const country of COUNTRIES) {
+    for (const alias of country.aliases || []) {
+      const key = normalise(alias);
+      if (key) rows.push({ country, key, weight: key.length });
+    }
+  }
+  rows.sort((a, b) => b.weight - a.weight);
+  COUNTRY_ALIAS_CACHE = rows;
+  return rows;
+}
+
+let REGION_CACHE = null;
+function regionIndex() {
+  if (REGION_CACHE) return REGION_CACHE;
+  const rows = [];
+  for (const country of COUNTRIES) {
+    for (const region of country.regions || []) {
+      const key = normalise(region);
+      if (key) rows.push({ country, key, weight: key.length });
+    }
+  }
+  rows.sort((a, b) => b.weight - a.weight);
+  REGION_CACHE = rows;
+  return rows;
 }
 
 /** Match a place against a country's first-level regions. */
 function findRegion(text) {
-  const value = normalise(text);
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  // 1. Check for state/province postal codes e.g. "Troy, NY", "Albany, NY 12203", "Toronto, ON"
+  const parts = raw.split(',').map(s => s.trim().toLowerCase());
+  if (parts.length > 1) {
+    for (let i = 1; i < parts.length; i++) {
+      const seg = parts[i].trim();
+      const token = seg.split(/\s+/)[0].replace(/[^a-z]/g, '');
+      if (token && token !== 'in' && US_STATE_CODES[token]) {
+        const country = COUNTRIES.find(c => c.code === 'US');
+        if (country) return { country, region: US_STATE_CODES[token], level: 'region' };
+      }
+      if (token && CA_PROVINCE_CODES[token]) {
+        const country = COUNTRIES.find(c => c.code === 'CA');
+        if (country) return { country, region: CA_PROVINCE_CODES[token], level: 'region' };
+      }
+      if (token && AU_STATE_CODES[token]) {
+        const country = COUNTRIES.find(c => c.code === 'AU');
+        if (country) return { country, region: AU_STATE_CODES[token], level: 'region' };
+      }
+    }
+  }
+
+  const matchCode = raw.match(/(?:,\s*|\s+)([a-zA-Z]{2})(?:\s*,\s*|\s+\d{5}|\s*$)/);
+  if (matchCode) {
+    const code = matchCode[1].toLowerCase();
+    if (code !== 'in' && US_STATE_CODES[code]) {
+      const country = COUNTRIES.find(c => c.code === 'US');
+      if (country) return { country, region: US_STATE_CODES[code], level: 'region' };
+    }
+    if (CA_PROVINCE_CODES[code]) {
+      const country = COUNTRIES.find(c => c.code === 'CA');
+      if (country) return { country, region: CA_PROVINCE_CODES[code], level: 'region' };
+    }
+  }
+
+  const value = normalise(raw);
   if (!value) return null;
+
+  const cityAlias = CITY_ALIASES[value];
+  if (cityAlias && cityAlias.region) {
+    const country = COUNTRIES.find(c => c.code === cityAlias.country);
+    if (country) return { country, region: cityAlias.region, level: 'region' };
+  }
+
   for (const country of COUNTRIES) {
     for (const region of country.regions) {
       const key = normalise(region);
-      if (value === key || value.startsWith(`${key} `) || value.endsWith(` ${key}`)) {
+      if (value === key || value.startsWith(`${key} `) || value.endsWith(` ${key}`) || value.includes(` ${key} `)) {
         return { country, region, level: 'region' };
       }
     }

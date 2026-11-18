@@ -583,7 +583,8 @@ function buildExportContent(leads, format, baseName, options = {}) {
     const phoneType = primary
       ? 'Mobile'
       : (secondary.some(n => n.isLandline) ? 'STD Landline' : (secondary.length ? 'Contact' : 'Unlisted'));
-    const whatsappUrl = primary ? `https://wa.me/91${primary.national}` : '';
+    const leadCountry = String(lead.country || 'IN').toUpperCase();
+    const whatsappUrl = lead.whatsappLink || (primary ? (leadCountry === 'IN' ? `https://wa.me/91${primary.national}` : `https://wa.me/${primary.digits || primary.national}`) : '');
     const callUrl = (primary && primary.callUrl) || (secondary[0] && secondary[0].callUrl) || '';
     const alternateStr = secondary.map(n => n.display).join(', ');
     const totalLinesCount = numbers.length;
@@ -1269,10 +1270,123 @@ router.post('/merge', (req, res) => {
   }
 });
 
-// 6. Batch Delete Sessions
+// 5.5 Master Backup and Restore Endpoints
+router.get('/backup/all', (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Permission Denied: Vault backup download is restricted to Master Admin.' });
+    }
+    const bundle = {
+      exportedAt: new Date().toISOString(),
+      vaultType: 'complete_master_archive',
+      sessions: []
+    };
+    const dirs = listSessionDirs({ isMaster: true });
+    const seenSessions = new Set();
+    const dbAdapter = require('../config/dbAdapter');
+    const allVendors = dbAdapter.getVendors() || [];
+
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir)) continue;
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        if (!entry.endsWith('.json')) continue;
+        const filePath = path.join(dir, entry);
+        try {
+          const content = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const sId = content.id || content.sessionId || path.basename(entry, '.json');
+          if (seenSessions.has(sId)) continue;
+          seenSessions.add(sId);
+          if (Array.isArray(content.leads)) {
+            content.leads = content.leads.map(l => {
+              const fresh = allVendors.find(v => v.id === l.id);
+              return fresh || l;
+            });
+          }
+          bundle.sessions.push(content);
+        } catch (err) {}
+      }
+    }
+    bundle.totalSessions = bundle.sessions.length;
+    bundle.totalLeads = bundle.sessions.reduce((sum, s) => sum + (Array.isArray(s.leads) ? s.leads.length : 0), 0);
+
+    const filename = `master_vault_complete_backup_${Date.now()}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(JSON.stringify(bundle, null, 2));
+  } catch (e) {
+    return res.status(500).json({ error: `Bulk backup failed: ${e.message}` });
+  }
+});
+
+router.post('/restore-backup', (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Permission Denied: Vault restoration is restricted to Master Admin.' });
+    }
+    const payload = req.body;
+    if (!payload || typeof payload !== 'object') {
+      return res.status(400).json({ error: 'Valid JSON payload is required' });
+    }
+
+    const sessionsToRestore = [];
+    if (Array.isArray(payload.sessions)) {
+      sessionsToRestore.push(...payload.sessions);
+    } else if (payload.id || payload.sessionId) {
+      sessionsToRestore.push(payload);
+    } else {
+      return res.status(400).json({ error: 'Unrecognized backup structure. Expected session object or bundle.' });
+    }
+
+    const dbAdapter = require('../config/dbAdapter');
+    let restoredSessionsCount = 0;
+    let restoredLeadsCount = 0;
+    const targetDir = path.join(SESSIONS_DIR, 'anonymous');
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+    for (const session of sessionsToRestore) {
+      const sId = session.id || session.sessionId;
+      if (!sId) continue;
+      const safeId = safeSessionKey(sId);
+      const filePath = path.join(targetDir, `${safeId}.json`);
+      fs.writeFileSync(filePath, JSON.stringify(session, null, 2), 'utf8');
+      sessionHeaderCache.delete(filePath);
+      restoredSessionsCount++;
+
+      if (Array.isArray(session.leads)) {
+        for (const lead of session.leads) {
+          if (!lead || !lead.id) continue;
+          try {
+            dbAdapter.saveVendor(lead.userId || 'admin_1', lead);
+            restoredLeadsCount++;
+          } catch (err) {}
+        }
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Restored ${restoredSessionsCount} folder(s) with ${restoredLeadsCount} lead(s).`,
+      restoredSessionsCount,
+      restoredLeadsCount
+    });
+  } catch (e) {
+    return res.status(500).json({ error: `Restore failed: ${e.message}` });
+  }
+});
+
+// 6. Batch Delete Sessions (Master Only)
 router.post('/batch-delete', (req, res) => {
   try {
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    if (!isMaster) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Permission Denied: Client accounts cannot delete folders. Folder deletion is strictly restricted to Master Admin.'
+      });
+    }
     const { sessionIds } = req.body;
     if (!Array.isArray(sessionIds) || !sessionIds.length) {
       return res.status(400).json({ error: 'sessionIds array is required' });
@@ -1329,6 +1443,53 @@ router.post('/batch-delete', (req, res) => {
   } catch (error) {
     console.error('Batch delete error:', error);
     return res.status(500).json({ error: 'Failed to batch delete sessions' });
+  }
+});
+
+// API: Aggressively enrich all leads in a session that lack mobile numbers
+router.post('/:id/aggressive-enrich', async (req, res) => {
+  try {
+    const { enrichSessionAggressive } = require('../services/aggressivePhoneEnricher');
+    const sessionId = req.params.id;
+    const result = await enrichSessionAggressive(sessionId, req.body || {});
+    return res.json(result);
+  } catch (error) {
+    console.error('[Session Aggressive Enrich Error]', error.message);
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// 3.5 Single Session Backup (Master Only)
+router.get(['/:sessionId/backup', '/:userId/:sessionId/backup'], (req, res) => {
+  try {
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    if (!isMaster) {
+      return res.status(403).json({ error: 'Permission Denied: Vault backup download is restricted to Master Admin.' });
+    }
+    const sessionId = req.params.sessionId;
+    const files = resolveSessionFiles(sessionId, { isMaster: true });
+    if (!files.length) {
+      return res.status(404).json({ error: 'Session file not found' });
+    }
+    const filePath = files[0];
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+
+    const dbAdapter = require('../config/dbAdapter');
+    const allVendors = dbAdapter.getVendors() || [];
+    if (Array.isArray(data.leads)) {
+      data.leads = data.leads.map(l => {
+        const fresh = allVendors.find(v => v.id === l.id);
+        return fresh || l;
+      });
+    }
+    data.backupGeneratedAt = new Date().toISOString();
+
+    const filename = `vault_backup_${sessionId}_${Date.now()}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(JSON.stringify(data, null, 2));
+  } catch (e) {
+    return res.status(500).json({ error: `Backup failed: ${e.message}` });
   }
 });
 
@@ -1442,10 +1603,16 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
   }
 });
 
-// 4. Delete session
+// 4. Delete session (Master Only)
 router.delete(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
   try {
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    if (!isMaster) {
+      return res.status(403).json({
+        ok: false,
+        error: 'Permission Denied: Client accounts cannot delete folders. Folder deletion is strictly restricted to Master Admin.'
+      });
+    }
     const sessionId = req.params.sessionId || req.params.userId;
     if (!sessionId) {
       return res.status(400).json({ error: 'sessionId is required' });

@@ -1,6 +1,7 @@
 const { launchStealthBrowser } = require('./browserFactory');
 const dbAdapter = require('../config/dbAdapter');
 const { verifyWithAI } = require('../utils/aiParser');
+const { extractPhones, normalizePhone } = require('../utils/phoneUtils');
 
 // Shared logging utility callback
 let logCallback = console.log;
@@ -30,7 +31,7 @@ function unwrapBingUrl(raw) {
  * One Bing result page, already link-unwrapped.
  * Returns { rows, captcha, error } and never throws.
  */
-async function bingRows(query, platformName) {
+async function bingRows(query, platformName, pageIndex = 0) {
   let browser = null;
   let context = null;
   try {
@@ -38,7 +39,8 @@ async function bingRows(query, platformName) {
     browser = stealthBrowser;
     context = await browser.newContext();
     const page = await context.newPage();
-    await page.goto(`https://www.bing.com/search?q=${encodeURIComponent(query)}`, {
+    const firstParam = pageIndex > 0 ? `&first=${pageIndex * 10 + 1}` : '';
+    await page.goto(`https://www.bing.com/search?q=${encodeURIComponent(query)}${firstParam}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
@@ -48,7 +50,7 @@ async function bingRows(query, platformName) {
 
     const html = await page.content();
     if (html.includes('verify you are a human') || html.includes('captcha')) {
-      addLog(`[Bing Dork Engine] Bing served a human-verification page for ${platformName}.`);
+      addLog(`[Social Discovery] Bing served a human-verification page for ${platformName}.`);
       return { rows: [], captcha: true };
     }
 
@@ -69,7 +71,7 @@ async function bingRows(query, platformName) {
     // it first, the domain filter never matches a single real profile.
     return { rows: raw.map(item => ({ ...item, url: unwrapBingUrl(item.url) })), captcha: false };
   } catch (err) {
-    addLog(`[Bing Dork Engine] Browser error for ${platformName}: ${err.message}`);
+    addLog(`[Social Discovery] Browser error for ${platformName}: ${err.message}`);
     return { rows: [], error: err.message };
   } finally {
     try { if (context) await context.close(); } catch (e) {}
@@ -77,14 +79,21 @@ async function bingRows(query, platformName) {
   }
 }
 
-async function scrapeDuckDuckGoDork(platformDomain, exactQuery, category, location, globalAbortSignal = { aborted: false }, sessionId = 'legacy') {
+async function scrapeDuckDuckGoDork(
+  platformDomain,
+  exactQuery,
+  category,
+  location,
+  globalAbortSignal = { aborted: false },
+  sessionId = 'legacy',
+  countryCode = 'IN',
+  userId = 'admin_1'
+) {
   try {
     const platformName = platformDomain.split('.')[0];
+    const country = String(countryCode || 'IN').toUpperCase();
 
-    // Bing now often ignores `site:` for small Indian cities and returns its own
-    // generic pages. So: try the precise dork first, then fall back to the plain
-    // "<category> <city> instagram" query and keep only real profile links.
-    // Both are ordinary public searches — no automation of a blocked surface.
+    // Query variations for multi-page discovery
     const queries = [
       `site:${platformDomain} ${exactQuery}`,
       `${exactQuery} ${platformName} profile`
@@ -92,20 +101,33 @@ async function scrapeDuckDuckGoDork(platformDomain, exactQuery, category, locati
 
     let searchResults = [];
     for (const query of queries) {
-      addLog(`[Bing Dork Engine] Bing search: "${query}"`);
-      const { rows } = await bingRows(query, platformName);
-      searchResults = rows.filter(item => item.url && item.url.includes(platformDomain));
-      if (searchResults.length) break;
-      addLog(`[Bing Dork Engine] No ${platformName} profiles in that page; trying the next query shape.`);
+      if (globalAbortSignal.aborted) break;
+      addLog(`[Social Discovery] Searching: "${query}" (${country})`);
+      
+      // Page 0 and Page 1 for high yield
+      for (let p = 0; p < 2; p++) {
+        if (globalAbortSignal.aborted) break;
+        const { rows, captcha } = await bingRows(query, platformName, p);
+        if (captcha) break;
+        const matched = rows.filter(item => item.url && item.url.includes(platformDomain));
+        for (const m of matched) {
+          if (!searchResults.some(existing => existing.url === m.url)) {
+            searchResults.push(m);
+          }
+        }
+        if (rows.length === 0) break;
+      }
+      
+      if (searchResults.length >= 5) break;
     }
 
     if (searchResults.length === 0) {
-      addLog(`[Bing Dork Engine] No ${platformName} results found for "${exactQuery}"`);
+      addLog(`[Social Discovery] No ${platformName} results found for "${exactQuery}"`);
       return { totalScraped: 0, found: 0 };
     }
 
     const results = searchResults;
-    addLog(`[Bing Dork Engine] Found ${results.length} ${platformName} results for "${exactQuery}"`);
+    addLog(`[Social Discovery] Found ${results.length} ${platformName} candidate profiles for "${exactQuery}"`);
 
     let totalInserted = 0;
 
@@ -115,20 +137,45 @@ async function scrapeDuckDuckGoDork(platformDomain, exactQuery, category, locati
       const profileUrl = item.url;
       if (!profileUrl || /\/(reel|explore|p|stories|groups|events|watch)\//.test(profileUrl)) continue;
 
-      const cleanName = (item.title || 'Unknown Vendor')
-        .replace(/\s*[\|·\-–]\s*(Facebook|Instagram|YouTube|Pinterest|LinkedIn).*$/i, '')
-        .replace(/\s*-\s*(Home|Official Page|Profile|Page).*$/i, '')
-        .trim() || 'Unknown Vendor';
+      const cleanName = (item.title || 'Unknown Business')
+        .replace(/\s*[\|·\-–]\s*(Facebook|Instagram|YouTube|Pinterest|LinkedIn|Twitter|X).*$/i, '')
+        .replace(/\s*-\s*(Home|Official Page|Profile|Page|About).*$/i, '')
+        .trim() || 'Unknown Business';
 
       const snippet = item.description || '';
       
-      // Extract phone
-      const phoneMatch = snippet.match(/(?:\+91[\s\-]?)?[6-9]\d{9}/);
-      const phone = phoneMatch ? phoneMatch[0].replace(/\s/g,'').trim() : '';
+      // Extract phones using universal international parser
+      const extractedPhones = extractPhones(snippet, {
+        defaultCountry: country,
+        allowInternational: true,
+        trusted: false,
+        context: 'social snippet'
+      });
+
+      let phone = '';
+      let isMobile = false;
+      if (extractedPhones.length > 0) {
+        phone = extractedPhones[0].displayPhone || extractedPhones[0].e164 || extractedPhones[0].national;
+        isMobile = Boolean(extractedPhones[0].isMobile);
+      }
+
+      // Fallback for Indian regex if country is IN and extractPhones missed it
+      if (!phone && country === 'IN') {
+        const phoneMatch = snippet.match(/(?:\+91[\s\-]?)?[6-9]\d{9}/);
+        if (phoneMatch) {
+          phone = phoneMatch[0].replace(/\s/g,'').trim();
+          isMobile = true;
+        }
+      }
 
       // Extract followers/likes
       const follMatch = snippet.match(/([\d.,]+[KkMm]?)\s*\+?\s*(?:followers?|likes?|subscribers?)/i);
       const followers = follMatch ? follMatch[1] : '';
+
+      // A social profile without phone or followers or clear business relevance is skipped
+      if (!phone && !followers) {
+        continue;
+      }
 
       const vendors = dbAdapter.getVendors();
       const existing = vendors.find(v => 
@@ -137,23 +184,25 @@ async function scrapeDuckDuckGoDork(platformDomain, exactQuery, category, locati
         v.pinterest === profileUrl || 
         v.youtube === profileUrl || 
         v.linkedin === profileUrl || 
-        v.name === cleanName
+        (v.name && v.name.toLowerCase() === cleanName.toLowerCase() && v.city && v.city.toLowerCase() === location.toLowerCase())
       );
       
       if (!existing) {
         const newLead = {
-          id: `dork_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-          userId: 'admin_1',
+          id: `social_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+          userId: userId || 'admin_1',
           sessionId,
           name: cleanName,
           category: category,
           city: location,
+          country,
           address: '',
           scrapedAt: new Date().toISOString(),
           verified: false,
           pushed: false,
-          qualityScore: followers ? 25 : (phone ? 15 : 8),
+          qualityScore: followers ? 25 : (phone ? 20 : 10),
           phone: phone || '',
+          isMobile,
           instagram: platformDomain.includes('instagram') ? profileUrl : '',
           instagramFollowers: platformDomain.includes('instagram') ? followers : '',
           facebook: platformDomain.includes('facebook') ? profileUrl : '',
@@ -161,22 +210,23 @@ async function scrapeDuckDuckGoDork(platformDomain, exactQuery, category, locati
           pinterest: platformDomain.includes('pinterest') ? profileUrl : '',
           youtube: platformDomain.includes('youtube') ? profileUrl : '',
           linkedin: platformDomain.includes('linkedin') ? profileUrl : '',
-          source: `Social Dork (${platformName})`
+          twitter: (platformDomain.includes('twitter') || platformDomain.includes('x.com')) ? profileUrl : '',
+          source: `Social Discovery (${platformName})`
         };
-        dbAdapter.saveVendor('admin_1', newLead);
+        dbAdapter.saveVendor(userId || 'admin_1', newLead);
         try {
           const { streamingEnricher } = require('../services/phoneBackfillService');
           streamingEnricher.enqueue(newLead);
         } catch (e) {}
-        addLog(`[Bing Dork Engine] ✓ ${platformName}: "${cleanName}"${followers ? ` (${followers})` : ''}${phone ? ` 📞${phone}` : ''}`);
+        addLog(`[Social Discovery] ✓ ${platformName}: "${cleanName}"${followers ? ` (${followers})` : ''}${phone ? ` 📞${phone}` : ''}`);
         totalInserted++;
       }
     }
 
-    addLog(`[Bing Dork Engine] Done: ${platformName} inserted ${totalInserted} leads for "${exactQuery}".`);
+    addLog(`[Social Discovery] Done: ${platformName} inserted ${totalInserted} leads for "${exactQuery}".`);
     return { totalScraped: totalInserted, found: results.length };
   } catch (error) {
-    addLog(`[Bing Dork Engine] Failed to scrape ${platformDomain}: ${error.message}`);
+    addLog(`[Social Discovery] Failed to scrape ${platformDomain}: ${error.message}`);
     return { totalScraped: 0, error: error.message };
   }
 }

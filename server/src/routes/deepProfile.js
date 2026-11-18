@@ -14,16 +14,17 @@ function parseEngines(value) {
 
 // GET /api/deep-profile/estimate?query=plumbers+in+Vijayawada&strategy=broad&engines=auto
 // Accepts either one free-text query or explicit category + location fields.
-router.get('/estimate', (req, res) => {
+router.get('/estimate', async (req, res) => {
   try {
     const parsed = parseSearchQuery({
       query: req.query.query,
       category: req.query.category,
       location: req.query.location
     });
-    const estimate = estimateRun({
+    const estimate = await estimateRun({
       category: parsed.category || req.query.category || req.query.query,
       location: parsed.location || req.query.location,
+      country: req.query.country || req.query.searchCountry,
       strategy: req.query.strategy,
       enabledEngines: parseEngines(req.query.engines || req.query.enabledEngines),
       targetLeads: req.query.targetLeads,

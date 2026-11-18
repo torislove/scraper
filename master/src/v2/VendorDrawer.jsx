@@ -7,35 +7,64 @@ import {
   Star, Utensils, X, Zap
 } from 'lucide-react';
 import {
-  getVendorProfile, deepExtractVendor, getDeepJob, updateVendorCrm
+  getVendorProfile, deepExtractVendor, deepEnrichVendor, getDeepJob, updateVendorCrm
 } from './api';
 import {
   CopyButton, StatusPill, ScoreRing, Unknown, cx, formatNumber, relativeTime
 } from './ui';
 import { CRM_STAGES, crmStageOf } from './CrmBoard';
-import { parseIndianPhone, isIndianMobile } from '../utils/phoneClassify';
+import { parseAdaptivePhone, parseIndianPhone, isIndianMobile } from '../utils/phoneClassify';
+
+function isCssOrCodeSnippet(text) {
+  if (!text || typeof text !== 'string') return false;
+  if (/--[a-z0-9_-]+:/i.test(text)) return true;
+  if (/[{};]\s*--/i.test(text)) return true;
+  if (/(?:rgba?|hsla?)\s*\(/i.test(text)) return true;
+  if (/(?:mOnSite|shouldReportErrorOnlyInPanorama|window\.__|document\.)/i.test(text)) return true;
+  if (/#[0-9a-fA-F]{6}\b/.test(text) && text.includes(';')) return true;
+  if (text.includes('var(--') || text.includes('!important')) return true;
+  if (/[{}"\\]/.test(text) && (text.includes('true') || text.includes('false') || text.includes('null'))) return true;
+  return false;
+}
+
+function detectCountry(vendor, fullAddress) {
+  if (vendor?.country || vendor?.countryCode) {
+    const c = String(vendor.country || vendor.countryCode).toUpperCase();
+    if (c === 'US' || c === 'USA') return 'US';
+    if (c === 'CA') return 'CA';
+    if (c === 'GB' || c === 'UK') return 'GB';
+    if (c === 'AU') return 'AU';
+    if (c === 'IN') return 'IN';
+  }
+  const str = `${fullAddress || ''} ${vendor?.address || ''} ${vendor?.state || ''} ${vendor?.location || ''} ${vendor?.city || ''}`;
+  if (/\b(?:USA|United States|Indiana|California|Texas|Florida|New York|Illinois|Ohio|Michigan|Washington)\b/i.test(str)) return 'US';
+  if (/\b(?:Canada|Ontario|Quebec|British Columbia|Alberta|Manitoba)\b/i.test(str)) return 'CA';
+  if (/\b(?:UK|United Kingdom|England|Scotland|London)\b/i.test(str)) return 'GB';
+  if (/\b(?:Australia|Sydney|Melbourne|Brisbane|NSW)\b/i.test(str)) return 'AU';
+  return 'IN';
+}
 
 function safeUrl(value) {
   const raw = String(value || '').trim();
-  if (!raw) return '';
+  if (!raw || isCssOrCodeSnippet(raw)) return '';
   if (/^https?:\/\//i.test(raw)) return raw;
   if (/^[\w.-]+\.[a-z]{2,}/i.test(raw)) return `https://${raw}`;
   return '';
 }
 
 function extractArea(address, cityHint) {
-  if (!address || typeof address !== 'string') return '';
+  if (!address || typeof address !== 'string' || isCssOrCodeSnippet(address)) return '';
   const segs = address.split(',').map(s => s.trim()).filter(Boolean);
-  const clean = segs.filter(s => !/^\d{6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
+  const clean = segs.filter(s => !/^\d{5,6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
   if (clean.length >= 2) {
     const cand = clean[clean.length - 2];
-    if (cand && cand.length >= 3 && cand.length <= 40 && !/^(near|opp|behind|plot|door|flat|shop|floor|no\.)/i.test(cand)) {
+    if (cand && cand.length >= 3 && cand.length <= 40 && !/^(near|opp|behind|plot|door|flat|shop|floor|no\.)/i.test(cand) && !isCssOrCodeSnippet(cand)) {
       return cand;
     }
   }
   if (clean.length >= 1) {
     const cand = clean[clean.length - 1];
-    if (cand.toLowerCase() !== (cityHint || '').toLowerCase()) {
+    if (cand.toLowerCase() !== (cityHint || '').toLowerCase() && !isCssOrCodeSnippet(cand)) {
       return cand;
     }
   }
@@ -46,7 +75,9 @@ function getDirectGoogleMapsUrl(vendor, fullAddress) {
   if (vendor?.mapsLink && /^https?:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google|maps\.app)/i.test(vendor.mapsLink)) {
     return vendor.mapsLink;
   }
-  const query = [vendor?.name, fullAddress || vendor?.address || vendor?.city].filter(Boolean).join(', ');
+  const cleanName = !isCssOrCodeSnippet(vendor?.name) ? vendor?.name : '';
+  const cleanAddr = !isCssOrCodeSnippet(fullAddress) ? fullAddress : (!isCssOrCodeSnippet(vendor?.city) ? vendor?.city : '');
+  const query = [cleanName, cleanAddr].filter(Boolean).join(', ');
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
@@ -109,6 +140,19 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
     setExtracting(true);
     setError('');
     try {
+      // 1. Direct aggressive enrichment for phone/mobile/email/socials
+      try {
+        const enriched = await deepEnrichVendor(vendor.id);
+        if (enriched?.vendor && mountedRef.current) {
+          if (enriched.vendor.phone && !vendor.phone) {
+            setCrmMessage(`Aggressive Hunter found: ${enriched.vendor.phone}`);
+          }
+        }
+      } catch (e) {
+        console.warn('Direct deep-enrich note:', e?.message);
+      }
+
+      // 2. Also run comprehensive deep extraction pipeline
       const response = await deepExtractVendor(vendor.id, {
         force: true,
         includeWebsite: Boolean(vendor.website),
@@ -177,22 +221,68 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
   const offeringsGroup = profile?.groups?.offerings || {};
   const socialGroup = profile?.groups?.social || {};
 
+  const country = detectCountry(vendor, vendor.address || locationGroup.address);
   const primaryPhone = vendor.phone || contactGroup.primaryPhone || contactGroup.phone || '';
-  const parsedPhone = parseIndianPhone(primaryPhone);
+  const parsedPhone = parseAdaptivePhone(primaryPhone, country);
   const isMobile = Boolean(parsedPhone && parsedPhone.isMobile);
-  const isLandline = Boolean(parsedPhone && parsedPhone.isLandline) || String(primaryPhone).trim().startsWith('0');
+  const isLandline = Boolean(parsedPhone && parsedPhone.isLandline);
   const formattedDisplayPhone = parsedPhone ? parsedPhone.display : primaryPhone;
   const callUrl = parsedPhone ? parsedPhone.callUrl : (primaryPhone ? `tel:${String(primaryPhone).replace(/\s+/g, '')}` : '');
+  const whatsappUrl = parsedPhone?.whatsappUrl || (isMobile ? `https://wa.me/${String(primaryPhone).replace(/\D/g, '')}` : '');
 
-  const displayEmail = vendor.email || contactGroup.email || (Array.isArray(vendor.emails) ? vendor.emails[0] : '') || '';
-  const displayWebsite = vendor.website || contactGroup.website || '';
+  // Parse all phone numbers, normalize and deduplicate by E.164
+  const allParsedPhones = useMemo(() => {
+    const rawList = [
+      primaryPhone,
+      ...(Array.isArray(vendor.phones) ? vendor.phones : []),
+      ...(contactGroup.alternatePhones || []),
+      ...(vendor.otherInfo?.mobileNumbers || [])
+    ].filter(Boolean);
 
-  const fullAddressLine = vendor.address || locationGroup.address || [vendor.city, vendor.district, vendor.state, vendor.pincode].filter(Boolean).join(', ');
-  const displayLocality = vendor.locality || vendor.suburb || locationGroup.suburb || locationGroup.locality || extractArea(fullAddressLine, vendor.city) || vendor.city || '';
-  const displayMandal = vendor.mandal || locationGroup.mandal || vendor.district || '';
-  const displayDistrict = vendor.district || locationGroup.district || vendor.city || '';
-  const displayState = vendor.state || locationGroup.state || 'Telangana';
-  const displayPincode = vendor.pincode || locationGroup.pincode || (fullAddressLine.match(/\b\d{6}\b/) ? fullAddressLine.match(/\b\d{6}\b/)[0] : '');
+    const map = new Map();
+    for (const raw of rawList) {
+      if (typeof raw !== 'string' && typeof raw !== 'number') continue;
+      const parsed = parseAdaptivePhone(raw, country);
+      if (!parsed) continue;
+      const key = parsed.e164 || parsed.national;
+      if (!map.has(key)) {
+        map.set(key, parsed);
+      }
+    }
+    return Array.from(map.values());
+  }, [primaryPhone, vendor.phones, contactGroup.alternatePhones, vendor.otherInfo, country]);
+
+  const displayEmail = (!isCssOrCodeSnippet(vendor.email) && vendor.email)
+    || (!isCssOrCodeSnippet(contactGroup.email) && contactGroup.email)
+    || (Array.isArray(vendor.emails) ? vendor.emails.find(e => !isCssOrCodeSnippet(e)) : '') || '';
+  const displayWebsite = (!isCssOrCodeSnippet(vendor.website) && vendor.website) || (!isCssOrCodeSnippet(contactGroup.website) && contactGroup.website) || '';
+
+  const rawAddress = vendor.address || locationGroup.address || '';
+  const cleanAddress = !isCssOrCodeSnippet(rawAddress) ? rawAddress : '';
+  const fullAddressLine = cleanAddress || [vendor.city, vendor.district, vendor.state, vendor.pincode].filter(v => v && !isCssOrCodeSnippet(v)).join(', ');
+
+  const displayLocality = (!isCssOrCodeSnippet(vendor.locality) && vendor.locality)
+    || (!isCssOrCodeSnippet(vendor.suburb) && vendor.suburb)
+    || (!isCssOrCodeSnippet(locationGroup.locality) && locationGroup.locality)
+    || extractArea(fullAddressLine, vendor.city) || vendor.city || '';
+
+  const displayMandal = (!isCssOrCodeSnippet(vendor.mandal) && vendor.mandal)
+    || (!isCssOrCodeSnippet(locationGroup.mandal) && locationGroup.mandal)
+    || '';
+
+  const displayDistrict = (!isCssOrCodeSnippet(vendor.district) && vendor.district)
+    || (!isCssOrCodeSnippet(locationGroup.district) && locationGroup.district)
+    || vendor.city || '';
+
+  const displayState = (!isCssOrCodeSnippet(vendor.state) && vendor.state)
+    || (!isCssOrCodeSnippet(locationGroup.state) && locationGroup.state)
+    || (country === 'IN' ? 'Telangana' : '');
+
+  const rawPincode = vendor.pincode || locationGroup.pincode || (fullAddressLine.match(/\b\d{5,6}\b/) ? fullAddressLine.match(/\b\d{5,6}\b/)[0] : '');
+  const displayPincode = !isCssOrCodeSnippet(rawPincode) && !rawPincode.includes(';') ? rawPincode : '';
+
+  const cleanOperatingHours = vendor.operatingHours && !isCssOrCodeSnippet(vendor.operatingHours) && !/[{}"\\]/.test(vendor.operatingHours) && !vendor.operatingHours.includes('mOnSite')
+    ? vendor.operatingHours : '';
   const latitude = vendor.latitude || locationGroup.latitude;
   const longitude = vendor.longitude || locationGroup.longitude;
 
@@ -250,7 +340,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
               <h2 style={{ fontSize: 21, fontWeight: 800, color: '#0F172A', margin: '4px 0 6px', letterSpacing: '-0.02em' }}>
                 {vendor.name || 'Unknown Business'}
               </h2>
-              <p style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: '#475569', fontSize: 12, margin: 0 }}>
+              <p style={{ display: 'flex', alignItems: 'flex-start', gap: 5, color: '#94a3b8', fontSize: 12, margin: 0 }}>
                 <MapPin size={13} style={{ flexShrink: 0, marginTop: 2, color: '#64748B' }} />
                 <span>{fullAddressLine || 'Address not listed'}</span>
               </p>
@@ -266,7 +356,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                 className="v2-3d-action-btn v2-btn-wa"
                 onClick={() => {
                   if (onOpenWhatsApp) onOpenWhatsApp(vendor);
-                  else window.open(parsedPhone.whatsappUrl, '_blank');
+                  else window.open(whatsappUrl, '_blank');
                 }}
                 title={`Open WhatsApp outreach for ${parsedPhone.national}`}
               >
@@ -274,7 +364,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
               </button>
             ) : null}
 
-            {/* If Landline: Primary prominent 📞 Call Vendor Button (replaces WhatsApp) */}
+            {/* If Landline: Primary prominent 📞 Call Landline Button */}
             {isLandline ? (
               <a
                 href={callUrl || `tel:${primaryPhone}`}
@@ -282,7 +372,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                 style={{ background: '#F0FDF4', color: '#166534', border: '1.5px solid #BBF7D0', fontWeight: 750 }}
                 title={`Call Landline ${formattedDisplayPhone}`}
               >
-                <Phone size={14} /> 📞 Call Vendor ({formattedDisplayPhone})
+                <Phone size={14} /> 📞 Call Landline ({formattedDisplayPhone})
               </a>
             ) : (
               primaryPhone ? (
@@ -382,26 +472,39 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Phone size={13} style={{ color: '#4F46E5' }} /> CONTACT INTEL & TELECOM
                 </span>
-                {isMobile && <span style={{ color: '#059669', fontWeight: 700, fontSize: 10 }}>VERIFIED MOBILE</span>}
-                {isLandline && <span style={{ color: '#0284C7', fontWeight: 700, fontSize: 10 }}>STD LANDLINE (CALL ONLY)</span>}
+                {allParsedPhones.some(p => p.isMobile) && (
+                  <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: 6, fontWeight: 750, fontSize: 10 }}>
+                    VERIFIED MOBILE READY
+                  </span>
+                )}
+                {allParsedPhones.some(p => p.isLandline) && (
+                  <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 6, fontWeight: 750, fontSize: 10, marginLeft: 6 }}>
+                    STD LANDLINE DETECTED
+                  </span>
+                )}
               </div>
               <div className="v2-drawer-card-body">
                 <div className="v2-data-row">
-                  <span className="v2-data-label">{isLandline ? 'Landline Number' : 'Primary Phone'}</span>
+                  <span className="v2-data-label">{isLandline ? 'Primary Landline' : 'Primary Mobile'}</span>
                   <span className="v2-data-val">
                     {primaryPhone ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <a href={callUrl || `tel:${primaryPhone}`} style={{ color: isLandline ? '#0F766E' : '#1D4ED8', fontWeight: 700, textDecoration: 'none' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <a href={callUrl || `tel:${primaryPhone}`} style={{ color: isLandline ? '#0F766E' : '#0F172A', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
                           {formattedDisplayPhone}
                         </a>
                         {isMobile && (
-                          <span style={{ background: '#DCFCE7', color: '#166534', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 750 }}>
-                            WhatsApp
-                          </span>
+                          <a
+                            href={whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            <MessageSquare size={10} /> WhatsApp
+                          </a>
                         )}
                         {isLandline && (
-                          <span style={{ background: '#E0F2FE', color: '#0369A1', padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 750 }}>
-                            Direct Call
+                          <span style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 750 }}>
+                            📞 Call Only (Landline)
                           </span>
                         )}
                         <CopyButton value={formattedDisplayPhone} />
@@ -410,15 +513,70 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                   </span>
                 </div>
 
-                {((Array.isArray(vendor.phones) && vendor.phones.length > 1) || (contactGroup.alternatePhones && contactGroup.alternatePhones.length > 0)) && (
-                  <div className="v2-data-row">
-                    <span className="v2-data-label">All Direct Numbers</span>
-                    <span className="v2-data-val">
-                      {Array.from(new Set([...(Array.isArray(vendor.phones) ? vendor.phones : []), ...(contactGroup.alternatePhones || [])])).map((p, i) => (
-                        <span key={i} style={{ display: 'inline-block', marginRight: 8, marginTop: 2 }}>
-                          <a href={`tel:${p}`} style={{ color: '#0369A1', fontWeight: 650, textDecoration: 'none' }}>{p}</a>
-                        </span>
-                      ))}
+                {allParsedPhones.length > 1 && (
+                  <div className="v2-data-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="v2-data-label" style={{ marginTop: 6 }}>All Direct Numbers ({allParsedPhones.length})</span>
+                    <span className="v2-data-val" style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                      {allParsedPhones.map((p, idx) => {
+                        const isPrimary = p.e164 === parsedPhone?.e164;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              padding: '5px 10px',
+                              background: isPrimary ? '#F8FAFC' : '#FFFFFF',
+                              border: '1px solid #E2E8F0',
+                              borderRadius: 8
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <a href={p.callUrl} style={{ color: '#0F172A', fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
+                                {p.display}
+                              </a>
+                              {p.isMobile && (
+                                <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '1px 6px', borderRadius: 4, fontSize: 9.5, fontWeight: 750 }}>
+                                  📱 Mobile
+                                </span>
+                              )}
+                              {p.isLandline && (
+                                <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '1px 6px', borderRadius: 4, fontSize: 9.5, fontWeight: 750 }}>
+                                  ☎️ STD Landline
+                                </span>
+                              )}
+                              {isPrimary && (
+                                <span style={{ background: '#F1F5F9', color: '#475569', padding: '1px 5px', borderRadius: 4, fontSize: 9, fontWeight: 700 }}>
+                                  Primary
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              {p.isMobile && p.whatsappUrl && (
+                                <a
+                                  href={p.whatsappUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ background: '#25D366', color: '#FFFFFF', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                                  title="WhatsApp"
+                                >
+                                  <MessageSquare size={10} /> WA
+                                </a>
+                              )}
+                              <a
+                                href={p.callUrl}
+                                style={{ background: '#F1F5F9', color: '#334155', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                                title="Call"
+                              >
+                                <Phone size={10} /> Call
+                              </a>
+                              <CopyButton value={p.display} />
+                            </span>
+                          </div>
+                        );
+                      })}
                     </span>
                   </div>
                 )}
@@ -491,14 +649,14 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
 
                 {displayLocality && (
                   <div className="v2-data-row">
-                    <span className="v2-data-label">Locality / Suburb</span>
+                    <span className="v2-data-label">{country === 'IN' ? 'Locality / Suburb' : 'City / Neighborhood'}</span>
                     <span className="v2-data-val" style={{ fontWeight: 750, color: '#1E293B' }}>
                       📍 {displayLocality}
                     </span>
                   </div>
                 )}
 
-                {displayMandal && (
+                {country === 'IN' && displayMandal && displayMandal !== displayDistrict && (
                   <div className="v2-data-row">
                     <span className="v2-data-label">Mandal / Sub-district</span>
                     <span className="v2-data-val">{displayMandal}</span>
@@ -506,13 +664,13 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                 )}
 
                 <div className="v2-data-row">
-                  <span className="v2-data-label">District & State</span>
-                  <span className="v2-data-val">{displayDistrict}, {displayState}</span>
+                  <span className="v2-data-label">{country === 'US' ? 'City & State' : country === 'CA' ? 'City & Province' : country === 'GB' ? 'Town & County' : 'District & State'}</span>
+                  <span className="v2-data-val">{[displayDistrict, displayState].filter(Boolean).join(', ')}</span>
                 </div>
 
                 {displayPincode && (
                   <div className="v2-data-row">
-                    <span className="v2-data-label">Postal Pincode</span>
+                    <span className="v2-data-label">{country === 'US' ? 'ZIP Code' : country === 'CA' ? 'Postal Code' : country === 'GB' ? 'Postcode' : 'Postal PIN Code'}</span>
                     <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontWeight: 700 }}>
                       {displayPincode}
                     </span>
@@ -523,7 +681,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                   <div className="v2-data-row">
                     <span className="v2-data-label">GPS Coordinates</span>
                     <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
-                      {Number(latitude).toFixed(5)}° N, {Number(longitude).toFixed(5)}° E
+                      {Number(latitude).toFixed(5)}°, {Number(longitude).toFixed(5)}°
                     </span>
                   </div>
                 )}
@@ -625,7 +783,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
             )}
 
             {/* Card 5: Operating Hours */}
-            {(vendor.operatingHours || hoursTable.length > 0) && (
+            {(cleanOperatingHours || hoursTable.length > 0) && (
               <div className="v2-drawer-data-card">
                 <div className="v2-drawer-card-head">
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -633,11 +791,11 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                   </span>
                 </div>
                 <div className="v2-drawer-card-body">
-                  {vendor.operatingHours && (
+                  {cleanOperatingHours && (
                     <div className="v2-data-row">
                       <span className="v2-data-label">Today's Schedule</span>
                       <span className="v2-data-val" style={{ fontWeight: 650, color: '#0F172A' }}>
-                        {vendor.operatingHours}
+                        {cleanOperatingHours}
                       </span>
                     </div>
                   )}
@@ -645,8 +803,8 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                   {hoursTable.length > 0 && (
                     <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
                       {hoursTable.map((h, i) => (
-                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderBottom: '1px dashed #F1F5F9' }}>
-                          <span style={{ color: '#64748B', fontWeight: 600 }}>{h.day}</span>
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0', borderBottom: '1px dashed rgba(165, 184, 204, 0.12)' }}>
+                          <span style={{ color: '#8fa0b3', fontWeight: 600 }}>{h.day}</span>
                           <span style={{ color: '#0F172A', fontWeight: 650 }}>{h.hours || (h.opens ? `${h.opens} – ${h.closes}` : 'Closed')}</span>
                         </div>
                       ))}

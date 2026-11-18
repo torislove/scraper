@@ -19,8 +19,9 @@ const { isVendorRelevant } = require('./categoryFidelity');
 const { collectCarryForward, findRepeatCoveredZones } = require('./carryForwardService');
 const { areNearDuplicates, mergeVendorLeads } = require('../utils/indiaTradeIntelligence');
 const { calculateLeadQuality, determineTier } = require('../utils/leadScoring');
-const { streamingEnricher, backfillPhones, hasValidMobile } = require('./phoneBackfillService');
+const { streamingEnricher, backfillPhones, hasValidMobile, countryForLead } = require('./phoneBackfillService');
 const { resolveUniversalZones, zoneCoordinates, ZONE_COORDINATES, buildCityGridZones, classifyLocation, mandalIndex } = require('../utils/universalGeoCluster');
+const { resolveInternationalZones } = require('../utils/internationalGeo');
 const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
 const { clearStaleQueue, getPersistentQueue, getActiveJobs, addScrapeJob: queueAddScrapeJob, getConcurrencyMetrics } = require('../utils/queue');
 const etaModel = require('../utils/etaModel');
@@ -188,7 +189,11 @@ function isInsideSweepArea(lead, center, scope, options = {}) {
     Number(lead.latitude),
     Number(lead.longitude)
   );
-  return km <= sweepReachKm(scope);
+  // `reachKm` comes from the resolved territory (a county bbox in the US, a
+  // sampled state grid). Without it every country inherited India's 26/140/800
+  // km rings, which cut real counties short and stretched small ones.
+  const reach = Number(options.reachKm) > 0 ? Number(options.reachKm) : sweepReachKm(scope);
+  return km <= reach;
 }
 
 function leadBelongsToZone(lead, zone, options = {}) {
@@ -345,7 +350,8 @@ async function runOmniSearchOrchestrator(
   filters = {},
   plan = null,
   isMaster = false,
-  deps = {}
+  deps = {},
+  countryHint = null
 ) {
   const activeSessions = deps.activeSessions || {};
   const sessionAbortSignals = deps.sessionAbortSignals || new Map();
@@ -397,10 +403,20 @@ async function runOmniSearchOrchestrator(
   const classification = categoryRouter.classifyCategory(category);
   const autoMode = !requestedEngines.length || requestedEngines.some(engine => /^auto$/i.test(String(engine)));
 
-  // Country-aware dispatch. India keeps its own bundle and category router;
-  // every other country runs the keyless global bundle. Sources marked
-  // blocked/untested never run anywhere (see sources/registry).
-  const countryProfile = brain.countryProfile(baseLocation) || { code: 'IN', name: 'India' };
+  // Country-aware dispatch. The country selected in the UI is authoritative;
+  // text detection is only a fallback for callers that do not send one. This is
+  // what stopped a US "Troy" run from falling back to India and parsing every
+  // phone with +91 rules.
+  const { COUNTRIES: WORLD_COUNTRIES } = require('./localBrain/countries');
+  const explicitCountry = sources.normaliseCountry(countryHint);
+  const detectedLocationProfile = brain.countryProfile(baseLocation);
+  let resolvedCountry = explicitCountry;
+  if (detectedLocationProfile && detectedLocationProfile.code && (!explicitCountry || (explicitCountry === 'IN' && detectedLocationProfile.code !== 'IN'))) {
+    resolvedCountry = detectedLocationProfile.code;
+  }
+  const countryProfile = (resolvedCountry && WORLD_COUNTRIES.find(item => item.code === resolvedCountry))
+    || detectedLocationProfile
+    || { code: 'IN', name: 'India' };
   const countryCode = countryProfile.code;
   const requestedActive = autoMode
     ? (countryCode === 'IN'
@@ -409,6 +425,15 @@ async function runOmniSearchOrchestrator(
     : [...new Set(requestedEngines)];
 
   const activeEngines = requestedActive.filter(engine => sources.engineSupportedInCountry(engine, countryCode));
+  // Hard bundle guard: outside India only the verified country bundle may run.
+  // This prevents unverified local-only engines from running in foreign jurisdictions.
+  if (countryCode !== 'IN') {
+    const bundle = new Set(sources.enginesForCountry(countryCode).map(key => sources.canonicalEngine(key) || key));
+    for (let i = activeEngines.length - 1; i >= 0; i -= 1) {
+      const canonical = sources.canonicalEngine(activeEngines[i]) || String(activeEngines[i]).toLowerCase();
+      if (!bundle.has(canonical)) activeEngines.splice(i, 1);
+    }
+  }
   // Auto runs always include the keyless global discovery engine. It is what
   // gives US/UK/CA/AU runs coverage when their directories block automation.
   if (autoMode && sources.engineSupportedInCountry('web-discovery', countryCode) && !activeEngines.includes('web-discovery')) {
@@ -469,7 +494,7 @@ async function runOmniSearchOrchestrator(
       sessionId,
       emit: (vendor, type) => { try { emitVendorEvent(vendor, type); } catch (e) {} },
       log: addLog,
-      concurrency: 2
+      concurrency: 4
     }).catch(() => {});
   } catch (enricherErr) {
     addLog(`[Orchestrator] Realtime enricher init: ${enricherErr.message}`);
@@ -502,7 +527,7 @@ async function runOmniSearchOrchestrator(
     // Guntur city and returned Guntur businesses for a Tenali sweep).
     let baseGeo = null;
     try {
-      baseGeo = await geocodeLocation(baseLocation);
+      baseGeo = await geocodeLocation(baseLocation, countryCode === 'IN' ? {} : { countryCode });
     } catch (e) {}
     if (!baseGeo || !baseGeo.lat) baseGeo = null;
 
@@ -550,6 +575,29 @@ async function runOmniSearchOrchestrator(
     // 2. Resolve Universal Geographic Zones (0.01ms instantaneous local memory indexing).
     // A master sweep supplies a frozen plan, so its exact zone policy is honoured
     // instead of re-resolving from the location string.
+    //
+    // Outside India the gazetteer knows nothing, so a real 5×5 coordinate lattice
+    // is built from the geocoded bounding box. Without it a US run only had the
+    // eight generic sector phrases (six after dedupe) and never dispatched a
+    // worker swarm.
+    let internationalZones = null;
+    if (countryCode !== 'IN' && !(Array.isArray(plan?.zones) && plan.zones.length)) {
+      try {
+        const resolved = await resolveInternationalZones(baseLocation, category, countryCode, {
+          radiusKm: Math.max(6, Number(radius) || 8)
+        });
+        if (resolved.zones.length) {
+          internationalZones = resolved.zones;
+          if (!planCenter && resolved.anchor) {
+            planCenter = { lat: resolved.anchor.lat, lng: resolved.anchor.lng };
+          }
+          addLog(`[Orchestrator] ${countryCode} coverage lattice: ${resolved.zones.length} coordinate zones around ${resolved.anchor.name}.`);
+        }
+      } catch (geoError) {
+        addLog(`[Orchestrator] ${countryCode} zone lattice skipped: ${geoError.message}`);
+      }
+    }
+
     const buildZones = (center) => (Array.isArray(plan?.zones) && plan.zones.length)
       ? plan.zones.map((z, index) => {
           // A resumed plan can carry either `name` or `zoneName`, so normalise
@@ -597,7 +645,7 @@ async function runOmniSearchOrchestrator(
             isSingle: false
           };
         })
-      : resolveUniversalZones(baseLocation, category, isMaster);
+      : (internationalZones || resolveUniversalZones(baseLocation, category, isMaster));
 
     let zones = buildZones(planCenter);
 
@@ -629,7 +677,10 @@ async function runOmniSearchOrchestrator(
     // One guard is used by every write path — live snapshot, reconciliation and
     // the final folder — so a row can never enter through the side door after
     // the containment pass has already judged it out of bounds.
-    allowSweepLead = (lead) => isInsideSweepArea(lead, planCenter, sweepScope, { boundary: plan?.boundary });
+    allowSweepLead = (lead) => isInsideSweepArea(lead, planCenter, sweepScope, {
+      boundary: plan?.boundary,
+      reachKm: plan?.reachKm
+    });
 
     addLog(`[Orchestrator] Resolved ${zones.length} universal zones for "${baseLocation}": ${zones.map(z => z.zoneName).join(', ')}`);
 
@@ -639,7 +690,7 @@ async function runOmniSearchOrchestrator(
         lat: planCenter.lat,
         lng: planCenter.lng,
         district: plan.district || baseLocation,
-        state: plan.state || 'India'
+        state: plan.state || regionLabel
       };
     } else if (planCenter && baseGeo && Number.isFinite(Number(baseGeo.lat))) {
       const anchorDrift = getDistanceKm(Number(baseGeo.lat), Number(baseGeo.lng), planCenter.lat, planCenter.lng);
@@ -649,7 +700,7 @@ async function runOmniSearchOrchestrator(
           lat: planCenter.lat,
           lng: planCenter.lng,
           district: plan.district || baseLocation,
-          state: plan.state || 'India'
+          state: plan.state || regionLabel
         };
       }
     }
@@ -660,7 +711,7 @@ async function runOmniSearchOrchestrator(
           lat: Number(firstWithCoords.lat),
           lng: Number(firstWithCoords.lng),
           district: firstWithCoords.district || baseLocation,
-          state: firstWithCoords.state || 'India'
+          state: firstWithCoords.state || regionLabel
         };
       } else {
         const cleanKey = baseLocation.toLowerCase().trim();
@@ -682,13 +733,13 @@ async function runOmniSearchOrchestrator(
     // the eight generic sector queries. Once the geocoder returns a centre, add
     // the coordinate grid so even an unknown town gets whole-area coverage.
     try {
-      if (!plan && baseGeo && baseGeo.lat && zones.length < 12) {
+      if (countryCode === 'IN' && !plan && baseGeo && baseGeo.lat && zones.length < 12) {
         const scopeType = classifyLocation(baseLocation).type;
         if (['city', 'metro', 'mandal'].includes(scopeType)) {
           const extra = buildCityGridZones(baseLocation, category, [], {
             center: { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) },
             cappedRadiusKm: 7
-          }).slice(0, Math.max(0, 32 - zones.length));
+          });
           if (extra.length) {
             zones.push(...extra);
             addLog(`[Orchestrator] Coverage grid added for unknown city "${baseLocation}": ${extra.length} coordinate zones.`);
@@ -706,16 +757,36 @@ async function runOmniSearchOrchestrator(
     const coverageMode = String(gridDensity || '').toLowerCase() === 'fast' ? 'fast' : 'deep';
     const namedZones = zones.filter(zone => !isGridZone(zone));
     const gridZones = zones.filter(zone => isGridZone(zone));
-    const deferredZones = coverageMode === 'fast' ? gridZones.slice() : [];
-    const deferredKeys = new Set(deferredZones.map(zoneKey));
-    // Named zones run first in both modes: they are the highest-yield queries.
-    const activeZones = coverageMode === 'fast'
-      ? namedZones.slice()
-      : [...namedZones, ...gridZones];
+
+    // Center-out concentric sorting: prioritize Zone 1 (Commercial Core / Downtown)
+    // so the operator receives the highest-yield leads in the first seconds.
+    if (baseGeo && Number.isFinite(Number(baseGeo.lat)) && Number.isFinite(Number(baseGeo.lng))) {
+      const cLat = Number(baseGeo.lat);
+      const cLng = Number(baseGeo.lng);
+      const zoneDist = (z) => {
+        if (Number.isFinite(Number(z.lat)) && Number.isFinite(Number(z.lng))) {
+          return Math.hypot(Number(z.lat) - cLat, Number(z.lng) - cLng);
+        }
+        const label = String(z.zoneName || z.name || '').toLowerCase();
+        if (label.includes('central') || label.includes('downtown') || label.includes('main market') || label.includes('bazaar')) {
+          return 0.001;
+        }
+        return 0.5;
+      };
+      namedZones.sort((a, b) => zoneDist(a) - zoneDist(b));
+      gridZones.sort((a, b) => zoneDist(a) - zoneDist(b));
+    }
+
+    // Named zones run first (high-yield commercial hubs), then the peripheral
+    // grid. Fast mode used to stop after the named zones, which silently dropped
+    // whole quadrants of a city; it now keeps the same order but sweeps the grid
+    // too. Ordering is the speed control, not truncation.
+    const activeZones = [...namedZones, ...gridZones];
+    const deferredZones = [];
+    const deferredKeys = new Set();
     addLog(
       `[Orchestrator] Coverage mode: ${coverageMode.toUpperCase()} — ${activeZones.length} active zones `
-      + `(${namedZones.length} named, ${gridZones.length} grid)`
-      + (deferredZones.length ? `, ${deferredZones.length} grid zones deferred` : '')
+      + `(${namedZones.length} named, ${activeZones.length - namedZones.length} grid)`
       + '.'
     );
 
@@ -751,40 +822,49 @@ async function runOmniSearchOrchestrator(
     const vectorBoundaryKm = Math.max(12, Math.min(45, cityReachKm + 5));
 
     // Emit the full zone coverage, not just the base pin, so the command map
-    // can scan every area before the first vendor arrives.
-    if (baseGeo && baseGeo.lat) {
+    // can display every coverage zone properly across India and all global countries.
+    const anchorCoord = (baseGeo && Number.isFinite(Number(baseGeo.lat)))
+      ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng), district: baseGeo.district, state: baseGeo.state, boundingbox: baseGeo.boundingbox }
+      : (planCenter || (zones.find(z => z.lat && z.lng) ? { lat: Number(zones.find(z => z.lat && z.lng).lat), lng: Number(zones.find(z => z.lat && z.lng).lng) } : null));
+
+    if (anchorCoord && Number.isFinite(anchorCoord.lat) && Number.isFinite(anchorCoord.lng)) {
       try {
         const zonePoints = zones.map((zone, index) => {
-          const lat = Number(zone.lat);
-          const lng = Number(zone.lng);
-          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng);
+          const rawLat = zone.lat ?? zone.latitude;
+          const rawLng = zone.lng ?? zone.longitude;
+          const hasCoords = Number.isFinite(Number(rawLat)) && Number.isFinite(Number(rawLng));
+          const zName = zone.zoneName || zone.name || `Zone ${index + 1}`;
+          const zQuery = zone.queryText || zone.query || `${searchPhrase} in ${zName}`;
           return {
-            zoneName: zone.zoneName,
-            query: zone.queryText,
-            lat: hasCoords ? lat : baseGeo.lat,
-            lng: hasCoords ? lng : baseGeo.lng,
-            approx: !hasCoords || Boolean(zone.isApproximate),
+            zoneName: zName,
+            name: zName,
+            query: zQuery,
+            queryText: zQuery,
+            lat: hasCoords ? Number(rawLat) : anchorCoord.lat,
+            lng: hasCoords ? Number(rawLng) : anchorCoord.lng,
+            radiusKm: zone.radiusKm || 3.5,
+            approx: !hasCoords || Boolean(zone.isApproximate || zone.approx),
             index: index + 1,
             centerLoc: baseLocation,
-            district: zone.district || baseGeo.district || baseLocation,
-            state: zone.state || baseGeo.state || 'India',
+            district: zone.district || anchorCoord.district || baseLocation,
+            state: zone.state || anchorCoord.state || regionLabel,
             deferred: deferredKeys.has(zoneKey(zone)),
             pass: isGridZone(zone) ? 'grid' : 'named'
           };
         });
         emitGridEvent([{
-          lat: baseGeo.lat,
-          lng: baseGeo.lng,
+          lat: anchorCoord.lat,
+          lng: anchorCoord.lng,
           distanceFromCenter: 0,
           ring: 0,
           angle: 0,
           centerLoc: baseLocation,
           activeRadius: Number(radius) || 5,
           isExactPoint: true,
-          boundingbox: baseGeo.boundingbox,
+          boundingbox: anchorCoord.boundingbox,
           zones: zonePoints
         }, ...zonePoints]);
-        addLog(`[Orchestrator] 🛰️ Coverage grid emitted: ${zonePoints.length} zones anchored around ${baseGeo.lat.toFixed(4)}, ${baseGeo.lng.toFixed(4)}.`);
+        addLog(`[Orchestrator] 🛰️ Coverage grid emitted: ${zonePoints.length} zones anchored around ${anchorCoord.lat.toFixed(4)}, ${anchorCoord.lng.toFixed(4)}.`);
       } catch (e) {}
     }
 
@@ -842,6 +922,27 @@ async function runOmniSearchOrchestrator(
 
     // Emit initial progress
     try {
+      const firstActive = activeZones[0];
+      let firstLat = Number(firstActive?.lat ?? firstActive?.latitude);
+      let firstLng = Number(firstActive?.lng ?? firstActive?.longitude);
+      if ((!Number.isFinite(firstLat) || !Number.isFinite(firstLng)) && firstActive) {
+        const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
+        const fKey = String(firstActive.zoneName || firstActive.name || '').toLowerCase().trim();
+        const fallbackC = ZONE_COORDINATES[fKey] || anchorCoord;
+        if (fallbackC) {
+          firstLat = Number(fallbackC.lat);
+          firstLng = Number(fallbackC.lng);
+        }
+      }
+      const firstActivePayload = firstActive ? {
+        name: firstActive.zoneName || firstActive.name || 'Zone 1',
+        lat: firstLat,
+        lng: firstLng,
+        radiusKm: firstActive.radiusKm || 3.5,
+        index: 1,
+        total: totalZones
+      } : null;
+
       emitProgressEvent({
         sessionId,
         totalDistricts: 1,
@@ -849,13 +950,26 @@ async function runOmniSearchOrchestrator(
         activeDistrict: baseLocation,
         totalMandals: totalZones,
         completedMandals: 0,
-        activeMandal: activeZones[0]?.zoneName || 'Zone 1',
+        activeMandal: firstActive?.zoneName || 'Zone 1',
+        activeZone: firstActivePayload,
         totalMandalsAcrossAll: totalZones,
         overallCompletedMandals: 0,
         eta: formatEta(etaModel.modelEtaMs(totalZones, etaSlots, etaPerZone)),
         etaText: formatEta(etaModel.modelEtaMs(totalZones, etaSlots, etaPerZone)),
         sessionActive: true
       });
+      if (firstActivePayload && Number.isFinite(firstLat) && Number.isFinite(firstLng)) {
+        emitActivePointEvent({
+          zoneName: firstActivePayload.name,
+          locationName: firstActivePayload.name,
+          lat: firstLat,
+          lng: firstLng,
+          index: 1,
+          total: totalZones,
+          sessionId,
+          active: true
+        });
+      }
     } catch (e) {}
 
     const geocodeCache = getGeoCache();
@@ -904,11 +1018,6 @@ async function runOmniSearchOrchestrator(
             .trim();
 
           const burstTasks = [];
-          if (hasEngine('justdial')) {
-            const { scrapeJustDial, setDeps: setJDDeps } = require('../scrapers/engine-justdial');
-            if (typeof setJDDeps === 'function') setJDDeps({ logger: addLog, emitVendorEvent });
-            burstTasks.push(runBurst('justdial', 'JustDial', () => scrapeJustDial(category, cleanBaseCity, sessionId)));
-          }
           if (hasEngine('openstreetmap')) {
             const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../scrapers/engine-openstreetmap');
             if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent });
@@ -931,6 +1040,16 @@ async function runOmniSearchOrchestrator(
               sessionId,
               { countryCode, limit: 8 }
             )));
+          }
+          if (hasEngine('wikidata')) {
+            const { scrapeWikidata, setDeps: setWkDeps } = require('../scrapers/engine-wikidata-businesses');
+            if (typeof setWkDeps === 'function') setWkDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
+            burstTasks.push(runBurst('wikidata', 'Wikidata', () => scrapeWikidata(category, cleanBaseCity, sessionId, countryCode)));
+          }
+          if (hasEngine('trustpilot')) {
+            const { scrapeTrustpilot, setDeps: setTpDeps } = require('../scrapers/engine-trustpilot');
+            if (typeof setTpDeps === 'function') setTpDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
+            burstTasks.push(runBurst('trustpilot', 'Trustpilot', () => scrapeTrustpilot(category, cleanBaseCity, sessionId, { countryCode })));
           }
           await Promise.allSettled(burstTasks);
           addLog(`[Turbo-Burst] 🚀 Tier-0 direct HTTP burst complete: first leads delivered to Command Center.`);
@@ -969,11 +1088,14 @@ async function runOmniSearchOrchestrator(
       sessionId,
       zones,
       plan,
-      isMaster
+      isMaster,
+      countryCode
     });
     for (const note of enginePlan.notes) addLog(note);
+    const budget = isMaster ? enginePlan.limits.zoneBudget.master : enginePlan.limits.zoneBudget.client;
+    const budgetText = Number.isFinite(budget) ? `${budget} zone budget` : 'no zone cap';
     addLog(`[Scope Engines] ${enginePlan.scope} plan for this ${isMaster ? 'Master' : 'client'} run: `
-      + `${enginePlan.jobs.length} directory job(s), zone budget ${isMaster ? enginePlan.limits.zoneBudget.master : enginePlan.limits.zoneBudget.client}`
+      + `${enginePlan.jobs.length} directory job(s), ${budgetText}`
       + `${enginePlan.swarmTowns.length ? `, ${enginePlan.swarmTowns.length} JustDial swarm centre(s)` : ''}.`);
 
     for (const job of enginePlan.jobs) {
@@ -1025,7 +1147,7 @@ async function runOmniSearchOrchestrator(
       const zoneGeo = (z.lat && z.lng) ? { lat: z.lat, lng: z.lng } : (geocodeCache[zoneCacheKey] || baseGeo);
 
       const targetDistrict = z.district || baseLocation;
-      const targetState = z.state || 'India';
+      const targetState = z.state || (countryCode === 'IN' ? 'India' : regionLabel);
 
       const coverageKind = z.coverageKind || (z.kind === 'grid' ? 'grid' : 'vector');
       const zoneRadius = coverageKind === 'grid'
@@ -1039,6 +1161,7 @@ async function runOmniSearchOrchestrator(
         locationName: z.zoneName,
         district: targetDistrict,
         state: targetState,
+        country: countryCode,
         sessionId,
         active: true,
         coverageKind,
@@ -1054,18 +1177,27 @@ async function runOmniSearchOrchestrator(
       const zoneScope = z.scope || plan?.resolvedScope || (isMaster ? 'district' : null);
       const zoneAlreadyCovered = repeatCoveredZones.has(zoneKey(z));
 
+      // Zone-by-zone priority gradient: Zone 1 (zi === 0, Central Hub) is assigned
+      // highest priority (30) so the worker pool dispatches it instantly and streams
+      // prime downtown commercial leads first. Radial sectors follow in descending waves.
+      const basePriority = isGridZone(z)
+        ? Math.max(3, 8 - Math.floor(zi / 4))
+        : Math.max(10, 30 - zi);
+      const zonePriority = zoneAlreadyCovered ? 2 : basePriority;
+
       if (allowMaps) {
         await addScrapeJob(
           'scrapeGooglePlaces',
-          [zoneQuery, category, z.zoneName, sessionId, zoneGeo?.lat || null, zoneGeo?.lng || null, zoneRadius, 'broad', targetDistrict, targetState, zoneGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, z.mandal || (zoneScope === 'mandal' ? z.zoneName : null)],
-          zoneAlreadyCovered ? 2 : (coverageMode === 'deep' && isGridZone(z) ? 4 : 10),
+          [zoneQuery, category, z.zoneName, sessionId, zoneGeo?.lat || null, zoneGeo?.lng || null, zoneRadius, 'broad', targetDistrict, targetState, zoneGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, z.mandal || (zoneScope === 'mandal' ? z.zoneName : null), countryCode],
+          zonePriority,
           meta
         );
-      } else if (allowLocalFinder) {
+      }
+      if (allowLocalFinder) {
         await addScrapeJob(
           'scrapeGoogleLocalFinder',
-          [zoneQuery, category, z.zoneName, sessionId, 6, targetDistrict, targetState, zoneGeo, baseLocation, false, isMaster, zoneScope],
-          zoneAlreadyCovered ? 2 : (coverageMode === 'deep' && isGridZone(z) ? 4 : 8),
+          [zoneQuery, category, z.zoneName, sessionId, 6, targetDistrict, targetState, zoneGeo, baseLocation, false, isMaster, zoneScope, countryCode],
+          Math.max(2, zonePriority - 1),
           meta
         );
       }
@@ -1092,7 +1224,7 @@ async function runOmniSearchOrchestrator(
       const targetMap = sessionState.completedTargetsMap || {};
       const targetKeys = Object.keys(targetMap);
       const baseFinished = plan?.resumed ? (plan.initialCompletedCount || 0) : 0;
-      const finishedZones = baseFinished + targetKeys.filter(key => targetMap[key] === 'completed').length;
+      const finishedZones = baseFinished + targetKeys.filter(key => ['completed', 'deferred', 'error', 'failed'].includes(targetMap[key])).length;
       completedZones = Math.min(totalZones, finishedZones);
 
       let etaStr = 'Calculating...';
@@ -1128,6 +1260,32 @@ async function runOmniSearchOrchestrator(
       }
 
       try {
+        const currentActiveZone = activeZones.find(z => (z.zoneName || z.name) === activeZoneName) || nextZone;
+        let actLat = Number(currentActiveZone?.lat ?? currentActiveZone?.latitude);
+        let actLng = Number(currentActiveZone?.lng ?? currentActiveZone?.longitude);
+        if ((!Number.isFinite(actLat) || !Number.isFinite(actLng)) && currentActiveZone) {
+          const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
+          const cKey = String(currentActiveZone.zoneName || currentActiveZone.name || '').toLowerCase().trim();
+          const fallbackC = ZONE_COORDINATES[cKey] || anchorCoord;
+          if (fallbackC) {
+            actLat = Number(fallbackC.lat);
+            actLng = Number(fallbackC.lng);
+          }
+        }
+
+        const activeZonePayload = currentActiveZone ? {
+          name: currentActiveZone.zoneName || currentActiveZone.name || activeZoneName,
+          lat: actLat,
+          lng: actLng,
+          radiusKm: currentActiveZone.radiusKm || 3.5,
+          index: currentActiveZone.index || (completedZones + 1),
+          total: totalZones
+        } : null;
+
+        if (liveSession && activeZonePayload) {
+          liveSession.activeZone = activeZonePayload;
+        }
+
         emitProgressEvent({
           sessionId,
           totalDistricts: 1,
@@ -1136,27 +1294,68 @@ async function runOmniSearchOrchestrator(
           totalMandals: totalZones,
           completedMandals: completedZones,
           activeMandal: activeZoneName,
+          activeZone: activeZonePayload,
           totalMandalsAcrossAll: totalZones,
           overallCompletedMandals: completedZones,
           eta: etaStr,
           etaText: etaStr,
           sessionActive: true
         });
+
+        // Broadcast active scanning zone so the Command Center map highlights and tracks the live swarm
+        if (activeZonePayload && Number.isFinite(activeZonePayload.lat) && Number.isFinite(activeZonePayload.lng)) {
+          emitActivePointEvent({
+            zoneName: activeZonePayload.name,
+            locationName: activeZonePayload.name,
+            lat: activeZonePayload.lat,
+            lng: activeZonePayload.lng,
+            index: activeZonePayload.index,
+            total: totalZones,
+            sessionId,
+            active: true
+          });
+        }
       } catch (e) {}
 
-      if (pendingForSession.length === 0 && runningForSession.length === 0) {
-        addLog('[Orchestrator] All queued and running engine jobs for this session have completed.');
-        break;
-      }
-
-      if (finishedZones >= totalZones && pendingForSession.length === 0) {
+      if (finishedZones >= totalZones && pendingForSession.length === 0 && runningForSession.length === 0) {
         if (!allZonesCompleteAt) allZonesCompleteAt = Date.now();
-        if (Date.now() - allZonesCompleteAt > 2000) {
-          addLog('[Orchestrator] All zones completed and queue drained. Releasing remaining straggler tasks.');
+        if (Date.now() - allZonesCompleteAt > 1500) {
+          addLog(`[Orchestrator] All ${totalZones} planned zones completed and queue fully drained. Proceeding to final contact scouts.`);
           break;
         }
       } else {
         allZonesCompleteAt = null;
+      }
+
+      if (pendingForSession.length === 0 && runningForSession.length === 0) {
+        const remainingUnfinished = activeZones.filter(z => {
+          const state = targetMap[zoneKey(z)] || targetMap[String(z.zoneName || z.name || '').toLowerCase().trim()];
+          return !['completed', 'deferred', 'error', 'failed'].includes(state);
+        });
+        if (remainingUnfinished.length > 0) {
+          addLog(`[Orchestrator] Worker pool momentarily idle with ${remainingUnfinished.length}/${totalZones} zone(s) remaining. Re-enqueuing remaining zones...`);
+          for (const rz of remainingUnfinished) {
+            const rzLabel = rz.zoneName || rz.name || '';
+            const rzQuery = rz.queryText || `${searchPhrase} in ${rzLabel}`;
+            const rzGeo = (rz.lat && rz.lng) ? { lat: rz.lat, lng: rz.lng } : baseGeo;
+            await addScrapeJob('scrapeGooglePlaces', [
+              rzQuery, category, rzLabel, sessionId, rzGeo?.lat || null, rzGeo?.lng || null, 3.5, 'broad',
+              targetDistrict, targetState, rzGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, rz.mandal || null, countryCode
+            ], 10, {
+              lat: rzGeo?.lat || null,
+              lng: rzGeo?.lng || null,
+              zoneName: rzLabel,
+              locationName: rzLabel,
+              sessionId,
+              active: true
+            });
+          }
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        } else {
+          addLog(`[Orchestrator] All ${finishedZones}/${totalZones} active zones completed and queue drained.`);
+          break;
+        }
       }
 
       if (Date.now() - startTime > maxScrapeWindowMs) {
@@ -1305,7 +1504,8 @@ async function runOmniSearchOrchestrator(
         const containment = enforceMasterZoneContainment(harvestedLeads, zones, {
           center: planCenter,
           scope: plan?.resolvedScope || 'district',
-          boundary: plan?.boundary || null
+          boundary: plan?.boundary || null,
+          reachKm: plan?.reachKm
         });
         if (containment.rejected.length) {
           for (const item of containment.rejected) {
@@ -1373,7 +1573,7 @@ async function runOmniSearchOrchestrator(
       if (anchor) {
         const scopeType = plan?.resolvedScope || (isMaster ? 'district' : 'city');
         const boundary = scopeType === 'district' ? plan?.boundary : null;
-        const maxKm = sweepReachKm(scopeType);
+        const maxKm = Number(plan?.reachKm) > 0 ? Number(plan.reachKm) : sweepReachKm(scopeType);
         finalAnchor = anchor;
         finalMaxKm = maxKm;
         const before = sessionLeads.length;
@@ -1387,6 +1587,15 @@ async function runOmniSearchOrchestrator(
           }
           const km = getDistanceKm(anchor.lat, anchor.lng, Number(lead.latitude), Number(lead.longitude));
           if (km <= maxKm) return true;
+
+          // Service-Area Businesses (SABs) & City-Named Matches:
+          // Mobile pros (e.g. wedding photographers) often have statewide default coords on Maps/directories
+          const targetToken = String(baseLocation || '').split(',')[0].trim().toLowerCase();
+          const leadAddr = String(lead.address || lead.locality || lead.city || '').toLowerCase();
+          if (targetToken && targetToken.length > 2 && (leadAddr.includes(targetToken) || !lead.address || !/\d/.test(lead.address))) {
+            return true; // Preserves verified SABs serving the target city
+          }
+
           addLog(`[Containment] Dropped "${lead.name}" · ${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
           quarantineLead(lead, `${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
           return false;
@@ -1400,17 +1609,135 @@ async function runOmniSearchOrchestrator(
     }
 
     try {
-      addLog(`[Contact Scout] Finalizing real-time contact backfill...`);
-      await streamingEnricher.drain(3000).catch(() => {});
-      await streamingEnricher.stop().catch(() => {});
+      addLog(`[Contact Scout] Finalizing real-time contact backfill across all extracted leads...`);
+      try {
+        emitProgressEvent({
+          sessionId,
+          totalDistricts: 1,
+          completedDistricts: 1,
+          activeDistrict: baseLocation,
+          totalMandals: totalZones,
+          completedMandals: totalZones,
+          activeMandal: 'Contact Enrichment',
+          totalMandalsAcrossAll: totalZones,
+          overallCompletedMandals: totalZones,
+          eta: 'Finishing contacts...',
+          etaText: 'Finishing contacts...',
+          sessionActive: true
+        });
+      } catch (pe) {}
+      await streamingEnricher.drain(30000).catch(() => {});
     } catch (e) {
       addLog(`[Contact Scout] Notice: ${e.message}`);
     }
 
-    // Fast Auto-Stop: Real-time enrichment ran concurrently during the zone crawl.
-    // Deep profiling continues asynchronously in background without freezing session completion.
+    // Cooperative Cross-Engine Entity Resolution & Contact Intelligence Mesh
+    try {
+      const { dorkPhoneFromSearch } = require('./aggressivePhoneEnricher');
+      const { normalizePhone } = require('../utils/phoneUtils');
+      const { detectCountry } = require('./localBrain/countries');
+
+      // 1. Cross-Engine In-Memory / Database Resolution
+      const allStoredVendors = dbAdapter.getVendors();
+      let crossResolvedCount = 0;
+      let dorkedCount = 0;
+
+      for (const lead of sessionLeads) {
+        if (!lead) continue;
+        const countryCode = (lead.country && lead.country.length === 2) ? lead.country.toUpperCase() : (detectCountry(lead.city || lead.address || baseLocation)?.code || 'IN');
+        const hasMobile = Boolean(lead.phone && (lead.phoneType === 'mobile' || (lead.phone.replace(/\D/g, '').length >= 10 && !lead.phone.toLowerCase().includes('require'))));
+
+        if (!hasMobile) {
+          // Check if any other vendor in store matches this business name & locality
+          const leadNormName = (lead.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (leadNormName.length >= 3) {
+            const peerMatch = allStoredVendors.find(v => {
+              if (!v || v.id === lead.id || !v.phone) return false;
+              const vNorm = (v.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (vNorm !== leadNormName && !vNorm.includes(leadNormName) && !leadNormName.includes(vNorm)) return false;
+              const vLoc = (v.city || v.locality || v.address || '').toLowerCase();
+              const lLoc = (lead.city || lead.locality || lead.address || '').toLowerCase();
+              return (vLoc && lLoc && (vLoc.includes(lLoc) || lLoc.includes(vLoc))) || (v.pincode && lead.pincode && v.pincode === lead.pincode);
+            });
+
+            if (peerMatch && peerMatch.phone) {
+              lead.phone = peerMatch.phone;
+              lead.phones = [...new Set([...(lead.phones || []), ...(peerMatch.phones || [peerMatch.phone])])];
+              lead.phoneType = peerMatch.phoneType || 'mobile';
+              lead.whatsappAvailable = peerMatch.whatsappAvailable || lead.phoneType === 'mobile';
+              lead.whatsappLink = peerMatch.whatsappLink || (lead.whatsappAvailable ? `https://wa.me/${lead.phone.replace(/\D/g, '')}` : '');
+              lead.verified = true;
+              lead.phoneSource = `cooperative-${peerMatch.source || 'peer-directory'}`;
+              crossResolvedCount++;
+              if (onProgress) onProgress(lead, 'updated');
+              try { dbAdapter.saveVendor(lead.userId || 'admin_1', lead); } catch (e) {}
+            }
+          }
+        }
+      }
+
+      if (crossResolvedCount > 0) {
+        addLog(`[Cooperative Engine] 🤝 Cross-engine entity matching recovered ${crossResolvedCount} missing contact(s).`);
+      }
+
+      // 2. High-Yield Stealth Fallback SERP Dorking for remaining high-priority leads with missing mobile
+      const stillNeedingPhone = sessionLeads.filter(l => l && (!l.phone || l.phone.length < 8)).slice(0, 15);
+      if (stillNeedingPhone.length > 0) {
+        addLog(`[SERP Intelligence] 🔍 Dorking verified contacts for ${stillNeedingPhone.length} directory leads...`);
+        const dorkPromises = stillNeedingPhone.map(async (targetLead) => {
+          try {
+            const cCode = (targetLead.country && targetLead.country.length === 2) ? targetLead.country.toUpperCase() : 'IN';
+            const serpResult = await dorkPhoneFromSearch(targetLead.name, targetLead.city || targetLead.locality || baseLocation, cCode);
+            if (serpResult && serpResult.phones && serpResult.phones.length > 0) {
+              const parsed = normalizePhone(serpResult.phones[0], { defaultCountry: cCode, allowInternational: cCode !== 'IN' });
+              if (parsed) {
+                targetLead.phone = parsed.e164 || parsed.national;
+                targetLead.phoneType = parsed.isMobile ? 'mobile' : 'landline';
+                targetLead.phones = [...new Set([...(targetLead.phones || []), ...serpResult.phones])];
+                if (parsed.isMobile) {
+                  targetLead.whatsappAvailable = true;
+                  targetLead.whatsappLink = `https://wa.me/${parsed.digits}`;
+                }
+                targetLead.verified = true;
+                targetLead.phoneSource = 'serp-intelligence';
+                dorkedCount++;
+                if (onProgress) onProgress(targetLead, 'updated');
+                try { dbAdapter.saveVendor(targetLead.userId || 'admin_1', targetLead); } catch (e) {}
+              }
+            }
+          } catch (e) {}
+        });
+        await Promise.allSettled(dorkPromises);
+        if (dorkedCount > 0) {
+          addLog(`[SERP Intelligence] 📞 Extracted ${dorkedCount} verified contact(s) via stealth search dorking.`);
+        }
+      }
+    } catch (coopErr) {
+      addLog(`[Cooperative Engine] Notice: ${coopErr.message}`);
+    }
+
+    // Explicit Targeted Place Detail Scout Pass for any leads still missing a verified mobile phone
     let webContact = null;
     let phoneBackfill = null;
+    try {
+      const stillNeedingMobile = sessionLeads.filter(l => l && !hasValidMobile(l.phone, countryForLead(l)));
+      if (stillNeedingMobile.length > 0) {
+        addLog(`[Contact Scout] 🎯 Launching targeted place detail pass for ${stillNeedingMobile.length} lead(s) lacking mobile numbers...`);
+        phoneBackfill = await backfillPhones(stillNeedingMobile, {
+          sessionId,
+          onProgress,
+          addLog,
+          concurrency: 6,
+          budgetMs: 120000
+        });
+        if (phoneBackfill && phoneBackfill.mobilesFound > 0) {
+          addLog(`[Contact Scout] 📱 Discovered ${phoneBackfill.mobilesFound} mobile(s) and ${phoneBackfill.landlinesFound || 0} direct line(s) from place detail scouts.`);
+        }
+      }
+    } catch (bfErr) {
+      addLog(`[Contact Scout] Targeted backfill notice: ${bfErr.message}`);
+    }
+
     addLog(`[Orchestrator] Multi-engine zone crawl and live contact scouts completed. Finalizing session.`);
 
     // Per-zone yield ledger
@@ -1450,7 +1777,10 @@ async function runOmniSearchOrchestrator(
           if (!allowSweepLead(lead)) continue;
           if (finalAnchor && lead.latitude && lead.longitude) {
             const km = getDistanceKm(finalAnchor.lat, finalAnchor.lng, Number(lead.latitude), Number(lead.longitude));
-            if (km > finalMaxKm) continue;
+            const targetToken = String(baseLocation || '').split(',')[0].trim().toLowerCase();
+            const leadAddr = String(lead.address || lead.locality || lead.city || '').toLowerCase();
+            const isSab = targetToken && targetToken.length > 2 && (leadAddr.includes(targetToken) || !lead.address || !/\d/.test(lead.address));
+            if (km > finalMaxKm && !isSab) continue;
           }
           merged.push(lead);
           added++;
@@ -1516,7 +1846,11 @@ async function runOmniSearchOrchestrator(
         for (const raw of [lead.phone, lead.primaryPhone, ...(Array.isArray(lead.phones) ? lead.phones : [])]) {
           const val = typeof raw === 'object' && raw ? (raw.displayPhone || raw.e164 || raw.national || raw.number || '') : (raw || '');
           if (!val) continue;
-          const parsed = parsePhone(val);
+          const parsed = parsePhone(val, {
+            defaultCountry: countryCode || 'IN',
+            allowInternational: countryCode !== 'IN',
+            allowedCountry: countryCode !== 'IN' ? countryCode : undefined
+          });
           if (parsed && (parsed.isMobile || parsed.isLandline)) {
             return parsed;
           }
@@ -1552,17 +1886,17 @@ async function runOmniSearchOrchestrator(
           if (nameCityKey) seenNameCities.add(nameCityKey);
 
           if (contact.isMobile) {
-            lead.phone = contact.displayPhone; // +91 ...
+            lead.phone = contact.displayPhone;
             lead.phoneType = 'mobile';
             lead.isMobile = true;
             lead.isLandline = false;
             lead.whatsappAvailable = true;
-            lead.whatsappLink = `https://wa.me/91${contact.national}`;
+            lead.whatsappLink = `https://wa.me/${contact.digits}`;
             lead.callUrl = contact.callUrl;
             mobileCount++;
           } else {
-            // Authentic STD Landline starting with 0: strictly NO +91
-            lead.phone = contact.displayPhone; // e.g. 040 2324 3798
+            // Authentic STD Landline
+            lead.phone = contact.displayPhone;
             lead.phoneType = 'landline';
             lead.isMobile = false;
             lead.isLandline = true;
@@ -1627,6 +1961,9 @@ async function runOmniSearchOrchestrator(
             fromSessions: carried.fromSessions
           };
           addLog(`[Carry Forward] Reused ${carried.leads.length} previously discovered lead(s) from ${carried.fromSessions.length} earlier search(es) for "${category}" in "${baseLocation}". No new credits charged.`);
+          if (carried.skippedQuality) {
+            addLog(`[Carry Forward] Quality guard skipped ${carried.skippedQuality} stale row(s) with no usable contact or a low profile score.`);
+          }
         }
       } catch (carryError) {
         addLog(`[Carry Forward] Skipped: ${carryError.message}`);

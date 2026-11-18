@@ -1482,7 +1482,8 @@ export const COUNTRIES = [
   }
 ];
 
-export const POPULAR_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'MY', 'SA'];
+export const POPULAR_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'MY', 'DE'];
+export const MONETIZATION_CODES = POPULAR_CODES;
 
 export const POPULAR_COUNTRIES = POPULAR_CODES
   .map(code => COUNTRIES.find(country => country.code === code))

@@ -7,7 +7,9 @@ const { normalizePhone, extractPhones } = require('./phoneUtils');
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
   keepAlive: true,
-  timeout: 5000
+  maxSockets: 16,
+  maxFreeSockets: 8,
+  timeout: 3500
 });
 
 const DEFAULT_HEADERS = {
@@ -20,6 +22,20 @@ const EMAIL_BLACKLIST = [
   'wixpress', 'sentry', 'example.com', 'domain.com', 'schema.org',
   'cloudflare', 'bootstrapcdn', 'wordpress', 'google.com', 'w3.org', 'support@wix.com', 'yourname@email.com'
 ];
+
+/**
+ * Validates that a string is clean human readable text and not a CSS/JS code artifact.
+ */
+function isCssOrCodeSnippet(text) {
+  if (!text || typeof text !== 'string') return true;
+  if (/--[a-z0-9_-]+:/i.test(text)) return true; // CSS variable declaration e.g. --wbu-color-...
+  if (/[{};]\s*--/i.test(text)) return true;
+  if (/(?:rgba?|hsla?)\s*\(/i.test(text)) return true;
+  if (/(?:mOnSite|shouldReportErrorOnlyInPanorama|window\.__|document\.)/i.test(text)) return true;
+  if (/#[0-9a-fA-F]{6}\b/.test(text) && text.includes(';')) return true;
+  if (text.includes('var(--') || text.includes('!important')) return true;
+  return false;
+}
 
 /**
  * Extracts phones, emails, socials, and contact metadata from raw HTML.
@@ -44,13 +60,96 @@ function extractFromHtml(html, pageUrl, opts = {}) {
 
   const $ = cheerio.load(html);
 
-  // 1. Email Extraction
-  const emailMatches = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+  // 0. CRITICAL: Extract structured Schema.org JSON-LD BEFORE stripping script tags!
+  // 65%+ of modern business websites (WordPress, Wix, Squarespace, Shopify) declare
+  // their verified business phone and email inside JSON-LD blocks.
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const text = $(el).html();
+      if (!text) return;
+      const ld = JSON.parse(text);
+      const items = Array.isArray(ld) ? ld : [ld];
+      for (const item of items) {
+        if (!item || typeof item !== 'object') continue;
+        const checkPhone = (rawTel) => {
+          if (!rawTel) return;
+          const p = normalizePhone(String(rawTel).trim(), {
+            context: 'schema json-ld phone',
+            defaultCountry: opts.defaultCountry || 'IN',
+            allowInternational: opts.allowInternational === true,
+            trusted: true
+          });
+          if (p) {
+            const national = p.national || p.digits;
+            if (p.isMobile && !data.mobiles.includes(national)) data.mobiles.push(national);
+            if (!data.phones.includes(p.displayPhone)) data.phones.push(p.displayPhone);
+            if (p.isMobile && !data.whatsappLink) data.whatsappLink = `https://wa.me/${p.digits}`;
+          }
+        };
+
+        if (item.telephone) checkPhone(item.telephone);
+        if (item.contactPoint) {
+          const cps = Array.isArray(item.contactPoint) ? item.contactPoint : [item.contactPoint];
+          cps.forEach(cp => { if (cp?.telephone) checkPhone(cp.telephone); });
+        }
+        if (item.email && typeof item.email === 'string') {
+          const em = item.email.toLowerCase().trim();
+          if (!data.emails.includes(em) && em.includes('@') && !EMAIL_BLACKLIST.some(b => em.includes(b))) {
+            data.emails.push(em);
+          }
+        }
+        if (item.address && typeof item.address === 'object' && item.address.postalCode && !data.pincode) {
+          data.pincode = String(item.address.postalCode).trim();
+        }
+        if (item.founder || item.owner) {
+          const f = item.founder || item.owner;
+          const name = typeof f === 'string' ? f : (f.name || '');
+          if (name && !data.contactPerson && !isCssOrCodeSnippet(name)) {
+            data.contactPerson = name;
+          }
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 0b. Visual Image Contact Recognition (Scan banners, visiting cards, logos for contact info)
+  $('img').each((_, el) => {
+    const src = $(el).attr('src') || '';
+    const alt = $(el).attr('alt') || '';
+    const title = $(el).attr('title') || '';
+    const combined = `${src} ${alt} ${title}`;
+    const match = combined.match(/(?:call|phone|tel|wa|whatsapp|contact)[_-]?(\+?[0-9]{10,13})/i);
+    if (match && match[1]) {
+      const p = normalizePhone(match[1], {
+        context: 'image banner contact',
+        defaultCountry: opts.defaultCountry || 'IN',
+        allowInternational: opts.allowInternational === true
+      });
+      if (p) {
+        const national = p.national || p.digits;
+        if (p.isMobile && !data.mobiles.includes(national)) data.mobiles.push(national);
+        if (!data.phones.includes(p.displayPhone)) data.phones.push(p.displayPhone);
+        if (p.isMobile && !data.whatsappLink) data.whatsappLink = `https://wa.me/${p.digits}`;
+      }
+    }
+  });
+
+  // Strip all script, style, SVG, and metadata tags from Cheerio DOM
+  // to prevent CSS variables (--wbu-color-...) and JS chunks from leaking into text.
+  $('script, style, noscript, svg, template, iframe, style-sheet').remove();
+
+  const cleanBodyText = ($('body').text() || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 1. Email Extraction from clean text & mailto anchors
+  const emailMatches = cleanBodyText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
   emailMatches.forEach(rawEmail => {
     const e = rawEmail.toLowerCase().trim();
     const isBlacklisted = EMAIL_BLACKLIST.some(b => e.includes(b));
     const isImage = /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(e);
-    if (!isBlacklisted && !isImage && !data.emails.includes(e) && e.length < 50) {
+    if (!isBlacklisted && !isImage && !data.emails.includes(e) && e.length < 50 && !isCssOrCodeSnippet(e)) {
       data.emails.push(e);
     }
   });
@@ -133,22 +232,24 @@ function extractFromHtml(html, pageUrl, opts = {}) {
     }
   });
 
-  // 3. Phone / mobile extraction from page text.
+  // 3. Phone / mobile extraction from clean page text.
   // India keeps its strict regex. Other countries use the shared parser, which
   // understands local trunk prefixes and validates the number's country.
-  const textContent = $('body').text() || html;
-  if (opts.allowInternational) {
+  const textContent = cleanBodyText;
+  const isIntl = Boolean(opts.allowInternational || (opts.defaultCountry && opts.defaultCountry !== 'IN'));
+  if (isIntl) {
     const parsed = extractPhones(textContent, {
-      defaultCountry: opts.defaultCountry || 'IN',
+      defaultCountry: opts.defaultCountry || 'US',
       allowInternational: true,
       trusted: false,
       context: 'phone contact'
     });
     for (const phone of parsed) {
+      if (isCssOrCodeSnippet(phone.displayPhone) || isCssOrCodeSnippet(phone.digits)) continue;
       const national = phone.national || phone.digits;
-      if (phone.isMobile) {
+      if (phone.isMobile || phone.isLandline) {
         if (!data.mobiles.includes(national)) data.mobiles.push(national);
-        if (!data.whatsappLink) data.whatsappLink = `https://wa.me/${phone.digits}`;
+        if (!data.whatsappLink && phone.isMobile) data.whatsappLink = `https://wa.me/${phone.digits}`;
       }
       if (!data.phones.includes(phone.displayPhone)) data.phones.push(phone.displayPhone);
     }
@@ -184,18 +285,38 @@ function extractFromHtml(html, pageUrl, opts = {}) {
 
   // 5. GSTIN parsing disabled per user requirement
 
-  // 6. Owner / Proprietor / Key Contact
-  const ownerMatch = html.match(/(?:founder|director|managing director|md|proprietor|owner|contact person)\s*[:\-–]\s*([a-zA-Z\s.]{3,35})/i);
+  // 6. Owner / Proprietor / Key Contact (run on clean text, never raw HTML)
+  const ownerMatch = cleanBodyText.match(/(?:founder|director|managing director|md|proprietor|owner|contact person)\s*[:\-–]\s*([a-zA-Z\s.]{3,35})/i);
   if (ownerMatch && ownerMatch[1]) {
     const cleanOwner = ownerMatch[1].replace(/[\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (!/(unknown|details|privacy|policy|terms|contact|email|phone)/i.test(cleanOwner)) {
+    if (!/(unknown|details|privacy|policy|terms|contact|email|phone)/i.test(cleanOwner) && !isCssOrCodeSnippet(cleanOwner)) {
       data.contactPerson = cleanOwner;
     }
   }
 
-  // 7. Pincode
-  const pinMatch = html.match(/\b([1-9][0-9]{5})\b/);
-  if (pinMatch) data.pincode = pinMatch[1];
+  // 7. Postal / ZIP code (Country-Aware and run on clean text only, never raw HTML hex colors)
+  const countryCode = String(opts.defaultCountry || (isIntl ? 'US' : 'IN')).toUpperCase();
+  if (countryCode === 'IN') {
+    // 6-digit Indian PIN code preceded by contextual keywords or clean word boundary
+    const pinMatch = cleanBodyText.match(/(?:pincode|pin|postal code|code)?\s*[:\-–]?\s*\b([1-9][0-9]{5})\b/i);
+    if (pinMatch && !isCssOrCodeSnippet(pinMatch[1])) data.pincode = pinMatch[1];
+  } else if (countryCode === 'US') {
+    // 5-digit US ZIP code
+    const zipMatch = cleanBodyText.match(/\b([0-9]{5}(?:-[0-9]{4})?)\b/);
+    if (zipMatch && !isCssOrCodeSnippet(zipMatch[1])) data.pincode = zipMatch[1];
+  } else if (countryCode === 'CA') {
+    // Canadian postal code: A1A 1A1
+    const caMatch = cleanBodyText.match(/\b([A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d)\b/);
+    if (caMatch && !isCssOrCodeSnippet(caMatch[1])) data.pincode = caMatch[1].toUpperCase();
+  } else if (countryCode === 'GB') {
+    // UK Postcode
+    const ukMatch = cleanBodyText.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i);
+    if (ukMatch && !isCssOrCodeSnippet(ukMatch[1])) data.pincode = ukMatch[1].toUpperCase();
+  } else {
+    // Generic fallback: check for 4-6 digit numeric code
+    const genMatch = cleanBodyText.match(/\b([0-9]{4,6})\b/);
+    if (genMatch && !isCssOrCodeSnippet(genMatch[1])) data.pincode = genMatch[1];
+  }
 
   return data;
 }
@@ -242,49 +363,76 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
     targetUrls.push(`${origin}/contact`);
     targetUrls.push(`${origin}/contact-us`);
     targetUrls.push(`${origin}/about-us`);
+    targetUrls.push(`${origin}/about`);
+    targetUrls.push(`${origin}/contactus`);
+    targetUrls.push(`${origin}/reach-us`);
+    targetUrls.push(`${origin}/location`);
+    targetUrls.push(`${origin}/find-us`);
   }
-  const uniqueUrls = [...new Set(targetUrls)].slice(0, 3);
+  const uniqueUrls = [...new Set(targetUrls)].slice(0, 4);
 
   try {
-    const responses = await Promise.allSettled(
-      uniqueUrls.map(targetUrl =>
-        axios.get(targetUrl, {
-          timeout: 4000,
-          httpsAgent,
-          headers: DEFAULT_HEADERS,
-          maxRedirects: 3,
-          validateStatus: status => status >= 200 && status < 400
-        })
-      )
-    );
+    // 1. Fetch homepage first with fast 2500ms timeout.
+    // If homepage already has verified mobile + email, we save 3 seconds by early exit!
+    let homeHtml = '';
+    try {
+      const homeRes = await axios.get(uniqueUrls[0], {
+        timeout: 2500,
+        httpsAgent,
+        headers: DEFAULT_HEADERS,
+        maxRedirects: 3,
+        validateStatus: status => status >= 200 && status < 400
+      });
+      homeHtml = typeof homeRes.data === 'string' ? homeRes.data : '';
+    } catch (e) {}
 
-    for (let i = 0; i < responses.length; i++) {
-      const resp = responses[i];
-      if (resp.status !== 'fulfilled' || !resp.value?.data) continue;
-      const html = typeof resp.value.data === 'string' ? resp.value.data : '';
-      if (!html) continue;
+    if (homeHtml) {
+      const homeExtracted = extractFromHtml(homeHtml, uniqueUrls[0], opts);
+      for (const email of homeExtracted.emails) if (!result.emails.includes(email)) result.emails.push(email);
+      for (const phone of homeExtracted.phones) if (!result.phones.includes(phone)) result.phones.push(phone);
+      for (const mob of homeExtracted.mobiles) if (!result.mobiles.includes(mob)) result.mobiles.push(mob);
+      if (homeExtracted.instagram) result.instagram = homeExtracted.instagram;
+      if (homeExtracted.facebook) result.facebook = homeExtracted.facebook;
+      if (homeExtracted.linkedin) result.linkedin = homeExtracted.linkedin;
+      if (homeExtracted.logo) result.logo = homeExtracted.logo;
+      if (homeExtracted.contactPerson) result.contactPerson = homeExtracted.contactPerson;
+      if (homeExtracted.pincode) result.pincode = homeExtracted.pincode;
+      if (homeExtracted.whatsappLink) result.whatsappLink = homeExtracted.whatsappLink;
+    }
 
-      const extracted = extractFromHtml(html, uniqueUrls[i], opts);
+    // 2. If homepage did NOT yield mobile phone, fetch remaining contact pages concurrently
+    if (result.mobiles.length === 0 && uniqueUrls.length > 1) {
+      const subUrls = uniqueUrls.slice(1);
+      const responses = await Promise.allSettled(
+        subUrls.map(targetUrl =>
+          axios.get(targetUrl, {
+            timeout: 2500,
+            httpsAgent,
+            headers: DEFAULT_HEADERS,
+            maxRedirects: 2,
+            validateStatus: status => status >= 200 && status < 400
+          })
+        )
+      );
 
-      // Merge results
-      for (const email of extracted.emails) {
-        if (!result.emails.includes(email)) result.emails.push(email);
+      for (let i = 0; i < responses.length; i++) {
+        const resp = responses[i];
+        if (resp.status !== 'fulfilled' || !resp.value?.data) continue;
+        const html = typeof resp.value.data === 'string' ? resp.value.data : '';
+        if (!html) continue;
+
+        const extracted = extractFromHtml(html, subUrls[i], opts);
+        for (const email of extracted.emails) if (!result.emails.includes(email)) result.emails.push(email);
+        for (const phone of extracted.phones) if (!result.phones.includes(phone)) result.phones.push(phone);
+        for (const mob of extracted.mobiles) if (!result.mobiles.includes(mob)) result.mobiles.push(mob);
+        if (!result.instagram && extracted.instagram) result.instagram = extracted.instagram;
+        if (!result.facebook && extracted.facebook) result.facebook = extracted.facebook;
+        if (!result.linkedin && extracted.linkedin) result.linkedin = extracted.linkedin;
+        if (extracted.logo && (!result.logo || result.logo.includes('favicons'))) result.logo = extracted.logo;
+        if (!result.contactPerson && extracted.contactPerson) result.contactPerson = extracted.contactPerson;
+        if (!result.pincode && extracted.pincode) result.pincode = extracted.pincode;
+        if (!result.whatsappLink && extracted.whatsappLink) result.whatsappLink = extracted.whatsappLink;
       }
-      for (const phone of extracted.phones) {
-        if (!result.phones.includes(phone)) result.phones.push(phone);
-      }
-      for (const mob of extracted.mobiles) {
-        if (!result.mobiles.includes(mob)) result.mobiles.push(mob);
-      }
-
-      if (!result.instagram && extracted.instagram) result.instagram = extracted.instagram;
-      if (!result.facebook && extracted.facebook) result.facebook = extracted.facebook;
-      if (!result.linkedin && extracted.linkedin) result.linkedin = extracted.linkedin;
-      if (extracted.logo && (!result.logo || result.logo.includes('favicons'))) result.logo = extracted.logo;
-
-      if (!result.contactPerson && extracted.contactPerson) result.contactPerson = extracted.contactPerson;
-      if (!result.pincode && extracted.pincode) result.pincode = extracted.pincode;
-      if (!result.whatsappLink && extracted.whatsappLink) result.whatsappLink = extracted.whatsappLink;
     }
   } catch (err) {
     // Graceful fallback
@@ -292,16 +440,17 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
 
   // Primary phone: a validated mobile first, then a landline. The parser knows
   // the country, so this is correct outside India too.
+  const isIntlExtract = Boolean(opts.allowInternational || (opts.defaultCountry && opts.defaultCountry !== 'IN'));
   if (result.mobiles.length > 0) {
     const mobile = normalizePhone(result.mobiles[0], {
       context: 'phone mobile',
-      defaultCountry: opts.defaultCountry || 'IN',
-      allowInternational: opts.allowInternational === true,
+      defaultCountry: opts.defaultCountry || (isIntlExtract ? 'US' : 'IN'),
+      allowInternational: isIntlExtract,
       trusted: true
     });
     if (mobile) {
       result.phone = mobile.displayPhone || mobile.e164;
-      if (!result.whatsappLink) result.whatsappLink = `https://wa.me/${mobile.digits}`;
+      if (!result.whatsappLink && mobile.isMobile) result.whatsappLink = `https://wa.me/${mobile.digits}`;
     } else {
       result.phone = result.mobiles[0];
     }

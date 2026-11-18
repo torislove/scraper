@@ -831,6 +831,51 @@ const GRID_MAX_CELLS_PER_AXIS = 9;
 // bakery, cafe and military-hotel clusters. These are search vectors, not
 // invented businesses — every lead still comes from Google.
 const CATEGORY_SUBVECTORS = [
+  // 1. Manufacturers, Industrial Units, Factories & Fabrication
+  {
+    match: /manufactur|factory|factories|industrial|fabricat|oem|production|plant|mill|processing unit|packaging|machinery|foundry/i,
+    labels: [
+      'Industrial equipment manufacturer', 'Fabrication works', 'OEM parts manufacturer',
+      'Machinery manufacturer', 'Plastic products manufacturer', 'Chemical manufacturing plant',
+      'Packaging material manufacturer', 'Steel fabrication workshop', 'Food processing unit',
+      'Electrical goods manufacturer', 'Industrial estate factory units', 'Warehouse and industrial supplier',
+      'Pipes and fittings manufacturer', 'Corrugated box manufacturer', 'Textile mill'
+    ]
+  },
+  // 2. Computer Stores, Laptops, IT Hardware, Networking & CCTV
+  {
+    match: /computer|laptop|printer|cctv|software|it service|mobile|electronics|hardware store|pc builder|gaming pc/i,
+    labels: [
+      'Laptop showroom', 'Computer hardware shop', 'Desktop PC builder', 'Computer repair and service',
+      'Laptop screen and motherboard repair', 'CCTV camera dealer and installation', 'Networking equipment supplier',
+      'Printer dealer and cartridge refill', 'Refurbished laptop store', 'Computer accessories and peripherals',
+      'Computer AMC service provider', 'Software development company', 'Mobile shop and accessories',
+      'Mobile phone repair center', 'Electronics showroom', 'UPS and inverter dealer'
+    ]
+  },
+  // 3. Photography, Studios, Videography & Digital Labs
+  {
+    match: /\b(photo|photographer|photographers|photography|photo studio|photo studios|studio|studios|videographer|videographers|videography|candid|digital lab|shoot)\b/i,
+    labels: [
+      'Wedding photographer', 'Photo studio', 'Digital photo lab', 'Candid wedding photography',
+      'Pre wedding photoshoot', 'Newborn baby photographer', 'Just born baby photoshoot',
+      'Maternity photoshoot studio', 'Birthday and event photographer', 'Drone videography and cinematography',
+      'Cinematographer and video editor', 'Portrait studio', 'Passport photo studio',
+      'Photo frame and album maker', 'Commercial photographer', 'Baby portfolio studio'
+    ]
+  },
+  // 4. Venues, Mandaps, Function Halls, Banquets & Catering
+  {
+    match: /wedding|mandap|decorator|catering|banquet|function hall|marriage hall|convention|kalyana mandapam/i,
+    labels: [
+      'Convention centre', 'Function hall', 'Marriage hall', 'Kalyana mandapam',
+      'AC banquet hall', 'Open party lawn', 'Wedding caterers', 'Outdoor catering service',
+      'Veg catering service', 'Non veg catering', 'Brahmin catering service', 'Wedding decorator',
+      'Mandap decoration', 'Stage decoration', 'Flower decorator', 'DJ sound and lighting',
+      'Wedding planner', 'Event management company'
+    ]
+  },
+  // 5. Food, Dining, Restaurants & Cafes
   {
     match: /restaurant|restaurent|dhaba|biryani|eatery|food court|dining|meals|mess|cafe|bakery|fast food/i,
     labels: [
@@ -840,108 +885,129 @@ const CATEGORY_SUBVECTORS = [
       'Military hotel', 'Meals mess', 'Grill and BBQ', 'Seafood restaurant', 'Sweets shop'
     ]
   },
+  // 6a. Hospitals, Emergency Care & Nursing Homes (Strictly In-Patient, Trauma & Surgery)
   {
-    match: /hospital|clinic|doctor|medical|nursing home|diagnostic|dental|eye care/i,
+    match: /\b(hospital|hospitals|nursing home|nursing homes|trauma cent(?:er|re)|emergency care|icu|maternity home|healthcare center)\b/i,
     labels: [
-      'Hospital', 'Multispeciality hospital', 'Clinic', 'Dental clinic', 'Eye hospital',
-      'Orthopaedic hospital', 'Children hospital', 'Diagnostic centre', 'Physiotherapy clinic',
-      'General physician', 'Gynaecologist', 'Dermatologist', 'ENT clinic', 'Ayurvedic clinic'
+      'Multispeciality hospital', 'Emergency and trauma care hospital', 'Children and pediatric hospital',
+      'Maternity hospital and gynaec care', 'Eye hospital', 'Orthopaedic and fracture hospital',
+      'Cardiology hospital', 'Super speciality hospital', 'Surgical nursing home', 'Cancer hospital'
     ]
   },
+  // 6b. Pharmacies, Medical Stores, Chemists & Drug Stores (Medicines & Surgical Supplies)
   {
-    match: /hotel|resort|lodge|guest house|banquet|function hall|marriage hall/i,
+    match: /\b(pharmacy|pharmacies|medical store|medical stores|medical shop|medical shops|chemist|chemists|druggist|druggists|drug store|drug stores|apothecary|jan aushadhi|medicine shop|medicine store)\b/i,
     labels: [
-      'Hotel', 'Lodge', 'Resort', 'Guest house', 'Banquet hall', 'Function hall',
-      'Marriage hall', 'Convention centre', 'Budget hotel', 'Wedding venue'
+      '24 hours pharmacy', 'Medical store and chemist', 'Retail pharmacy shop',
+      'Wholesale medicine distributor', 'Surgical equipment supplier', 'Generic medicine store (Jan Aushadhi)',
+      'Ayurvedic pharmacy and medical store', 'Homeopathy medical store', 'Veterinary pharmacy'
     ]
   },
+  // 6c. Doctors, Clinics & Specialist Practitioners (Outpatient Consultations)
   {
-    match: /school|college|coaching|tuition|institute|academy|training/i,
+    match: /\b(clinic|clinics|doctor|doctors|physician|dental|dentist|eye care|ophthalmologist|orthopedic|pediatrician|gynecologist|dermatologist|ent clinic|physiotherapy)\b/i,
     labels: [
-      'School', 'High school', 'College', 'Coaching centre', 'Tuition centre',
-      'IIT coaching', 'Spoken English institute', 'Computer training institute',
-      'Nursery school', 'Play school', 'Music academy', 'Dance academy'
+      'General physician clinic', 'Dental clinic and implant centre', 'Skin and dermatology clinic',
+      'Pediatrician child clinic', 'Gynaecologist clinic', 'ENT specialist clinic',
+      'Orthopedic consultation clinic', 'Physiotherapy centre', 'Eye care and optometry clinic',
+      'Ayurvedic and homeopathic clinic'
     ]
   },
+  // 6d. Diagnostics, Scan Centers & Pathology Labs
   {
-    match: /gym|fitness|yoga|sports|swimming/i,
+    match: /\b(diagnostic|diagnostics|pathology|blood test|scan cent(?:er|re)|mri|ct scan|x ray|ultrasound|laboratory|path lab)\b/i,
     labels: [
-      'Gym', 'Fitness centre', 'Yoga centre', 'Crossfit gym', 'Ladies gym',
-      'Swimming pool', 'Sports academy', 'Badminton court', 'Cricket coaching'
+      'Diagnostic centre', 'Pathology and blood testing lab', 'MRI and CT scan centre',
+      'Ultrasound and X-ray clinic', 'Thyroid and clinical lab', 'Full body health checkup centre'
     ]
   },
+  // 7. Salons, Spas, Makeup & Beauty
   {
     match: /salon|beauty|spa|parlour|parlor|hair|makeup/i,
     labels: [
-      'Beauty parlour', 'Salon', 'Spa', 'Hair cutting salon', 'Bridal makeup',
-      'Nail art studio', 'Massage centre', 'Men salon', 'Ladies beauty parlour'
+      'Beauty parlour', 'Unisex salon', 'Bridal makeup artist', 'Mehendi artist',
+      'Hair spa and styling salon', 'Nail art studio', 'Massage and wellness spa',
+      'Men grooming salon', 'Ladies beauty parlour', 'Skin and laser treatment clinic'
     ]
   },
+  // 8. Building Materials, Hardware & Construction
   {
-    match: /computer|laptop|printer|cctv|software|it service|mobile|electronics/i,
+    match: /tiles?|cement|steel|hardware|paint|building material|sanitary|plywood|timber|glass|aluminium/i,
     labels: [
-      'Computer shop', 'Laptop store', 'Computer repair', 'Printer dealer', 'CCTV dealer',
-      'Networking solutions', 'Software company', 'Mobile shop', 'Mobile repair',
-      'Electronics showroom', 'Computer accessories', 'UPS dealer'
+      'Building material supplier', 'Hardware and tools shop', 'Tiles and granite showroom',
+      'Sanitaryware shop', 'Plywood and laminates', 'TMT steel and cement dealer',
+      'Paints and hardware store', 'Electrical goods and wiring', 'Glass and aluminium works',
+      'Bathroom fittings dealer', 'Modular kitchen hardware', 'PVC pipe dealer'
     ]
   },
+  // 9. Wholesale, Retail, Products, Showrooms & FMCG
+  {
+    match: /shop|store|showroom|dealer|distributor|wholesaler|supplier|traders?|market|grocery|supermarket|kirana|garment|cloth|saree|jewell?ery|footwear|furniture|fmcg|product/i,
+    labels: [
+      'Wholesale market', 'Wholesale dealer', 'Authorized distributor', 'Retail showroom',
+      'Supermarket', 'Departmental store', 'FMCG distributor', 'Electronics showroom',
+      'Garment wholesaler', 'Saree showroom', 'Footwear showroom', 'Furniture showroom',
+      'Home appliances store', 'Cosmetics store', 'Hardware and tools store'
+    ]
+  },
+  // 10. Education, Coaching, Institutes & Academies
+  {
+    match: /school|college|coaching|tuition|institute|academy|training/i,
+    labels: [
+      'School', 'High school', 'College', 'IIT JEE NEET coaching', 'Competitive exam coaching',
+      'Spoken English and IELTS institute', 'Computer software training institute', 'Tuition centre',
+      'Play school and daycare', 'Music academy', 'Dance academy'
+    ]
+  },
+  // 11. Fitness, Gym & Sports
+  {
+    match: /gym|fitness|yoga|sports|swimming/i,
+    labels: [
+      'Gym and fitness centre', 'Yoga studio', 'Crossfit gym', 'Ladies gym',
+      'Swimming pool', 'Sports academy', 'Badminton court', 'Cricket coaching academy'
+    ]
+  },
+  // 12. Real Estate, Builders & Properties
   {
     match: /real estate|property|builder|flat|apartment|land|plot/i,
     labels: [
-      'Real estate agent', 'Property dealer', 'Builder', 'Apartment project',
-      'Open plots', 'Villa project', 'Rental flats', 'Commercial property', 'Land surveyor'
+      'Real estate agent', 'Property dealer', 'Builder and developer', 'Apartment project',
+      'Open plots and layouts', 'Villa project', 'Rental flats', 'Commercial property', 'Land surveyor'
     ]
   },
+  // 13. Automobiles, Vehicles, Spares & Servicing
   {
     match: /car|bike|automobile|vehicle|tyre|spare parts|service centre|service center/i,
     labels: [
-      'Car showroom', 'Bike showroom', 'Car service centre', 'Bike service centre',
-      'Tyre shop', 'Spare parts shop', 'Car accessories', 'Car wash', 'Driving school'
+      'Car repair workshop', 'Bike service centre', 'Car showroom', 'Bike showroom',
+      'Tyre shop and wheel alignment', 'Auto spare parts shop', 'Car accessories', 'Car wash and detailing',
+      'Car battery dealer', 'Car AC repair', 'Driving school'
     ]
   },
+  // 14. Home Maintenance, Plumbing, Electrical & Repair
   {
-    match: /shop|store|showroom|dealer|distributor|wholesaler|supplier|traders?|market|tiles?|cement|steel|hardware|paint|furniture|saree|clothes|garment|grocery|kirana|pharmacy|medical store|jewell?ery|footwear|fabric|pipe|sanitary/i,
+    match: /plumber|electrician|carpenter|painter|pest control|cleaning|packers|movers|appliance|ac repair/i,
     labels: [
-      'Wholesale market', 'Wholesale shop', 'Distributor', 'Dealer', 'Retail shop',
-      'Showroom', 'Supplier', 'Supermarket', 'Main market', 'Brand showroom',
-      'Hardware shop', 'Building material shop', 'Traders', 'Stockist'
+      'Plumbing contractor', 'Electrician and house wiring', 'Carpenter and woodwork',
+      'Painter and whitewashing', 'AC repair and servicing', 'Home appliance repair',
+      'Deep cleaning service', 'Pest control service', 'Packers and movers', 'RO water purifier service'
     ]
   },
-  {
-    match: /\b(photo|photographer|photographers|photography|photo studio|photo studios|studio|studios|videographer|videographers|videography|candid|digital lab)\b/i,
-    labels: [
-      'Wedding photographer', 'Photo studio', 'Digital photo lab', 'Candid photographer',
-      'Pre wedding photographer', 'Drone videography', 'Event photographer', 'Maternity photographer',
-      'Video editor', 'Portrait studio'
-    ]
-  },
-  {
-    match: /wedding|mandap|decorator|catering/i,
-    labels: [
-      'Wedding planner', 'Wedding decorator', 'Catering service',
-      'Mandap decoration', 'Banquet hall', 'Bridal makeup', 'Wedding cards', 'DJ service'
-    ]
-  },
+  // 15. Legal, Financial & Corporate Services
   {
     match: /lawyer|advocate|legal|chartered accountant|ca |tax|consultant/i,
     labels: [
-      'Lawyer', 'Advocate', 'Chartered accountant', 'Tax consultant', 'GST consultant',
-      'Company registration consultant', 'Notary', 'Legal advisor'
+      'Lawyer', 'Advocate and legal counsel', 'Chartered accountant', 'Tax consultant', 'GST consultant',
+      'Company registration consultant', 'Notary advocate', 'Legal advisor and firm'
     ]
   },
-  {
-    match: /plumber|electrician|carpenter|painter|pest control|cleaning|packers|movers/i,
-    labels: [
-      'Plumber', 'Electrician', 'Carpenter', 'Painter', 'Pest control', 'Deep cleaning service',
-      'Packers and movers', 'AC repair', 'RO repair', 'Home appliance repair'
-    ]
-  },
+  // 16. Logistics, Travel, Printing & General Services
   {
     match: /service|repair|install|maintenance|security|transport|courier|travel|tour|insurance|finance|printing|xerox|laundry|tailor|agency/i,
     labels: [
-      'Service centre', 'Repair shop', 'Installation service', 'Maintenance service',
-      'Security service', 'Transport service', 'Courier service', 'Travel agency',
-      'Insurance agent', 'Printing press', 'Laundry service', 'Tailor', 'Agency'
+      'Courier service', 'Transport and logistics service', 'Travel agency and tours',
+      'Security services', 'Printing press and digital printing', 'Insurance agency',
+      'Laundry and dry cleaners', 'Tailor and boutique', 'Installation and repair service'
     ]
   }
 ];
@@ -958,7 +1024,7 @@ function normalizeCategoryKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function buildCategorySubVectorZones(category, cityLabel, limit = 24) {
+function buildCategorySubVectorZones(category, cityLabel, limit = 32) {
   const cat = String(category || '').replace(/\s+/g, ' ').trim();
   if (!cat) return [];
   const city = String(cityLabel || '').replace(/,\s*$/, '').trim();
@@ -1133,9 +1199,9 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
  * @param {string} category
  * @param {string[]} localityNames
  * @param {string} locationLabel location string used in locality queries
- * @param {number} maxZones hard cap
+ * @param {number} maxZones optional hard cap (Infinity = cover everything)
  */
-function buildCityCoverage(cityName, category, localityNames, locationLabel, maxZones = 32) {
+function buildCityCoverage(cityName, category, localityNames, locationLabel, maxZones = Infinity) {
   const prefix = category ? `${category} in ` : '';
   const named = (localityNames || []).map((name, idx) => {
     let coord = ZONE_COORDINATES[String(name).toLowerCase().trim()] || null;
@@ -1201,20 +1267,105 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
 }
 
 // ── UNIVERSAL CATEGORY & LOCALITY INTELLIGENCE ENGINE ──
-function getUniversalCategoryVectors(category, cleanLoc) {  let cat = (category || 'Business').trim();
+function getUniversalCategoryVectors(category, cleanLoc) {
+  let cat = (category || 'Business').trim();
   cat = cat.replace(new RegExp(`\\s+(in|near|at|around)\\s+.*$`, 'i'), '').trim();
   if (!cat) cat = 'Business';
   const lowerCat = cat.toLowerCase();
 
-  // Photography / Studio / Album Printing
-  if (lowerCat.includes('photo') || lowerCat.includes('camera') || lowerCat.includes('studio') || lowerCat.includes('album') || lowerCat.includes('shoot') || lowerCat.includes('video')) {
+  // 1. Manufacturers & Industrial Units
+  if (lowerCat.match(/manufactur|factory|factories|industrial|fabricat|oem|production|plant|mill|processing/i)) {
     return [
-      { zoneName: `${cleanLoc} Photo Studios`, queryText: `Photo Studio in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Industrial Equipment Manufacturers`, queryText: `Industrial Equipment Manufacturers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Fabrication Works & Workshops`, queryText: `Fabrication Works in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} OEM Parts & Machinery Manufacturers`, queryText: `Machinery Manufacturers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Plastic & Packaging Manufacturers`, queryText: `Packaging Material Manufacturers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Industrial Area Factory Units`, queryText: `Factories in Industrial Area ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Chemical & Processing Plants`, queryText: `Manufacturing Plants in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 2. Computer Stores, IT Hardware, Laptops & CCTV
+  if (lowerCat.match(/computer|laptop|printer|cctv|software|it service|pc builder|hardware/i)) {
+    return [
+      { zoneName: `${cleanLoc} Laptop & Computer Showrooms`, queryText: `Laptop Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Computer Hardware & PC Builders`, queryText: `Computer Hardware Shop in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Computer & Laptop Repair Centers`, queryText: `Computer Repair and Service in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} CCTV & Security System Dealers`, queryText: `CCTV Camera Dealers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Networking & Server Equipment`, queryText: `Networking Solutions in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Printer Dealers & Cartridge Refill`, queryText: `Printer Dealers in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 3. Photography, Studios & Videography
+  if (lowerCat.match(/photo|camera|studio|album|shoot|video|candid|cinemat/i)) {
+    return [
+      { zoneName: `${cleanLoc} Photo Studios & Digital Labs`, queryText: `Photo Studio in ${cleanLoc}`, isVectorQuery: true },
       { zoneName: `${cleanLoc} Wedding Photographers`, queryText: `Wedding Photographers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Digital Video & Press`, queryText: `Digital Studio & Video in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Commercial Photography`, queryText: `Commercial Photographers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Main Road Photo Hub`, queryText: `Photographers near Main Road, ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Top Rated Studios`, queryText: `Best Photo Studio in ${cleanLoc}`, isVectorQuery: true }
+      { zoneName: `${cleanLoc} Candid & Pre-Wedding Shoots`, queryText: `Candid Wedding Photography in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Newborn & Baby Photographers`, queryText: `Baby Photoshoot in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Drone Videographers & Cinematography`, queryText: `Drone Videography in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Passport & Instant Photo Studios`, queryText: `Passport Photo Studio in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 4. Venues, Mandaps, Function Halls & Catering
+  if (lowerCat.match(/wedding|mandap|decorator|catering|banquet|function hall|marriage/i)) {
+    return [
+      { zoneName: `${cleanLoc} Convention & Function Halls`, queryText: `Function Hall in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} AC Banquet Halls`, queryText: `Banquet Hall in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Marriage & Kalyana Mandapams`, queryText: `Kalyana Mandapam in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Wedding & Outdoor Caterers`, queryText: `Catering Services in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Stage & Mandap Decorators`, queryText: `Wedding Decorators in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} DJ & Event Organizers`, queryText: `Event Management Company in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 5a. Pharmacies, Chemists, Medical Stores & Drugstores (Strictly medicine & supplies)
+  if (lowerCat.match(/\b(pharmacy|pharmacies|medical store|medical stores|medical shop|medical shops|chemist|chemists|druggist|drug store|drug stores|jan aushadhi|medicine shop)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} 24 Hours Pharmacies & Chemists`, queryText: `24 Hours Pharmacy in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Retail Medical Stores & Drugstores`, queryText: `Medical Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Wholesale Pharmaceutical Distributors`, queryText: `Wholesale Medicine Distributors in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Surgical & Medical Equipment Suppliers`, queryText: `Surgical Equipment Suppliers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Generic Medicine Stores (Jan Aushadhi)`, queryText: `Generic Medicine Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Ayurvedic & Herbal Medical Stores`, queryText: `Ayurvedic Pharmacy in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 5b. Hospitals, Emergency Care & Nursing Homes (Strictly Inpatient & Trauma)
+  if (lowerCat.match(/\b(hospital|hospitals|nursing home|nursing homes|trauma|emergency care|icu|maternity home)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} Multispeciality Hospitals`, queryText: `Multispeciality Hospital in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Emergency & Trauma Care Centers`, queryText: `Trauma Care Hospital in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Children & Pediatric Hospitals`, queryText: `Children Hospital in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Maternity & Gynecologist Hospitals`, queryText: `Maternity Hospital in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Orthopedic & Fracture Hospitals`, queryText: `Orthopedic Hospital in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Eye Care Hospitals`, queryText: `Eye Hospital in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 5c. Doctors, Clinics & Specialist Consultations
+  if (lowerCat.match(/\b(clinic|clinics|doctor|doctors|physician|dental|dentist|dermatolog|pediatric|gynecolog|ent|physiotherapy)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} General Physician & Family Clinics`, queryText: `Clinics in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Dental Clinics & Implant Centers`, queryText: `Dental Clinic in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Skin & Dermatology Clinics`, queryText: `Skin Specialist Clinic in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Eye Care & Optometry Clinics`, queryText: `Eye Clinic in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Pediatric & Child Care Clinics`, queryText: `Pediatrician Clinic in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Physiotherapy & Rehab Centers`, queryText: `Physiotherapy Centre in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 5d. Diagnostics, Scan Centers & Pathology Labs
+  if (lowerCat.match(/\b(diagnostic|diagnostics|pathology|blood test|scan|mri|ct scan|x ray|ultrasound|lab|laboratory)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} Diagnostic & Imaging Centers`, queryText: `Diagnostic Centre in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Pathology & Blood Test Labs`, queryText: `Pathology Lab in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} MRI & CT Scan Centers`, queryText: `MRI Scan Centre in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Ultrasound & X-Ray Clinics`, queryText: `Scan Centre in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Health Checkup Centers`, queryText: `Clinical Laboratory in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Blood Testing Laboratories`, queryText: `Blood Testing Lab in ${cleanLoc}`, isVectorQuery: true }
     ];
   }
 
@@ -1225,7 +1376,7 @@ function getUniversalCategoryVectors(category, cleanLoc) {  let cat = (category 
     { zoneName: `${cleanLoc} Central / Main`, queryText: `${cat} in ${cleanLoc} Central`, isVectorQuery: true },
     { zoneName: `${cleanLoc} Commercial Market`, queryText: `${cat} near Market, ${cleanLoc}`, isVectorQuery: true },
     { zoneName: `${cleanLoc} Station & Bus Stand Area`, queryText: `${cat} near Railway Station / Bus Stand, ${cleanLoc}`, isVectorQuery: true },
-    { zoneName: `${cleanLoc} Services`, queryText: `${cat} Services in ${cleanLoc}`, isVectorQuery: true }
+    { zoneName: `${cleanLoc} Wholesale & Services`, queryText: `${cat} Services in ${cleanLoc}`, isVectorQuery: true }
   ];
 }
 
@@ -1244,12 +1395,7 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
   const isExplicitDistrict = /\b(district|dist)\b/i.test(cleanLoc);
   const isExplicitState = stateIndex.has(strippedName) || stateIndex.has(lowerLoc) || stateIndex.has(primaryName);
 
-  // In Client mode: block explicit district or state sweeps
-  if (!isMaster) {
-    if (isExplicitDistrict || isExplicitState) {
-      throw new Error(`Client searches are restricted strictly to individual cities, mandals and villages. District and state-wide sweeps require Master Command Center.`);
-    }
-  }
+  // Wide-area sweeps (Districts, Mandals, States, Metros) are supported seamlessly across all modes.
 
   // 1. Authoritative Pre-Mapped Cities & Metros (All 24 Mumbai Wards, All Delhi Wards, etc.)
   // Runs comprehensively across ALL localities of the city (NO arbitrary truncation)
@@ -1260,7 +1406,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       // see the businesses those few phrases happen to rank.
       const cityLabel = cleanLoc.replace(/\b(city|town)\b/gi, '').replace(/\s+/g, ' ').trim() || cleanLoc;
       const cityTitle = key.replace(/\b\w/g, ch => ch.toUpperCase());
-      return buildCityCoverage(cityTitle, category, zones, cityLabel, isMaster ? 400 : 250);
+      // No coverage cap: every named locality plus every grid cell is dispatched.
+      return buildCityCoverage(cityTitle, category, zones, cityLabel, Infinity);
     }
   }
 
@@ -1309,7 +1456,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
     // Fill the rest of the city with viewport grid cells so the sweep is not
     // limited to eight hand-written sectors.
     const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6 });
-    return [...sectorZones, ...grid].slice(0, isMaster ? 400 : 250);
+    // No coverage cap: the named sectors and the whole viewport grid are returned.
+    return [...sectorZones, ...grid];
   }
 
   // 3. Village Multi-Node Expansion Protocol
@@ -1398,10 +1546,11 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       isSingle: false
     });
 
-    // Constituent commercial villages across mandal (top 8-10 villages)
+    // Every constituent village of the mandal, not a sample. A sub-district with
+    // 140 villages used to stop at 12 (client) or 100 (Master); the tail was
+    // silently unsearched.
     const villages = Array.isArray(entry.villages) ? entry.villages : [];
-    const maxVillages = isMaster ? 100 : 12;
-    const selectedVillages = villages.slice(0, maxVillages);
+    const selectedVillages = villages;
     selectedVillages.forEach((village, idx) => {
       let vCoords = null;
       if (centerCoords?.lat && centerCoords?.lng) {
@@ -1431,7 +1580,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
   if (isExplicitDistrict && isMaster) {
     const entry = districtIndex.get(strippedName) || districtIndex.get(lowerLoc) || districtIndex.get(primaryName);
     if (entry && entry.mandals && entry.mandals.length > 0) {
-      const selected = entry.mandals.slice(0, 120);
+      // Every sub-district in the district, not the first 120.
+      const selected = entry.mandals;
       return selected.map((m, index) => {
         const coords = zoneCoordinates(m, entry.district, index, selected.length);
         const prefix = category ? `${category} in ` : '';
@@ -1459,7 +1609,10 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       const zones = [];
       const center = STATE_CENTERS[entry.state.toLowerCase()] || STATE_CENTERS[strippedName] || null;
       
-      for (let di = 0; di < stateDistricts.length && zones.length < 200; di++) {
+      // Every district, and every sub-district inside it. The old loop stopped
+      // at 200 zones and kept only 3 mandals per district, so a state sweep
+      // covered a fraction of the state it was asked for.
+      for (let di = 0; di < stateDistricts.length; di++) {
         const d = stateDistricts[di];
         const prefix = category ? `${category} in ` : '';
         const distCoords = zoneCoordinates(d, d, di, stateDistricts.length)
@@ -1479,14 +1632,13 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
           isSingle: false
         });
 
-        // Add top 3 commercial mandals from each district
+        // Every commercial mandal of the district.
         const cleanD = d.toLowerCase().replace(/[^a-z0-9]/g, '');
         const distEntry = districtIndex.get(cleanD);
         if (distEntry && Array.isArray(distEntry.mandals)) {
           const subMandals = distEntry.mandals
-            .filter(m => m.toLowerCase().replace(/[^a-z0-9]/g, '') !== cleanD)
-            .slice(0, 3);
-          for (let mi = 0; mi < subMandals.length && zones.length < 200; mi++) {
+            .filter(m => m.toLowerCase().replace(/[^a-z0-9]/g, '') !== cleanD);
+          for (let mi = 0; mi < subMandals.length; mi++) {
             const sm = subMandals[mi];
             const mCoords = zoneCoordinates(sm, d, mi, subMandals.length);
             zones.push({
@@ -1549,13 +1701,11 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
 
   // Any city not in the curated clusters still gets the full treatment:
   // named sectors + real sub-category vectors + a grid that covers the city
-  // and its 5 km ring.
+  // and its 5 km ring. No cap: every planned zone is returned.
   const subVectors = buildCategorySubVectorZones(category, cityName);
   const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6 });
   const mustKeep = [...sectorZones, ...subVectors];
-  const cap = isMaster ? 400 : 250;
-  const gridSlots = Math.max(0, cap - mustKeep.length);
-  return [...mustKeep, ...grid.slice(0, gridSlots)];
+  return [...mustKeep, ...grid];
 }
 
 function classifyLocation(queryOrLoc) {
@@ -1568,9 +1718,12 @@ function classifyLocation(queryOrLoc) {
   let locCandidate = prepMatch ? prepMatch[2].trim() : text;
   locCandidate = locCandidate.replace(/^(the|a|an)\s+/i, '').replace(/[?,.!]+$/, '').trim();
 
-  const explicitDistrict = /\b(district|dist)\b/i.test(locCandidate);
-  const explicitState = /\b(state)\b/i.test(locCandidate);
-  const stripped = locCandidate.replace(/\b(district|dist|mandal|tehsil|taluk|state|city|town|metro)\b/gi, '').trim();
+  const explicitDistrict = /\b(district|dist|zilla|zila|jilla)\b/i.test(locCandidate);
+  const explicitState = /\b(state|pradesh|territory)\b/i.test(locCandidate);
+  const explicitMandal = /\b(mandal|mandals|tehsil|tehsils|taluk|taluks|taluka|talukas|tahsil|block|subdivision)\b/i.test(locCandidate);
+  const explicitMunicipality = /\b(municipality|municipal|corporation|council|ulb|gmc|vmc|ghmc|bbmp|mcgm|pcmc)\b/i.test(locCandidate);
+  const explicitCity = /\b(city|town|urban|corporation|municipality)\b/i.test(locCandidate);
+  const stripped = locCandidate.replace(/\b(district|dist|mandal|mandals|tehsil|tahsil|taluk|taluka|state|city|town|metro|municipality|municipal|corporation|council|ulb|gmc|vmc|ghmc|bbmp|mcgm|pcmc)\b/gi, '').trim();
 
   const rawCandidates = [
     locCandidate,
@@ -1580,9 +1733,23 @@ function classifyLocation(queryOrLoc) {
     locCandidate.split(',').pop().trim()
   ].filter(Boolean);
 
-  const cleanCandidates = [...new Set(rawCandidates.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '')))];
+  const MUNICIPAL_ACRONYMS = {
+    'gmc': 'guntur',
+    'vmc': 'vijayawada',
+    'ghmc': 'hyderabad',
+    'bbmp': 'bangalore',
+    'mcgm': 'mumbai',
+    'pmc': 'pune',
+    'pcmc': 'pimpri chinchwad'
+  };
 
-  // Check state
+  const initialClean = [...new Set(rawCandidates.map(c => c.toLowerCase().replace(/[^a-z0-9]/g, '')))];
+  const cleanCandidates = [...new Set([
+    ...initialClean,
+    ...initialClean.map(c => MUNICIPAL_ACRONYMS[c]).filter(Boolean)
+  ])];
+
+  // 1. Check state
   for (const c of cleanCandidates) {
     if (stateIndex.has(c)) {
       const stateObj = stateIndex.get(c);
@@ -1598,7 +1765,7 @@ function classifyLocation(queryOrLoc) {
     }
   }
 
-  // Check district
+  // 2. Check explicit district
   if (explicitDistrict) {
     for (const c of cleanCandidates) {
       if (districtIndex.has(c)) {
@@ -1607,6 +1774,7 @@ function classifyLocation(queryOrLoc) {
         return {
           type: 'district',
           name: distObj.district,
+          state: distObj.state,
           zoneCount: count,
           estimatedLeads: count * 45,
           badge: '🗺️ DISTRICT-WIDE',
@@ -1616,31 +1784,62 @@ function classifyLocation(queryOrLoc) {
     }
   }
 
-  // Check metro / city cluster
-  for (const c of cleanCandidates) {
-    if (AUTHORITATIVE_CLUSTERS[c]) {
-      const zones = AUTHORITATIVE_CLUSTERS[c];
-      const cityTitle = c.charAt(0).toUpperCase() + c.slice(1);
-      const coverage = buildCityCoverage(cityTitle, '', zones, cityTitle, 250);
-      return {
-        type: 'metro',
-        name: cityTitle,
-        zoneCount: coverage.length,
-        estimatedLeads: coverage.length * 28,
-        badge: '🏙️ METRO/CITY',
-        label: `Whole-city sweep: ${coverage.length} zones`
-      };
+  // 3. Check explicit mandal OR explicit municipality / corporation
+  if (explicitMandal || explicitMunicipality) {
+    for (const c of cleanCandidates) {
+      if (mandalIndex.has(c) || AUTHORITATIVE_CLUSTERS[c]) {
+        const mObj = mandalIndex.get(c) || {};
+        const subName = mObj.subDistrict || (c.charAt(0).toUpperCase() + c.slice(1));
+        const vCount = Array.isArray(mObj.villages) ? mObj.villages.length : 11;
+        const isDual = Boolean(AUTHORITATIVE_CLUSTERS[c] || AUTHORITATIVE_CLUSTERS[keyOf(subName)]);
+        const totalZ = isDual ? (AUTHORITATIVE_CLUSTERS[c]?.length || 24) + vCount + 86 : Math.max(8, vCount + 1);
+        const badgeLabel = isDual
+          ? (explicitMunicipality ? '🏛️ MUNICIPAL CORPORATION & DUAL-MANDAL SWARM' : '📍 DUAL-STATUS MANDAL & MUNICIPALITY')
+          : (explicitMunicipality ? '🏛️ MUNICIPALITY SWARM' : '📍 MANDAL SWARM');
+        return {
+          type: 'mandal',
+          name: subName,
+          district: mObj.district || subName,
+          state: mObj.state || 'Andhra Pradesh',
+          zoneCount: totalZ,
+          estimatedLeads: totalZ * 30,
+          badge: badgeLabel,
+          label: isDual
+            ? `${subName} Municipal Corporation & Mandal Swarm: ${totalZ} zones (Urban Wards + Villages + GPS Grid)`
+            : `${subName} ${explicitMunicipality ? 'Municipality' : 'Mandal'} sweep (${vCount} zones)`
+        };
+      }
     }
   }
 
-  // Check district headquarters / major cities (e.g. Nellore, Nalgonda, Kurnool, Solapur, Bareilly)
-  if (!explicitDistrict) {
+  // 4. Check metro / city cluster (when not explicitly requested as district or mandal)
+  if (!explicitDistrict && !explicitMandal) {
+    for (const c of cleanCandidates) {
+      if (AUTHORITATIVE_CLUSTERS[c]) {
+        const zones = AUTHORITATIVE_CLUSTERS[c];
+        const cityTitle = c.charAt(0).toUpperCase() + c.slice(1);
+        const coverage = buildCityCoverage(cityTitle, '', zones, cityTitle, 250);
+        return {
+          type: 'metro',
+          name: cityTitle,
+          zoneCount: coverage.length,
+          estimatedLeads: coverage.length * 28,
+          badge: '🏙️ METRO/CITY',
+          label: `Whole-city sweep: ${coverage.length} zones`
+        };
+      }
+    }
+  }
+
+  // 5. Check district headquarters / major cities (e.g. Nellore, Nalgonda, Kurnool, Solapur, Bareilly)
+  if (!explicitDistrict && !explicitMandal) {
     for (const c of cleanCandidates) {
       if (districtIndex.has(c)) {
         const distObj = districtIndex.get(c);
         return {
           type: 'city',
           name: distObj.district,
+          state: distObj.state,
           zoneCount: 8 + buildCityGridZones(distObj.district, '', [], { cappedRadiusKm: 6 }).length,
           estimatedLeads: 240,
           badge: '🏙️ CITY/TOWN',
@@ -1650,16 +1849,21 @@ function classifyLocation(queryOrLoc) {
     }
   }
 
-  // Check mandal
+  // 6. Check generic mandal match
   for (const c of cleanCandidates) {
     if (mandalIndex.has(c)) {
       const mObj = mandalIndex.get(c);
+      const vCount = Array.isArray(mObj.villages) ? mObj.villages.length : 0;
+      const isDual = Boolean(AUTHORITATIVE_CLUSTERS[c] || AUTHORITATIVE_CLUSTERS[keyOf(mObj.subDistrict)]);
+      const totalZ = isDual ? (AUTHORITATIVE_CLUSTERS[c]?.length || 24) + vCount + 80 : Math.max(8, vCount + 1);
       return {
         type: 'mandal',
         name: mObj.subDistrict,
-        zoneCount: 8,
-        estimatedLeads: 60,
-        badge: '📍 MANDAL/TOWN',
+        district: mObj.district,
+        state: mObj.state,
+        zoneCount: totalZ,
+        estimatedLeads: totalZ * 30,
+        badge: isDual ? '📍 DUAL-STATUS MANDAL' : '📍 MANDAL SWARM',
         label: `Mandal sweep: ${mObj.subDistrict} (${mObj.district})`
       };
     }

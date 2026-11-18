@@ -106,8 +106,10 @@ export async function getDeepEstimate(params = {}) {
   return data;
 }
 
-export async function suggestLocations(q, limit = 8) {
-  const { data } = await client.get('/locations/suggest', { params: { q, limit } });
+export async function suggestLocations(q, limit = 8, country = '') {
+  const { data } = await client.get('/locations/suggest', {
+    params: { q, limit, country: country || undefined }
+  });
   return Array.isArray(data) ? data : [];
 }
 
@@ -119,7 +121,8 @@ export async function suggestSearch(params = {}, options = {}) {
       category: params.category || undefined,
       location: params.location || undefined,
       limit: params.limit || 6,
-      isMaster: params.isMaster ?? true
+      isMaster: params.isMaster ?? true,
+      country: params.country || undefined
     }
   });
   return data;
@@ -220,6 +223,16 @@ export async function getVendorProfile(vendorId) {
   return data?.profile || null;
 }
 
+export async function deepEnrichVendor(vendorId) {
+  const { data } = await client.post(`/vendors/${encodeURIComponent(vendorId)}/deep-enrich`);
+  return data;
+}
+
+export async function aggressiveEnrichSession(sessionId) {
+  const { data } = await client.post(`/sessions/${encodeURIComponent(sessionId)}/aggressive-enrich`);
+  return data;
+}
+
 export async function deepExtractVendor(vendorId, options = {}) {
   const { data } = await client.post(`/deep-profile/vendor/${encodeURIComponent(vendorId)}`, options);
   return data;
@@ -292,6 +305,16 @@ export async function mergeSessions(sessionIds, newName, tags = [], color = 'pur
 
 export async function batchDeleteSessions(sessionIds) {
   const { data } = await client.post('/sessions/batch-delete', { sessionIds });
+  return data;
+}
+
+export async function getTrash(limit = 50) {
+  const { data } = await client.get('/sessions/trash', { params: { limit } });
+  return data;
+}
+
+export async function restoreTrash(ids, sessionId = '') {
+  const { data } = await client.post('/sessions/trash/restore', { ids, sessionId });
   return data;
 }
 

@@ -71,9 +71,10 @@ const ROLES = [
     wants: ['photograph', 'photography', 'photo studio', 'photoshoot', 'photo shoot', 'videograph', 'videographer', 'cinematograph', 'candid', 'digital studio', 'digital photo lab', 'portrait studio', 'wedding studio'],
     avoids: [
       'banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center',
-      'convention', 'marriage hall', 'wedding hall', 'party hall', 'lawns', 'resort', 'hotel',
-      'restaurant', 'caterer', 'catering', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi',
+      'convention', 'marriage hall', 'wedding hall', 'party hall', 'wedding venue', 'event venue', 'venue', 'venues',
+      'lawns', 'resort', 'hotel', 'restaurant', 'caterer', 'catering', 'decorator', 'decoration', 'makeup', 'make up', 'mehendi',
       'mehndi', 'invitation', 'tent house', 'travels', 'jewell', 'jewel', 'bakery', 'sweet',
+      'bridal shop', 'bridal store', 'bridal salon',
       'xerox', 'photocopy', 'colour print', 'color print', 'flex print', 'offset', 'meeseva', 'mee seva',
       'digital seva', 'internet cafe', 'internet center', 'photo frame', 'framing', 'glass house', 'cctv', 'mobile repair'
     ]
@@ -479,16 +480,12 @@ function isGenericName(name) {
 
 function vendorHaystack(vendor) {
   if (!vendor) return '';
-  // NOTE: vendor.category is deliberately NOT part of the haystack. The Maps
-  // engine stamps the *searched* category onto every result, so an eye hospital
-  // can arrive labelled "Dental Clinics". Treating that echo as evidence is how
-  // unrelated businesses survived the dental filter. Real source taxonomy lives
-  // in `subcategory`; a vendor's own name/description/URL are the honest signals.
   return norm([
     vendor.name,
     vendor.normalizedName,
     vendor.subcategory,
     vendor.description,
+    vendor.website,
     vendor.profileUrl,
     vendor.profileSourceUrl,
     vendor.sourceUrl,
@@ -561,6 +558,26 @@ function isVendorRelevant(vendor, requestedCategory) {
     }
 
     if (avoids) return false;
+
+    // Trust dedicated wedding/photography directory entries
+    if (vendor.sourceEngine === 'weddingwire' || vendor.source === 'WeddingWire') {
+      return true;
+    }
+
+    // Direct token & stem check for photo, studio, shoot, wedding, video:
+    if (/photograph|photo|studio|shoot|candid|cinematograph|videograph|wedding|portrait|visual|film|camera|lens/i.test(text)) {
+      return true;
+    }
+
+    // Expanded wants for photography:
+    const photographyWants = [
+      ...requestedRole.wants.map(norm),
+      'photo', 'photos', 'pix', 'pics', 'studio', 'studios', 'shoot', 'shoots', 'lens', 'camera', 'film', 'films',
+      'capture', 'visual', 'visuals', 'media', 'portrait', 'portraits',
+      'candid', 'imaging', 'production', 'productions', 'creative', 'wedding'
+    ];
+    if (hasAny(text, photographyWants)) return true;
+
     return wants;
   }
 

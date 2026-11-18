@@ -1,29 +1,34 @@
 const express = require('express');
 const router = express.Router();
-const { suggest } = require('../services/searchSuggest');
+const { suggest, suggestForCountry } = require('../services/searchSuggest');
 const { parseUniversalQuery, PROPRIETARY_VECTORS } = require('../utils/universalQueryEngine');
 const { classifyLocation } = require('../utils/universalGeoCluster');
 
 /**
- * GET /api/search/suggest?q=plumbers%20in%20vij
+ * GET /api/search/suggest?q=plumbers%20in%20vij&country=US
  *
  * Returns resolved category + location, grouped suggestions,
  * and real-time semantic intent breakdown (HUD tokens, radius, proprietary vectors, location classification).
+ *
+ * `country` makes the place resolver country-aware: India is answered from the
+ * local gazetteer, every other country from the keyless OSM services.
  */
-router.get('/suggest', (req, res) => {
+router.get('/suggest', async (req, res) => {
   try {
     const rawQ = req.query.q || '';
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.isMaster === 'true';
-    const payload = suggest({
+    const country = String(req.query.country || '').toUpperCase().slice(0, 2);
+    const payload = await suggestForCountry({
       q: rawQ,
       category: req.query.category || '',
       location: req.query.location || '',
       limit: req.query.limit,
-      isMaster
+      isMaster,
+      country
     });
 
     // Attach real-time universal natural language parsing contract
-    const parsed = parseUniversalQuery(rawQ || `${req.query.category || ''} in ${req.query.location || ''}`);
+    const parsed = parseUniversalQuery(rawQ || `${req.query.category || ''} in ${req.query.location || ''}`, country);
     const locationClassification = parsed.location ? classifyLocation(parsed.location) : null;
     parsed.locationClassification = locationClassification;
     payload.parsed = parsed;

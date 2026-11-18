@@ -64,6 +64,21 @@ function cleanText(value, max = 4000) {
     .slice(0, max);
 }
 
+/**
+ * Validates that a string is clean human readable text and not a CSS/JS code artifact.
+ */
+function isCssOrCodeSnippet(text) {
+  if (!text || typeof text !== 'string') return false;
+  if (/--[a-z0-9_-]+:/i.test(text)) return true; // CSS variable declaration e.g. --wbu-color-...
+  if (/[{};]\s*--/i.test(text)) return true;
+  if (/(?:rgba?|hsla?)\s*\(/i.test(text)) return true;
+  if (/(?:mOnSite|shouldReportErrorOnlyInPanorama|window\.__|document\.)/i.test(text)) return true;
+  if (/#[0-9a-fA-F]{6}\b/.test(text) && text.includes(';')) return true;
+  if (text.includes('var(--') || text.includes('!important')) return true;
+  if (/[{}"\\]/.test(text) && (text.includes('true') || text.includes('false') || text.includes('null'))) return true;
+  return false;
+}
+
 function uniqueBy(items, keyFn) {
   const seen = new Set();
   const out = [];
@@ -295,9 +310,19 @@ function normaliseSocial(key, href) {
 }
 
 function extractHoursFromText(text) {
-  if (!text) return { raw: '', specifications: [] };
-  const matches = text.match(/(?:mon|monday)[^.\n]{0,80}(?:sun|sunday)?[^.\n]{0,80}(?:am|pm|hrs|hours|closed)[^.\n]{0,60}/i);
-  return { raw: matches ? cleanText(matches[0], 240) : '', specifications: [] };
+  if (!text || typeof text !== 'string' || isCssOrCodeSnippet(text)) return { raw: '', specifications: [] };
+  // Strictly require day or time patterns, and reject code syntax
+  const matches = text.match(/(?:(?:mon|tue|wed|thu|fri|sat|sun|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:day)?s?)\s*[:\-–]?\s*(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*[-–to]+\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)|closed|24 hours|open)/i);
+  if (!matches) {
+    const generalMatch = text.match(/(?:open 24 hours|open daily|open\s*:\s*\d{1,2}\s*(?:am|pm)\s*[-–]\s*\d{1,2}\s*(?:am|pm))/i);
+    if (generalMatch && !isCssOrCodeSnippet(generalMatch[0])) {
+      return { raw: cleanText(generalMatch[0], 120), specifications: [] };
+    }
+    return { raw: '', specifications: [] };
+  }
+  const raw = cleanText(matches[0], 180);
+  if (isCssOrCodeSnippet(raw) || /[{}"\\]/.test(raw) || raw.includes('mOnSite')) return { raw: '', specifications: [] };
+  return { raw, specifications: [] };
 }
 
 function extractFaqs(nodes) {
@@ -645,22 +670,34 @@ function collectContacts($, fullHtml, nodes) {
   return { phones, emails: Array.from(emailSet).slice(0, 20), primaryPhone: pickBestPhone(phones) };
 }
 
-function extractAddress($, nodes, phones) {
+function extractAddress($, nodes, phones, countryHint = '') {
   const structured = extractPostalAddress(nodes);
-  if (structured && structured.full) return structured;
+  if (structured && structured.full && !isCssOrCodeSnippet(structured.full)) return structured;
 
   const addressTag = cleanText($('address').first().text(), 500);
   const candidates = [];
-  if (addressTag) candidates.push(addressTag);
+  if (addressTag && !isCssOrCodeSnippet(addressTag)) candidates.push(addressTag);
 
-  const bodyText = $('body').text();
-  const pinMatches = bodyText.match(/[^.\n]{10,140}\b[1-9]\d{5}\b/g) || [];
-  for (const match of pinMatches.slice(0, 5)) candidates.push(cleanText(match, 220));
+  const cleanBody = ($('body').text() || '').replace(/\s+/g, ' ').trim();
+  const isIndia = !countryHint || countryHint.toUpperCase() === 'IN';
 
-  for (const candidate of candidates) {
-    if (!extractPincode(candidate, phones)) continue;
-    const split = splitIndianAddress(candidate);
-    if (split.full) return { ...split, source: 'page_address' };
+  if (isIndia) {
+    const pinMatches = cleanBody.match(/[^.\n;{}]{10,140}\b[1-9]\d{5}\b/g) || [];
+    for (const match of pinMatches.slice(0, 5)) {
+      if (!isCssOrCodeSnippet(match)) candidates.push(cleanText(match, 220));
+    }
+
+    for (const candidate of candidates) {
+      if (isCssOrCodeSnippet(candidate)) continue;
+      if (!extractPincode(candidate, phones)) continue;
+      const split = splitIndianAddress(candidate);
+      if (split.full && !isCssOrCodeSnippet(split.full)) return { ...split, source: 'page_address' };
+    }
+  } else {
+    for (const candidate of candidates) {
+      if (isCssOrCodeSnippet(candidate) || candidate.length < 10) continue;
+      return { full: candidate, locality: '', city: '', district: '', state: '', pincode: '', country: countryHint, source: 'page_address' };
+    }
   }
   return null;
 }
@@ -862,15 +899,18 @@ async function deepExtractWebsite(url, options = {}) {
 
   const fullHtml = htmlParts.join('\n');
   const $all = cheerio.load(fullHtml);
-  const bodyText = $all('body').text();
+  // CRITICAL: Strip scripts and styles so no inline CSS variables or Street View JSON leak into bodyText
+  $all('script, style, noscript, svg, template, iframe').remove();
+  const bodyText = cleanText($all('body').text(), 80000);
 
+  const countryHint = String(options.countryHint || options.country || options.defaultCountry || '').toUpperCase();
   const name = detectName($home, homeNodes);
   const description = detectDescription($home, homeNodes);
   const legalName = detectLegalName(homeNodes);
   const logo = extractLogo($home, baseUrl, homeNodes);
   const images = extractImages($home, baseUrl, homeNodes);
   const contacts = collectContacts($all, fullHtml, allNodes);
-  const address = extractAddress($all, allNodes, contacts.phones);
+  const address = extractAddress($all, allNodes, contacts.phones, countryHint);
   const geo = extractGeo(allNodes);
   const hours = extractSchemaHours(allNodes);
   const socials = collectSocials($all, baseUrl, allNodes);

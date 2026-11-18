@@ -1,0 +1,439 @@
+/* ============================================================================
+   NEO-SPATIAL GLASS 3D DESIGN SYSTEM
+   Ultra-premium frosted glassmorphism, specular gradient borders, 3D depth,
+   fluid spring animations, and tactile micro-interactions.
+   ========================================================================== */
+
+:root {
+  --glass-surface: rgba(11, 18, 28, 0.72);
+  --glass-surface-elevated: rgba(15, 23, 38, 0.82);
+  --glass-surface-hover: rgba(22, 33, 52, 0.88);
+  --glass-blur: blur(28px) saturate(210%);
+  --glass-blur-sm: blur(16px) saturate(180%);
+  
+  --glass-border-specular: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.03) 50%,
+    rgba(0, 240, 255, 0.25) 100%
+  );
+  --glass-border-subtle: rgba(255, 255, 255, 0.08);
+  --glass-border-highlight: rgba(0, 240, 255, 0.4);
+  
+  --glass-shadow-ambient: 0 12px 40px -10px rgba(0, 0, 0, 0.65);
+  --glass-shadow-floating: 0 20px 60px -12px rgba(0, 0, 0, 0.8), 0 0 24px -4px rgba(0, 240, 255, 0.15);
+  --glass-shadow-inset: inset 0 1px 1px 0 rgba(255, 255, 255, 0.15);
+  
+  --neon-cyan: #00f0ff;
+  --neon-emerald: #10b981;
+  --neon-amber: #f59e0b;
+  --neon-purple: #a855f7;
+  --neon-rose: #f43f5e;
+}
+
+/* ── Global Viewport Clamping (Single-Page Strict Cockpit) ────────────────── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background-color: #06090e;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root, .v2-root {
+  position: relative;
+  height: 100vh;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #06090e;
+}
+
+.v2-root::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  width: 180%;
+  height: 180%;
+  background: 
+    radial-gradient(circle at 25% 15%, rgba(0, 240, 255, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 75% 20%, rgba(139, 92, 246, 0.10) 0%, transparent 45%),
+    radial-gradient(circle at 45% 75%, rgba(16, 185, 129, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.11) 0%, transparent 40%),
+    radial-gradient(circle at 50% 0%, rgba(14, 30, 55, 0.6) 0%, transparent 60%);
+  animation: auroraMeshShift 24s ease-in-out infinite alternate;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes auroraMeshShift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-3%, 2%) scale(1.03);
+  }
+  100% {
+    transform: translate(2%, -3%) scale(0.98);
+  }
+}
+
+.v2-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Custom Ultra-Sleek Glass Scrollbars ────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+*::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.35);
+}
+
+/* ── Neo-Spatial Top Navigation Bar ──────────────────────────────────────── */
+.v2-cmd-top {
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(8, 13, 22, 0.82) !important;
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border-subtle) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  position: relative;
+}
+
+/* ── Magnetic Sound Mute Toggle ─────────────────────────────────────────── */
+.v2-audio-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--glass-border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+.v2-audio-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.4);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+  transform: scale(1.05);
+}
+.v2-audio-btn.is-active {
+  color: var(--neon-cyan);
+  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+/* ── Neo-Glass Tab Dock with Magnetic Pill ───────────────────────────────── */
+.v2-cmd-tabs {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(9, 14, 24, 0.75) !important;
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border-subtle);
+  z-index: 40;
+}
+
+.v2-tab-pill-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: color 0.18s ease, transform 0.15s ease;
+  z-index: 1;
+}
+.v2-tab-pill-btn:hover {
+  color: #f1f5f9;
+  transform: translateY(-1px);
+}
+.v2-tab-pill-btn.is-active {
+  color: #ffffff;
+  font-weight: 750;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+/* Magnetic Active Indicator Pill (Rendered via Framer Motion layoutId) */
+.v2-tab-indicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, rgba(30, 48, 77, 0.9), rgba(16, 28, 48, 0.95));
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.5), 0 0 16px rgba(0, 240, 255, 0.15), var(--glass-shadow-inset);
+  z-index: -1;
+}
+
+/* ── 3D Interactive Tilt Card & Glass Containers ─────────────────────────── */
+.glass-card-3d {
+  position: relative;
+  border-radius: 14px;
+  background: var(--glass-surface);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-subtle);
+  box-shadow: var(--glass-shadow-ambient), var(--glass-shadow-inset);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.glass-card-3d::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-border-specular);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.65;
+  transition: opacity 0.3s ease;
+}
+
+.glass-card-3d:hover {
+  background: var(--glass-surface-hover);
+  border-color: rgba(0, 240, 255, 0.25);
+  box-shadow: 0 16px 48px -8px rgba(0, 0, 0, 0.75), 0 0 24px rgba(0, 240, 255, 0.12);
+}
+.glass-card-3d:hover::before {
+  opacity: 1;
+}
+
+/* ── Rolling Odometer Counter ────────────────────────────────────────────── */
+.odometer-wrapper {
+  display: inline-flex;
+  align-items: baseline;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.odometer-digit {
+  position: relative;
+  display: inline-block;
+  height: 1.1em;
+  overflow: hidden;
+  line-height: 1.1em;
+}
+.odometer-ribbon {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.odometer-num {
+  height: 1.1em;
+  line-height: 1.1em;
+  text-align: center;
+}
+
+/* ── 3-Pane Cockpit Layout (Clamped to 100vh) ─────────────────────────────── */
+.v2-cp-grid {
+  display: grid;
+  grid-template-columns: 290px minmax(520px, 1fr) 340px;
+  gap: 12px;
+  padding: 12px;
+  height: calc(100vh - 128px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 1366px) {
+  .v2-cp-grid {
+    grid-template-columns: 260px 1fr 310px;
+    gap: 10px;
+    padding: 10px;
+  }
+}
+@media (max-width: 1120px) {
+  .v2-cp-grid {
+    grid-template-columns: 240px 1fr;
+  }
+  .v2-cp-grid > .v2-cp-side-map {
+    display: none;
+  }
+}
+
+/* Left & Right Side Panes */
+.v2-cp-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border-radius: 14px;
+  background: var(--glass-surface) !important;
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-subtle) !important;
+  box-shadow: var(--glass-shadow-ambient);
+  overflow: hidden;
+}
+
+/* Center Stage */
+.v2-cp-center {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  border-radius: 14px;
+  background: var(--glass-surface-elevated) !important;
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-subtle) !important;
+  box-shadow: var(--glass-shadow-ambient);
+  overflow: hidden;
+}
+
+.v2-cp-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Contextual Floating Glass Dock ──────────────────────────────────────── */
+.v2-floating-dock-backdrop {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 900;
+  pointer-events: none;
+}
+
+.v2-floating-dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-radius: 18px;
+  background: rgba(14, 22, 36, 0.92);
+  backdrop-filter: blur(32px) saturate(220%);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  box-shadow: var(--glass-shadow-floating);
+  pointer-events: auto;
+  animation: floatDockSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes floatDockSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.v2-dock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  color: var(--neon-cyan);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.v2-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 13px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+.v2-dock-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.v2-dock-btn.is-wa {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35));
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+.v2-dock-btn.is-wa:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.4), rgba(5, 150, 105, 0.5));
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+}
+
+.v2-dock-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Concentric Zone Radar Glow & Pulse ─────────────────────────────────── */
+.concentric-radar-container {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 50%, rgba(14, 25, 42, 0.8), rgba(8, 12, 20, 0.95));
+}
+.radar-sweep-beam {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(0, 240, 255, 0) 0deg,
+    rgba(0, 240, 255, 0.08) 320deg,
+    rgba(0, 240, 255, 0.28) 360deg
+  );
+  border-radius: 50%;
+  animation: radarSpin 4s linear infinite;
+}
+@keyframes radarSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

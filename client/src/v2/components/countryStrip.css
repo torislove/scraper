@@ -11,7 +11,10 @@
     linear-gradient(135deg, rgba(18, 24, 38, 0.96), rgba(11, 16, 27, 0.96));
   border: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  overflow: hidden;
+  /* The country picker expands inside this card. `overflow: hidden` clipped it
+     whenever the dashboard was short, so the card must never clip its own
+     children; the animated border ring is masked and needs no clipping. */
+  overflow: visible;
 }
 
 .country-strip-glow {
@@ -118,11 +121,13 @@
 .country-strip-pills {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
+  overflow: visible;
+  padding-bottom: 0;
+  scrollbar-width: none;
 }
+.country-strip-pills::-webkit-scrollbar { display: none; }
 
 .country-pill {
   flex: 0 0 auto;

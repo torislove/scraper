@@ -7,6 +7,7 @@
 
 const indiaGeoIndex = require('../utils/indiaGeoIndex');
 const { resolveUniversalZones } = require('../utils/universalGeoCluster');
+const { resolveInternationalZones } = require('../utils/internationalGeo');
 const { getConcurrencyMetrics } = require('../utils/queue');
 const { classifyCategory, pickAutoEngines } = require('./categoryRouter');
 
@@ -170,7 +171,7 @@ function round(value, digits = 0) {
   return Math.round(value * factor) / factor;
 }
 
-function estimateRun(params = {}) {
+async function estimateRun(params = {}) {
   const category = String(params.category || params.query || 'Business').trim();
   const location = String(params.location || '').trim();
   const strategy = String(params.strategy || 'broad').toLowerCase();
@@ -194,12 +195,28 @@ function estimateRun(params = {}) {
     warnings.push('No location supplied. ETA assumes a single central zone.');
   }
 
-  const resolved = location ? indiaGeoIndex.resolveQuick(location) : null;
-  if (!resolved && location) {
-    warnings.push(`"${location}" was not found in the local India index. ETA assumes one fallback zone; the scraper may still geocode it at runtime.`);
+  const explicitCountry = String(params.country || params.searchCountry || '').trim().toUpperCase();
+  const isExplicitlyInternational = Boolean(explicitCountry && explicitCountry !== 'IN');
+
+  let resolved = (location && !isExplicitlyInternational) ? indiaGeoIndex.resolveQuick(location) : null;
+  let zones = [];
+  let internationalAnchor = null;
+
+  if (resolved) {
+    zones = resolveUniversalZones(location, category) || [];
+  } else if (location) {
+    try {
+      const intl = await resolveInternationalZones(location, category, { country: explicitCountry || undefined });
+      if (intl && intl.anchor) {
+        internationalAnchor = intl.anchor;
+        zones = intl.zones || [];
+      }
+    } catch (e) {}
+    if (!zones.length && !isExplicitlyInternational) {
+      zones = resolveUniversalZones(location, category) || [];
+    }
   }
 
-  const zones = resolveUniversalZones(location || 'India', category) || [];
   const safeZones = zones.length ? zones : [{ zoneName: 'Central Area', queryText: `${category} in ${location || 'India'}`, isSingle: true }];
 
   const concurrency = getConcurrencyMetrics();
@@ -341,15 +358,24 @@ function estimateRun(params = {}) {
     };
   });
 
-  const zonePreview = safeZones.slice(0, 20).map((z, index) => ({
-    index: index + 1,
-    name: z.zoneName,
-    query: z.queryText,
-    lat: z.lat || null,
-    lng: z.lng || null,
-    district: z.district || resolved?.district || null,
-    state: z.state || resolved?.state || null
-  }));
+  const zonePreview = safeZones.map((z, index) => {
+    const rawLat = z.lat ?? z.latitude;
+    const rawLng = z.lng ?? z.longitude;
+    const fallbackLat = internationalAnchor?.lat != null ? Number(internationalAnchor.lat) : (resolved?.lat != null ? Number(resolved.lat) : null);
+    const fallbackLng = internationalAnchor?.lng != null ? Number(internationalAnchor.lng) : (resolved?.lng != null ? Number(resolved.lng) : null);
+    return {
+      index: index + 1,
+      name: z.zoneName || z.name || `Zone ${index + 1}`,
+      zoneName: z.zoneName || z.name || `Zone ${index + 1}`,
+      query: z.queryText || z.query || '',
+      lat: rawLat != null ? Number(rawLat) : fallbackLat,
+      lng: rawLng != null ? Number(rawLng) : fallbackLng,
+      radiusKm: z.radiusKm || 3.5,
+      approx: Boolean(z.isApproximate || z.approx),
+      district: z.district || resolved?.district || internationalAnchor?.district || null,
+      state: z.state || resolved?.state || internationalAnchor?.state || null
+    };
+  });
 
   assumptions.push('Zone count comes from the local universal zone resolver, not a random guess.');
   assumptions.push(`Queue concurrency is read live: ${concurrency.maxWorkers} browser workers, ${concurrency.freeRamPct}% free RAM.`);
@@ -386,6 +412,15 @@ function estimateRun(params = {}) {
       lat: resolved.lat,
       lng: resolved.lng,
       source: resolved.source
+    } : internationalAnchor ? {
+      name: internationalAnchor.name || location,
+      level: 'city',
+      district: internationalAnchor.district || null,
+      state: internationalAnchor.state || null,
+      village: null,
+      lat: internationalAnchor.lat,
+      lng: internationalAnchor.lng,
+      source: 'international'
     } : {
       name: location || 'India',
       level: 'fallback',

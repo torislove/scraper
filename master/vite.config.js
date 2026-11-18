@@ -24,93 +24,21 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           ws: true,
-          configure: (proxy) => {
-            proxy.on('proxyRes', (proxyRes, req, res) => {
-              // Long-lived SSE sockets can outlive the tab that opened them.
-              // http-proxy does not always propagate the downstream close
-              // upstream, so a dashboard tab closed mid-stream can leave a ghost
-              // stream counted on the engine. Tie the upstream response to the
-              // browser connection for stream paths only.
-              //
-              // Attach on the *downstream response*: an IncomingMessage "close"
-              // fires as soon as the request body is complete, which would kill
-              // a legitimate stream immediately.
-              if (!req?.url || !req.url.includes('/stream')) return;
-              const kill = () => {
-                try { proxyRes.destroy(); } catch (e) { /* already gone */ }
-              };
-              res.on('close', kill);
-              res.on('error', kill);
-            });
-            proxy.on('error', (err, req, res) => {
-              // Gracefully handle expected SSE stream disconnects during server restarts
-              if (req?.url?.includes('/stream') || req?.url?.includes('/logs')) {
-                try {
-                  if (res && !res.headersSent && typeof res.writeHead === 'function') {
-                    res.writeHead(503, { 'Content-Type': 'text/event-stream' });
-                    res.end('retry: 2500\n\n');
-                  } else if (res && !res.writableEnded && typeof res.end === 'function') {
-                    res.end();
-                  }
-                } catch (e) {}
-                return;
-              }
-              try {
-                if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-                  res.writeHead(503, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ ok: false, error: 'Server temporarily reconnecting', code: 'SERVER_RECONNECTING' }));
-                } else if (res && typeof res.end === 'function' && !res.writableEnded) {
-                  res.end();
-                }
-              } catch (e) {}
-            });
-          }
+          timeout: 0
         },
         '/logs': {
           target: 'http://127.0.0.1:5002',
           changeOrigin: true,
           secure: false,
-          configure: (proxy) => {
-            proxy.on('proxyRes', (proxyRes, req, res) => {
-              // Long-lived SSE sockets can outlive the tab that opened them.
-              // http-proxy does not always propagate the downstream close
-              // upstream, so a dashboard tab closed mid-stream can leave a ghost
-              // stream counted on the engine. Tie the upstream response to the
-              // browser connection for stream paths only.
-              //
-              // Attach on the *downstream response*: an IncomingMessage "close"
-              // fires as soon as the request body is complete, which would kill
-              // a legitimate stream immediately.
-              if (!req?.url || !req.url.includes('/stream')) return;
-              const kill = () => {
-                try { proxyRes.destroy(); } catch (e) { /* already gone */ }
-              };
-              res.on('close', kill);
-              res.on('error', kill);
-            });
-            proxy.on('error', (err, req, res) => {
-              // Gracefully handle expected SSE stream disconnects during server restarts
-              if (req?.url?.includes('/stream') || req?.url?.includes('/logs')) {
-                try {
-                  if (res && !res.headersSent && typeof res.writeHead === 'function') {
-                    res.writeHead(503, { 'Content-Type': 'text/event-stream' });
-                    res.end('retry: 2500\n\n');
-                  } else if (res && !res.writableEnded && typeof res.end === 'function') {
-                    res.end();
-                  }
-                } catch (e) {}
-                return;
-              }
-              try {
-                if (res && typeof res.writeHead === 'function' && !res.headersSent) {
-                  res.writeHead(503, { 'Content-Type': 'application/json' });
-                  res.end(JSON.stringify({ ok: false, error: 'Server temporarily reconnecting', code: 'SERVER_RECONNECTING' }));
-                } else if (res && typeof res.end === 'function' && !res.writableEnded) {
-                  res.end();
-                }
-              } catch (e) {}
-            });
-          }
+          ws: true,
+          timeout: 0
+        },
+        '/events': {
+          target: 'http://127.0.0.1:5002',
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+          timeout: 0
         }
       }
     },

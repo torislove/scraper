@@ -28,12 +28,10 @@ function envInt(name, fallback) {
   return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : fallback;
 }
 
-const TOTAL_SLOTS = Math.max(1, Math.min(8, envInt('SCRAPER_BROWSER_SLOTS', 5)));
-const ENRICH_RESERVE = Math.max(0, Math.min(TOTAL_SLOTS, envInt('SCRAPER_ENRICH_RESERVE', 2)));
-// Discovery-first: while any browser discovery job is queued, the enricher
-// waits. Measured on Tenali fast (28 zones): holding 2 slots for the enricher
-// cost 9.4 s and did not change final mobile coverage (79% vs 81%).
-const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD !== '0';
+const TOTAL_SLOTS = Math.max(4, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', 12)));
+const ENRICH_RESERVE = Math.max(2, Math.min(TOTAL_SLOTS, envInt('SCRAPER_ENRICH_RESERVE', 6)));
+// Enrichment must run concurrently with discovery so leads receive verified mobile numbers in real time.
+const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD === '1';
 
 let discoveryActive = 0;
 let enrichmentActive = 0;
@@ -50,9 +48,6 @@ function freeRamPct() {
 
 /** Discovery may use every slot the enricher is not holding. */
 function discoveryLimit() {
-  // Windows reports very little "free" RAM even when the machine is healthy
-  // (standby/cached pages count as used). Only throttle when memory is truly
-  // critical, otherwise the measured 5-slot budget wins.
   let critical = false;
   try {
     critical = os.freemem() < 1.5 * 1024 * 1024 * 1024 || freeRamPct() < 8;
@@ -61,11 +56,14 @@ function discoveryLimit() {
   return Math.max(1, Math.min(ramCap, TOTAL_SLOTS - enrichmentActive));
 }
 
-/** Enrichment may only take a genuinely free slot, capped by the reserve. */
+/** Enrichment gets dedicated slots that run continuously alongside discovery. */
 function enrichmentLimit() {
   if (ENRICH_YIELD && discoveryQueued > 0) return 0;
+  const slotsRemaining = TOTAL_SLOTS - enrichmentActive;
+  if (slotsRemaining <= 0) return 0;
   const free = Math.max(0, TOTAL_SLOTS - discoveryActive - enrichmentActive);
-  return Math.max(0, Math.min(ENRICH_RESERVE, free));
+  // Ensure at least 1-2 enrichment workers are active while leads are in queue
+  return Math.max(1, Math.min(ENRICH_RESERVE, free > 0 ? free : 1));
 }
 
 function notify() {

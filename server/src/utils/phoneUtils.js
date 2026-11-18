@@ -107,6 +107,24 @@ function normalizePhone(raw, opts = {}) {
       } else if (compact.length === 13 && compact.startsWith('091')) {
         compact = '+91' + compact.slice(3);
       }
+    } else if (defaultCountry === 'CA' || defaultCountry === 'US') {
+      if (compact.length === 11 && compact.startsWith('1')) {
+        compact = '+' + compact;
+      } else if (compact.length === 10) {
+        compact = '+1' + compact;
+      }
+    } else if (defaultCountry === 'GB') {
+      if (compact.startsWith('0') && (compact.length === 11 || compact.length === 10)) {
+        compact = '+44' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'AU') {
+      if (compact.startsWith('0') && compact.length === 10) {
+        compact = '+61' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'AE') {
+      if (compact.startsWith('0') && (compact.length === 10 || compact.length === 9)) {
+        compact = '+971' + compact.slice(1);
+      }
     }
     // Everywhere else the national form is passed through unchanged.
     // libphonenumber applies the default country and its own trunk-prefix
@@ -122,7 +140,15 @@ function normalizePhone(raw, opts = {}) {
   if (!parsed || !parsed.isValid()) return null;
 
   const country = parsed.country || 'IN';
+  const targetCountry = String(opts.defaultCountry || 'IN').toUpperCase();
   if (country !== 'IN' && !opts.allowInternational) return null;
+
+  // A run for one market must never save another market's number. This is the
+  // rule that keeps a +91 Instagram snippet out of a US lead. India keeps its
+  // historical international acceptance, and an explicit `allowedCountry`
+  // override lets a caller widen the rule when it really means to.
+  const requiredCountry = opts.allowedCountry ? String(opts.allowedCountry).toUpperCase() : targetCountry;
+  if (requiredCountry && requiredCountry !== 'IN' && country !== requiredCountry) return null;
 
   const national = parsed.nationalNumber || '';
   const type = parsed.getType ? (parsed.getType() || 'UNKNOWN') : 'UNKNOWN';
@@ -525,7 +551,7 @@ function syncPhoneFlags(lead) {
     }
     return lead;
   }
-  const parsed = normalizePhone(raw, { context: 'phone mobile', trusted: true });
+  const parsed = normalizePhone(raw, { context: 'phone mobile', trusted: true, allowInternational: true });
   if (!parsed) return lead;
 
   lead.isMobile = Boolean(parsed.isMobile);

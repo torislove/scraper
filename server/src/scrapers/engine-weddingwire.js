@@ -33,19 +33,109 @@ const LIST_ATTEMPTS = 3;
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
+const US_STATE_MAP = {
+  'al': 'al-alabama', 'alabama': 'al-alabama',
+  'ak': 'ak-alaska', 'alaska': 'ak-alaska',
+  'az': 'az-arizona', 'arizona': 'az-arizona',
+  'ar': 'ar-arkansas', 'arkansas': 'ar-arkansas',
+  'ca': 'ca-california', 'california': 'ca-california',
+  'co': 'co-colorado', 'colorado': 'co-colorado',
+  'ct': 'ct-connecticut', 'connecticut': 'ct-connecticut',
+  'de': 'de-delaware', 'delaware': 'de-delaware',
+  'fl': 'fl-florida', 'florida': 'fl-florida',
+  'ga': 'ga-georgia', 'georgia': 'ga-georgia',
+  'hi': 'hi-hawaii', 'hawaii': 'hi-hawaii',
+  'id': 'id-idaho', 'idaho': 'id-idaho',
+  'il': 'il-illinois', 'illinois': 'il-illinois',
+  'in': 'in-indiana', 'indiana': 'in-indiana',
+  'ia': 'ia-iowa', 'iowa': 'ia-iowa',
+  'ks': 'ks-kansas', 'kansas': 'ks-kansas',
+  'ky': 'ky-kentucky', 'kentucky': 'ky-kentucky',
+  'la': 'la-louisiana', 'louisiana': 'la-louisiana',
+  'me': 'me-maine', 'maine': 'me-maine',
+  'md': 'md-maryland', 'maryland': 'md-maryland',
+  'ma': 'ma-massachusetts', 'massachusetts': 'ma-massachusetts',
+  'mi': 'mi-michigan', 'michigan': 'mi-michigan',
+  'mn': 'mn-minnesota', 'minnesota': 'mn-minnesota',
+  'ms': 'ms-mississippi', 'mississippi': 'ms-mississippi',
+  'mo': 'mo-missouri', 'missouri': 'mo-missouri',
+  'mt': 'mt-montana', 'montana': 'mt-montana',
+  'ne': 'ne-nebraska', 'nebraska': 'ne-nebraska',
+  'nv': 'nv-nevada', 'nv-nevada': 'nv-nevada',
+  'nh': 'nh-new-hampshire', 'new hampshire': 'nh-new-hampshire',
+  'nj': 'nj-new-jersey', 'new jersey': 'nj-new-jersey',
+  'nm': 'nm-new-mexico', 'new mexico': 'nm-new-mexico',
+  'ny': 'ny-new-york', 'new york': 'ny-new-york',
+  'nc': 'nc-north-carolina', 'north carolina': 'nc-north-carolina',
+  'nd': 'nd-north-dakota', 'north dakota': 'nd-north-dakota',
+  'oh': 'oh-ohio', 'ohio': 'oh-ohio',
+  'ok': 'ok-oklahoma', 'oklahoma': 'ok-oklahoma',
+  'or': 'or-oregon', 'oregon': 'or-oregon',
+  'pa': 'pa-pennsylvania', 'pennsylvania': 'pa-pennsylvania',
+  'ri': 'ri-rhode-island', 'rhode island': 'ri-rhode-island',
+  'sc': 'sc-south-carolina', 'south carolina': 'sc-south-carolina',
+  'sd': 'sd-south-dakota', 'south dakota': 'sd-south-dakota',
+  'tn': 'tn-tennessee', 'tennessee': 'tn-tennessee',
+  'tx': 'tx-texas', 'texas': 'tx-texas',
+  'ut': 'ut-utah', 'utah': 'ut-utah',
+  'vt': 'vt-vermont', 'vermont': 'vt-vermont',
+  'va': 'va-virginia', 'virginia': 'va-virginia',
+  'wa': 'wa-washington', 'washington': 'wa-washington',
+  'wv': 'wv-west-virginia', 'west virginia': 'wv-west-virginia',
+  'wi': 'wi-wisconsin', 'wisconsin': 'wi-wisconsin',
+  'wy': 'wy-wyoming', 'wyoming': 'wy-wyoming',
+  'dc': 'dc-district-of-columbia', 'district of columbia': 'dc-district-of-columbia'
+};
+
+const WW_CATALOG_IDS = {
+  'wedding-venues': 1,
+  'wedding-caterers': 2,
+  'wedding-planners': 3,
+  'wedding-florists': 4,
+  'wedding-djs': 5,
+  'bridal-makeup-artists': 6,
+  'wedding-hair-makeup': 6,
+  'wedding-photographers': 10,
+  'wedding-videographers': 11
+};
+
 function citySlug(location) {
   return dv.slug(String(location || '').split(',')[0]) || 'india';
 }
 
-function listingUrl(location) {
-  return `https://www.weddingwire.in/wedding-venues/${citySlug(location)}`;
+function categorySlug(category) {
+  const c = String(category || '').toLowerCase();
+  if (/photo|video|shoot/i.test(c)) return 'wedding-photographers';
+  if (/cater|food/i.test(c)) return 'wedding-caterers';
+  if (/plan|decorat|event/i.test(c)) return 'wedding-planners';
+  if (/makeup|mehendi|bridal/i.test(c)) return 'bridal-makeup-artists';
+  return 'wedding-venues';
+}
+
+function listingUrl(location, category = 'wedding-venues', countryCode = 'IN') {
+  const catSlug = categorySlug(category);
+  const isUS = String(countryCode || '').toUpperCase() === 'US';
+  if (isUS) {
+    const rawLoc = String(location || '').replace(/,\s*(?:united states|usa|us)$/i, '').trim();
+    const parts = rawLoc.split(',').map(s => s.trim().toLowerCase());
+    const city = dv.slug(parts[0]) || 'troy';
+    let stateSlug = 'ny-new-york';
+    if (parts.length > 1) {
+      const st = parts[1].replace(/[^a-z\s]/gi, '').trim().toLowerCase();
+      if (US_STATE_MAP[st]) stateSlug = US_STATE_MAP[st];
+    }
+    const catId = WW_CATALOG_IDS[catSlug] || 10;
+    return `https://www.weddingwire.com/c/${stateSlug}/${city}/${catSlug}/${catId}-vendors.html`;
+  }
+  const city = citySlug(location);
+  return `https://www.weddingwire.in/${catSlug}/${city}`;
 }
 
 async function extractTiles(page) {
   return page.evaluate(() => {
     const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
     return [...document.querySelectorAll('li.vendorTile')].map(tile => {
-      const titleAnchor = tile.querySelector('a.vendorTile__title');
+      const titleAnchor = tile.querySelector('a.vendorTile__title') || tile.querySelector('a[href*="/biz/"]');
       let name = clean(tile.getAttribute('data-ec-name') || (titleAnchor ? titleAnchor.innerText : ''));
       if (/\d+°\d+['′"]\d+.*[NSEW]|-?\d{1,3}\.\d{3,}\s*,\s*-?\d{1,3}\.\d{3,}/i.test(name)) {
         name = '';
@@ -62,8 +152,10 @@ async function extractTiles(page) {
       const locality = clean(tile.querySelector('.vendorTile__location') ? tile.querySelector('.vendorTile__location').innerText : '');
       const price = clean(tile.querySelector('.vendorTileFooter__price') ? tile.querySelector('.vendorTileFooter__price').innerText : '');
       const capacity = clean(tile.querySelector('.vendorTileFooter__capacity') ? tile.querySelector('.vendorTileFooter__capacity').innerText : '');
+      const rating = clean(tile.querySelector('.vendorTile__rating') ? tile.querySelector('.vendorTile__rating').innerText : (tile.innerText.match(/(\d\.\d)\s*\(\d+\)/)?.[1] || ''));
+      const reviewsCount = clean(tile.querySelector('.vendorTile__reviews') ? tile.querySelector('.vendorTile__reviews').innerText : (tile.innerText.match(/\((\d+)\)/)?.[1] || ''));
 
-      const images = [...tile.querySelectorAll('img[src*="weddingwire.in/vendor"]')]
+      const images = [...tile.querySelectorAll('img[src*="weddingwire."][src*="/vendor"]')]
         .map(img => img.getAttribute('src') || '')
         .filter(Boolean);
 
@@ -85,6 +177,8 @@ async function extractTiles(page) {
         locality,
         price,
         capacity,
+        rating,
+        reviewsCount,
         description: description.slice(0, 700),
         info,
         images: [...new Set(images)].slice(0, 12)
@@ -171,7 +265,7 @@ function parseLd(blocks) {
   return out;
 }
 
-function buildFromDetail(raw, card) {
+function buildFromDetail(raw, card, countryCode = 'IN') {
   const ld = parseLd(raw.ldBlocks || []);
   const venue = ld.venue || {};
   const address = venue.address || {};
@@ -261,6 +355,24 @@ function buildFromDetail(raw, card) {
 
   const reviewMatch = raw.reviewText.match(/([0-5](?:\.\d)?)\s*(?:out of 5|\/\s*5)/i);
   const reviewCountMatch = raw.reviewText.match(/([\d,]+)\s+Reviews?/i);
+  const venueRating = venue.aggregateRating ? (venue.aggregateRating.ratingValue || '') : '';
+  const venueReviewCount = venue.aggregateRating ? (venue.aggregateRating.reviewCount || '') : '';
+
+  let phone = '';
+  if (venue.telephone) {
+    phone = String(venue.telephone).trim();
+  }
+  let phones = [];
+  if (phone) {
+    const rawDigits = phone.replace(/\D/g, '');
+    let e164 = phone;
+    if (rawDigits.length === 10) {
+      e164 = String(countryCode).toUpperCase() === 'US' ? `+1 ${rawDigits.slice(0, 3)} ${rawDigits.slice(3, 6)} ${rawDigits.slice(6)}` : `+91 ${rawDigits.slice(0, 5)} ${rawDigits.slice(5)}`;
+    } else if (rawDigits.length === 11 && rawDigits.startsWith('1')) {
+      e164 = `+1 ${rawDigits.slice(1, 4)} ${rawDigits.slice(4, 7)} ${rawDigits.slice(7)}`;
+    }
+    phones = [{ e164, raw: phone, isValid: true, isMobile: true }];
+  }
 
   return {
     description: raw.descriptionText,
@@ -270,8 +382,8 @@ function buildFromDetail(raw, card) {
     pincode: dv.cleanText(address.postalCode, 10) || dv.extractPincode(addressText),
     latitude: Number.isFinite(Number(geo.latitude)) ? Number(geo.latitude) : null,
     longitude: Number.isFinite(Number(geo.longitude)) ? Number(geo.longitude) : null,
-    rating: reviewCountMatch || reviewMatch ? dv.parseRating(reviewMatch ? reviewMatch[1] : '') : '',
-    reviewCount: reviewCountMatch ? dv.parseReviewCount(reviewCountMatch[1]) : '',
+    rating: venueRating || (reviewCountMatch || reviewMatch ? dv.parseRating(reviewMatch ? reviewMatch[1] : '') : '') || card.rating || '',
+    reviewCount: venueReviewCount || (reviewCountMatch ? dv.parseReviewCount(reviewCountMatch[1]) : '') || card.reviewsCount || '',
     priceRange: dv.parsePrice(venue.priceRange || card.price, ''),
     capacity: capacity || dv.parseCapacity(card.capacity),
     amenities,
@@ -279,17 +391,15 @@ function buildFromDetail(raw, card) {
     services,
     otherInfo,
     images: dv.uniqueStrings([...images, ...(card.images || [])], 30),
+    logo: venue.logo || '',
+    phone: phones[0]?.e164 || '',
+    phones,
     faqs: (raw.faqPairs || []).slice(0, 14)
   };
 }
 
-async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
-  // WeddingWire's listing URL is the venue directory only.
-  if (!fidelity.isVenueCategory(category)) {
-    deps.logger(`[WeddingWire] Skipped: "${category}" is not a venue category.`);
-    return { totalScraped: 0, newInserted: 0, updated: 0, skipped: 'not-a-venue-category' };
-  }
-  const url = listingUrl(location);
+async function scrapeWeddingWire(category, location, sessionId = 'legacy', countryCode = 'IN') {
+  const url = listingUrl(location, category, countryCode);
   const parsedLocation = dv.parseCityState(location);
   const city = parsedLocation.city || dv.cleanText(String(location || '').split(',')[0], 120);
 
@@ -305,12 +415,13 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
   let cards = [];
 
   try {
+    const isUS = String(countryCode || '').toUpperCase() === 'US';
     context = await browser.newContext({
       userAgent: USER_AGENT,
       viewport: { width: 1366, height: 950 },
-      locale: 'en-IN',
-      timezoneId: 'Asia/Kolkata',
-      extraHTTPHeaders: { 'Accept-Language': 'en-IN,en;q=0.9' }
+      locale: isUS ? 'en-US' : 'en-IN',
+      timezoneId: isUS ? 'America/New_York' : 'Asia/Kolkata',
+      extraHTTPHeaders: { 'Accept-Language': isUS ? 'en-US,en;q=0.9' : 'en-IN,en;q=0.9' }
     });
     const page = await context.newPage();
 
@@ -346,19 +457,21 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
     const queue = cards.slice(0, MAX_DETAIL_PAGES);
     let cursor = 0;
 
+    const baseOrigin = (countryCode && String(countryCode).toUpperCase() !== 'IN') ? 'https://www.weddingwire.com' : 'https://www.weddingwire.in';
+
     const worker = async () => {
       const detailPage = await context.newPage();
       try {
         while (cursor < queue.length && !deps.abortSignal.aborted) {
           const card = queue[cursor++];
-          const profileUrl = dv.ensureAbsolute(card.profileHref, 'https://www.weddingwire.in');
+          const profileUrl = dv.ensureAbsolute(card.profileHref, baseOrigin);
           if (!profileUrl) continue;
           try {
-            await detailPage.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 40000 });
-            await detailPage.waitForSelector('h2#description', { timeout: 12000 }).catch(() => {});
-            await detailPage.waitForTimeout(1200);
+            await detailPage.goto(profileUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await detailPage.waitForSelector('script[type="application/ld+json"], h2#description', { timeout: 6000 }).catch(() => {});
+            await detailPage.waitForTimeout(800);
             const raw = await extractDetail(detailPage);
-            if (raw && raw.descriptionText) details.set(profileUrl, raw);
+            if (raw && (raw.descriptionText || (raw.ldBlocks && raw.ldBlocks.length))) details.set(profileUrl, raw);
           } catch (error) {
             deps.logger(`[WeddingWire] Detail failed for ${card.name}: ${error.message}`);
           }
@@ -375,9 +488,9 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
 
     for (const card of cards) {
       if (deps.abortSignal.aborted) break;
-      const profileUrl = dv.ensureAbsolute(card.profileHref, 'https://www.weddingwire.in');
+      const profileUrl = dv.ensureAbsolute(card.profileHref, baseOrigin);
       const raw = details.get(profileUrl) || null;
-      const detail = raw ? buildFromDetail(raw, card) : null;
+      const detail = raw ? buildFromDetail(raw, card, countryCode) : null;
       const info = card.info || {};
       const locality = detail && detail.locality ? detail.locality : (card.locality || info.city || city);
       const address = detail && detail.address
@@ -401,15 +514,16 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy') {
         pincode: (detail && detail.pincode) || info.address?.postal_code || '',
         latitude: detail ? detail.latitude : null,
         longitude: detail ? detail.longitude : null,
-        rating: detail ? detail.rating : '',
-        reviewCount: detail ? detail.reviewCount : '',
+        rating: (detail && detail.rating) || card.rating || '',
+        reviewCount: (detail && detail.reviewCount) || card.reviewsCount || '',
         priceRange: (detail && detail.priceRange) || dv.parsePrice(card.price, ''),
         capacity: (detail && detail.capacity) || dv.parseCapacity(card.capacity),
         amenities: detail ? detail.amenities : [],
         services: detail ? detail.services : [],
         payments: detail ? detail.payments : [],
         images: (detail && detail.images.length ? detail.images : card.images),
-        logo: (detail && detail.images[0]) || card.images[0] || '',
+        logo: (detail && detail.logo) || (detail && detail.images[0]) || card.images[0] || '',
+        phones: detail ? detail.phones : [],
         profileUrl,
         mapsUrl: detail && detail.latitude && detail.longitude
           ? `https://www.google.com/maps/search/?api=1&query=${detail.latitude},${detail.longitude}`

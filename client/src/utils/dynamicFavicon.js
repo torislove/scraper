@@ -70,26 +70,26 @@ function drawRadar(ctx, angle, isScanning, count) {
   const cy = 32;
   const r = 26;
 
-  // Dark obsidian circular background
+  // Pure white circular background matching white aesthetic
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, 30, 0, Math.PI * 2);
-  ctx.fillStyle = '#0a0f1d';
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = isScanning ? '#00f0ff' : '#10b981';
+  ctx.strokeStyle = isScanning ? '#10b981' : '#cbd5e1';
   ctx.stroke();
 
   // Radar grid concentric circles
   ctx.beginPath();
   ctx.arc(cx, cy, 18, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.25)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.beginPath();
   ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -97,7 +97,7 @@ function drawRadar(ctx, angle, isScanning, count) {
   ctx.beginPath();
   ctx.moveTo(cx - 26, cy); ctx.lineTo(cx + 26, cy);
   ctx.moveTo(cx, cy - 26); ctx.lineTo(cx, cy + 26);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.2)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -134,7 +134,7 @@ function drawRadar(ctx, angle, isScanning, count) {
     ctx.arc(48, 16, 12, 0, Math.PI * 2);
     ctx.fillStyle = '#10b981';
     ctx.fill();
-    ctx.strokeStyle = '#0a0f1d';
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
 

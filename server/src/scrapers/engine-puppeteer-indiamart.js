@@ -204,11 +204,37 @@ async function scrapePuppeteerIndiaMart(category, location, sessionId = 'legacy'
         rawCards = await extractCards(page);
         workingUrl = page.url();
 
-        // Reveal up to 6 phone numbers per pass.
-        for (let i = 0; i < Math.min(rawCards.length, 6) && !deps.abortSignal.aborted; i++) {
+        // Reveal up to 8 phone numbers on initial page.
+        for (let i = 0; i < Math.min(rawCards.length, 8) && !deps.abortSignal.aborted; i++) {
           if (!rawCards[i].hasShowMobile) continue;
           const best = await revealPhone(page, i);
           if (best) rawCards[i].phone = best;
+        }
+
+        // Deep Multi-Page Pagination Loop (pages 2 to 4)
+        for (let pageNum = 2; pageNum <= 4 && !deps.abortSignal.aborted && rawCards.length < 80; pageNum++) {
+          try {
+            const pageUrl = `${url}&page=${pageNum}`;
+            deps.logger(`[IndiaMART] Navigating to page ${pageNum}: ${pageUrl}`);
+            const pCount = await loadSearchPage(page, pageUrl);
+            if (pCount > 0) {
+              const moreCards = await extractCards(page);
+              const seenSuppliers = new Set(rawCards.map(c => c.supplierName));
+              const freshCards = moreCards.filter(c => !seenSuppliers.has(c.supplierName));
+              for (let i = 0; i < Math.min(freshCards.length, 6) && !deps.abortSignal.aborted; i++) {
+                if (!freshCards[i].hasShowMobile) continue;
+                const best = await revealPhone(page, i);
+                if (best) freshCards[i].phone = best;
+              }
+              rawCards.push(...freshCards);
+              deps.logger(`[IndiaMART] Page ${pageNum} yielded ${freshCards.length} fresh card(s) (total: ${rawCards.length})`);
+            } else {
+              break;
+            }
+          } catch (pageErr) {
+            deps.logger(`[IndiaMART] Pagination notice for page ${pageNum}: ${pageErr.message}`);
+            break;
+          }
         }
         break;
       }

@@ -23,7 +23,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const https = require('https');
 const dbAdapter = require('../config/dbAdapter');
-const { normalizePhone } = require('../utils/phoneUtils');
+const { normalizePhone, extractPhones } = require('../utils/phoneUtils');
 
 const USER_AGENT = 'Mozilla/5.0 (compatible; Scraper.co.in-LeadFinder/1.0; +https://scraper.co.in)';
 const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
@@ -165,7 +165,8 @@ function socialFromHref(href) {
   return null;
 }
 
-function extractFromHtml(html, baseUrl) {
+function extractFromHtml(html, baseUrl, countryCode = 'IN') {
+  const country = String(countryCode || 'IN').toUpperCase();
   const $ = cheerio.load(html);
   const emailSet = new Set();
   const phoneSet = new Map();
@@ -177,7 +178,11 @@ function extractFromHtml(html, baseUrl) {
   });
 
   $('a[href^="tel:"]').each((_, element) => {
-    const parsed = normalizePhone($(element).attr('href'), { context: 'tel' });
+    const parsed = normalizePhone($(element).attr('href'), {
+      context: 'tel',
+      defaultCountry: country,
+      allowInternational: true
+    });
     if (parsed && parsed.isValid !== false) phoneSet.set(parsed.e164, parsed);
   });
 
@@ -203,10 +208,26 @@ function extractFromHtml(html, baseUrl) {
     }
   }
   if (!phoneSet.size) {
-    for (const match of text.matchAll(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}/g)) {
-      const parsed = normalizePhone(match[0], { context: 'phone' });
-      if (parsed && parsed.isValid !== false) phoneSet.set(parsed.e164, parsed);
-      if (phoneSet.size >= 4) break;
+    if (country === 'IN') {
+      for (const match of text.matchAll(/(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}/g)) {
+        const parsed = normalizePhone(match[0], { context: 'phone', defaultCountry: 'IN', allowInternational: true });
+        if (parsed && parsed.isValid !== false) phoneSet.set(parsed.e164, parsed);
+        if (phoneSet.size >= 4) break;
+      }
+    } else {
+      // Western sites publish numbers in local formats ("(248) 555-0134",
+      // "020 7946 0958"). The country-aware extractor validates them against
+      // that market and refuses foreign prefixes.
+      const parsedPhones = extractPhones(text, {
+        defaultCountry: country,
+        allowInternational: true,
+        trusted: false,
+        context: 'phone contact call'
+      }).filter(phone => phone.isMobile || phone.isLandline || phone.isTollFree);
+      for (const parsed of parsedPhones) {
+        phoneSet.set(parsed.e164, parsed);
+        if (phoneSet.size >= 4) break;
+      }
     }
   }
 
@@ -282,9 +303,10 @@ function needsEnrichment(lead) {
   return !hasAnyPhone(lead) || !lead.email || !lead.instagram || !lead.facebook;
 }
 
-async function enrichOne(lead) {
+async function enrichOne(lead, countryCode = 'IN') {
   const website = String(lead.website || '').trim();
   if (!isPublicUrl(website)) return null;
+  const country = String(lead.country || countryCode || 'IN').toUpperCase();
 
   const collected = { emails: [], phones: [], socials: {} };
   const visited = new Set();
@@ -302,7 +324,7 @@ async function enrichOne(lead) {
   const first = await fetchPage(website);
   if (!first) return null;
   visited.add(first.url);
-  merge(extractFromHtml(first.html, first.url));
+  merge(extractFromHtml(first.html, first.url, country));
 
   if (needsMore(collected)) {
     for (const candidate of contactCandidates(first.html, first.url)) {
@@ -311,7 +333,7 @@ async function enrichOne(lead) {
       visited.add(candidate);
       const page = await fetchPage(candidate);
       if (!page) continue;
-      merge(extractFromHtml(page.html, page.url));
+      merge(extractFromHtml(page.html, page.url, country));
       if (!needsMore(collected)) break;
     }
   }
@@ -326,14 +348,14 @@ function needsMore(collected) {
   return (!collected.emails.length || !collected.socials.instagram || !collected.socials.facebook);
 }
 
-async function scrapeWebContact(leads = [], { sessionId = '', concurrency = DEFAULT_CONCURRENCY, limit = DEFAULT_LIMIT, budgetMs = 90_000 } = {}) {
+async function scrapeWebContact(leads = [], { sessionId = '', concurrency = DEFAULT_CONCURRENCY, limit = DEFAULT_LIMIT, budgetMs = 90_000, countryCode = 'IN' } = {}) {
   // Phone coverage is the product. When a business has its own website, that site
   // is the most reliable place to find the missing mobile, so leads with no phone
   // must be read first - the old code just took the first N leads in scrape order.
   const phonePriority = (lead) => {
     if (!hasAnyPhone(lead)) return 0;
     const mobileOf = (value) => {
-      try { return Boolean(normalizePhone(String(value || ''), { context: 'phone mobile', trusted: true })?.isMobile); }
+      try { return Boolean(normalizePhone(String(value || ''), { context: 'phone mobile', trusted: true, allowInternational: true })?.isMobile); }
       catch (e) { return false; }
     };
     const isMobile = lead?.phoneType === 'mobile'
@@ -370,7 +392,7 @@ async function scrapeWebContact(leads = [], { sessionId = '', concurrency = DEFA
       // sites once the time budget is spent and report what was done.
       if (Date.now() - startedAt > budgetMs) return;
       const lead = targets[cursor++];
-      const found = await enrichOne(lead).catch(() => null);
+      const found = await enrichOne(lead, countryCode).catch(() => null);
       if (!found) continue;
 
       const current = dbAdapter.getVendors().find(v => v.id === lead.id);
@@ -396,7 +418,7 @@ async function scrapeWebContact(leads = [], { sessionId = '', concurrency = DEFA
         return String(p.e164 || p.number || p.raw || '').trim();
       };
       const isMobileE164 = (p) => {
-        try { return Boolean(normalizePhone(p, { context: 'phone mobile', trusted: true })?.isMobile); }
+        try { return Boolean(normalizePhone(p, { context: 'phone mobile', trusted: true, allowInternational: true })?.isMobile); }
         catch (e) { return false; }
       };
       const existingPhones = (Array.isArray(current.phones) ? current.phones : [])

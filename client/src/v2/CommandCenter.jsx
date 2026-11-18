@@ -7,13 +7,16 @@ import {
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
-  Table2, Tag, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge
+  Table2, Tag, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge,
+  Volume2, VolumeX, Lock, ShieldAlert, Maximize2, Minimize2
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
 import InstrumentPanel from './components/InstrumentPanel';
 import CountryFlagStrip from './components/CountryFlagStrip';
+import TrashModal from './components/TrashModal';
 import { findCountry } from './data/countries';
 import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
 import {
@@ -26,6 +29,7 @@ import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
   relativeTime
 } from './ui';
+import { getDisplayPhone, isMobilePhone, parseAdaptivePhone, whatsappNumber } from '../utils/phoneClassify';
 import { createLiveStream } from './liveStream';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
@@ -71,30 +75,7 @@ function urlFromTab(tab) {
   return tab === 'runs' ? 'folders' : tab;
 }
 
-export function getDisplayPhone(vendor) {
-  if (!vendor) return null;
-  if (vendor.phone && !String(vendor.phone).includes('Requires') && !String(vendor.phone).includes('Obfuscated')) return vendor.phone;
-  if (Array.isArray(vendor.phones) && vendor.phones.length > 0) {
-    const mobileFirst = vendor.phones.find(p => p && (p.isMobile || (typeof p === 'string' && /^[6-9]\d{9}$/.test(p.replace(/\D/g, '').slice(-10)))));
-    if (mobileFirst) {
-      const val = typeof mobileFirst === 'string' ? mobileFirst : mobileFirst.e164 || mobileFirst.national || mobileFirst.raw;
-      if (val && !String(val).includes('Requires')) return val;
-    }
-    const first = vendor.phones[0];
-    const val = typeof first === 'string' ? first : first?.e164 || first?.national || first?.raw;
-    if (val && !String(val).includes('Requires')) return val;
-  }
-  if (vendor.whatsapp && !String(vendor.whatsapp).includes('Requires')) return vendor.whatsapp;
-  if (vendor.phone_primary && !String(vendor.phone_primary).includes('Requires')) return vendor.phone_primary;
-  return null;
-}
 
-export function isMobilePhone(phoneStr) {
-  if (!phoneStr) return false;
-  const digits = String(phoneStr).replace(/\D/g, '');
-  const last10 = digits.slice(-10);
-  return last10.length === 10 && /^[6-9]/.test(last10);
-}
 
 
 export function calculateHaversineKm(lat1, lon1, lat2, lon2) {
@@ -152,6 +133,23 @@ function qualityOf(vendor) {
   return legacy != null && Number.isFinite(Number(legacy)) ? Number(legacy) : null;
 }
 
+// Addresses often repeat the same part ("Troy, Troy, Ny, Ny"). Keep the first
+// mention of each part so the column reads cleanly at any width.
+function dedupeAddress(value) {
+  const seen = new Set();
+  return String(value || '')
+    .split(',')
+    .map(part => part.trim())
+    .filter(part => {
+      if (!part) return false;
+      const key = part.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join(', ');
+}
+
 function vendorInitial(vendor) {
   return (vendor?.name || '?').slice(0, 1).toUpperCase();
 }
@@ -207,6 +205,7 @@ function FilterBar({ filters, onChange, total, shown, compact = false }) {
       <div className="v2-filter-search">
         <Search size={14} />
         <input
+          style={{ color: '#0F172A', caretColor: '#059669' }}
           value={filters.query}
           onChange={event => onChange('query', event.target.value)}
           placeholder="Search name, category, phone, village…"
@@ -412,14 +411,14 @@ function RunCard({
             <Download size={10} />
             <span>CSV</span>
           </button>
-          <button
-            type="button"
-            className="v2-run-btn-delete"
-            onClick={(e) => { e.stopPropagation(); onDelete?.(run); }}
-            title="Delete this folder"
+          <span
+            className="v2-run-btn-tool"
+            style={{ opacity: 0.65, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 7px' }}
+            title="Protected: Folder deletion is restricted to Master Admin"
           >
-            <Trash2 size={12} />
-          </button>
+            <Lock size={10} />
+            <span>Protected</span>
+          </span>
         </div>
       </footer>
     </div>
@@ -813,14 +812,13 @@ function FolderView({
             >
               <RefreshCw size={11} /> Run Again
             </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-danger v2-btn-xs"
-              onClick={() => onDelete?.(view.run)}
-              title="Permanently delete this folder"
+            <span
+              className="v2-tag-protected"
+              style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', color: '#6b7280', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500 }}
+              title="Protected Folder: Deletion is restricted to Master Admin"
             >
-              <Trash2 size={11} /> Delete
-            </button>
+              <Lock size={11} /> Protected
+            </span>
           </div>
         </div>
 
@@ -830,6 +828,7 @@ function FolderView({
             <Search size={13} className="v2-search-icon" />
             <input
               type="search"
+              style={{ color: '#0F172A', caretColor: '#059669' }}
               placeholder="Search leads in folder (business, area, phone)..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -1288,7 +1287,7 @@ function FolderView({
 
 function WhatsAppCampaignModal({ leads, onClose, onUpdateStage }) {
   const validLeads = useMemo(() => (Array.isArray(leads) ? leads : []).filter(l => isMobilePhone(getDisplayPhone(l))), [leads]);
-  
+
   // Product Catalog State
   const [products, setProducts] = useState(DEFAULT_PRODUCTS);
   const [selectedProdId, setSelectedProdId] = useState(DEFAULT_PRODUCTS[0]?.id || 'custom');
@@ -1448,7 +1447,7 @@ function WhatsAppCampaignModal({ leads, onClose, onUpdateStage }) {
           <div className="v2-wa-modal-grid">
             {/* LEFT COLUMN: Outreach Controls & Catalog Editor */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              
+
               {/* Prospect Navigation Card */}
               <div className="v2-wa-prospect-card" style={{ padding: '12px 14px', borderRadius: '10px' }}>
                 <div className="v2-wa-prospect-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -1832,10 +1831,14 @@ function CockpitView({
   onPage,
   onPageSize,
   run,
-  stats
+  progress = null,
+  stats,
+  onOpenTrash
 }) {
   const [cockpitSelectedIds, setCockpitSelectedIds] = useState(new Set());
   const [showCockpitWaModal, setShowCockpitWaModal] = useState(false);
+  const [hoveredLeadId, setHoveredLeadId] = useState(null);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const crmPhonesMap = useMemo(() => {
     const map = new Map();
@@ -1889,29 +1892,13 @@ function CockpitView({
     toast.success(`Copied ${rawPhones.length} mobile numbers to clipboard!`);
   };
 
-  const stageCounts = useMemo(() => {
-    const map = {};
-    CRM_STAGES.forEach(stage => { map[stage.id] = 0; });
-    vendors.forEach(vendor => {
-      const stage = crmStageOf(vendor);
-      map[stage] = (map[stage] || 0) + 1;
-    });
-    return map;
-  }, [vendors]);
-
   const plotted = filteredVendors.filter(vendor => Number.isFinite(Number(vendor.latitude))).length;
   const recentRuns = runs.slice(0, 6);
 
-  // Which scrapes produced the live rows? Counts respect the open folder so a
-  // selected source chip keeps a stable total instead of collapsing to itself.
+  // Which leads produced the live rows? Scoped strictly to the present scrape
   const scopedVendors = useMemo(() => {
-    if (!sessionFilter) return vendors || [];
-    return (vendors || []).filter(v =>
-      v.sessionId === sessionFilter ||
-      v.lastSessionId === sessionFilter ||
-      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionFilter))
-    );
-  }, [vendors, sessionFilter]);
+    return filteredVendors || [];
+  }, [filteredVendors]);
 
   const sourceFacets = useMemo(() => listLeadSources(scopedVendors), [scopedVendors]);
   const activeSource = filters?.source || 'all';
@@ -1931,13 +1918,16 @@ function CockpitView({
   };
 
   return (
-    <div className="v2-cockpit">
+    <div className={cx('v2-cockpit', isFocusMode && 'is-focus-mode')}>
       {/* LEFT: folders + CRM */}
       <aside className="v2-cockpit-col v2-cp-left">
         <section className="v2-cp-panel v2-cp-folders">
           <header className="v2-cp-head">
             <span><FolderArchive size={13} /> FOLDERS <b>{formatNumber(runs.length)}</b></span>
-            <button type="button" onClick={() => onTab('runs')} title="Open all folders">All</button>
+            <span className="v2-cp-head-actions">
+              <button type="button" onClick={onOpenTrash} title="Recovery bin — restore deleted leads"><Trash2 size={12} /> Trash</button>
+              <button type="button" onClick={() => onTab('runs')} title="Open all folders">All</button>
+            </span>
           </header>
           <div className="v2-cp-folder-list">
             {recentRuns.map(runCard => (
@@ -1955,32 +1945,6 @@ function CockpitView({
             )}
           </div>
         </section>
-
-        <section className="v2-cp-panel v2-cp-crm">
-          <header className="v2-cp-head">
-            <span><Users size={13} /> PIPELINE</span>
-            <button type="button" onClick={() => onTab('crm')} title="Open CRM board">Board</button>
-          </header>
-          <div className="v2-cp-crm-list">
-            {CRM_STAGES.map(stage => (
-              <button
-                type="button"
-                key={stage.id}
-                className={cx('v2-cp-crm-row', `stage-${stage.id}`)}
-                onClick={() => onTab('crm')}
-                title={`${stage.label}: open the CRM board`}
-              >
-                <i />
-                <span>{stage.label}</span>
-                <b>{formatNumber(stageCounts[stage.id] || 0)}</b>
-              </button>
-            ))}
-          </div>
-          <footer className="v2-cp-crm-foot">
-            <span>Qualified <b>{formatNumber(stageCounts.qualified || 0)}</b></span>
-            <span>Won <b>{formatNumber(stageCounts.won || 0)}</b></span>
-          </footer>
-        </section>
       </aside>
 
       {/* CENTER: live leads */}
@@ -1994,15 +1958,39 @@ function CockpitView({
           <span className="v2-cp-sub">
             {formatNumber(stats.phones)} mobiles · {stats.avg}% profile quality
           </span>
-          <button
-            type="button"
-            className="v2-btn-ghost v2-export-csv-btn"
-            onClick={handleExportCsv}
-            title="Download the live leads (or selected rows) as a CSV spreadsheet with the scrape source"
-          >
-            <Download size={12} />
-            <span>Export CSV</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              className={cx('v2-btn-ghost v2-focus-table-btn', isFocusMode && 'is-active')}
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              title={isFocusMode ? "Exit focus mode and restore 3-column cockpit" : "Maximize Live Leads table to full screen width"}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                height: 28,
+                padding: '0 9px',
+                borderRadius: 6,
+                fontSize: 10,
+                border: '1px solid var(--v2-line)',
+                background: isFocusMode ? 'rgba(34, 211, 238, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: isFocusMode ? '#22d3ee' : 'var(--v2-muted)',
+                cursor: 'pointer'
+              }}
+            >
+              {isFocusMode ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+              <span>{isFocusMode ? 'Normal' : 'Focus'}</span>
+            </button>
+            <button
+              type="button"
+              className="v2-btn-ghost v2-export-csv-btn"
+              onClick={handleExportCsv}
+              title="Download the live leads (or selected rows) as a CSV spreadsheet with the scrape source"
+            >
+              <Download size={12} />
+              <span>Export CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* Scrape source differentiation: each row is stamped by the engine
@@ -2015,7 +2003,7 @@ function CockpitView({
               className={cx('v2-source-chip', activeSource === 'all' && 'is-active')}
               onClick={() => onFilterChange?.('source', 'all')}
             >
-              All scrapes <b>{formatNumber(filteredVendors.length)}</b>
+              All leads <b>{formatNumber(filteredVendors.length)}</b>
             </button>
             {sourceFacets.map(facet => (
               <button
@@ -2038,6 +2026,31 @@ function CockpitView({
           shown={filteredVendors.length}
           compact
         />
+
+        {scanning && (
+          <div className="v2-live-swarm-cockpit-hud">
+            <div className="v2-live-hud-main">
+              <span className="v2-live-hud-pulse"><i /></span>
+              <div className="v2-live-hud-info">
+                <span className="v2-live-hud-badge">ACTIVE SWARM SECTOR</span>
+                <b className="v2-live-hud-title">
+                  📍 {activeZone?.name || activeZone?.zoneName || progress?.activeMandal || 'Active Territory'}
+                </b>
+                {Number.isFinite(Number(activeZone?.lat)) && Number.isFinite(Number(activeZone?.lng)) && (
+                  <span className="v2-live-hud-coords">
+                    [{Number(activeZone.lat).toFixed(4)}, {Number(activeZone.lng).toFixed(4)}]
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="v2-live-hud-meta">
+              <span className="v2-live-hud-zone-pill">
+                ZONE {activeZone?.index || (progress?.completedMandals != null ? progress.completedMandals + 1 : 1)} / {progress?.totalMandalsAcrossAll || progress?.totalMandals || mapZones.length || '—'}
+              </span>
+              <span className="v2-live-hud-status">⚡ SWEEPING 5-ENGINE PARALLEL</span>
+            </div>
+          </div>
+        )}
 
         <div className="v2-cp-table">
           <table className="v2-lead-table">
@@ -2067,19 +2080,28 @@ function CockpitView({
                 const vLat = vendor.latitude ?? vendor.lat;
                 const vLng = vendor.longitude ?? vendor.lng;
                 const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
-                const leadAddress = vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || locality;
+                const leadAddress = dedupeAddress(vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || locality);
+                const vKey = vendor.id || `${vendor.name}-${vendor.phone}`;
+                const isRowHovered = Boolean(hoveredLeadId && (hoveredLeadId === vendor.id || hoveredLeadId === vKey));
                 return (
                   <tr
                     key={vendor.id}
-                    className={cx('v2-lead-animated-row', cockpitSelectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`) && 'is-selected')}
+                    id={`lead-row-${vKey}`}
+                    className={cx(
+                      'v2-lead-animated-row',
+                      cockpitSelectedIds.has(vKey) && 'is-selected',
+                      isRowHovered && 'is-hovered'
+                    )}
                     style={{ animationDelay: `${Math.min(index * 35, 600)}ms` }}
                     onClick={() => onSelectVendor(vendor)}
+                    onMouseEnter={() => setHoveredLeadId(vendor.id || vKey)}
+                    onMouseLeave={() => setHoveredLeadId(null)}
                   >
                     <td onClick={e => e.stopPropagation()} style={{ width: 32 }}>
                       <input
                         type="checkbox"
-                        checked={cockpitSelectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`)}
-                        onChange={() => toggleCockpitSelectOne(vendor.id || `${vendor.name}-${vendor.phone}`)}
+                        checked={cockpitSelectedIds.has(vKey)}
+                        onChange={() => toggleCockpitSelectOne(vKey)}
                       />
                     </td>
                     <td>
@@ -2109,7 +2131,7 @@ function CockpitView({
                           <div className="v2-lead-address-line" title={leadAddress}>
                             <MapPin size={11} className="v2-text-lime" style={{ flexShrink: 0 }} />
                             <span className="v2-lead-address">{leadAddress}</span>
-                            {distKm != null && (
+                            {distKm != null && distKm <= 500 && (
                               <span className="v2-distance-badge" title="Distance from search origin">
                                 📍 {distKm} km
                               </span>
@@ -2128,8 +2150,8 @@ function CockpitView({
                         {(() => {
                           const activePhone = getDisplayPhone(vendor);
                           if (!activePhone) return <span className="v2-muted">No mobile yet</span>;
-                          const cleanDigits = String(activePhone).replace(/\D/g, '').slice(-10);
-                          const isMob = cleanDigits.length === 10 && /^[6-9]/.test(cleanDigits);
+                          const isMob = isMobilePhone(activePhone, vendor.country);
+                          const waNum = whatsappNumber(activePhone, vendor.country);
                           return (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                               <a href={`tel:${activePhone}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, color: isMob ? '#22d3ee' : '#cbd5e1' }} onClick={event => event.stopPropagation()}>
@@ -2137,7 +2159,7 @@ function CockpitView({
                               </a>
                               {isMob && (
                                 <a
-                                  href={`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, I found your business on scraper.co.in and wanted to connect.`)}`}
+                                  href={vendor.whatsappLink || `https://wa.me/${waNum}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, reaching out regarding your business.`)}`}
                                   target="_blank"
                                   rel="noreferrer"
                                   style={{
@@ -2244,7 +2266,9 @@ function CockpitView({
           </span>
           <div className="v2-pagination">
             <select value={pageSize} onChange={event => onPageSize(Number(event.target.value))}>
-              {[25, 50, 100].map(size => <option value={size} key={size}>{size} / page</option>)}
+              {[25, 50, 100, 250, 500, 10000].map(size => (
+                <option value={size} key={size}>{size === 10000 ? 'All Leads' : `${size} / page`}</option>
+              ))}
             </select>
             <button type="button" onClick={() => onPage(Math.max(1, page - 1))} disabled={page <= 1}><ChevronLeft size={13} /></button>
             <span>{page} / {pageCount}</span>
@@ -2322,8 +2346,15 @@ function CockpitView({
               center={mapCenter}
               zoom={mapZoom}
               height="100%"
+              compact={true}
+              hoveredLeadId={hoveredLeadId}
               fitKey={run?.id || 'live'}
-              onSelect={vendor => onSelectVendor(vendor)}
+              onSelect={vendor => {
+                onSelectVendor(vendor);
+                const vKey = vendor.id || `${vendor.name}-${vendor.phone}`;
+                const rowEl = document.getElementById(`lead-row-${vKey}`);
+                if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
               onSelectZone={name => onFilterChange('query', name)}
             />
           </div>
@@ -2515,6 +2546,7 @@ export default function CommandCenter() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const toolsRef = useRef(null);
   const [selectedVendor, setSelectedVendor] = useState(null);
+  const [trashOpen, setTrashOpen] = useState(false);
 
   // Enforce natural vertical scrolling on Dashboard canvas
   useEffect(() => {
@@ -2606,7 +2638,7 @@ export default function CommandCenter() {
 
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
-    try { localStorage.setItem('scraper-country', code); } catch (e) {}
+    try { localStorage.setItem('scraper-country', code); } catch (e) { }
     toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
     setForm(prev => {
       if (prev.location && prev.location.trim()) return prev;
@@ -2654,6 +2686,7 @@ export default function CommandCenter() {
   const mountedRef = useRef(true);
   const runRef = useRef(null);
   const runVendorIdsRef = useRef(new Set());
+  const activeSessionIdRef = useRef('');
   const lastEventRef = useRef(Date.now());
   const finishingRef = useRef(false);
   const deepJobRef = useRef(null);
@@ -2663,8 +2696,57 @@ export default function CommandCenter() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  const progressRef = useRef(null);
   useEffect(() => { runRef.current = run; }, [run]);
+  useEffect(() => { progressRef.current = progress; }, [progress]);
   useEffect(() => { deepJobRef.current = deepJob; }, [deepJob]);
+
+  // On mount: detect if an active scrape session is already running on the server
+  // and rehydrate run state so the STOP button stays persistently armed even after page refresh.
+  useEffect(() => {
+    let active = true;
+    async function rehydrateRunningSession() {
+      try {
+        const jobs = await getScrapeJobs();
+        if (!active || !mountedRef.current) return;
+        const list = Array.isArray(jobs)
+          ? jobs
+          : Array.isArray(jobs?.omniJobs) ? jobs.omniJobs : [];
+        const runningJob = list.find(job => (job.status === 'running' || job.sessionActive === true) && !job.finishedAt);
+        if (runningJob) {
+          const sid = runningJob.id || runningJob.sessionId;
+          activeSessionIdRef.current = sid;
+          setSessionFilter(sid);
+          setScanning(true);
+          setRun(prev => {
+            if (prev && prev.status === 'running') return prev;
+            return {
+              id: sid,
+              sessionId: sid,
+              category: runningJob.category || 'Vendors',
+              location: runningJob.location || '',
+              familyLabel: runningJob.category || 'Auto',
+              status: 'running',
+              startedAt: runningJob.startTime || Date.now(),
+              totalMandalsAcrossAll: runningJob.totalCount || 1,
+              completedMandals: runningJob.completedCount || 0
+            };
+          });
+          setProgress(prev => prev || {
+            sessionId: sid,
+            overallCompletedMandals: runningJob.completedCount || 0,
+            totalMandalsAcrossAll: runningJob.totalCount || 1,
+            activeMandal: runningJob.activeMandal || 'Scanning',
+            etaText: runningJob.etaText || '',
+            sessionActive: true
+          });
+          setActiveTab('cockpit');
+        }
+      } catch (e) { /* ignore */ }
+    }
+    rehydrateRunningSession();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -2764,6 +2846,29 @@ export default function CommandCenter() {
     form.targetLeads, form.serp, form.maps, form.postWebsite, form.postDeep
   ]);
 
+  // Ergonomic keyboard navigation shortcuts:
+  // Press '/' anywhere to focus search. Press 'Escape' to dismiss modals / drawer.
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        const searchInput = document.getElementById('cmd-console-query');
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      } else if (e.key === 'Escape') {
+        setSelectedVendor(null);
+        setTrashOpen(false);
+        setToolsOpen(false);
+        setMergeOpen(false);
+        setRenameTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   useEffect(() => {
     const unextracted = vendors.filter(vendor => !vendor.deepExtractedAt).length;
     setDeepEstimate({
@@ -2785,6 +2890,83 @@ export default function CommandCenter() {
       lastEventRef.current = Date.now();
     };
 
+    let microFlushTimer = null;
+    const flushBuffers = () => {
+      if (vendorBuffer.length) {
+        const incoming = vendorBuffer.splice(0, vendorBuffer.length);
+        setVendors(prev => {
+          const map = new Map(prev.map(vendor => [vendor.id, vendor]));
+          const existingIds = prev.map(vendor => vendor.id);
+          const freshIds = [];
+          let hasChanges = false;
+
+          incoming.forEach(v => {
+            if (!v || !v.id) return;
+            const existing = map.get(v.id);
+            if (existing) {
+              const existingPhone = getDisplayPhone(existing);
+              const incomingPhone = getDisplayPhone(v);
+              const isIncomingMob = incomingPhone && /^[6-9]\d{9}$/.test(incomingPhone.replace(/\D/g, '').slice(-10));
+              const isExistingMob = existingPhone && /^[6-9]\d{9}$/.test(existingPhone.replace(/\D/g, '').slice(-10));
+
+              let mergedPhone = existing.phone;
+              if (isIncomingMob) mergedPhone = incomingPhone;
+              else if (isExistingMob) mergedPhone = existingPhone;
+              else if (incomingPhone) mergedPhone = incomingPhone;
+
+              const mergedPhones = Array.from(new Set([
+                ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
+                ...(Array.isArray(v.phones) ? v.phones : (v.phone ? [v.phone] : []))
+              ])).filter(Boolean);
+
+              const mergedSessionIds = Array.from(new Set([
+                ...(Array.isArray(existing.sessionIds) ? existing.sessionIds : (existing.sessionId ? [existing.sessionId] : [])),
+                ...(Array.isArray(v.sessionIds) ? v.sessionIds : (v.sessionId ? [v.sessionId] : []))
+              ])).filter(Boolean);
+
+              map.set(v.id, {
+                ...existing,
+                ...v,
+                phone: mergedPhone,
+                phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
+                sessionId: v.sessionId || existing.sessionId,
+                lastSessionId: v.lastSessionId || v.sessionId || existing.lastSessionId,
+                sessionIds: mergedSessionIds,
+                website: v.website || existing.website,
+                email: v.email || existing.email,
+                emails: (Array.isArray(v.emails) && v.emails.length) ? v.emails : existing.emails,
+                address: v.address || existing.address,
+                crmStage: existing.crmStage || v.crmStage || 'new',
+                crmStatus: existing.crmStatus || v.crmStatus || 'new',
+                crmNotes: existing.crmNotes || v.crmNotes,
+                crmTasks: existing.crmTasks || v.crmTasks
+              });
+              hasChanges = true;
+            } else {
+              map.set(v.id, v);
+              freshIds.push(v.id);
+              hasChanges = true;
+            }
+          });
+          if (!hasChanges) return prev;
+          const fullOrder = [...freshIds, ...existingIds.filter(id => !freshIds.includes(id))];
+          return fullOrder.map(id => map.get(id)).filter(Boolean);
+        });
+      }
+      if (logBuffer.length) {
+        const incoming = logBuffer.splice(0, logBuffer.length);
+        setLogs(prev => [...prev, ...incoming].slice(-400));
+      }
+    };
+
+    const scheduleMicroFlush = () => {
+      if (microFlushTimer) return;
+      microFlushTimer = setTimeout(() => {
+        microFlushTimer = null;
+        flushBuffers();
+      }, 50);
+    };
+
     // A fresh EventSource is created on every reconnect, so the data handlers
     // are bound each time. Transport, backoff and liveness live in
     // createLiveStream — the old code never reconnected at all.
@@ -2803,12 +2985,24 @@ export default function CommandCenter() {
           if (!vendor || !vendor.id) return;
           if (payload.action === 'out-of-bounds') return;
           lastEventRef.current = Date.now();
-          vendorBuffer.push(vendor);
-          if (runRef.current?.status === 'running') {
+          if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
+
+          const activeSid = activeSessionIdRef.current || sessionFilter || runRef.current?.sessionId || runRef.current?.id;
+          if (activeSid) {
+            vendor.sessionId = activeSid;
+            vendor.lastSessionId = activeSid;
+            vendor.sessionIds = Array.isArray(vendor.sessionIds)
+              ? Array.from(new Set([...vendor.sessionIds, activeSid]))
+              : [activeSid];
+          }
+
+          if (runRef.current?.status === 'running' || activeSessionIdRef.current) {
             runVendorIdsRef.current.add(vendor.id);
             setRunLeadCount(runVendorIdsRef.current.size);
           }
+          vendorBuffer.push(vendor);
           pushLog(`[LEAD] ${vendor.name || vendor.id} · ${vendor.phone || 'no phone'} · ${vendor.city || vendor.village || 'location unknown'}`);
+          scheduleMicroFlush();
         } catch (error) { /* ignore */ }
       });
 
@@ -2816,9 +3010,48 @@ export default function CommandCenter() {
         try {
           const data = JSON.parse(event.data);
           lastEventRef.current = Date.now();
+          if (data?.sessionId && activeSessionIdRef.current && data.sessionId !== activeSessionIdRef.current) {
+            return;
+          }
           setProgress(data);
           if (typeof data?.sessionActive === 'boolean') {
-            setScanning(Boolean(data.sessionActive));
+            if (activeSessionIdRef.current) {
+              setScanning(Boolean(data.sessionActive));
+            }
+          }
+          if (data?.activeZone) {
+            setActiveZone(prev => ({
+              ...(prev || {}),
+              ...data.activeZone,
+              name: data.activeZone.name || data.activeZone.zoneName || prev?.name,
+              lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
+              lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
+              radiusKm: Number(data.activeZone.radiusKm) || 3.5,
+              index: data.activeZone.index || prev?.index || 1
+            }));
+          } else if (data?.activeMandal) {
+            const zName = data.activeMandal;
+            const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const cleanTarget = norm(zName);
+            setGridZones(currentGrid => {
+              const matched = currentGrid.find(z => norm(z.zoneName || z.name) === cleanTarget);
+              if (matched && Number.isFinite(Number(matched.lat)) && Number.isFinite(Number(matched.lng))) {
+                setActiveZone({
+                  name: matched.zoneName || matched.name || zName,
+                  lat: Number(matched.lat),
+                  lng: Number(matched.lng),
+                  radiusKm: Number(matched.radiusKm) || 3.5,
+                  index: matched.index || 1
+                });
+              } else {
+                setActiveZone(prev => ({
+                  name: zName,
+                  lat: prev?.name === zName ? prev?.lat : undefined,
+                  lng: prev?.name === zName ? prev?.lng : undefined
+                }));
+              }
+              return currentGrid;
+            });
           }
         } catch (error) { /* ignore */ }
       });
@@ -2835,9 +3068,31 @@ export default function CommandCenter() {
           const points = JSON.parse(event.data);
           const grid = Array.isArray(points) ? points : [];
           const zoneEntry = grid.find(item => Array.isArray(item.zones) && item.zones.length);
-          if (zoneEntry) {
+          if (zoneEntry && zoneEntry.zones.length) {
             setGridZones(zoneEntry.zones);
             pushLog(`[GRID] ${zoneEntry.zones.length} coverage zones anchored.`);
+            setActiveZone(prev => {
+              if (prev && Number.isFinite(Number(prev.lat)) && Number.isFinite(Number(prev.lng))) return prev;
+              const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+              const matched = prev?.name ? zoneEntry.zones.find(z => norm(z.zoneName || z.name) === norm(prev.name)) : null;
+              if (matched) {
+                return {
+                  name: matched.zoneName || matched.name,
+                  lat: Number(matched.lat),
+                  lng: Number(matched.lng),
+                  radiusKm: Number(matched.radiusKm) || 3.5,
+                  index: matched.index || 1
+                };
+              }
+              const first = zoneEntry.zones[0];
+              return prev || (first ? {
+                name: first.zoneName || first.name,
+                lat: Number(first.lat),
+                lng: Number(first.lng),
+                radiusKm: Number(first.radiusKm) || 3.5,
+                index: 1
+              } : null);
+            });
           } else if (grid.length) {
             pushLog(`[GRID] ${grid.length} geocoded grid points received.`);
           }
@@ -2850,14 +3105,25 @@ export default function CommandCenter() {
           if (!point || point.completed) return;
           const lat = Number(point.lat);
           const lng = Number(point.lng);
-          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= 6 && lat <= 38 && lng >= 68 && lng <= 98;
-          if (point.zoneName) {
-            setActiveZone(prev => ({
-              name: point.zoneName,
-              lat: hasCoords ? lat : prev?.lat,
-              lng: hasCoords ? lng : prev?.lng
-            }));
-            pushLog(`[ZONE] searching ${point.zoneName}`);
+          const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
+          const zLabel = point.zoneName || point.locationName;
+          if (zLabel) {
+            const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            const clean = norm(zLabel);
+            setGridZones(currentGrid => {
+              const matched = currentGrid.find(z => norm(z.zoneName || z.name) === clean);
+              const finalLat = hasCoords ? lat : (matched && Number.isFinite(Number(matched.lat)) ? Number(matched.lat) : undefined);
+              const finalLng = hasCoords ? lng : (matched && Number.isFinite(Number(matched.lng)) ? Number(matched.lng) : undefined);
+              setActiveZone(prev => ({
+                name: zLabel,
+                lat: finalLat !== undefined ? finalLat : prev?.lat,
+                lng: finalLng !== undefined ? finalLng : prev?.lng,
+                radiusKm: point.boundaryKm || matched?.radiusKm || 3.5,
+                index: point.index || matched?.index || 1
+              }));
+              return currentGrid;
+            });
+            pushLog(`[ZONE] searching ${zLabel}`);
           }
           setScanning(true);
           lastEventRef.current = Date.now();
@@ -2867,65 +3133,7 @@ export default function CommandCenter() {
       es.onmessage = event => pushLog(event.data);
     };
 
-    flushTimer = setInterval(() => {
-        if (vendorBuffer.length) {
-          const incoming = vendorBuffer.splice(0, vendorBuffer.length);
-          setVendors(prev => {
-            const map = new Map(prev.map(vendor => [vendor.id, vendor]));
-            const existingIds = prev.map(vendor => vendor.id);
-            const freshIds = [];
-            let hasChanges = false;
-
-            incoming.forEach(v => {
-              if (!v || !v.id) return;
-              const existing = map.get(v.id);
-              if (existing) {
-                const existingPhone = getDisplayPhone(existing);
-                const incomingPhone = getDisplayPhone(v);
-                const isIncomingMob = incomingPhone && /^[6-9]\d{9}$/.test(incomingPhone.replace(/\D/g, '').slice(-10));
-                const isExistingMob = existingPhone && /^[6-9]\d{9}$/.test(existingPhone.replace(/\D/g, '').slice(-10));
-
-                let mergedPhone = existing.phone;
-                if (isIncomingMob) mergedPhone = incomingPhone;
-                else if (isExistingMob) mergedPhone = existingPhone;
-                else if (incomingPhone) mergedPhone = incomingPhone;
-
-                const mergedPhones = Array.from(new Set([
-                  ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
-                  ...(Array.isArray(v.phones) ? v.phones : (v.phone ? [v.phone] : []))
-                ])).filter(Boolean);
-
-                map.set(v.id, {
-                  ...existing,
-                  ...v,
-                  phone: mergedPhone,
-                  phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
-                  website: v.website || existing.website,
-                  email: v.email || existing.email,
-                  emails: (Array.isArray(v.emails) && v.emails.length) ? v.emails : existing.emails,
-                  address: v.address || existing.address,
-                  crmStage: existing.crmStage || v.crmStage || 'new',
-                  crmStatus: existing.crmStatus || v.crmStatus || 'new',
-                  crmNotes: existing.crmNotes || v.crmNotes,
-                  crmTasks: existing.crmTasks || v.crmTasks
-                });
-                hasChanges = true;
-              } else {
-                map.set(v.id, v);
-                freshIds.push(v.id);
-                hasChanges = true;
-              }
-            });
-            if (!hasChanges) return prev;
-            const fullOrder = [...freshIds, ...existingIds.filter(id => !freshIds.includes(id))];
-            return fullOrder.map(id => map.get(id)).filter(Boolean);
-          });
-        }
-        if (logBuffer.length) {
-          const incoming = logBuffer.splice(0, logBuffer.length);
-          setLogs(prev => [...prev, ...incoming].slice(-400));
-        }
-      }, 420);
+    flushTimer = setInterval(flushBuffers, 300);
 
     const stream = createLiveStream({
       url: streamUrl(),
@@ -2938,6 +3146,7 @@ export default function CommandCenter() {
 
     return () => {
       if (flushTimer) clearInterval(flushTimer);
+      if (microFlushTimer) clearTimeout(microFlushTimer);
       stream.stop();
     };
   }, []);
@@ -2945,6 +3154,18 @@ export default function CommandCenter() {
   const finishRun = useCallback(async status => {
     const current = runRef.current;
     if (!current || current.status !== 'running' || finishingRef.current) return;
+
+    // Safety guard: if completing naturally, ensure that if progress is reporting zones,
+    // all zones have completed or the run was explicitly aborted/stopped.
+    if (status === 'complete' && progressRef.current) {
+      const comp = Number(progressRef.current.overallCompletedMandals ?? progressRef.current.completedMandals ?? 0);
+      const tot = Number(progressRef.current.totalMandalsAcrossAll ?? progressRef.current.totalMandals ?? 0);
+      if (tot > 0 && comp < tot) {
+        // Prevent premature finish while zones are still being crawled!
+        return;
+      }
+    }
+
     finishingRef.current = true;
 
     const finishedAt = Date.now();
@@ -2973,15 +3194,20 @@ export default function CommandCenter() {
     }, 800);
   }, [refresh]);
 
-  // Progress completion and watchdog: never leave a run stuck in "running".
+  // Progress completion: only finish when this run's session is strictly finished
   useEffect(() => {
     if (run?.status === 'running' && progress && progress.sessionActive === false) {
-      // Guard: strictly ensure progress event belongs to current run and run has been active >= 3 seconds
-      if ((!progress.sessionId || progress.sessionId === run.id) && (Date.now() - (run.startedAt || 0) > 3000)) {
-        finishRun(progress.error ? 'error' : 'complete');
+      // Guard: strictly ensure progress event belongs to current run
+      if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
+        const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
+        const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
+        const isAllZonesDone = tot > 0 ? (comp >= tot) : true;
+        if (isAllZonesDone || progress.aborted || (Date.now() - (run.startedAt || 0) > 20000)) {
+          finishRun(progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete');
+        }
       }
     }
-  }, [progress, run?.status, run?.id, run?.startedAt, finishRun]);
+  }, [progress, run?.status, run?.id, run?.sessionId, run?.startedAt, finishRun]);
 
   useEffect(() => {
     if (run?.status !== 'running') return undefined;
@@ -2996,10 +3222,14 @@ export default function CommandCenter() {
           : Array.isArray(jobs?.omniJobs) ? jobs.omniJobs : [];
         const matching = list.find(job => job.id === run.id || job.sessionId === run.id);
         if (matching?.status === 'completed') {
-          finishRun('complete');
+          const comp = Number(matching.completedCount || 0);
+          const tot = Number(matching.totalCount || 0);
+          if (!tot || comp >= tot) {
+            finishRun('complete');
+          }
         } else if (matching?.status === 'failed') {
           setMascotAlert({ id: Date.now(), text: 'That run hit an engine error. Check the engine board and try again.' });
-        } else if (!matching && (Date.now() - (run.startedAt || 0) > 60000) && (Date.now() - lastEventRef.current > 90000)) {
+        } else if (!matching && (Date.now() - (run.startedAt || 0) > 120000) && (Date.now() - lastEventRef.current > 180000)) {
           finishRun('complete');
         }
       } catch (error) { /* ignore */ }
@@ -3054,6 +3284,7 @@ export default function CommandCenter() {
 
     setLaunching(true);
     const sessionId = `cmd_${Date.now().toString(36)}`;
+    activeSessionIdRef.current = sessionId;
     if (overrides.query) setAutoQuery(overrides.query);
     runVendorIdsRef.current = new Set();
     finishingRef.current = false;
@@ -3063,6 +3294,22 @@ export default function CommandCenter() {
     setActiveTab('cockpit');
     setActiveZone(null);
     setGridZones([]);
+    setScanning(true);
+    setRun({
+      id: sessionId,
+      sessionId,
+      category: auto ? runQuery : runCategory,
+      location: auto ? '' : runLocation,
+      familyLabel: auto ? 'Auto' : runCategory,
+      strategy: form.strategy,
+      engines,
+      postWebsite: true,
+      postDeep: true,
+      targetLeads: overrides.targetLeads || form.targetLeads,
+      startedAt: Date.now(),
+      finishedAt: null,
+      status: 'running'
+    });
     setLogs(prev => [
       ...prev,
       auto
@@ -3078,15 +3325,31 @@ export default function CommandCenter() {
           strategy: form.strategy,
           radius: overrides.radius || form.radius || 5,
           engines,
+          country: searchCountry,
           sessionId
         });
         const plan = response?.plan || {};
+        if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
+          setGridZones(plan.zones);
+          const first = plan.zones[0];
+          if (first) {
+            setActiveZone({
+              name: first.zoneName || first.name || 'Zone 1',
+              lat: Number(first.lat ?? first.latitude),
+              lng: Number(first.lng ?? first.longitude),
+              radiusKm: Number(first.radiusKm) || 3.5,
+              index: 1,
+              total: plan.zones.length
+            });
+          }
+        }
         setForm(prev => ({
           ...prev,
           category: plan.category || prev.category,
           location: plan.location || prev.location
         }));
-        setRun({
+        setRun(prev => ({
+          ...(prev || {}),
           id: sessionId,
           sessionId,
           category: plan.category || runQuery,
@@ -3097,10 +3360,10 @@ export default function CommandCenter() {
           postWebsite: true,
           postDeep: true,
           targetLeads: overrides.targetLeads || form.targetLeads,
-          startedAt: Date.now(),
+          startedAt: prev?.startedAt || Date.now(),
           finishedAt: null,
           status: 'running'
-        });
+        }));
         setLogs(prev => [
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · ${(plan.engines || []).join(' + ') || 'auto'}`,
@@ -3121,10 +3384,26 @@ export default function CommandCenter() {
           location: runLocation,
           strategy: form.strategy,
           engines,
+          country: searchCountry,
           sessionId
         });
         const plan = response?.plan || {};
-        setRun({
+        if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
+          setGridZones(plan.zones);
+          const first = plan.zones[0];
+          if (first) {
+            setActiveZone({
+              name: first.zoneName || first.name || 'Zone 1',
+              lat: Number(first.lat ?? first.latitude),
+              lng: Number(first.lng ?? first.longitude),
+              radiusKm: Number(first.radiusKm) || 3.5,
+              index: 1,
+              total: plan.zones.length
+            });
+          }
+        }
+        setRun(prev => ({
+          ...(prev || {}),
           id: sessionId,
           sessionId,
           category: plan.category || runCategory,
@@ -3134,10 +3413,10 @@ export default function CommandCenter() {
           postWebsite: true,
           postDeep: true,
           targetLeads: form.targetLeads,
-          startedAt: Date.now(),
+          startedAt: prev?.startedAt || Date.now(),
           finishedAt: null,
           status: 'running'
-        });
+        }));
         setLogs(prev => [
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · sources chosen automatically`,
@@ -3156,6 +3435,8 @@ export default function CommandCenter() {
       setActiveTab('cockpit');
     } catch (error) {
       setScanning(false);
+      setRun(null);
+      activeSessionIdRef.current = '';
       toast.error(error?.response?.data?.error || 'Search could not be started.');
       setMascotAlert({ id: Date.now(), text: 'That search did not start. Check the engine board, then try again.' });
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
@@ -3167,9 +3448,18 @@ export default function CommandCenter() {
   const stopRun = async () => {
     setStopping(true);
     try {
-      await stopAllScrapes();
-      setRun(prev => prev ? { ...prev, status: 'stopped', finishedAt: Date.now() } : prev);
+      const sid = run?.sessionId || run?.id || activeSessionIdRef.current;
+      activeSessionIdRef.current = '';
+      setRun(prev => ({
+        ...(prev || {}),
+        id: sid,
+        sessionId: sid,
+        status: 'stopped',
+        finishedAt: Date.now()
+      }));
+      setProgress(prev => prev ? { ...prev, sessionActive: false } : null);
       setScanning(false);
+      await stopAllScrapes(sid);
       toast('Run stopped. Completed leads remain saved.', { icon: '■' });
       refresh();
     } catch (error) {
@@ -3388,24 +3678,8 @@ export default function CommandCenter() {
     }
   };
 
-  const handleBatchDelete = async () => {
-    if (!selectedFolderIds.size) return;
-    const ids = Array.from(selectedFolderIds);
-    if (!window.confirm(`Permanently delete ${ids.length} selected search folders? This cannot be undone.`)) return;
-    try {
-      const res = await batchDeleteSessions(ids);
-      if (res?.deleted?.length) {
-        const deletedSet = new Set(res.deleted);
-        setSessions(prev => prev.filter(s => !deletedSet.has(s.id)));
-        setSelectedFolderIds(new Set());
-        if (folderView && deletedSet.has(folderView.run?.id)) {
-          setFolderView(null);
-        }
-        toast.success(`Deleted ${res.deleted.length} folders.`);
-      }
-    } catch (err) {
-      toast.error('Failed to delete selected folders.');
-    }
+  const handleBatchDelete = () => {
+    toast.error('Protected: Batch folder deletion is restricted to Master Admin.');
   };
 
   const handleMergeFolders = async targetTitle => {
@@ -3524,18 +3798,8 @@ export default function CommandCenter() {
     }
   };
 
-  const deleteFolder = async runCard => {
-    if (!runCard?.id) return;
-    if (!window.confirm(`Permanently delete folder "${runCard.name || runCard.id}"? This cannot be undone.`)) return;
-    try {
-      await deleteSession(runCard.id);
-      setSessions(prev => prev.filter(s => s.id !== runCard.id));
-      if (sessionFilter === runCard.id) setSessionFilter('');
-      if (folderView?.run?.id === runCard.id) setFolderView(null);
-      toast.success(`Deleted folder "${runCard.name || runCard.id}".`);
-    } catch (err) {
-      toast.error('Failed to delete folder.');
-    }
+  const deleteFolder = () => {
+    toast.error('Protected: Folder deletion is restricted to Master Admin. Clients cannot delete folders.');
   };
 
   const reScrapeFolder = runCard => {
@@ -3549,55 +3813,6 @@ export default function CommandCenter() {
     setActiveTab('cockpit');
     toast.success(`Configured search for ${cat} in ${loc}. Click "FIND ALL LEADS" to swarm!`);
   };
-
-  const filteredVendors = useMemo(() => {
-    const query = filters.query.trim().toLowerCase();
-    let list = vendors.filter(vendor => {
-      if (sessionFilter && (vendor.sessionId || 'unassigned') !== sessionFilter) return false;
-      if (filters.phoneOnly && !getDisplayPhone(vendor)) return false;
-      if (filters.primeOnly) {
-        const p = getDisplayPhone(vendor);
-        const isMob = isMobilePhone(p);
-        const rating = Number(vendor.rating) || 0;
-        const reviews = Number(vendor.reviewsCount) || 0;
-        if (!isMob || rating < 4.0 || reviews === 0) return false;
-      }
-      if (filters.websiteOnly && !vendor.website) return false;
-      if (filters.deepOnly && !vendor.deepExtractedAt) return false;
-      if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
-      if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
-      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
-      if (query) {
-        const haystack = [
-          vendor.name, vendor.category, vendor.city, vendor.village, vendor.mandal,
-          vendor.district, vendor.state, vendor.pincode, vendor.phone, vendor.email, vendor.address
-        ].filter(Boolean).join(' ').toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-
-    list = [...list].sort((a, b) => {
-      if (filters.sort === 'rating') {
-        const rA = Number(a.rating) || 0;
-        const rB = Number(b.rating) || 0;
-        if (rB !== rA) return rB - rA;
-        return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
-      }
-      if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
-      if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
-      if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
-      return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
-    });
-
-    return list;
-  }, [vendors, filters, sessionFilter]);
-
-  useEffect(() => { setPage(1); }, [filters, sessionFilter, pageSize]);
-
-  const pageCount = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filteredVendors.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const effectiveRuns = useMemo(() => {
     const map = new Map();
@@ -3657,6 +3872,68 @@ export default function CommandCenter() {
     return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   }, [vendors, sessions]);
 
+  const activeScrapeId = (run?.status === 'running' || run?.status === 'aborted' || run?.status === 'complete' || run?.status === 'completed') ? (run.sessionId || run.id) : null;
+  const effectiveSessionFilter = sessionFilter || activeScrapeId || activeSessionIdRef.current || (effectiveRuns[0]?.id && effectiveRuns[0]?.id !== 'unassigned' ? effectiveRuns[0]?.id : null);
+
+  const filteredVendors = useMemo(() => {
+    const query = filters.query.trim().toLowerCase();
+    let list = vendors.filter(vendor => {
+      if (effectiveSessionFilter) {
+        const isLiveIncoming = Boolean(
+          (runVendorIdsRef.current && runVendorIdsRef.current.has(vendor.id)) ||
+          (activeSessionIdRef.current && (vendor.sessionId === activeSessionIdRef.current || vendor.lastSessionId === activeSessionIdRef.current))
+        );
+        const belongs = isLiveIncoming ||
+          (vendor.sessionId === effectiveSessionFilter) ||
+          (vendor.lastSessionId === effectiveSessionFilter) ||
+          (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(effectiveSessionFilter)) ||
+          (vendor.sessionId && String(vendor.sessionId).startsWith(effectiveSessionFilter));
+        if (!belongs) return false;
+      }
+      if (filters.phoneOnly && !getDisplayPhone(vendor)) return false;
+      if (filters.primeOnly) {
+        const p = getDisplayPhone(vendor);
+        const isMob = isMobilePhone(p);
+        const rating = Number(vendor.rating) || 0;
+        const reviews = Number(vendor.reviewsCount) || 0;
+        if (!isMob || rating < 4.0 || reviews === 0) return false;
+      }
+      if (filters.websiteOnly && !vendor.website) return false;
+      if (filters.deepOnly && !vendor.deepExtractedAt) return false;
+      if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
+      if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
+      if (filters.source && filters.source !== 'all' && leadSourceMeta(vendor).key !== filters.source) return false;
+      if (query) {
+        const haystack = [
+          vendor.name, vendor.category, vendor.city, vendor.village, vendor.mandal,
+          vendor.district, vendor.state, vendor.pincode, vendor.phone, vendor.email, vendor.address
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+
+    list = [...list].sort((a, b) => {
+      if (filters.sort === 'rating') {
+        const rA = Number(a.rating) || 0;
+        const rB = Number(b.rating) || 0;
+        if (rB !== rA) return rB - rA;
+        return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
+      }
+      if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
+      if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
+      if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
+    });
+
+    return list;
+  }, [vendors, filters, effectiveSessionFilter]);
+
+  useEffect(() => { setPage(1); }, [filters, effectiveSessionFilter, pageSize]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filteredVendors.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const folderCities = useMemo(() => {
     const set = new Set();
     effectiveRuns.forEach(r => {
@@ -3691,28 +3968,72 @@ export default function CommandCenter() {
   }, [effectiveRuns, folderCity, folderSearch, folderSort]);
 
   const stats = useMemo(() => {
-    const phones = vendors.filter(vendor => Boolean(getDisplayPhone(vendor))).length;
-    const websites = vendors.filter(vendor => vendor.website).length;
-    const deep = vendors.filter(vendor => vendor.deepExtractedAt).length;
-    const conflicts = vendors.reduce((sum, vendor) => sum + (Array.isArray(vendor.conflicts) ? vendor.conflicts.length : 0), 0);
-    const scores = vendors
+    const target = filteredVendors || [];
+    const phones = target.filter(vendor => Boolean(getDisplayPhone(vendor))).length;
+    const websites = target.filter(vendor => vendor.website).length;
+    const deep = target.filter(vendor => vendor.deepExtractedAt).length;
+    const conflicts = target.reduce((sum, vendor) => sum + (Array.isArray(vendor.conflicts) ? vendor.conflicts.length : 0), 0);
+    const scores = target
       .map(vendor => qualityOf(vendor))
       .filter(score => score != null && Number.isFinite(score));
     const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
     return { phones, websites, deep, conflicts, avg };
-  }, [vendors]);
+  }, [filteredVendors]);
 
-  const runElapsed = run ? Math.max(0, Math.floor(((run.finishedAt || now) - run.startedAt) / 1000)) : 0;
+  const toEpochMs = value => {
+    if (value == null) return null;
+    const n = typeof value === 'number' ? value : new Date(value).getTime();
+    return Number.isFinite(n) ? n : null;
+  };
+  const runStartedMs = toEpochMs(run?.startedAt);
+  const runEndedMs = toEpochMs(run?.finishedAt);
+  const runElapsed = run && runStartedMs != null
+    ? Math.max(0, Math.floor(((runEndedMs != null ? runEndedMs : now) - runStartedMs) / 1000))
+    : 0;
   const runTotal = progress?.totalMandalsAcrossAll || progress?.totalMandals || estimate?.zones?.count || 0;
   const runDone = progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0;
   const runPercent = run?.status === 'complete' || run?.status === 'stopped'
     ? 100
     : runTotal ? Math.round((runDone / runTotal) * 100) : 0;
 
+  const mapZones = useMemo(() => {
+    if (gridZones.length) return gridZones;
+    return (estimate?.zones?.preview || []).map(zone => ({ ...zone, zoneName: zone.zoneName || zone.name }));
+  }, [gridZones, estimate]);
+
+  const effectiveActiveZone = useMemo(() => {
+    const raw = activeZone || (progress?.activeZone ? progress.activeZone : null);
+    const zName = raw?.name || raw?.zoneName || progress?.activeMandal || '';
+    if (!zName && !raw?.lat) return null;
+
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanName = norm(zName);
+
+    let lat = Number(raw?.lat ?? raw?.latitude);
+    let lng = Number(raw?.lng ?? raw?.longitude);
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      const matched = mapZones.find(z => norm(z.zoneName || z.name) === cleanName);
+      if (matched && Number.isFinite(Number(matched.lat)) && Number.isFinite(Number(matched.lng))) {
+        lat = Number(matched.lat);
+        lng = Number(matched.lng);
+      }
+    }
+
+    return {
+      name: zName || 'Active Territory',
+      zoneName: zName || 'Active Territory',
+      lat: Number.isFinite(lat) ? lat : undefined,
+      lng: Number.isFinite(lng) ? lng : undefined,
+      radiusKm: Number(raw?.radiusKm) || 3.5,
+      index: raw?.index || (progress?.completedMandals ? progress.completedMandals + 1 : 1)
+    };
+  }, [activeZone, progress?.activeZone, progress?.activeMandal, mapZones]);
+
   const mapCenter = useMemo(() => {
     // 1. If actively scanning an area, center map directly on active zone coordinate
-    if (activeZone?.lat && activeZone?.lng && Number.isFinite(Number(activeZone.lat))) {
-      return [Number(activeZone.lat), Number(activeZone.lng)];
+    if (effectiveActiveZone?.lat && effectiveActiveZone?.lng && Number.isFinite(Number(effectiveActiveZone.lat))) {
+      return [Number(effectiveActiveZone.lat), Number(effectiveActiveZone.lng)];
     }
     // 2. If radar grid zones are loaded for this search, focus on first/center zone
     if (gridZones.length > 0 && gridZones[0]?.lat && gridZones[0]?.lng) {
@@ -3724,24 +4045,30 @@ export default function CommandCenter() {
     if (Number.isFinite(estLat) && Number.isFinite(estLng) && estLat && estLng) {
       return [estLat, estLng];
     }
+    if (estimate?.zones?.preview?.[0]?.lat && estimate?.zones?.preview?.[0]?.lng) {
+      return [Number(estimate.zones.preview[0].lat), Number(estimate.zones.preview[0].lng)];
+    }
     // 4. If current run has vendor leads
     const runLeads = run?.id ? filteredVendors.filter(v => v.sessionId === run.id || v.lastSessionId === run.id) : [];
     const targetVendors = runLeads.length > 0 ? runLeads : filteredVendors;
     const coords = targetVendors
       .map(vendor => [Number(vendor.latitude), Number(vendor.longitude)])
-      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && a >= 6 && a <= 38 && b >= 68 && b <= 98);
-    if (!coords.length) return [22.5937, 79.9629];
+      .filter(([a, b]) => Number.isFinite(a) && Number.isFinite(b) && a >= -90 && a <= 90 && b >= -180 && b <= 180 && (a !== 0 || b !== 0));
+    if (!coords.length) {
+      if (searchCountry === 'CA') return [43.5890, -79.6441];
+      if (searchCountry === 'US') return [37.0902, -95.7129];
+      if (searchCountry === 'GB') return [51.5074, -0.1278];
+      if (searchCountry === 'AU') return [-33.8688, 151.2093];
+      if (searchCountry === 'AE') return [25.2048, 55.2708];
+      return [22.5937, 79.9629];
+    }
     return [
       coords.reduce((sum, pair) => sum + pair[0], 0) / coords.length,
       coords.reduce((sum, pair) => sum + pair[1], 0) / coords.length
     ];
-  }, [activeZone, gridZones, estimate, run?.id, filteredVendors]);
+  }, [effectiveActiveZone, gridZones, estimate, run?.id, filteredVendors, searchCountry]);
 
-  const mapZoom = (activeZone?.lat || gridZones.length > 0 || estimate?.location?.lat) ? 12 : 5;
-  const mapZones = useMemo(() => {
-    if (gridZones.length) return gridZones;
-    return (estimate?.zones?.preview || []).map(zone => ({ ...zone, zoneName: zone.zoneName || zone.name }));
-  }, [gridZones, estimate]);
+  const mapZoom = (effectiveActiveZone?.lat || gridZones.length > 0 || estimate?.location?.lat) ? 12 : 5;
   const currentDeep = deepJob;
   const activeDeepJobs = deepJobs.filter(job => ['queued', 'running', 'stopping'].includes(job.status));
   const recentProfiles = vendors
@@ -3761,7 +4088,7 @@ export default function CommandCenter() {
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
 
-      {sseStatus !== 'open' && (
+      {(sseStatus === 'error' && reconnectAttempts >= 2) && (
         <div
           className="v2-network-alert-banner is-error"
           style={{
@@ -3828,8 +4155,13 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
           <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} leads · {(findCountry(searchCountry) || { name: 'India' }).name}
-            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
+            {formatNumber(vendors.length)} leads · {(() => {
+              const markets = new Set(vendors.map(v => String(v.country || 'IN').toUpperCase()));
+              if (markets.size > 1) return `${markets.size} markets`;
+              const only = [...markets][0] || searchCountry;
+              return (findCountry(only) || { name: 'India' }).name;
+            })()}
+            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">Next search: {countryMeta.adminPath}</em> : null}
           </span>
 
           <DesktopBadge />
@@ -3878,123 +4210,89 @@ export default function CommandCenter() {
 
       <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
 
+      <nav className="v2-cmd-tabs">
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'cockpit' && 'is-active')}
+          onClick={() => setActiveTab('cockpit')}
+        >
+          {activeTab === 'cockpit' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <LayoutDashboard size={14} /> Workspace
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'leads' && 'is-active')}
+          onClick={() => setActiveTab('leads')}
+        >
+          {activeTab === 'leads' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'map' && 'is-active')}
+          onClick={() => setActiveTab('map')}
+        >
+          {activeTab === 'map' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'crm' && 'is-active')}
+          onClick={() => setActiveTab('crm')}
+        >
+          {activeTab === 'crm' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'runs' && 'is-active')}
+          onClick={() => setActiveTab('runs')}
+        >
+          {activeTab === 'runs' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <FolderArchive size={14} /> Saved Folders <b>{formatNumber(effectiveRuns.length)}</b>
+        </button>
+        <span className="v2-cmd-tabs-spacer" />
+        <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
+          <RefreshCw size={13} /> Refresh
+        </button>
+      </nav>
+
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
-        <aside className="v2-cmd-rail">
-          <section className="v2-rail-panel">
-            <div className="v2-rail-head">
-              <span><Crosshair size={14} /> YOUR SEARCH</span>
-              <b>{estimate?.zones?.count || '—'} AREAS</b>
-            </div>
-
-            <div className="v2-plan-card">
-              <div className="v2-plan-what">
-                <span>LOOKING FOR</span>
-                <b>{scanPlan?.category?.value || form.category || 'Waiting for a query'}</b>
-              </div>
-              <div className="v2-plan-where">
-                <MapPin size={12} />
-                <span>{scanPlan?.location?.display || scanPlan?.location?.value || form.location || 'Add a city or village'}</span>
-              </div>
-              <div className="v2-plan-tags">
-                {estimate?.family?.label && <span className="is-family">{estimate.family.label}</span>}
-                <span>Automatic sources</span>
-                <span>Fresh results</span>
-              </div>
-              <div className="v2-plan-note">
-                <RadarIcon size={12} />
-                <span>Autonomous Multi-Vector Swarm. Type any query into the unified Omnibox. Service category, constituent 5km zones, and proprietary vector routing are resolved automatically.</span>
-              </div>
-            </div>
-
-            {estimateError && <div className="v2-inline-error">{estimateError}</div>}
-
-            <div className="v2-rail-estimate">
-              <div className="v2-form-head">
-                <span>WHAT TO EXPECT</span>
-                <b>{estimating ? 'CALCULATING' : estimate?.calibration || 'READY'}</b>
-              </div>
-              {estimate ? (
-                <>
-                  <div className="v2-rail-estimate-grid">
-                    <div><span>LEADS</span><b>{formatNumber(estimate.expectedLeads?.expected || 0)}</b><small>estimated</small></div>
-                    <div><span>FIRST LEAD</span><b>{estimate.timing?.firstLeadLabel}</b><small>stream</small></div>
-                    <div><span>TOTAL TIME</span><b>{estimate.timing?.totalLabel}</b><small>full scan</small></div>
-                    <div><span>SPEED</span><b>{estimate.throughput?.leadsPerMinute || 0}</b><small>leads/min</small></div>
-                  </div>
-                  <div className="v2-rail-phases">
-                    {(estimate.phases || []).map(phase => (
-                      <div key={phase.name}>
-                        <span>{phase.name === 'Search' ? 'Find businesses' : phase.name === 'Deep' ? 'Complete profiles' : phase.name}</span>
-                        <b>{phase.label}</b>
-                      </div>
-                    ))}
-                  </div>
-                  {estimate.warnings?.length > 0 && (
-                    <div className="v2-rail-warning"><AlertTriangle size={12} /> {estimate.warnings[0]}</div>
-                  )}
-                </>
-              ) : (
-                <div className="v2-rail-empty">{estimating ? 'Reading zone index…' : 'Add a location to estimate.'}</div>
-              )}
-            </div>
-          </section>
-
-          <section className="v2-rail-panel v2-run-panel">
-            <div className="v2-rail-head">
-              <span><RadarIcon size={14} /> CURRENT RUN</span>
-              <StatusPill tone={run?.status === 'running' ? 'cyan' : run?.status === 'complete' ? 'lime' : run ? 'amber' : 'neutral'} pulse={run?.status === 'running'}>
-                {run?.status || 'idle'}
-              </StatusPill>
-            </div>
-
-            {run ? (
-              <>
-                <div className="v2-run-big">
-                  <b>{formatNumber(runLeadCount || 0)}</b>
-                  <span>LEADS THIS RUN</span>
-                  <small>{formatClock(runElapsed)} elapsed</small>
-                </div>
-                <span className="v2-run-progress"><i style={{ width: `${runPercent}%` }} /></span>
-                <div className="v2-run-detail">
-                  <span><b>{runPercent}%</b> zones</span>
-                  <span><b>{runDone}/{runTotal || '—'}</b> complete</span>
-                  <span><b>{progress?.eta || '—'}</b> ETA</span>
-                </div>
-                <div className="v2-run-zone">
-                  <CircleDot size={12} />
-                  <span>{progress?.activeMandal || (run.status === 'running' ? 'Opening signal…' : 'Run finished')}</span>
-                </div>
-                <div className="v2-run-tags">
-                  {run.engines.map(engine => <span key={engine}>{engine}</span>)}
-                  {run.postWebsite && <span>website</span>}
-                  {run.postDeep && <span>deep</span>}
-                </div>
-              </>
-            ) : (
-              <div className="v2-rail-empty">No active run. Configure a category and a location, then dispatch.</div>
-            )}
-          </section>
-
-          <section className="v2-rail-panel v2-rail-help">
-            <div className="v2-rail-head">
-              <span><Sparkles size={14} /> HOW IT WORKS</span>
-            </div>
-            <ol className="v2-help-steps">
-              <li><b>1</b><span>Type what you need and where.</span></li>
-              <li><b>2</b><span>Watch verified businesses appear live.</span></li>
-              <li><b>3</b><span>Call, add notes and move them through CRM.</span></li>
-            </ol>
-            <div className="v2-exact-note">
-              <b>Exact-match guard is on</b>
-              <span>Only businesses that match the category you type are kept. Other vendor types and generic labels are rejected.</span>
-            </div>
-          </section>
-        </aside>
-
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>
           <SearchConsole
             mode={runMode}
             onModeChange={setRunMode}
+            country={searchCountry}
             value={autoQuery}
             onChange={setAutoQuery}
             category={form.category}
@@ -4011,7 +4309,12 @@ export default function CommandCenter() {
             onDeploy={startRun}
             onStop={stopRun}
             busy={launching}
-            running={run?.status === 'running'}
+            running={Boolean(
+              !(run?.status === 'stopped' || run?.status === 'complete' || run?.status === 'aborted') && (
+                run?.status === 'running' ||
+                (activeSessionIdRef.current && (scanning || progress?.sessionActive))
+              ) && !finishingRef.current
+            )}
             compact={activeTab === 'cockpit'}
             onResolve={setScanPlan}
             progress={progress}
@@ -4019,7 +4322,7 @@ export default function CommandCenter() {
           />
 
           <section className="v2-cmd-stats">
-            <MetricCard label="LEADS FOUND" value={formatNumber(vendors.length)} sub={`${formatNumber(runLeadCount)} this search`} icon={Users} tone="lime" pulse={run?.status === 'running'} />
+            <MetricCard label="LEADS FOUND" value={formatNumber(vendors.length)} sub={`${formatNumber(runLeadCount)} this search`} icon={Users} tone="lime" pulse={Boolean((run?.status === 'running' || scanning) && !finishingRef.current)} />
             <MetricCard label="MOBILE NUMBERS" value={formatNumber(stats.phones)} sub={`${vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}% have a phone`} icon={Phone} tone="cyan" />
             <MetricCard label="COMPLETE PROFILES" value={formatNumber(stats.deep)} sub={`${stats.avg}% avg profile quality`} icon={Zap} tone="violet" />
             <MetricCard label="SAVED FOLDERS" value={formatNumber(effectiveRuns.length)} sub={`${formatNumber(estimate?.zones?.count || 0)} areas in this search`} icon={FolderArchive} tone="amber" />
@@ -4031,7 +4334,12 @@ export default function CommandCenter() {
               <div className="v2-live-run-info">
                 <span className="v2-live-run-badge">SWARM HARVESTING ACTIVE</span>
                 <b>{run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}</b>
-                {progress?.activeMandal && <span className="v2-live-zone-chip">📍 {progress.activeMandal}</span>}
+                {(effectiveActiveZone?.name || progress?.activeMandal) && (
+                  <span className="v2-live-zone-chip">
+                    📍 {effectiveActiveZone?.name || progress?.activeMandal}
+                    {Number.isFinite(Number(effectiveActiveZone?.lat)) && ` [${Number(effectiveActiveZone.lat).toFixed(3)}, ${Number(effectiveActiveZone.lng).toFixed(3)}]`}
+                  </span>
+                )}
               </div>
               <div className="v2-live-run-metrics">
                 <div className="v2-live-metric-item">
@@ -4070,28 +4378,6 @@ export default function CommandCenter() {
             </div>
           )}
 
-          <nav className="v2-cmd-tabs">
-            <button type="button" className={cx(activeTab === 'cockpit' && 'is-active')} onClick={() => setActiveTab('cockpit')}>
-              <LayoutDashboard size={14} /> Workspace
-            </button>
-            <button type="button" className={cx(activeTab === 'leads' && 'is-active')} onClick={() => setActiveTab('leads')}>
-              <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'map' && 'is-active')} onClick={() => setActiveTab('map')}>
-              <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'crm' && 'is-active')} onClick={() => setActiveTab('crm')}>
-              <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
-            </button>
-            <button type="button" className={cx(activeTab === 'runs' && 'is-active')} onClick={() => setActiveTab('runs')}>
-              <FolderArchive size={14} /> Saved Folders <b>{formatNumber(effectiveRuns.length)}</b>
-            </button>
-            <span className="v2-cmd-tabs-spacer" />
-            <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
-              <RefreshCw size={13} /> Refresh
-            </button>
-          </nav>
-
           <div className={cx('v2-cmd-content', activeTab === 'map' && 'is-map')}>
             {activeTab === 'cockpit' && (
               <CockpitView
@@ -4110,7 +4396,8 @@ export default function CommandCenter() {
                 onSelectVendor={setSelectedVendor}
                 onTab={setActiveTab}
                 mapZones={mapZones}
-                activeZone={activeZone}
+                activeZone={effectiveActiveZone}
+                progress={progress}
                 scanning={scanning}
                 mapCenter={mapCenter}
                 mapZoom={mapZoom}
@@ -4121,6 +4408,7 @@ export default function CommandCenter() {
                 onPageSize={setPageSize}
                 run={run}
                 stats={stats}
+                onOpenTrash={() => setTrashOpen(true)}
               />
             )}
 
@@ -4163,7 +4451,7 @@ export default function CommandCenter() {
                           const vLat = vendor.latitude ?? vendor.lat;
                           const vLng = vendor.longitude ?? vendor.lng;
                           const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
-                          const leadAddress = vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || (vendor.city || vendor.village || 'Locality');
+                          const leadAddress = dedupeAddress(vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || (vendor.city || vendor.village || 'Locality'));
                           return (
                             <tr
                               key={vendor.id}
@@ -4189,8 +4477,8 @@ export default function CommandCenter() {
                                   </div>
                                   <div className="v2-location-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                                     <span>{vendor.city || vendor.village || vendor.mandal || 'Unknown'}</span>
-                                    <small>{[vendor.district, vendor.state].filter(Boolean).join(', ') || vendor.pincode || '—'}</small>
-                                    {distKm != null && (
+                                    <small>{dedupeAddress([vendor.district, vendor.state].filter(Boolean).join(', ')) || vendor.pincode || '—'}</small>
+                                    {distKm != null && distKm <= 500 && (
                                       <span className="v2-distance-badge" title="Distance from search origin">
                                         📍 {distKm} km
                                       </span>
@@ -4200,34 +4488,39 @@ export default function CommandCenter() {
                               </td>
                               <td>
                                 <div className="v2-contact-cell">
-                                  {vendor.phone && !String(vendor.phone).includes('Requires') ? (
-                                    <div className="v2-phone-cluster">
-                                      <a href={`tel:${vendor.phone}`} className="v2-phone-badge" onClick={event => event.stopPropagation()}>
-                                        <Phone size={11} /> {vendor.phone}
-                                      </a>
-                                      {isMobilePhone(vendor.phone) && (
-                                        <a
-                                          href={`https://wa.me/91${vendor.phone.replace(/[^0-9]/g, '').slice(-10)}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20listing%20and%20wanted%20to%20connect.`}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="v2-wa-quick-btn"
-                                          title="Chat on WhatsApp"
-                                          onClick={event => event.stopPropagation()}
-                                        >
-                                          💬 WhatsApp
-                                        </a>
-                                      )}
+                                          {(() => {
+                                            const activePhone = getDisplayPhone(vendor);
+                                            const isMob = isMobilePhone(activePhone, vendor.country);
+                                            const waNum = whatsappNumber(activePhone, vendor.country);
+                                            return activePhone && !String(activePhone).includes('Requires') ? (
+                                              <div className="v2-phone-cluster">
+                                                <a href={`tel:${activePhone}`} className="v2-phone-badge" onClick={event => event.stopPropagation()}>
+                                                  <Phone size={11} /> {activePhone}
+                                                </a>
+                                        {isMob && (
+                                            <a
+                                              href={vendor.whatsappLink || `https://wa.me/${waNum}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20listing%20and%20wanted%20to%20connect.`}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="v2-wa-quick-btn"
+                                              title="Chat on WhatsApp"
+                                              onClick={event => event.stopPropagation()}
+                                            >
+                                              💬 WhatsApp
+                                            </a>
+                                          )}
+                                        </div>
+                                      ) : (
+                                      <span className="v2-muted">No mobile yet</span>
+                                      );
+                                  })()}
+                                      <span className="v2-contact-sub">
+                                        {vendor.website
+                                          ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> website</a>
+                                          : <em>no website</em>}
+                                        {vendor.email && <a href={`mailto:${vendor.email}`} onClick={event => event.stopPropagation()}>email</a>}
+                                      </span>
                                     </div>
-                                  ) : (
-                                    <span className="v2-muted">No mobile yet</span>
-                                  )}
-                                  <span className="v2-contact-sub">
-                                    {vendor.website
-                                      ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> website</a>
-                                      : <em>no website</em>}
-                                    {vendor.email && <a href={`mailto:${vendor.email}`} onClick={event => event.stopPropagation()}>email</a>}
-                                  </span>
-                                </div>
                               </td>
                               <td>
                                 {vendor.rating != null ? <span className="v2-table-rating">{Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small></span> : <span className="v2-muted">—</span>}
@@ -4271,7 +4564,9 @@ export default function CommandCenter() {
                     </span>
                     <div className="v2-pagination">
                       <select value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
-                        {[25, 50, 100].map(size => <option value={size} key={size}>{size} / page</option>)}
+                        {[25, 50, 100, 250, 500, 10000].map(size => (
+                          <option value={size} key={size}>{size === 10000 ? 'All Leads' : `${size} / page`}</option>
+                        ))}
                       </select>
                       <button type="button" onClick={() => setPage(prev => Math.max(1, prev - 1))} disabled={currentPage <= 1}><ChevronLeft size={13} /></button>
                       <span>{currentPage} / {pageCount}</span>
@@ -4298,7 +4593,7 @@ export default function CommandCenter() {
                   <CommandMap
                     vendors={filteredVendors}
                     zones={mapZones}
-                    activeZone={activeZone}
+                    activeZone={effectiveActiveZone}
                     scanning={scanning}
                     center={mapCenter}
                     zoom={mapZoom}
@@ -4452,13 +4747,6 @@ export default function CommandCenter() {
                           <GitMerge size={13} /> Merge &amp; Deduplicate ({selectedFolderIds.size})
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="v2-btn v2-btn-danger v2-btn-sm"
-                        onClick={handleBatchDelete}
-                      >
-                        <Trash2 size={13} /> Delete Selected ({selectedFolderIds.size})
-                      </button>
                       <button
                         type="button"
                         className="v2-btn v2-btn-ghost v2-btn-sm"
@@ -4652,6 +4940,13 @@ export default function CommandCenter() {
           onClose={() => setShowMergeModal(false)}
           onMerge={handleMergeFolders}
           isMerging={isMerging}
+        />
+      )}
+
+      {trashOpen && (
+        <TrashModal
+          onClose={() => setTrashOpen(false)}
+          onRestored={() => { refresh(); }}
         />
       )}
     </div>

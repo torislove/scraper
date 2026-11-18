@@ -1,23 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <linearGradient id="scBg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7C3AED" />
-      <stop offset="50%" stop-color="#4F46E5" />
-      <stop offset="100%" stop-color="#0284C7" />
+    <!-- Luxury 3D Emerald Gradient -->
+    <linearGradient id="scFavEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="60%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
     </linearGradient>
-    <linearGradient id="scSpark" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#38BDF8" />
-      <stop offset="100%" stop-color="#00F0FF" />
+
+    <!-- 3D Glass Surface Highlight -->
+    <linearGradient id="scFavHl" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
+
+    <!-- Elevation Shadow -->
+    <filter id="scFavShd" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2.5" stdDeviation="3" flood-color="#059669" flood-opacity="0.35" />
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#047857" flood-opacity="0.25" />
+    </filter>
   </defs>
 
-  <!-- High-Contrast Squircle Base -->
-  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#scBg)" />
-  <rect x="3" y="3" width="58" height="58" rx="14" fill="none" stroke="#FFFFFF" stroke-opacity="0.3" stroke-width="1.5" />
+  <!-- 3D Beveled Emerald Squircle Base -->
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#scFavEmerald)" filter="url(#scFavShd)" />
+  <rect x="3" y="3" width="58" height="58" rx="16" fill="none" stroke="#047857" stroke-width="1.5" />
+  <rect x="4.5" y="4.5" width="55" height="55" rx="14.5" fill="none" stroke="url(#scFavHl)" stroke-width="1.5" />
 
-  <!-- High-Velocity "S" Monogram Vector -->
+  <!-- High-Velocity "S" Monogram in Optic White -->
   <path
-    d="M44 20 C44 15 39 13 32 13 C22 13 17 18 17 24 C17 32 35 30 35 37 C35 42 30 44 23 44 C17 44 13 40.5 13 37"
+    d="M43 20 C43 14.8 38.5 13 32 13 C21.5 13 16.5 18 16.5 24.5 C16.5 33 35.5 30.5 35.5 37.5 C35.5 43.5 30 46.5 23 46.5 C16.5 46.5 12.5 42.5 12.5 37.5"
     fill="none"
     stroke="#FFFFFF"
     stroke-width="6.5"
@@ -25,16 +35,17 @@
     stroke-linejoin="round"
   />
 
-  <!-- Forward Velocity Chevron Spark -->
+  <!-- Forward Velocity Cyan Vector Spark -->
   <path
     d="M37 36 L44 43.5 L37 51"
     fill="none"
-    stroke="url(#scSpark)"
+    stroke="#67E8F9"
     stroke-width="4.5"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
 
-  <!-- Emerald Live Verification Jewel -->
-  <circle cx="46" cy="17" r="4.2" fill="#10B981" stroke="#FFFFFF" stroke-width="1.8" />
+  <!-- Live Radar Beacon Jewel with Concentric Optical Highlight -->
+  <circle cx="45" cy="18" r="4.8" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2" />
+  <circle cx="45" cy="18" r="2.2" fill="#FFFFFF" />
 </svg>

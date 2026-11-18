@@ -11,7 +11,7 @@ const { baseDirectoryJobs } = require('./base');
 
 const LIMITS = {
   scope: 'mandal',
-  zoneBudget: { client: 64, master: 400 },
+  zoneBudget: { client: Infinity, master: Infinity },
   justdialSwarm: 0,
   deepEnrich: true
 };

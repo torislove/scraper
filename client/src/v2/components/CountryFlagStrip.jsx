@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Globe2, Search, X, Check, ShieldCheck, Sparkles } from 'lucide-react';
 import { API_URL } from '../../apiConfig';
 import { COUNTRIES, POPULAR_COUNTRIES, flagOf, findCountry } from '../data/countries';
+import Country3DFlag from './Country3DFlag';
 import './countryStrip.css';
 
 /**
@@ -55,6 +56,9 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
 
   const results = useMemo(() => {
     const value = query.trim().toLowerCase();
+    // The picker lists every country the backend can search (245), not just the
+    // featured markets. A search narrows the full list; an empty search shows
+    // all of them, India first.
     const list = value
       ? COUNTRIES.filter(country =>
           country.name.toLowerCase().includes(value) || country.code.toLowerCase() === value)
@@ -83,16 +87,14 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
       <div className="country-strip-main">
         <span className="country-strip-kicker"><Globe2 size={13} /> SEARCH COUNTRY</span>
         <div className={`country-strip-current${current?.code === 'IN' ? ' is-home' : ''}`}>
-          <span className="country-strip-flag" aria-hidden="true">{flag}</span>
+          <Country3DFlag code={current?.code || 'IN'} size={current?.code === 'IN' ? 42 : 36} isHome={current?.code === 'IN'} />
           <div className="country-strip-name">
             <b>{current?.name || 'India'}</b>
             <small className="country-strip-status">
               {current?.code === 'IN' && <em className="country-home">HOME</em>}
               {loading
-                ? 'Checking free sources…'
-                : engines.length
-                  ? `${engines.length} free sources ready${blocked.length ? ` · ${blocked.length} blocked by the site` : ''}`
-                  : 'Free sources ready'}
+                ? 'Preparing search sources…'
+                : 'All multi-vector sources active'}
             </small>
             <small className="country-strip-path">
               {loading ? 'Loading hierarchy…' : (coverage?.adminPath || '')}
@@ -110,7 +112,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
             onClick={() => choose(country)}
             title={`Search in ${country.name}`}
           >
-            <span className="country-pill-flag">{flagOf(country.code)}</span>
+            <Country3DFlag code={country.code} size={20} active={country.code === current?.code} isHome={country.code === 'IN'} />
             <span className="country-pill-text">{country.name}</span>
             {country.code === current?.code && <Check size={11} className="country-pill-check" />}
           </button>
@@ -120,9 +122,10 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
           className={`country-pill country-pill-all${open ? ' is-active' : ''}`}
           onClick={() => setOpen(value => !value)}
           aria-expanded={open}
+          title="Search countries"
         >
-          <Sparkles size={13} />
-          <span className="country-pill-text">All {COUNTRIES.length} countries</span>
+          <Search size={12} />
+          <span className="country-pill-text">All {COUNTRIES.length}</span>
         </button>
       </div>
 
@@ -135,7 +138,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
                 autoFocus
                 type="search"
                 value={query}
-                placeholder="Type a country name — India, United States, Germany, Brazil…"
+                placeholder="Search country — India, United States, UK, Canada…"
                 onChange={event => setQuery(event.target.value)}
               />
               {query && (
@@ -145,7 +148,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
               )}
             </div>
             <span className="country-picker-note">
-              <ShieldCheck size={12} /> No keys. No logins. {COUNTRIES.length} countries.
+              <ShieldCheck size={12} /> {COUNTRIES.length} countries · India is Home
             </span>
             <button type="button" className="country-picker-close" onClick={() => setOpen(false)} aria-label="Close country list">
               <X size={14} />
@@ -159,23 +162,25 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
                 className={`country-feature${current?.code === 'IN' ? ' is-active' : ''}`}
                 onClick={() => choose(findCountry('IN'))}
               >
-                <span className="country-feature-flag" aria-hidden="true">{flagOf('IN')}</span>
+                <Country3DFlag code="IN" size={38} isHome />
                 <span className="country-feature-text">
                   <b>India <em className="country-card-home">HOME</em></b>
-                  <small>Primary market · 9 engines · JustDial, WeddingBazaar, WeddingWire, Mandap plus the global stack</small>
+                  <small>Primary market · 10 engines · JustDial, WeddingBazaar, WeddingWire, Mandap plus the global stack</small>
                   <small className="country-feature-path">State → District → Mandal / Taluka / Tehsil</small>
                 </span>
                 <span className="country-feature-cta">Search India</span>
               </button>
             )}
-            {results.map(country => (
+            {results
+              .filter(country => query.trim() || country.code !== 'IN')
+              .map(country => (
               <button
                 type="button"
                 key={country.code}
                 className={`country-card${country.code === current?.code ? ' is-active' : ''}${country.code === 'IN' ? ' is-home' : ''}`}
                 onClick={() => choose(country)}
               >
-                <span className="country-card-flag">{flagOf(country.code)}</span>
+                <Country3DFlag code={country.code} size={24} active={country.code === current?.code} isHome={country.code === 'IN'} />
                 <span className="country-card-text">
                   <b>{country.name}</b>
                   <small>{country.code}{country.phone ? ` · ${country.phone}` : ''}</small>

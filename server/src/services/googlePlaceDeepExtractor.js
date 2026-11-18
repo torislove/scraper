@@ -25,6 +25,21 @@ function cleanText(value, max = 2000) {
     .slice(0, max);
 }
 
+/**
+ * Validates that a string is clean human readable text and not a CSS/JS code artifact.
+ */
+function isCssOrCodeSnippet(text) {
+  if (!text || typeof text !== 'string') return false;
+  if (/--[a-z0-9_-]+:/i.test(text)) return true; // CSS variable declaration e.g. --wbu-color-...
+  if (/[{};]\s*--/i.test(text)) return true;
+  if (/(?:rgba?|hsla?)\s*\(/i.test(text)) return true;
+  if (/(?:mOnSite|shouldReportErrorOnlyInPanorama|window\.__|document\.)/i.test(text)) return true;
+  if (/#[0-9a-fA-F]{6}\b/.test(text) && text.includes(';')) return true;
+  if (text.includes('var(--') || text.includes('!important')) return true;
+  if (/[{}"\\]/.test(text) && (text.includes('true') || text.includes('false') || text.includes('null'))) return true;
+  return false;
+}
+
 function uniqueBy(items, keyFn) {
   const seen = new Set();
   const out = [];
@@ -160,9 +175,13 @@ async function extractPageData(page, vendor) {
 
     const hoursTable = [...document.querySelectorAll('table.eK4R0e tr')].map(tr => {
       const cells = [...tr.querySelectorAll('td')].map(td => td.textContent.replace(/\s+/g, ' ').trim());
+      if (cells.some(c => /[{}"\\]/.test(c) || c.includes('mOnSite') || c.includes('shouldReportError'))) return null;
       return cells.length >= 2 ? { day: cells[0], hours: cells.slice(1).join(' ') } : null;
     }).filter(Boolean);
-    const hoursRaw = (aria('[data-item-id="oh"]') || text('div.t39EBf') || '').replace(/^Hours:\s*/i, '');
+    let hoursRaw = (aria('[data-item-id="oh"]') || text('div.t39EBf') || '').replace(/^Hours:\s*/i, '');
+    if (/[{}"\\]/.test(hoursRaw) || hoursRaw.includes('mOnSite') || hoursRaw.includes('shouldReportError') || hoursRaw.includes('--')) {
+      hoursRaw = '';
+    }
 
     const attributeGroups = [];
     const attrSeen = new Set();
@@ -288,21 +307,38 @@ async function extractPageData(page, vendor) {
 
   const ratingBlock = parseRatingBlock(`${dom.ratingText} ${dom.reviewCountText} ${dom.reviewAria}`);
 
+  const cleanAddress = cleanText(dom.address, 600);
+  const countryCode = String(vendor.country || vendor.countryCode || '').toUpperCase() ||
+    (/,\s*(?:USA?|United States)\b/i.test(cleanAddress) ? 'US' :
+     /,\s*Canada\b/i.test(cleanAddress) ? 'CA' :
+     /,\s*(?:UK|United Kingdom|England|Scotland)\b/i.test(cleanAddress) ? 'GB' :
+     /,\s*Australia\b/i.test(cleanAddress) ? 'AU' :
+     /,\s*India\b/i.test(cleanAddress) ? 'IN' : 'IN');
+
+  const isIntl = countryCode !== 'IN';
   const phones = uniqueBy(
-    [dom.phone, ...extractPhones(dom.phone)].map(value => normalizePhone(value)).filter(Boolean),
+    [dom.phone, ...extractPhones(dom.phone, { defaultCountry: countryCode, allowInternational: isIntl })]
+      .map(value => normalizePhone(value, { defaultCountry: countryCode, allowInternational: isIntl }))
+      .filter(p => p && !isCssOrCodeSnippet(p.displayPhone) && !isCssOrCodeSnippet(p.e164)),
     p => p.e164 || p.national
   );
   const bestPhone = phones.find(p => p.isMobile) || phones.find(p => p.isLandline) || phones[0] || null;
 
-  const addressComponents = splitIndianAddress(dom.address);
-  const pincode = addressComponents.pincode || extractPincode(dom.address, phones);
+  const addressComponents = countryCode === 'IN'
+    ? splitIndianAddress(cleanAddress)
+    : { full: cleanAddress, locality: '', city: '', district: '', state: '', pincode: '', country: countryCode };
+  const pincode = countryCode === 'IN'
+    ? (addressComponents.pincode || extractPincode(cleanAddress, phones))
+    : (cleanAddress.match(/\b([A-Z0-9]{3,10}(?:-[A-Z0-9]{4})?)\b/i)?.[1] || '');
   const coords = parseCoords(dom.mapsUrl) || parseCoords(vendor.mapsLink) ||
     (vendor.latitude && vendor.longitude ? { lat: Number(vendor.latitude), lng: Number(vendor.longitude) } : null);
 
   const attributes = [];
   for (const group of dom.attributeGroups) {
     for (const item of group.items) {
-      attributes.push({ group: cleanText(group.heading, 80), name: cleanText(item, 120) });
+      if (!isCssOrCodeSnippet(group.heading) && !isCssOrCodeSnippet(item)) {
+        attributes.push({ group: cleanText(group.heading, 80), name: cleanText(item, 120) });
+      }
     }
   }
 
@@ -311,10 +347,12 @@ async function extractPageData(page, vendor) {
     url => url
   ).slice(0, 24);
 
+  const cleanRawHours = isCssOrCodeSnippet(dom.hoursRaw) ? '' : cleanText(dom.hoursRaw, 300);
+
   return {
-    name: cleanText(dom.name, 240),
-    category: cleanText(dom.category, 120),
-    address: cleanText(dom.address, 600),
+    name: isCssOrCodeSnippet(dom.name) ? '' : cleanText(dom.name, 240),
+    category: isCssOrCodeSnippet(dom.category) ? '' : cleanText(dom.category, 120),
+    address: isCssOrCodeSnippet(cleanAddress) ? '' : cleanAddress,
     addressComponents: { ...addressComponents, pincode },
     pincode,
     plusCode: cleanText(dom.plusCode, 80),
@@ -329,7 +367,7 @@ async function extractPageData(page, vendor) {
     businessStatus: cleanText(dom.businessStatus, 80),
     ownerName: cleanText(dom.ownerName, 160),
     hours: {
-      raw: cleanText(dom.hoursRaw, 300),
+      raw: cleanRawHours,
       table: uniqueBy(dom.hoursTable, r => `${r.day}|${r.hours}`).slice(0, 10)
     },
     attributes: uniqueBy(attributes, a => `${a.group}|${a.name}`).slice(0, 120),

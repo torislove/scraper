@@ -176,8 +176,8 @@ function mobileKey(value) {
   const text = phoneString(value);
   if (!text || BAD_PHONE.test(text)) return '';
   try {
-    const parsed = normalizePhone(text, { context: 'phone mobile', trusted: true });
-    if (parsed && parsed.isMobile) return `phone:${parsed.national}`;
+    const parsed = normalizePhone(text, { context: 'phone mobile', trusted: true, allowInternational: true });
+    if (parsed && (parsed.isMobile || parsed.country !== 'IN')) return `phone:${parsed.e164 || parsed.national}`;
   } catch (e) {}
   return '';
 }
@@ -186,8 +186,27 @@ function linkKey(value) {
   const text = String(value || '').trim();
   if (!text) return '';
   if (!/google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(text)) return '';
-  // Drop volatile query params but keep the !8m2!3d... place identity.
-  return `link:${text.split('&')[0].split('?')[0]}`;
+
+  // If it's a search URL (/maps/search/), never use a bare URL as key. Only index if it has an explicit query.
+  if (text.includes('/maps/search')) {
+    try {
+      const u = new URL(text);
+      const q = u.searchParams.get('query') || u.searchParams.get('q') || '';
+      if (!q || q.length < 3) return '';
+      return `link_search:${q.toLowerCase().trim()}`;
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Place URL: Keep the path up to volatile parameters, but ensure it is not a bare /maps
+  if (text.includes('/maps/place/') || text.includes('cid=') || text.includes('data=') || text.includes('maps.app.goo.gl')) {
+    const base = text.split('&')[0].split('?')[0];
+    if (base.endsWith('/maps') || base.endsWith('/maps/')) return '';
+    return `link:${base}`;
+  }
+
+  return '';
 }
 
 function domainKey(website) {
@@ -320,8 +339,9 @@ function promoteBestMobile(vendor) {
   vendor.phone = found;
   vendor.whatsappAvailable = true;
   if (!vendor.whatsappLink) {
-    const national = mobileKey(found).replace('phone:', '');
-    vendor.whatsappLink = `https://wa.me/91${national}`;
+    const key = mobileKey(found).replace('phone:', '');
+    const digits = key.replace(/\D/g, '');
+    vendor.whatsappLink = digits ? `https://wa.me/${digits}` : '';
   }
   return vendor;
 }
@@ -569,7 +589,13 @@ function scheduleSnapshot() {
 function readJsonArray(file) {
   try {
     if (!fs.existsSync(file)) return [];
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    let content = fs.readFileSync(file, 'utf-8');
+    if (content.charCodeAt(0) === 0xFEFF) {
+      content = content.slice(1);
+    }
+    content = content.trim();
+    if (!content) return [];
+    const parsed = JSON.parse(content);
     return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
   } catch (e) {
     return null;
@@ -585,7 +611,11 @@ function healFromSessions() {
   // and a damaged store could only be rebuilt from three stale backups.
   const readRows = (file) => {
     try {
-      const parsed = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      let content = fs.readFileSync(file, 'utf-8');
+      if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
+      content = content.trim();
+      if (!content) return [];
+      const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) return parsed.filter(Boolean);
       if (parsed && Array.isArray(parsed.leads)) return parsed.leads.filter(Boolean);
       if (parsed && parsed.metadata && Array.isArray(parsed.metadata.leads)) return parsed.metadata.leads.filter(Boolean);

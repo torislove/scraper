@@ -6,8 +6,10 @@ import {
   FolderArchive, Globe2, Layers, Loader2, MapPin, MessageSquare, Phone,
   PhoneCall, Play, Radar as RadarIcon, RefreshCw, RotateCcw, Search,
   SlidersHorizontal, Smartphone, Sparkles, Square, Star, Table2, Tag,
-  Trash2, Users, Wifi, WifiOff, X, Zap
+  Trash2, Users, Wifi, WifiOff, X, Zap, Maximize2, Minimize2
 } from 'lucide-react';
+import ParallelEnginesStatus from '../ParallelEnginesStatus';
+import ConcentricZoneRadar from '../ConcentricZoneRadar';
 import FilterBar from '../cards/FilterBar';
 import CommandMap from '../../CommandMap';
 import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
@@ -17,8 +19,10 @@ import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from '
 import { CRM_STAGES, crmStageOf, formatInr } from '../../CrmBoard';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
-import { leadSourceMeta, listLeadSources, downloadLeadCsv } from '../../utils/leadSource';
 import { cx, formatNumber, relativeTime } from '../../ui';
+import OdometerCounter from '../cards/OdometerCounter';
+import FloatingActionDock from '../cards/FloatingActionDock';
+import { soundFx } from '../../utils/soundEffects';
 
 export default function CockpitView({
   vendors = [],
@@ -46,6 +50,7 @@ export default function CockpitView({
   onPage,
   onPageSize,
   run = null,
+  progress = null,
   stats = {},
   onOpenWhatsApp,
   selectedAreaFilter = 'all',
@@ -53,6 +58,8 @@ export default function CockpitView({
 }) {
   const [cockpitSelectedIds, setCockpitSelectedIds] = useState(new Set());
   const [showCockpitWaModal, setShowCockpitWaModal] = useState(false);
+  const [hoveredLeadId, setHoveredLeadId] = useState(null);
+  const [isFocusMode, setIsFocusMode] = useState(false);
 
   const crmPhonesMap = useMemo(() => {
     const map = new Map();
@@ -61,7 +68,7 @@ export default function CockpitView({
       if (stage && stage !== 'new') {
         const p = getDisplayPhone(v);
         if (p) {
-          const digits = whatsappNumber(p);
+          const digits = whatsappNumber(p, v.country);
           if (digits) {
             map.set(digits, {
               stage,
@@ -95,15 +102,43 @@ export default function CockpitView({
     const rawPhones = target.map(l => {
       const p = getDisplayPhone(l);
       if (!p) return null;
-      const digits = whatsappNumber(p);
-      return digits ? `+91 ${digits}` : null;
+      const digits = whatsappNumber(p, l.country);
+      if (!digits) return null;
+      if (digits.startsWith('91') || l.country === 'IN') return `+91 ${digits.replace(/^91/, '')}`;
+      return `+${digits}`;
     }).filter(Boolean);
     if (!rawPhones.length) {
       toast.error('No mobile numbers found in selected rows.');
       return;
     }
+    soundFx.playSuccess();
     navigator.clipboard?.writeText(rawPhones.join('\n'));
     toast.success(`Copied ${rawPhones.length} mobile numbers to clipboard!`);
+  };
+
+  const handleCockpitExportVcf = () => {
+    const target = pageRows.filter(v => cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`));
+    if (!target.length) {
+      toast.error('No leads selected for VCF export.');
+      return;
+    }
+    soundFx.playSuccess();
+    exportLeadsToVcf(target, `selected_leads_${target.length}`);
+    toast.success(`Exported ${target.length} leads to vCard (.vcf)!`);
+  };
+
+  const handleCockpitExportCsv = () => {
+    const target = pageRows.filter(v => cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`));
+    if (!target.length) {
+      toast.error('No leads selected for CSV export.');
+      return;
+    }
+    soundFx.playSuccess();
+    if (onExportFolder) {
+      onExportFolder({ leads: target, name: `selected_leads_${target.length}` }, 'csv');
+    } else {
+      toast.success(`Exporting ${target.length} selected leads...`);
+    }
   };
 
   const stageCounts = useMemo(() => {
@@ -156,38 +191,8 @@ export default function CockpitView({
     return scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
   }, [filteredVendors]);
 
-  // Which scrapes produced the live rows? Counts respect the open folder so a
-  // selected source chip keeps a stable total instead of collapsing to itself.
-  const scopedVendors = useMemo(() => {
-    if (!sessionFilter) return vendors || [];
-    return (vendors || []).filter(v =>
-      v.sessionId === sessionFilter ||
-      v.lastSessionId === sessionFilter ||
-      (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionFilter))
-    );
-  }, [vendors, sessionFilter]);
-
-  const sourceFacets = useMemo(() => listLeadSources(scopedVendors), [scopedVendors]);
-  const activeSource = filters?.source || 'all';
-
-  const handleExportCsv = () => {
-    const selected = (filteredVendors || []).filter(v =>
-      cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`)
-    );
-    const rows = selected.length ? selected : (filteredVendors || []);
-    if (!rows.length) {
-      toast.error('No leads to export yet.');
-      return;
-    }
-    const name = selected.length ? 'selected_leads' : 'live_leads';
-    const ok = downloadLeadCsv(rows, `${name}_${Date.now()}.csv`, { city: run?.location || '' });
-    if (ok) {
-      toast.success(`Exported ${rows.length} leads with scrape source to CSV.`);
-    }
-  };
-
   return (
-    <div className="v2-cockpit">
+    <div className={cx('v2-cockpit', isFocusMode && 'is-focus-mode')}>
       {/* LEFT: folders + CRM */}
       <aside className="v2-cockpit-col v2-cp-left">
         <section className="v2-cp-panel v2-cp-folders">
@@ -253,21 +258,34 @@ export default function CockpitView({
             <span className="v2-cp-title">
               <CircleDot size={13} className={scanning ? 'v2-cp-live' : ''} />
               LIVE LEADS
-              <b>{formatNumber(filteredVendors.length)}</b>
+              <b><OdometerCounter value={filteredVendors.length} /></b>
             </span>
             <span className="v2-cp-sub">
-              {formatNumber(cockpitMobilesCount)} mobiles · {cockpitAvgQuality}% profile quality
+              <OdometerCounter value={cockpitMobilesCount} /> mobiles · {cockpitAvgQuality}% profile quality
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <button
               type="button"
-              className="v2-btn-ghost v2-export-csv-btn"
-              onClick={handleExportCsv}
-              title="Download the live leads (or selected rows) as a CSV spreadsheet with the scrape source"
+              className={cx('v2-btn-ghost v2-focus-table-btn', isFocusMode && 'is-active')}
+              onClick={() => setIsFocusMode(!isFocusMode)}
+              title={isFocusMode ? "Exit focus mode and restore 3-column cockpit" : "Maximize Live Leads table to full screen width"}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                height: 28,
+                padding: '0 9px',
+                borderRadius: 6,
+                fontSize: 10,
+                border: '1px solid var(--v2-line)',
+                background: isFocusMode ? 'rgba(34, 211, 238, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                color: isFocusMode ? '#22d3ee' : 'var(--v2-muted)',
+                cursor: 'pointer'
+              }}
             >
-              <Download size={12} />
-              <span>Export CSV</span>
+              {isFocusMode ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+              <span>{isFocusMode ? 'Normal' : 'Focus'}</span>
             </button>
             <button
               type="button"
@@ -295,32 +313,6 @@ export default function CockpitView({
           </div>
         </div>
 
-        {/* Scrape source differentiation: every live row is stamped by the
-            engine that produced it, and the chips filter without a reload. */}
-        {sourceFacets.length > 0 && (
-          <div className="v2-source-bar" role="group" aria-label="Filter live leads by scrape source">
-            <span className="v2-source-bar-label">SCRAPE SOURCE</span>
-            <button
-              type="button"
-              className={cx('v2-source-chip', activeSource === 'all' && 'is-active')}
-              onClick={() => onFilterChange?.('source', 'all')}
-            >
-              All scrapes <b>{formatNumber(filteredVendors.length)}</b>
-            </button>
-            {sourceFacets.map(facet => (
-              <button
-                type="button"
-                key={facet.key}
-                className={cx('v2-source-chip', `is-${facet.tone}`, activeSource === facet.key && 'is-active')}
-                onClick={() => onFilterChange?.('source', activeSource === facet.key ? 'all' : facet.key)}
-                title={`${facet.label} · ${facet.count} leads from this scrape`}
-              >
-                {facet.short} <b>{formatNumber(facet.count)}</b>
-              </button>
-            ))}
-          </div>
-        )}
-
         <FilterBar
           filters={filters}
           onChange={onFilterChange}
@@ -330,18 +322,59 @@ export default function CockpitView({
         />
 
         {selectedAreaFilter && selectedAreaFilter !== 'all' && (
-          <div className="v2-area-filter-badge" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: 8, margin: '8px 0', fontSize: 12, color: '#0F172A', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
+          <div className="v2-area-filter-badge" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 14px', background: 'rgba(102, 230, 189, 0.08)', border: '1px solid rgba(102, 230, 189, 0.28)', borderRadius: 8, margin: '8px 0', fontSize: 12, color: '#f4f7fb', fontWeight: 600, boxShadow: '0 4px 14px rgba(0,0,0,0.3)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <MapPin size={13} style={{ color: '#2563EB' }} />
-              Sub-Area Filter: <b style={{ color: '#1D4ED8' }}>{selectedAreaFilter}</b> ({formatNumber(filteredVendors.length)} leads)
+              <MapPin size={13} style={{ color: '#66e6bd' }} />
+              Sub-Area Filter: <b style={{ color: '#66e6bd' }}>{selectedAreaFilter}</b> ({formatNumber(filteredVendors.length)} leads)
             </span>
             <button
               type="button"
               onClick={() => onSelectArea && onSelectArea('all')}
-              style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', borderRadius: 4, padding: '3px 8px', fontSize: 11, cursor: 'pointer', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 0 #94A3B8' }}
+              style={{ background: 'rgba(255, 255, 255, 0.06)', border: '1px solid rgba(165, 184, 204, 0.2)', borderRadius: 5, padding: '3px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 700, color: '#98a4b4', display: 'flex', alignItems: 'center', gap: 4 }}
             >
               <X size={11} /> Clear Filter
             </button>
+          </div>
+        )}
+
+        {scanning && (
+          <div className="v2-live-swarm-cockpit-hud">
+            <div className="v2-live-hud-main">
+              <span className="v2-live-hud-pulse"><i /></span>
+              <div className="v2-live-hud-info">
+                <span className="v2-live-hud-badge">ACTIVE SWARM SECTOR</span>
+                <b className="v2-live-hud-title">
+                  📍 {activeZone?.name || activeZone?.zoneName || progress?.activeMandal || 'Active Territory'}
+                </b>
+                {Number.isFinite(Number(activeZone?.lat)) && Number.isFinite(Number(activeZone?.lng)) && (
+                  <span className="v2-live-hud-coords">
+                    [{Number(activeZone.lat).toFixed(4)}, {Number(activeZone.lng).toFixed(4)}]
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="v2-live-hud-meta">
+              <span className="v2-live-hud-zone-pill">
+                ZONE {activeZone?.index || (progress?.completedMandals != null ? progress.completedMandals + 1 : 1)} / {progress?.totalMandalsAcrossAll || progress?.totalMandals || mapZones.length || '—'}
+              </span>
+              <span className="v2-live-hud-status">⚡ SWEEPING 5-ENGINE PARALLEL</span>
+            </div>
+          </div>
+        )}
+
+        {scanning && (
+          <div style={{ marginBottom: 12 }}>
+            <ParallelEnginesStatus
+              scanning={scanning}
+              totalHarvested={vendors.length}
+            />
+            <ConcentricZoneRadar
+              zones={mapZones}
+              activeZone={activeZone}
+              completedCount={mapZones.filter(z => z.completed).length}
+              totalCount={mapZones.length || 7}
+              scanning={scanning}
+            />
           </div>
         )}
 
@@ -374,18 +407,27 @@ export default function CockpitView({
                 const vLng = vendor.longitude ?? vendor.lng;
                 const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
                 const leadAddress = vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || locality;
+                const vKey = vendor.id || `${vendor.name}-${vendor.phone}`;
+                const isRowHovered = Boolean(hoveredLeadId && (hoveredLeadId === vendor.id || hoveredLeadId === vKey));
                 return (
                   <tr
                     key={vendor.id}
-                    className={cx('v2-lead-animated-row', cockpitSelectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`) && 'is-selected')}
+                    id={`lead-row-${vKey}`}
+                    className={cx(
+                      'v2-lead-animated-row',
+                      cockpitSelectedIds.has(vKey) && 'is-selected',
+                      isRowHovered && 'is-hovered'
+                    )}
                     style={{ animationDelay: `${Math.min(index * 35, 600)}ms` }}
                     onClick={() => onSelectVendor(vendor)}
+                    onMouseEnter={() => setHoveredLeadId(vendor.id || vKey)}
+                    onMouseLeave={() => setHoveredLeadId(null)}
                   >
                     <td onClick={e => e.stopPropagation()} style={{ width: 32 }}>
                       <input
                         type="checkbox"
-                        checked={cockpitSelectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`)}
-                        onChange={() => toggleCockpitSelectOne(vendor.id || `${vendor.name}-${vendor.phone}`)}
+                        checked={cockpitSelectedIds.has(vKey)}
+                        onChange={() => toggleCockpitSelectOne(vKey)}
                       />
                     </td>
                     <td>
@@ -394,17 +436,6 @@ export default function CockpitView({
                         <span className="v2-vendor-info-wrap">
                           <b className="v2-lead-proper-name">{vendor.name || 'Verified Business'}</b>
                           <CarriedBadge lead={vendor} />
-                          {(() => {
-                            const src = leadSourceMeta(vendor);
-                            return (
-                              <span
-                                className={cx('v2-source-badge', `is-${src.tone}`)}
-                                title={`This lead was found by the ${src.label} scrape`}
-                              >
-                                {src.short}
-                              </span>
-                            );
-                          })()}
                           {(() => {
                             const activePhone = getDisplayPhone(vendor);
                             if (!activePhone) return null;
@@ -442,8 +473,8 @@ export default function CockpitView({
                               </div>
                             );
                           }
-                          const cleanDigits = whatsappNumber(activePhone);
-                          const isMob = Boolean(cleanDigits);
+                          const cleanDigits = whatsappNumber(activePhone, vendor.country);
+                          const isMob = Boolean(cleanDigits) || isMobilePhone(activePhone, vendor.country);
                           const hasMultiPhones = Array.isArray(vendor.phones) && vendor.phones.length > 1;
                           return (
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -472,7 +503,8 @@ export default function CockpitView({
                                     if (onOpenWhatsApp) {
                                       onOpenWhatsApp(vendor);
                                     } else {
-                                      window.open(`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, reaching out regarding your business services.`)}`, '_blank', 'noopener,noreferrer');
+                                      const waTarget = cleanDigits || String(activePhone).replace(/\D/g, '');
+                                      window.open(`https://wa.me/${waTarget}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, reaching out regarding your business services.`)}`, '_blank', 'noopener,noreferrer');
                                     }
                                   }}
                                   title="Open WhatsApp Command Center to customize message & send"
@@ -529,9 +561,9 @@ export default function CockpitView({
                   <span className="v2-radar-ring r3" />
                   <RadarIcon size={26} className="v2-radar-center-icon v2-spin" />
                 </div>
-                <b className="v2-scanning-leads-title">Ultra-Blazing Multi-Vector Swarm In Progress</b>
+                <b className="v2-scanning-leads-title">Live 5-Engine Parallel Discovery In Progress</b>
                 <p className="v2-scanning-leads-desc">
-                  Sweeping Geospatial Radar Mesh, Direct Telecom Registry & Deep SERP Index. Direct verified mobile contacts streaming in...
+                  Concurrently sweeping Google Maps, Local Pack, OpenStreetMap, Directory Portals, and direct website verification. Verified contacts streaming live...
                 </p>
                 <div className="v2-leads-skeleton-grid">
                   <div className="v2-lead-skeleton-row" />
@@ -559,11 +591,9 @@ export default function CockpitView({
           </span>
           <div className="v2-pagination">
             <select value={pageSize} onChange={event => onPageSize(Number(event.target.value))}>
-              <option value={100}>100 / page</option>
-              <option value={250}>250 / page</option>
-              <option value={500}>500 / page</option>
-              <option value={1000}>1,000 / page</option>
-              <option value={100000}>All Leads</option>
+              {[25, 50, 100, 250, 500, 10000].map(size => (
+                <option value={size} key={size}>{size === 10000 ? 'All Leads' : `${size} / page`}</option>
+              ))}
             </select>
             <button type="button" onClick={() => onPage(Math.max(1, page - 1))} disabled={page <= 1}><ChevronLeft size={13} /></button>
             <span>{page} / {pageCount}</span>
@@ -641,9 +671,16 @@ export default function CockpitView({
               center={mapCenter}
               zoom={mapZoom}
               height="100%"
+              compact={true}
+              hoveredLeadId={hoveredLeadId}
               fitKey={run?.id || sessionFilter || 'current-search'}
               scopeTitle={run?.category ? `${run.category} (${run.location || 'Current'})` : sessionFilter ? 'Selected Folder' : 'Current Search'}
-              onSelect={vendor => onSelectVendor(vendor)}
+              onSelect={vendor => {
+                onSelectVendor(vendor);
+                const vKey = vendor.id || `${vendor.name}-${vendor.phone}`;
+                const rowEl = document.getElementById(`lead-row-${vKey}`);
+                if (rowEl) rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
               onSelectZone={name => onFilterChange('query', name)}
             />
           </div>
@@ -654,6 +691,15 @@ export default function CockpitView({
           </footer>
         </section>
       </aside>
+
+      <FloatingActionDock
+        selectedCount={cockpitSelectedIds.size}
+        onClear={() => setCockpitSelectedIds(new Set())}
+        onWhatsAppCampaign={() => setShowCockpitWaModal(true)}
+        onCopyMobiles={handleCockpitCopyMobiles}
+        onExportVcf={handleCockpitExportVcf}
+        onExportCsv={handleCockpitExportCsv}
+      />
     </div>
   );
 }

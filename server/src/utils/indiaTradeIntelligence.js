@@ -62,12 +62,13 @@ const SECTORS = {
 
   HEALTHCARE_DOCTORS: {
     key: 'healthcare_doctors',
-    label: 'Healthcare, Doctors & Diagnostics',
+    label: 'Healthcare, Hospitals & Doctors',
     patterns: [
       /\b(hospital|hospitals|clinic|clinics|doctor|doctors|dentist|dentists|dental|eye hospital|pediatric|child specialist|orthopedic|gynecologist|maternity|pathology|diagnostic|scan center|physiotherapy|dermatologist|ent)\b/i
     ],
     subvectors: [
       'Multi Speciality Hospitals',
+      'Emergency & Trauma Care Hospitals',
       'Dental Clinics & Dental Hospitals',
       'Eye Hospitals & Ophthalmologists',
       'Children & Pediatric Hospitals',
@@ -78,8 +79,28 @@ const SECTORS = {
       'Dermatology & Skin Clinics',
       'ENT Clinics'
     ],
-    avoids: ['pharmacy', 'medical store', 'chemist', 'druggist', 'ayurvedic store', 'optician store', 'veterinary', 'pet clinic'],
+    avoids: ['pharmacy', 'medical store', 'chemist', 'druggist', 'ayurvedic store', 'optician store', 'veterinary', 'pet clinic', 'medicine shop', 'drug store'],
     preferredZoneTypes: ['healthcare_belts', 'commercial_bazaar', 'residential_belts']
+  },
+
+  PHARMACIES_DRUGSTORES: {
+    key: 'pharmacies_drugstores',
+    label: 'Pharmacies, Medical Stores & Drugstores',
+    patterns: [
+      /\b(pharmacy|pharmacies|medical store|medical stores|medical shop|medical shops|chemist|chemists|druggist|druggists|drug store|drug stores|apothecary|jan aushadhi|medicine shop|medicine store)\b/i
+    ],
+    subvectors: [
+      '24 Hours Pharmacies',
+      'Retail Medical Stores & Chemists',
+      'Wholesale Medicine Distributors',
+      'Surgical Equipment & Medical Devices',
+      'Generic Medicine Stores (Jan Aushadhi)',
+      'Ayurvedic & Herbal Medicine Shops',
+      'Homeopathy Pharmacies & Dispensaries',
+      'Veterinary Medicine & Pet Pharmacy'
+    ],
+    avoids: ['hospital', 'nursing home', 'multi speciality', 'dental clinic', 'icu', 'trauma care'],
+    preferredZoneTypes: ['commercial_bazaar', 'healthcare_belts', 'residential_belts']
   },
 
   HOME_SERVICES_CONTRACTORS: {

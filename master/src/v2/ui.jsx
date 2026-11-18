@@ -48,7 +48,7 @@ export function compactDate(value) {
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-export function Logo({ compact = false, theme = 'dark' }) {
+export function Logo({ compact = false, theme = 'light' }) {
   return (
     <BrandLogo
       size={compact ? 28 : 34}
@@ -215,6 +215,7 @@ export function LocationField({
   value,
   onChange,
   onSelect,
+  country = '',
   placeholder = 'Village, mandal, district',
   label = 'Location',
   autoFocus = false,
@@ -250,7 +251,7 @@ export function LocationField({
     timer.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const list = await suggestLocations(query, 8);
+        const list = await suggestLocations(query, 8, country);
         if (requestRef.current !== requestId) return;
         setResults(list);
         setOpen(list.length > 0);
@@ -266,7 +267,7 @@ export function LocationField({
     }, 160);
 
     return () => clearTimeout(timer.current);
-  }, [value]);
+  }, [value, country]);
 
   const choose = item => {
     if (!item) return;

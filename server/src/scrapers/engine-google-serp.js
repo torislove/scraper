@@ -78,53 +78,74 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
     
     const page = await context.newPage();
     
-    // Navigate to Google
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=20&hl=en&gl=${countryGl}`;
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    
-    // Check if consent button appears
-    try {
-      const consentBtn = await page.$('button:has-text("Accept all"), button:has-text("I agree"), #L2AGLb');
-      if (consentBtn) await consentBtn.click();
-    } catch (e) {}
+    // Deep Multi-Page Google Search Pagination Loop (pages 1 to 4)
+    const maxPages = 4;
+    const results = [];
+    const seenUrls = new Set();
 
-    // Wait for search results with fallback selector
-    try {
-      await page.waitForSelector('#search, #rso, div[role="main"]', { timeout: 8000 });
-      await page.waitForSelector('div.MjjYud, #rso div.g', { timeout: 6000 });
-    } catch (e) {
-      // Continue even if selector wait timed out
-    }
-    
-    // Extract organic results
-    const results = await page.evaluate((blockedDomains) => {
-      const links = [];
-      const resultDivs = document.querySelectorAll('#search div.g, #rso div.g, div.MjjYud');
+    for (let p = 0; p < maxPages; p++) {
+      const startIndex = p * 20;
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&start=${startIndex}&num=20&hl=en&gl=${countryGl}`;
+      addLog(`[Cyber Search Matrix] Scanning Google Search page ${p + 1} (nodes ${startIndex + 1}-${startIndex + 20})...`);
       
-      resultDivs.forEach(div => {
-        const aTag = div.querySelector('a');
-        const h3 = div.querySelector('h3');
-        const descDiv = div.querySelector('div[style*="-webkit-line-clamp"], div.VwiC3b');
+      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 25000 });
+      
+      // Check if consent button appears
+      try {
+        const consentBtn = await page.$('button:has-text("Accept all"), button:has-text("I agree"), #L2AGLb, button:has-text("Reject all")');
+        if (consentBtn) await consentBtn.click();
+      } catch (e) {}
+
+      // Wait for search results with fallback selector
+      try {
+        await page.waitForSelector('#search, #rso, div[role="main"]', { timeout: 6000 });
+        await page.waitForSelector('div.MjjYud, #rso div.g', { timeout: 4000 });
+      } catch (e) {}
+      
+      // Extract organic results
+      const pageLinks = await page.evaluate((blockedDomains) => {
+        const links = [];
+        const resultDivs = document.querySelectorAll('#search div.g, #rso div.g, div.MjjYud');
         
-        if (aTag && h3) {
-          const href = aTag.getAttribute('href');
-          if (href && href.startsWith('http')) {
-            const lowerHref = href.toLowerCase();
-            const isBlocked = blockedDomains.some(d => lowerHref.includes(d));
-            if (!isBlocked) {
-              const rawTitle = (h3.innerText || '').trim();
-              const cleanTitle = rawTitle.replace(/\s*[-–|•]\s*(official\s*(?:website|site)|home|about\s*us|welcome|contact\s*us|index).*$/i, '').trim();
-              links.push({
-                title: cleanTitle || rawTitle,
-                url: href,
-                description: descDiv ? descDiv.innerText : ''
-              });
+        resultDivs.forEach(div => {
+          const aTag = div.querySelector('a');
+          const h3 = div.querySelector('h3');
+          const descDiv = div.querySelector('div[style*="-webkit-line-clamp"], div.VwiC3b');
+          
+          if (aTag && h3) {
+            const href = aTag.getAttribute('href');
+            if (href && href.startsWith('http')) {
+              const lowerHref = href.toLowerCase();
+              const isBlocked = blockedDomains.some(d => lowerHref.includes(d));
+              if (!isBlocked) {
+                const rawTitle = (h3.innerText || '').trim();
+                const cleanTitle = rawTitle.replace(/\s*[-–|•]\s*(official\s*(?:website|site)|home|about\s*us|welcome|contact\s*us|index).*$/i, '').trim();
+                links.push({
+                  title: cleanTitle || rawTitle,
+                  url: href,
+                  description: descDiv ? descDiv.innerText : ''
+                });
+              }
             }
           }
+        });
+        return links;
+      }, AGGREGATOR_DOMAINS);
+
+      let addedThisPage = 0;
+      for (const item of pageLinks) {
+        if (!seenUrls.has(item.url)) {
+          seenUrls.add(item.url);
+          results.push(item);
+          addedThisPage++;
         }
-      });
-      return links;
-    }, AGGREGATOR_DOMAINS);
+      }
+
+      if (addedThisPage === 0) {
+        addLog(`[Cyber Search Matrix] Reached end of Google Search organic results at page ${p + 1}.`);
+        break;
+      }
+    }
     
     addLog(`[Cyber Search Matrix] Identified ${results.length} organic nodes for "${query}". Extracting contact telemetry...`);
     

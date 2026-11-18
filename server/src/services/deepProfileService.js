@@ -312,9 +312,10 @@ function safeString(value, max = 600) {
   return String(value).replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
-function safePhoneValue(value) {
-  if (!value || typeof value !== 'string') return '';
-  const parsed = normalizePhone(value);
+function safePhoneValue(value, country = 'IN') {
+  if (!value || typeof value !== 'string' || isCssOrCodeSnippet(value)) return '';
+  const isIntl = country && country.toUpperCase() !== 'IN';
+  const parsed = normalizePhone(value, { defaultCountry: country, allowInternational: isIntl });
   return parsed ? parsed.e164 : '';
 }
 
@@ -326,25 +327,56 @@ function safeRating(value) {
 function safeCoord(value, axis) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '';
-  if (axis === 'lat' && (n < 6 || n > 38)) return '';
-  if (axis === 'lng' && (n < 68 || n > 98)) return '';
+  if (axis === 'lat' && (n < -90 || n > 90)) return '';
+  if (axis === 'lng' && (n < -180 || n > 180)) return '';
+  if (n === 0) return '';
   return n;
 }
 
-function safePincode(value) {
-  const match = String(value || '').match(/(?<!\d)([1-9]\d{5})(?!\d)/);
-  return match ? match[1] : '';
+function isCssOrCodeSnippet(text) {
+  if (!text || typeof text !== 'string') return false;
+  if (/--[a-z0-9_-]+:/i.test(text)) return true;
+  if (/[{};]\s*--/i.test(text)) return true;
+  if (/(?:rgba?|hsla?)\s*\(/i.test(text)) return true;
+  if (/(?:mOnSite|shouldReportErrorOnlyInPanorama|window\.__|document\.)/i.test(text)) return true;
+  if (/#[0-9a-fA-F]{6}\b/.test(text) && text.includes(';')) return true;
+  if (text.includes('var(--') || text.includes('!important')) return true;
+  if (/[{}"\\]/.test(text) && (text.includes('true') || text.includes('false') || text.includes('null'))) return true;
+  return false;
 }
 
-function normalisePhoneList(values) {
+function detectVendorCountry(vendor, address = '') {
+  if (vendor && (vendor.country || vendor.countryCode)) {
+    return String(vendor.country || vendor.countryCode).toUpperCase();
+  }
+  const combined = `${address || ''} ${vendor?.address || ''} ${vendor?.state || ''} ${vendor?.location || ''}`;
+  if (/,\s*(?:USA?|United States)\b|\b(?:Indiana|California|Texas|Florida|New York|Illinois|Ohio|Michigan|Washington)\b/i.test(combined)) return 'US';
+  if (/,\s*Canada\b|\b(?:Ontario|Quebec|British Columbia|Alberta|Manitoba)\b/i.test(combined)) return 'CA';
+  if (/,\s*(?:UK|United Kingdom|England|Scotland)\b/i.test(combined)) return 'GB';
+  if (/,\s*Australia\b|\b(?:NSW|Victoria|Queensland|Western Australia)\b/i.test(combined)) return 'AU';
+  return 'IN';
+}
+
+function safePincode(value, country = 'IN') {
+  if (isCssOrCodeSnippet(String(value || ''))) return '';
+  if (country === 'IN') {
+    const match = String(value || '').match(/(?<!\d)([1-9]\d{5})(?!\d)/);
+    return match ? match[1] : '';
+  }
+  const match = String(value || '').match(/\b([A-Z0-9]{3,10}(?:-[A-Z0-9]{4})?)\b/i);
+  return match ? match[1].toUpperCase() : '';
+}
+
+function normalisePhoneList(values, country = 'IN') {
   const list = [];
   const seen = new Set();
+  const isIntl = country && country.toUpperCase() !== 'IN';
   for (const value of values || []) {
-    const parsed = typeof value === 'string'
-      ? normalizePhone(value)
-      : value && (value.e164 || value.number)
-        ? (normalizePhone(value.e164 || value.number) || value)
-        : null;
+    const rawVal = typeof value === 'string'
+      ? value
+      : value && (value.e164 || value.number || value.national || value.phone || value.displayPhone);
+    if (!rawVal || isCssOrCodeSnippet(String(rawVal))) continue;
+    const parsed = normalizePhone(rawVal, { defaultCountry: country, allowInternational: isIntl });
     if (!parsed || !parsed.e164) continue;
     if (seen.has(parsed.e164)) continue;
     seen.add(parsed.e164);
@@ -352,6 +384,7 @@ function normalisePhoneList(values) {
       e164: parsed.e164,
       national: parsed.national || String(parsed.e164).replace(/\D/g, '').slice(-10),
       international: parsed.international || parsed.e164,
+      displayPhone: parsed.displayPhone || parsed.e164,
       type: parsed.type || 'UNKNOWN',
       isMobile: Boolean(parsed.isMobile),
       isLandline: Boolean(parsed.isLandline),
@@ -421,11 +454,11 @@ function classifyGoogleAttributes(groups = []) {
   };
 }
 
-function baseGroups(vendor) {
+function baseGroups(vendor, country = 'IN') {
   const existingPhones = normalisePhoneList([
     ...(Array.isArray(vendor.phones) ? vendor.phones : []),
     vendor.phone
-  ]);
+  ], country);
   const existingEmails = arrayBy([
     ...(Array.isArray(vendor.emails) ? vendor.emails : []),
     isValidEmail(vendor.email) ? vendor.email : ''
@@ -536,21 +569,21 @@ function builderFromGroups(groups) {
   return { groups, meta, mark };
 }
 
-function applyWebsite(builder, website) {
+function applyWebsite(builder, website, country = 'IN') {
   if (!website || !website.ok) return;
   const { groups, mark } = builder;
   const w = website;
 
-  if (w.identity.name) mark('identity', 'name', w.identity.name, 'website', 0.9);
-  if (w.identity.legalName) mark('identity', 'legalName', w.identity.legalName, 'website_jsonld', 0.95);
-  if (w.identity.description) mark('identity', 'description', w.identity.description, 'website', 0.88);
-  if (w.identity.tagline) mark('identity', 'tagline', w.identity.tagline, 'website', 0.82);
-  if (w.identity.priceRange) mark('identity', 'priceRange', w.identity.priceRange, 'website_jsonld', 0.86);
+  if (w.identity.name && !isCssOrCodeSnippet(w.identity.name)) mark('identity', 'name', w.identity.name, 'website', 0.9);
+  if (w.identity.legalName && !isCssOrCodeSnippet(w.identity.legalName)) mark('identity', 'legalName', w.identity.legalName, 'website_jsonld', 0.95);
+  if (w.identity.description && !isCssOrCodeSnippet(w.identity.description)) mark('identity', 'description', w.identity.description, 'website', 0.88);
+  if (w.identity.tagline && !isCssOrCodeSnippet(w.identity.tagline)) mark('identity', 'tagline', w.identity.tagline, 'website', 0.82);
+  if (w.identity.priceRange && !isCssOrCodeSnippet(w.identity.priceRange)) mark('identity', 'priceRange', w.identity.priceRange, 'website_jsonld', 0.86);
 
   const phones = normalisePhoneList([
     ...groups.contact.phones,
     ...(w.contact.phones || []).map(p => ({ ...p, source: 'website' }))
-  ]);
+  ], country);
   if (phones.length) {
     const best = pickBestPhone(phones) || phones[0];
     mark('contact', 'phones', phones, 'website_contact', 0.94);
@@ -563,20 +596,22 @@ function applyWebsite(builder, website) {
   }
   if (w.contact.whatsapp) mark('contact', 'whatsapp', w.contact.whatsapp, 'website_social', 0.9);
 
-  if (w.address && w.address.full) {
+  if (w.address && w.address.full && !isCssOrCodeSnippet(w.address.full)) {
     mark('location', 'address', w.address.full, 'website_address', 0.86);
-    if (w.address.locality) mark('location', 'locality', w.address.locality, 'website_address', 0.78);
-    if (w.address.city) mark('location', 'city', w.address.city, 'website_address', 0.8);
-    if (w.address.district) mark('location', 'district', w.address.district, 'website_address', 0.72);
-    if (w.address.state) mark('location', 'state', w.address.state, 'website_address', 0.8);
-    if (w.address.pincode) mark('location', 'pincode', w.address.pincode, 'website_address', 0.9);
+    if (w.address.locality && !isCssOrCodeSnippet(w.address.locality)) mark('location', 'locality', w.address.locality, 'website_address', 0.78);
+    if (w.address.city && !isCssOrCodeSnippet(w.address.city)) mark('location', 'city', w.address.city, 'website_address', 0.8);
+    if (w.address.district && !isCssOrCodeSnippet(w.address.district)) mark('location', 'district', w.address.district, 'website_address', 0.72);
+    if (w.address.state && !isCssOrCodeSnippet(w.address.state)) mark('location', 'state', w.address.state, 'website_address', 0.8);
+    if (w.address.pincode && !isCssOrCodeSnippet(w.address.pincode)) mark('location', 'pincode', w.address.pincode, 'website_address', 0.9);
   }
   if (w.geo && w.geo.lat) {
     mark('location', 'latitude', safeCoord(w.geo.lat, 'lat'), 'website_jsonld', 0.8);
     mark('location', 'longitude', safeCoord(w.geo.lng, 'lng'), 'website_jsonld', 0.8);
   }
 
-  if (w.hours && w.hours.raw) mark('hours', 'operatingHours', w.hours.raw, 'website_jsonld', 0.86);
+  if (w.hours && w.hours.raw && !isCssOrCodeSnippet(w.hours.raw) && !/[{}"\\]/.test(w.hours.raw)) {
+    mark('hours', 'operatingHours', w.hours.raw, 'website_jsonld', 0.86);
+  }
   if (w.hours && w.hours.specifications && w.hours.specifications.length) {
     mark('hours', 'hoursTable', w.hours.specifications, 'website_jsonld', 0.86);
   }
@@ -627,36 +662,36 @@ function applyWebsite(builder, website) {
   if (w.awards && w.awards.length) mark('answers', 'awards', arrayBy([...groups.answers.awards, ...w.awards], String), 'website', 0.8);
 }
 
-function applyGoogle(builder, google) {
+function applyGoogle(builder, google, country = 'IN') {
   if (!google || !google.ok || !google.data) return;
   const { groups, mark } = builder;
   const g = google.data;
 
-  if (g.name) mark('identity', 'name', g.name, 'google_maps', 0.97);
-  if (g.category) mark('identity', 'category', g.category, 'google_maps', 0.93);
-  if (g.priceLevel) mark('identity', 'priceRange', g.priceLevel, 'google_maps', 0.85);
-  if (g.businessStatus) mark('identity', 'businessStatus', g.businessStatus, 'google_maps', 0.9);
-  if (g.ownerName) mark('identity', 'ownerName', g.ownerName, 'google_maps', 0.86);
+  if (g.name && !isCssOrCodeSnippet(g.name)) mark('identity', 'name', g.name, 'google_maps', 0.97);
+  if (g.category && !isCssOrCodeSnippet(g.category)) mark('identity', 'category', g.category, 'google_maps', 0.93);
+  if (g.priceLevel && !isCssOrCodeSnippet(g.priceLevel)) mark('identity', 'priceRange', g.priceLevel, 'google_maps', 0.85);
+  if (g.businessStatus && !isCssOrCodeSnippet(g.businessStatus)) mark('identity', 'businessStatus', g.businessStatus, 'google_maps', 0.9);
+  if (g.ownerName && !isCssOrCodeSnippet(g.ownerName)) mark('identity', 'ownerName', g.ownerName, 'google_maps', 0.86);
 
   const phones = normalisePhoneList([
     ...groups.contact.phones,
     ...(g.phones || []).map(p => ({ ...p, source: 'google_maps' }))
-  ]);
+  ], country);
   if (phones.length) {
     const best = pickBestPhone(phones) || phones[0];
     mark('contact', 'phones', phones, 'google_maps', 0.95);
     mark('contact', 'phone', best.e164, 'google_maps', best.isMobile ? 0.98 : 0.92);
   }
 
-  if (g.address) mark('location', 'address', g.address, 'google_maps', 0.96);
+  if (g.address && !isCssOrCodeSnippet(g.address)) mark('location', 'address', g.address, 'google_maps', 0.96);
   if (g.addressComponents) {
-    if (g.addressComponents.locality) mark('location', 'locality', g.addressComponents.locality, 'google_maps', 0.85);
-    if (g.addressComponents.city) mark('location', 'city', g.addressComponents.city, 'google_maps', 0.9);
-    if (g.addressComponents.district) mark('location', 'district', g.addressComponents.district, 'google_maps', 0.82);
-    if (g.addressComponents.state) mark('location', 'state', g.addressComponents.state, 'google_maps', 0.9);
+    if (g.addressComponents.locality && !isCssOrCodeSnippet(g.addressComponents.locality)) mark('location', 'locality', g.addressComponents.locality, 'google_maps', 0.85);
+    if (g.addressComponents.city && !isCssOrCodeSnippet(g.addressComponents.city)) mark('location', 'city', g.addressComponents.city, 'google_maps', 0.9);
+    if (g.addressComponents.district && !isCssOrCodeSnippet(g.addressComponents.district)) mark('location', 'district', g.addressComponents.district, 'google_maps', 0.82);
+    if (g.addressComponents.state && !isCssOrCodeSnippet(g.addressComponents.state)) mark('location', 'state', g.addressComponents.state, 'google_maps', 0.9);
   }
-  if (g.pincode) mark('location', 'pincode', g.pincode, 'google_maps', 0.97);
-  if (g.plusCode) mark('location', 'plusCode', g.plusCode, 'google_maps', 0.95);
+  if (g.pincode && !isCssOrCodeSnippet(g.pincode)) mark('location', 'pincode', g.pincode, 'google_maps', 0.97);
+  if (g.plusCode && !isCssOrCodeSnippet(g.plusCode)) mark('location', 'plusCode', g.plusCode, 'google_maps', 0.95);
   if (g.coordinates && g.coordinates.lat) {
     mark('location', 'latitude', safeCoord(g.coordinates.lat, 'lat'), 'google_maps', 0.98);
     mark('location', 'longitude', safeCoord(g.coordinates.lng, 'lng'), 'google_maps', 0.98);
@@ -664,7 +699,9 @@ function applyGoogle(builder, google) {
 
   if (g.hours) {
     const raw = g.hours.raw || (g.hours.table || []).map(h => `${h.day}: ${h.hours}`).join('; ');
-    if (raw) mark('hours', 'operatingHours', raw, 'google_maps', 0.9);
+    if (raw && !isCssOrCodeSnippet(raw) && !/[{}"\\]/.test(raw) && !raw.includes('mOnSite')) {
+      mark('hours', 'operatingHours', raw, 'google_maps', 0.9);
+    }
     if (g.hours.table && g.hours.table.length) mark('hours', 'hoursTable', g.hours.table, 'google_maps', 0.94);
   }
 
@@ -908,14 +945,18 @@ function applyGroupsToVendor(vendor, groups, profile) {
 
   // Conservative merge: an absent deep value must never erase data that was
   // already discovered by the feed scraper or a previous enrichment pass.
-  const keep = (current, next) => (meaningful(next) ? next : (current == null ? '' : current));
+  const country = detectVendorCountry(vendor, location.address);
+  const keep = (current, next) => {
+    if (!meaningful(next) || isCssOrCodeSnippet(String(next))) return (current == null ? '' : current);
+    return next;
+  };
 
   // A Maps/deep pass can surface UI chrome ("Results", "Sponsored") as the
   // page title. Never let that replace a real business name.
   const fidelity = require('./categoryFidelity');
-  if (meaningful(identity.name) && !fidelity.isGenericName(identity.name)) {
+  if (meaningful(identity.name) && !fidelity.isGenericName(identity.name) && !isCssOrCodeSnippet(identity.name)) {
     vendor.name = identity.name;
-  } else if (fidelity.isGenericName(vendor.name) && meaningful(vendor.normalizedName)) {
+  } else if (fidelity.isGenericName(vendor.name) && meaningful(vendor.normalizedName) && !isCssOrCodeSnippet(vendor.normalizedName)) {
     vendor.name = vendor.normalizedName.replace(/\b\w/g, c => c.toUpperCase());
   }
   vendor.legalName = keep(vendor.legalName, identity.legalName);
@@ -929,15 +970,15 @@ function applyGroupsToVendor(vendor, groups, profile) {
   const existingPhones = normalisePhoneList([
     ...(Array.isArray(vendor.phones) ? vendor.phones : []),
     vendor.phone
-  ]);
+  ], country);
   const incomingPhones = Array.isArray(contact.phones) ? contact.phones : [];
   // Prioritize mobiles first in the normalized list
-  const combinedPhones = normalisePhoneList([...existingPhones, ...incomingPhones]);
+  const combinedPhones = normalisePhoneList([...existingPhones, ...incomingPhones], country);
   combinedPhones.sort((a, b) => Number(b.isMobile) - Number(a.isMobile));
   vendor.phones = combinedPhones;
 
   const bestPhoneObj = vendor.phones.find(p => p && p.isMobile) || vendor.phones.find(p => p && p.isLandline) || vendor.phones[0] || null;
-  const incomingPhone = safePhoneValue(contact.phone);
+  const incomingPhone = safePhoneValue(contact.phone, country);
 
   const hasExistingPhone = meaningful(vendor.phone) && !String(vendor.phone).includes('Requires') && !String(vendor.phone).includes('No mobile');
   const existingIsMobile = hasExistingPhone && /^[6-9]\d{9}$/.test(String(vendor.phone).replace(/\D/g, '').slice(-10));
@@ -968,22 +1009,27 @@ function applyGroupsToVendor(vendor, groups, profile) {
     : (isValidEmail(vendor.email) ? vendor.email : (vendor.emails[0] || ''));
   const bestPhone = vendor.phones.find(p => p.isMobile) || vendor.phones[0] || null;
   vendor.whatsappAvailable = Boolean(bestPhone && bestPhone.isMobile);
-  vendor.whatsappLink = contact.whatsapp || (bestPhone && bestPhone.whatsapp
-    ? `https://wa.me/${String(bestPhone.e164).replace(/\D/g, '')}${vendor.name ? `?text=${encodeURIComponent(`Hi ${vendor.name}, I found your business on scraper.co.in and wanted to connect.`)}` : ''}`
+  const digits = String(bestPhone?.e164 || bestPhone?.national || '').replace(/\D/g, '');
+  vendor.whatsappLink = contact.whatsapp || (bestPhone && bestPhone.whatsapp && digits
+    ? `https://wa.me/${digits}${vendor.name ? `?text=${encodeURIComponent(`Hi ${vendor.name}, I found your business on scraper.co.in and wanted to connect.`)}` : ''}`
     : '');
 
-  vendor.address = keep(vendor.address, location.address);
-  if (meaningful(location.city)) vendor.city = location.city;
-  else if (!meaningful(vendor.city)) vendor.city = location.district || location.locality || '';
+  if (meaningful(location.address) && !isCssOrCodeSnippet(location.address)) {
+    vendor.address = location.address;
+  }
+  if (meaningful(location.city) && !isCssOrCodeSnippet(location.city)) vendor.city = location.city;
+  else if (!meaningful(vendor.city) && !isCssOrCodeSnippet(location.district)) vendor.city = location.district || location.locality || '';
   vendor.locality = keep(vendor.locality, location.locality);
   vendor.district = keep(vendor.district, location.district);
   vendor.state = keep(vendor.state, location.state);
-  vendor.pincode = safePincode(location.pincode) || safePincode(vendor.pincode);
+  vendor.pincode = safePincode(location.pincode, country) || safePincode(vendor.pincode, country);
   vendor.plusCode = keep(vendor.plusCode, location.plusCode);
   vendor.latitude = safeCoord(location.latitude, 'lat') || safeCoord(vendor.latitude, 'lat');
   vendor.longitude = safeCoord(location.longitude, 'lng') || safeCoord(vendor.longitude, 'lng');
 
-  vendor.operatingHours = keep(vendor.operatingHours, hours.operatingHours);
+  if (meaningful(hours.operatingHours) && !isCssOrCodeSnippet(hours.operatingHours) && !/[{}"\\]/.test(hours.operatingHours) && !hours.operatingHours.includes('mOnSite')) {
+    vendor.operatingHours = hours.operatingHours;
+  }
   vendor.hoursTable = arrayBy([
     ...(Array.isArray(vendor.hoursTable) ? vendor.hoursTable : []),
     ...(Array.isArray(hours.hoursTable) ? hours.hoursTable : [])
@@ -1102,10 +1148,11 @@ function loadProfileFile(vendorId) {
  * Exported for tests and for replaying saved extraction payloads.
  */
 function buildProfileFromSources(vendor, website, google, options = {}) {
-  const groups = baseGroups(vendor);
+  const country = detectVendorCountry(vendor, (google && google.data && google.data.address) || (website && website.address && website.address.full));
+  const groups = baseGroups(vendor, country);
   const builder = builderFromGroups(groups);
-  applyWebsite(builder, website);
-  applyGoogle(builder, google);
+  applyWebsite(builder, website, country);
+  applyGoogle(builder, google, country);
 
   const conflicts = collectConflicts({ vendor, website, google, groups: builder.groups });
   const completeness = computeCompleteness(builder.groups, conflicts);
@@ -1127,7 +1174,7 @@ function buildProfileFromSources(vendor, website, google, options = {}) {
     ...(vendor.phones || []),
     ...((website && website.contact && website.contact.phones) || []),
     ...((google && google.data && google.data.phones) || [])
-  ]).map(p => ({ e164: p.e164, national: p.national, type: p.type, source: p.source }));
+  ], country).map(p => ({ e164: p.e164, national: p.national, type: p.type, source: p.source }));
 
   const profile = {
     version: VERSION,

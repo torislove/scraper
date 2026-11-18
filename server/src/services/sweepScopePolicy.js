@@ -49,14 +49,24 @@ const {
   keyOf: adminKey
 } = require('./indiaAdminUnits');
 
+/**
+ * Coverage caps: none.
+ *
+ * The old table (state 1200 / district 2600 / mandal 400 / city 250) silently
+ * dropped the tail of a territory. A district with 3,000 gazetteer points swept
+ * 2,600 of them and told the operator so in a footnote. That is a coverage
+ * decision made on the operator's behalf, so it is gone: every resolved zone is
+ * dispatched. `capZones` is kept as the single place to reinstate a limit if a
+ * future deployment needs one, and it now returns everything.
+ */
 const CAPS = {
-  state: 1200,
-  district: 2600,
-  mandal: 400,
-  city: 80
+  state: Infinity,
+  district: Infinity,
+  mandal: Infinity,
+  city: Infinity
 };
 
-const SUFFIX_WORDS = /\b(states?|districts?|dists?|zillas?|zilas?|jillas?|jilas?|mandals?|mandal cluster|tehsils?|tahsils?|talukas?|taluks?|taluq|blocks?|cd blocks?|circles?|sub[-\s]?districts?|subdivisions?|city|town|village|rural|urban|municipalities?|municipal corporations?|nagar palikas?|nagar nigams?|gram panchayats?|GPs?|wards?)\b/gi;
+const SUFFIX_WORDS = /\b(states?|districts?|dists?|zillas?|zilas?|jillas?|jilas?|mandals?|mandal cluster|tehsils?|tahsils?|talukas?|taluks?|taluq|blocks?|cd blocks?|circles?|sub[-\s]?districts?|subdivisions?|city|town|village|rural|urban|municipalit(y|ies)|municipality|municipalities|municipal corporations?|corporations?|nagar palikas?|nagar nigams?|gram panchayats?|GPs?|wards?|gmc|vmc|ghmc|bbmp)\b/gi;
 
 function keyOf(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -147,8 +157,20 @@ function buildDistrictBoundary(mandals, entry) {
 
 function lookupCandidates(name) {
   const raw = String(name || '').trim();
-  const stripped = raw.replace(SUFFIX_WORDS, ' ').replace(/\s+/g, ' ').trim();
-  return [...new Set([raw, stripped].map(keyOf).filter(Boolean))];
+  const MUNICIPAL_ACRONYMS = {
+    gmc: 'guntur',
+    vmc: 'vijayawada',
+    ghmc: 'hyderabad',
+    bbmp: 'bangalore',
+    mcgm: 'mumbai',
+    pmc: 'pune',
+    pcmc: 'pune'
+  };
+  const low = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const alias = MUNICIPAL_ACRONYMS[low];
+  const target = alias || raw;
+  const stripped = target.replace(SUFFIX_WORDS, ' ').replace(/\s+/g, ' ').trim();
+  return [...new Set([raw, target, stripped].map(keyOf).filter(Boolean))];
 }
 
 /**
@@ -381,6 +403,7 @@ function buildDistrictZones(name, options = {}) {
   // Tier 2 — every sub-district HQ. A "<category> in <mandal>, <district>"
   // query is localised by Google to that sub-district, so its villages and
   // hamlets are genuinely inside the area covered by the query.
+  const { AUTHORITATIVE_CLUSTERS } = require('../utils/universalGeoCluster');
   const villageBuckets = [];
   for (const mName of mandals) {
     const mEntry = lookup(mandalIndex, mName);
@@ -394,6 +417,24 @@ function buildDistrictZones(name, options = {}) {
       radiusKm: typology.radiusKm,
       typology: typology.type
     });
+    // If this mandal is a recognized urban commercial hub (e.g. Tenali, Mangalagiri),
+    // inject its known commercial sub-clusters so the district sweep penetrates deep town markets
+    const mKey = keyOf(mName);
+    const mCluster = AUTHORITATIVE_CLUSTERS[mKey];
+    if (Array.isArray(mCluster) && mCluster.length > 0) {
+      // Every known commercial sub-cluster, not just the first six.
+      for (const loc of mCluster) {
+        rawList.push({
+          name: loc,
+          kind: 'locality',
+          mandal: mName,
+          district: entry.district,
+          state: entry.state,
+          radiusKm: 3.5,
+          typology: 'urban'
+        });
+      }
+    }
     if (mEntry && Array.isArray(mEntry.villages)) {
       villageBuckets.push({ mandal: mName, villages: mEntry.villages, typology });
     }
@@ -504,7 +545,7 @@ function buildDistrictZones(name, options = {}) {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
-      cap: CAPS.district,
+      cap: capped.zones.length,
       mandalsCount: mandals.length,
       villagesCount: villagesTotal,
       thinDistrict,
@@ -525,6 +566,21 @@ function buildMandalZones(name, options = {}) {
 
   const term = unitLabel(LEVELS.SUBDISTRICT, entry.state, options.explicitTerm);
   const typology = getMandalTypology(entry.subDistrict);
+  const category = options.category || '';
+  const {
+    AUTHORITATIVE_CLUSTERS,
+    buildCategorySubVectorZones,
+    buildCityGridZones,
+    ZONE_COORDINATES
+  } = require('../utils/universalGeoCluster');
+
+  // Check if subDistrict or stripped name matches an authoritative urban cluster
+  // (e.g. Guntur, Vijayawada Urban, Warangal, Pune, Coimbatore, etc.)
+  const subDistrictKey = keyOf(entry.subDistrict);
+  const strippedSubDistrictKey = keyOf(entry.subDistrict.replace(SUFFIX_WORDS, ' ').replace(/\s+/g, ' ').trim());
+  const clusterKey = Object.keys(AUTHORITATIVE_CLUSTERS).find(k => k === subDistrictKey || k === strippedSubDistrictKey);
+  const urbanLocalities = clusterKey ? AUTHORITATIVE_CLUSTERS[clusterKey] : [];
+
   // Duplicate village rows in the gazetteer must not become duplicate queries.
   const seenVillages = new Set();
   const villages = [];
@@ -545,6 +601,39 @@ function buildMandalZones(name, options = {}) {
     typology: typology.type
   }];
 
+  // 1. Dual-Status Localities: Urban commercial centers (e.g. Brodipet, Arundelpet, Lakshmipuram)
+  if (urbanLocalities.length > 0) {
+    for (const loc of urbanLocalities) {
+      rawList.push({
+        name: loc,
+        kind: 'locality',
+        mandal: entry.subDistrict,
+        district: entry.district,
+        state: entry.state,
+        radiusKm: 3.5,
+        typology: 'urban'
+      });
+    }
+  }
+
+  // 2. Category Sub-Vectors (e.g. Wedding Photography, Photo Studio, Baby Shoots, or CNC, Hardware)
+  if (category) {
+    const vectorZones = buildCategorySubVectorZones(entry.subDistrict, category, 24);
+    for (const vz of vectorZones) {
+      rawList.push({
+        name: vz.zoneName,
+        kind: 'vector',
+        mandal: entry.subDistrict,
+        district: entry.district,
+        state: entry.state,
+        radiusKm: 4.0,
+        queryText: vz.queryText,
+        coverageKind: 'vector'
+      });
+    }
+  }
+
+  // 3. Constituent Rural Revenue Villages
   for (const v of villages) {
     if (keyOf(v) === keyOf(entry.subDistrict)) continue;
     rawList.push({
@@ -558,12 +647,39 @@ function buildMandalZones(name, options = {}) {
     });
   }
 
+  // 4. Viewport grid cells for dense urban / dual-status mandal to ensure zero geometric gaps
+  if (urbanLocalities.length > 0 || typology.type === 'urban') {
+    const hub = ZONE_COORDINATES[String(entry.subDistrict || '').toLowerCase().trim()];
+    if (hub) {
+      const grid = buildCityGridZones(entry.subDistrict, category, [], {
+        center: { lat: Number(hub.lat), lng: Number(hub.lng) },
+        cappedRadiusKm: 8,
+        ringKm: 4
+      });
+      for (const cell of grid) {
+        rawList.push({
+          name: cell.zoneName,
+          kind: 'grid',
+          mandal: entry.subDistrict,
+          district: entry.district,
+          state: entry.state,
+          radiusKm: 2.6,
+          lat: cell.lat,
+          lng: cell.lng,
+          queryText: cell.queryText,
+          coverageKind: 'grid'
+        });
+      }
+    }
+  }
+
   const unique = uniqueZones(rawList);
   const capped = capZones(unique, CAPS.mandal);
+  const isDual = urbanLocalities.length > 0;
 
   return {
     resolvedScope: 'mandal',
-    title: `${entry.subDistrict} ${term}`,
+    title: isDual ? `${entry.subDistrict} Mandal & Urban Center` : `${entry.subDistrict} ${term}`,
     unitTerm: term,
     terminology: describeTerminology(entry.state),
     state: entry.state,
@@ -574,6 +690,7 @@ function buildMandalZones(name, options = {}) {
       districts: 1,
       subDistricts: 1,
       subDistrictsCovered: 1,
+      localities: urbanLocalities.length,
       villages: villages.length,
       villagesCovered: capped.zones.filter(z => z.kind === 'village').length
     },
@@ -581,16 +698,22 @@ function buildMandalZones(name, options = {}) {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
-      cap: CAPS.mandal,
-      villagesCount: villages.length
+      cap: capped.zones.length,
+      urbanLocalitiesCount: urbanLocalities.length,
+      villagesCount: villages.length,
+      isDualStatus: isDual
     },
     policy: {
-      mode: 'all_villages_swarm',
-      label: `Every village and ward in ${entry.subDistrict} ${term}`,
-      note: `Exhaustive ${term} sweep: the HQ query plus every revenue village / hamlet in the ${term}.`
+      mode: isDual ? 'dual_status_urban_rural_swarm' : 'all_villages_swarm',
+      label: isDual
+        ? `Dual-Status Sweep: Urban localities, commercial clusters & rural villages in ${entry.subDistrict}`
+        : `Every village and ward in ${entry.subDistrict} ${term}`,
+      note: isDual
+        ? `Comprehensive dual-status sweep: includes ${urbanLocalities.length} urban commercial localities, category sub-vectors, and all ${villages.length} revenue villages.`
+        : `Exhaustive ${term} sweep: the HQ query plus every revenue village / hamlet in the ${term}.`
     },
     warnings: capped.capped
-      ? [`${term} has ${capped.total} villages; this swarm covers ${CAPS.mandal}.`]
+      ? [`${term} has ${capped.total} points; this swarm covers ${CAPS.mandal}.`]
       : []
   };
 }
@@ -676,7 +799,7 @@ function buildStateZones(name) {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
-      cap: CAPS.state,
+      cap: capped.zones.length,
       districts: districtNames.length,
       subDistricts: subDistrictCount
     },
@@ -691,7 +814,7 @@ function buildStateZones(name) {
   };
 }
 
-function buildCityZones(name) {
+function buildCityZones(name, options = {}) {
   const cleanName = String(name || '').trim();
   const cleanKey = keyOf(cleanName);
   const strippedKey = keyOf(cleanName.replace(SUFFIX_WORDS, ' ').replace(/\s+/g, ' ').trim());
@@ -712,10 +835,20 @@ function buildCityZones(name) {
     return { state: null, district: null };
   })();
 
+  // If this city is also an authoritative dual-status mandal / municipal corporation,
+  // return the complete dual-status swarm (localities + trade vectors + constituent villages + GPS mesh)
+  const isDualMandalCity = mandalIndex.has(cleanKey) || mandalIndex.has(strippedKey);
+  if (isDualMandalCity) {
+    const mandalRes = buildMandalZones(cleanName, options);
+    if (mandalRes && Array.isArray(mandalRes.zones) && mandalRes.zones.length > 30) {
+      return mandalRes;
+    }
+  }
+
   const { AUTHORITATIVE_CLUSTERS, resolveUniversalZones } = require('../utils/universalGeoCluster');
   const matchedClusterKey = Object.keys(AUTHORITATIVE_CLUSTERS).find(k => k === cleanKey || k === strippedKey);
   if (matchedClusterKey) {
-    const rawZones = resolveUniversalZones(cleanName, '', false);
+    const rawZones = resolveUniversalZones(cleanName, options.category || '', options.isMaster || false);
     if (Array.isArray(rawZones) && rawZones.length > 0) {
       const all = uniqueZones(rawZones.map(z => ({
         name: z.zoneName || z.name,
@@ -740,7 +873,7 @@ function buildCityZones(name) {
           totalZones: capped.total,
           returnedZones: capped.zones.length,
           capped: capped.capped,
-          cap: CAPS.city
+          cap: capped.zones.length
         },
         policy: {
           mode: 'commercial_localities_and_grid',
@@ -760,7 +893,7 @@ function buildCityZones(name) {
   }
 
   const subZones = Array.isArray(classification.subZones) ? classification.subZones : [];
-  const rawZones = subZones.length ? subZones : resolveUniversalZones(cleanName, '', false).map(z => z.zoneName || z.name);
+  const rawZones = subZones.length ? subZones : resolveUniversalZones(cleanName, options.category || '', options.isMaster || false).map(z => z.zoneName || z.name);
   if (!Array.isArray(rawZones) || rawZones.length < 1) return null;
 
   const all = uniqueZones(rawZones.map(z => ({ name: z, kind: 'locality' })));
@@ -779,7 +912,7 @@ function buildCityZones(name) {
       totalZones: capped.total,
       returnedZones: capped.zones.length,
       capped: capped.capped,
-      cap: CAPS.city
+      cap: capped.zones.length
     },
     policy: {
       mode: 'commercial_localities_and_grid',
@@ -793,9 +926,9 @@ function buildCityZones(name) {
 }
 
 function buildFor(scope, name, options) {
-  if (scope === LEVELS.STATE) return buildStateZones(name);
+  if (scope === LEVELS.STATE) return buildStateZones(name, options);
   if (scope === LEVELS.SUBDISTRICT) return buildMandalZones(name, options);
-  if (scope === LEVELS.CITY || scope === LEVELS.VILLAGE) return buildCityZones(name);
+  if (scope === LEVELS.CITY || scope === LEVELS.VILLAGE) return buildCityZones(name, options);
   return buildDistrictZones(name, options);
 }
 
@@ -813,7 +946,8 @@ function buildScopeZones(scope, name, options = {}) {
   if (!trimmed) return null;
 
   const parsed = parseAdminQuery(trimmed);
-  const requested = parsed.level || canonicalScope(scope) || LEVELS.DISTRICT;
+  const isExplicitMandalScope = canonicalScope(scope) === LEVELS.SUBDISTRICT;
+  const requested = isExplicitMandalScope ? LEVELS.SUBDISTRICT : (parsed.level || canonicalScope(scope) || LEVELS.DISTRICT);
   const placeName = parsed.name || trimmed;
   const buildOptions = {
     ...options,
@@ -851,7 +985,7 @@ function buildScopeZones(scope, name, options = {}) {
   if (!result) {
     const classification = classifyLocation(placeName);
     const subZones = Array.isArray(classification?.subZones) ? classification.subZones : [];
-    const cap = CAPS[requested] || 60;
+    const cap = CAPS[requested] || Infinity;
     result = {
       resolvedScope: classification?.type || requested,
       title: classification?.name || placeName,

@@ -1,11 +1,17 @@
 /**
- * Dynamic Stateful Favicon Engine (Master)
+ * Dynamic Stateful Favicon Engine
  * Renders high-resolution animated icons onto an HTML5 canvas and updates
  * the browser's document favicon dynamically.
+ *
+ * States:
+ * - 'idle': Default emerald radar icon
+ * - 'scraping': Rotating radar sweep beam with live lead counter badge
+ * - 'success': Cyber gold checkmark fanfare
  */
 
 let animationFrame = null;
 let currentAngle = 0;
+let lastBadge = null;
 
 function getFaviconLink() {
   let link = document.querySelector("link[rel*='icon']");
@@ -34,17 +40,20 @@ export function setDynamicFaviconState(state = 'idle', count = 0) {
   }
 
   if (state === 'idle') {
+    // Reset to crisp unified SVG favicon
     link.href = '/favicon.svg';
     return;
   }
 
   if (state === 'success') {
+    // Render gold success badge
     drawSuccess(ctx);
     link.href = canvas.toDataURL('image/png');
     return;
   }
 
   if (state === 'scraping') {
+    // Start continuous rotating sweep animation
     function loop() {
       currentAngle = (currentAngle + 0.12) % (Math.PI * 2);
       ctx.clearRect(0, 0, 64, 64);
@@ -61,35 +70,39 @@ function drawRadar(ctx, angle, isScanning, count) {
   const cy = 32;
   const r = 26;
 
+  // Pure white circular background matching white aesthetic
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, 30, 0, Math.PI * 2);
-  ctx.fillStyle = '#0a0f1d';
+  ctx.fillStyle = '#ffffff';
   ctx.fill();
   ctx.lineWidth = 2.5;
-  ctx.strokeStyle = isScanning ? '#00f0ff' : '#f59e0b';
+  ctx.strokeStyle = isScanning ? '#10b981' : '#cbd5e1';
   ctx.stroke();
 
+  // Radar grid concentric circles
   ctx.beginPath();
   ctx.arc(cx, cy, 18, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.25)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.beginPath();
   ctx.arc(cx, cy, 9, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
+  // Crosshairs
   ctx.beginPath();
   ctx.moveTo(cx - 26, cy); ctx.lineTo(cx + 26, cy);
   ctx.moveTo(cx, cy - 26); ctx.lineTo(cx, cy + 26);
-  ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+  ctx.strokeStyle = 'rgba(16, 185, 129, 0.2)';
   ctx.lineWidth = 1;
   ctx.stroke();
 
   if (isScanning) {
+    // Rotating radar sweep cone
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.arc(cx, cy, r, angle, angle + 0.7);
@@ -100,6 +113,7 @@ function drawRadar(ctx, angle, isScanning, count) {
     ctx.fillStyle = grad;
     ctx.fill();
 
+    // Sweep line
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.cos(angle + 0.7) * r, cy + Math.sin(angle + 0.7) * r);
@@ -108,11 +122,13 @@ function drawRadar(ctx, angle, isScanning, count) {
     ctx.stroke();
   }
 
+  // Glowing center blip
   ctx.beginPath();
   ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-  ctx.fillStyle = isScanning ? '#fbbf24' : '#f59e0b';
+  ctx.fillStyle = isScanning ? '#fbbf24' : '#10b981';
   ctx.fill();
 
+  // Badge notification count if leads found
   if (count > 0) {
     ctx.beginPath();
     ctx.arc(48, 16, 12, 0, Math.PI * 2);
@@ -145,6 +161,7 @@ function drawSuccess(ctx) {
   ctx.strokeStyle = '#f59e0b';
   ctx.stroke();
 
+  // Green checkmark
   ctx.beginPath();
   ctx.moveTo(20, 32);
   ctx.lineTo(28, 40);

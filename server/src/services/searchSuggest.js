@@ -1088,6 +1088,7 @@ function warmSuggestions() {
 module.exports = {
   suggest: suggestCached,
   suggestUncached: suggest,
+  suggestForCountry,
   warmSuggestions,
   detectFragments,
   findLocations,
@@ -1127,4 +1128,94 @@ function suggestCached(options = {}) {
     SUGGEST_CACHE.delete(oldest);
   }
   return value;
+}
+
+/**
+ * Country-aware suggestions.
+ *
+ * The local India gazetteer answers instantly for Indian places. Every other
+ * country — and any Indian fragment the gazetteer does not know — is resolved
+ * through the keyless OSM services in `globalPlaceIndex` (Photon, then
+ * Nominatim), so "photographers in Troy" resolves to Troy, Michigan and a
+ * Master sweep can pick Ontario, Quebec or Dubai.
+ *
+ * The synchronous `suggest()` remains the fast path and the fallback: if the
+ * network is unavailable the operator still gets the Indian results.
+ */
+async function suggestForCountry(options = {}) {
+  const payload = suggest(options);
+  const country = String(options.country || '').toUpperCase();
+  const fragment = clean(payload.fragments?.location || '');
+  if (fragment.length < 3) return payload;
+
+  const hasLocal = Number(payload.counts?.locations || 0) > 0;
+  // India is fully covered offline. Only reach the network when the local
+  // index is empty, which keeps Indian typing instant and keyless.
+  if ((!country || country === 'IN') && hasLocal) return payload;
+
+  let places = [];
+  try {
+    const globalPlaceIndex = require('./globalPlaceIndex');
+    places = await globalPlaceIndex.searchPlaces(fragment, {
+      country,
+      limit: Math.max(1, Math.min(12, Number(options.limit) || 6))
+    });
+  } catch (error) {
+    return payload;
+  }
+  if (!places.length) return payload;
+
+  // The client is restricted to a single city or mandal; the Master may sweep
+  // whole provinces. Filter exactly like the local path does.
+  const isMaster = Boolean(options.isMaster);
+  const visible = isMaster ? places : places.filter(place => place.level !== 'state' && place.level !== 'district');
+  const rows = (visible.length ? visible : places).map(place => ({
+    type: 'location',
+    value: place.value,
+    label: place.value,
+    display: place.display,
+    mandal: '',
+    district: place.district || '',
+    state: place.state || '',
+    subtitle: [
+      place.district && norm(place.district) !== norm(place.value) ? place.district : '',
+      place.state
+    ].filter(Boolean).join(' • '),
+    detail: LEVEL_LABEL[place.level] || 'City',
+    level: place.level,
+    scope: place.scope || (place.level === 'village' ? 'city' : place.level),
+    lat: place.lat,
+    lng: place.lng,
+    country: place.country || country || '',
+    corrected: false,
+    correctedFrom: ''
+  }));
+
+  payload.suggestions = [
+    ...payload.suggestions.filter(item => item.type !== 'location'),
+    ...rows
+  ];
+
+  const best = rows[0];
+  payload.location = {
+    value: best.value,
+    display: best.display,
+    mandal: '',
+    district: best.district,
+    state: best.state,
+    level: best.level,
+    lat: best.lat,
+    lng: best.lng,
+    raw: fragment,
+    corrected: false,
+    correctedFrom: '',
+    country: best.country
+  };
+  payload.counts = { ...(payload.counts || {}), locations: rows.length };
+  payload.ready = Boolean(payload.category && payload.location);
+  payload.query = payload.ready
+    ? `${payload.category.value} in ${best.value}`
+    : (payload.category?.value || best.value);
+  payload.globalPlaces = true;
+  return payload;
 }

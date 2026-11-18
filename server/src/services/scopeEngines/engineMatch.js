@@ -21,7 +21,15 @@ function makeHasEngine(engines) {
   const isAutoMode = normEngines.length === 0 || normEngines.includes('auto');
 
   return (key) => {
-    if (isAutoMode) return true;
+    if (isAutoMode) {
+      // Brave is rate-limited (HTTP 429) and is not part of any country bundle,
+      // so it only ever runs when the operator selects it explicitly. Every
+      // other bundled engine — including the India social dorks — runs by
+      // default, so the engine board never advertises an engine that auto mode
+      // silently refuses to dispatch.
+      if (key === 'brave') return false;
+      return true;
+    }
     switch (key) {
       case 'local_finder':
         return normEngines.some(e => e.includes('localfinder') || (e.includes('local') && !e.includes('social')) || e.includes('finder') || e.includes('deepserp'));
@@ -48,6 +56,28 @@ function makeHasEngine(engines) {
         return normEngines.some(e => e.includes('webdiscovery') || e.includes('websites') || e.includes('websearch'));
       case 'brave':
         return normEngines.some(e => e.includes('brave'));
+      case 'yelp':
+        return normEngines.some(e => e.includes('yelp'));
+      case 'bing-places':
+      case 'bing':
+        return normEngines.some(e => e.includes('bing') || e.includes('bingplaces'));
+      case 'tripadvisor':
+        return normEngines.some(e => e.includes('tripadvisor') || e.includes('advisor') || e.includes('ta'));
+      case 'wikidata':
+        return normEngines.some(e => e.includes('wikidata') || e.includes('wiki'));
+      case 'yellowpages':
+      case 'yell':
+        return normEngines.some(e => e.includes('yellowpages') || e.includes('yellow') || e.includes('yell') || e.includes('yp'));
+      case 'freeindex':
+        return normEngines.some(e => e.includes('freeindex'));
+      case 'goldenpages':
+        return normEngines.some(e => e.includes('goldenpages') || e.includes('golden'));
+      case 'cylex':
+        return normEngines.some(e => e.includes('cylex'));
+      case 'trustpilot':
+        return normEngines.some(e => e.includes('trustpilot') || e.includes('tp'));
+      case 'social-dork':
+        return normEngines.some(e => e.includes('dork') || e.includes('social') || e.includes('duckduckgo') || e.includes('ddg') || e.includes('instagram') || e.includes('facebook') || e.includes('footprint') || e.includes('digital'));
       default:
         return normEngines.includes(String(key).toLowerCase().replace(/[^a-z0-9]/g, ''));
     }

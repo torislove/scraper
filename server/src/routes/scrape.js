@@ -17,6 +17,16 @@ const { scrapeMandap, setDeps: setMandapDeps } = require('../scrapers/engine-man
 const { scrapeBraveDork, setDeps: setBraveDeps } = require('../scrapers/engine-brave-dork');
 const { scrapeCrawleeDeep, setDeps: setCrawleeDeps } = require('../scrapers/engine-crawlee-deep');
 const { scrapePuppeteerIndiaMart, setDeps: setIndiaMartDeps } = require('../scrapers/engine-puppeteer-indiamart');
+const { scrapeYellowPagesGlobal, setDeps: setYpDeps } = require('../scrapers/engine-yellowpages-global');
+const { scrapeYelp, setDeps: setYelpDeps } = require('../scrapers/engine-yelp');
+const { scrapeBingPlaces, setDeps: setBingPlacesDeps } = require('../scrapers/engine-bing-places');
+const { scrapeTripAdvisor, setDeps: setTripAdvisorDeps } = require('../scrapers/engine-tripadvisor');
+const { scrapeWikidata, setDeps: setWikidataDeps } = require('../scrapers/engine-wikidata-businesses');
+const { scrapeSocialDorkIntl, setDeps: setSocialDorkDeps } = require('../scrapers/engine-social-dork-intl');
+const { scrapeFreeIndexUK, setDeps: setFreeIndexDeps } = require('../scrapers/engine-freeindex-uk');
+const { scrapeGoldenPagesIE, setDeps: setGoldenPagesDeps } = require('../scrapers/engine-goldenpages-ie');
+const { scrapeCylex, setDeps: setCylexDeps } = require('../scrapers/engine-cylex');
+const { scrapeTrustpilot, setDeps: setTrustpilotDeps } = require('../scrapers/engine-trustpilot');
 
 const { initQueue, registerTask, addScrapeJob, clearQueue, clearQueueForSession, getActiveJobs, getConcurrencyMetrics } = require('../utils/queue');
 const { geocodeLocation } = require('../utils/olaMaps');
@@ -33,6 +43,7 @@ const credits = require('../services/credits');
 const engineHealth = require('../services/engineHealth');
 const requestGuard = require('../utils/requestGuard');
 const { buildScopeZones } = require('../services/sweepScopePolicy');
+const { buildCountrySweepPlan } = require('../services/countrySweepPlan');
 const { runOmniSearchOrchestrator, isInsideDistrictBoundary } = require('../services/omniSearchOrchestrator');
 const { persistSessionVault } = require('../services/sessionVaultService');
 const leadArchive = require('../services/leadArchive');
@@ -40,15 +51,33 @@ const outOfBoundsVault = require('../services/outOfBoundsVault');
 const { SESSIONS_DIR } = require('../config/paths');
 const etaModel = require('../utils/etaModel');
 
+/**
+ * The country the operator selected in the UI. This is authoritative for the
+ * whole run: engine bundles, Google `gl`, phone parsing and admin vocabulary.
+ * Without it a city like "Troy" falls back to India, which is exactly how
+ * Indian numbers used to appear in US results.
+ */
+function requestedCountry(req) {
+  const raw = String(
+    (req.body && req.body.country)
+    || req.headers['x-country']
+    || (req.query && req.query.country)
+    || ''
+  ).trim().toUpperCase();
+  if (!raw) return null;
+  if (raw === 'UK') return 'GB';
+  return /^[A-Z]{2}$/.test(raw) ? raw : null;
+}
+
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the earth in km
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    Math.sin(dLon/2) * Math.sin(dLon/2); 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
-  return R * c; 
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 // Safe execute wrapper. When an engine key is supplied the outcome is written
@@ -102,11 +131,11 @@ function isSessionAborted(sessionId) {
 }
 
 let addLog = console.log;
-let emitVendorEvent = () => {};
-let emitGridEvent = () => {};
-let emitDispatchEvent = () => {};
-let emitProgressEvent = () => {};
-let emitActivePointEvent = () => {};
+let emitVendorEvent = () => { };
+let emitGridEvent = () => { };
+let emitDispatchEvent = () => { };
+let emitProgressEvent = () => { };
+let emitActivePointEvent = () => { };
 
 function formatEta(ms) {
   if (ms <= 0) return '0s';
@@ -138,7 +167,7 @@ function updateSessionTargetState(sessionId, loc, status) {
   if (!sessionId || !loc) return;
   const session = activeSessions[sessionId];
   if (!session) return;
-  
+
   const key = (loc || '').toLowerCase().trim();
   session.completedTargetsMap = session.completedTargetsMap || {};
   session.completedTargetsMap[key] = status;
@@ -155,7 +184,7 @@ function updateSessionTargetState(sessionId, loc, status) {
       }
     }
   }
-  
+
   let completedCount = 0;
   let runningCount = 0;
   Object.keys(session.completedTargetsMap).forEach(k => {
@@ -167,13 +196,13 @@ function updateSessionTargetState(sessionId, loc, status) {
   session.overallCompletedMandals = activeTotal
     ? Math.min(completedCount, activeTotal)
     : completedCount;
-  
+
   if (status === 'running') {
     session.activeMandal = loc;
-    
+
     // Find district for this subLoc
     if (session.fullHierarchy && Array.isArray(session.fullHierarchy)) {
-      const targetDistrict = session.fullHierarchy.find(d => 
+      const targetDistrict = session.fullHierarchy.find(d =>
         (d.mandals || []).some(m => m.toLowerCase().trim() === key)
       );
       if (targetDistrict) {
@@ -187,13 +216,19 @@ function updateSessionTargetState(sessionId, loc, status) {
   // geocoded base location instead of disappearing from the radar.
   try {
     const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
-    const zCoords = ZONE_COORDINATES[key]
-      || (session.zones && session.zones.find(z => String(z.zoneName || '').toLowerCase().trim() === key))
-      || (session.baseLat && session.baseLng ? { lat: session.baseLat, lng: session.baseLng } : null);
-    if (zCoords) {
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanKey = norm(key);
+    let zCoords = ZONE_COORDINATES[key] || ZONE_COORDINATES[cleanKey];
+    if (!zCoords && session.zones && Array.isArray(session.zones)) {
+      zCoords = session.zones.find(z => norm(z.zoneName || z.name) === cleanKey);
+    }
+    if (!zCoords && session.baseLat && session.baseLng) {
+      zCoords = { lat: session.baseLat, lng: session.baseLng };
+    }
+    if (zCoords && Number.isFinite(Number(zCoords.lat)) && Number.isFinite(Number(zCoords.lng))) {
       emitActivePointEvent({
-        lat: zCoords.lat,
-        lng: zCoords.lng,
+        lat: Number(zCoords.lat),
+        lng: Number(zCoords.lng),
         zoneName: loc,
         locationName: loc,
         district: session.activeDistrict || loc,
@@ -203,20 +238,20 @@ function updateSessionTargetState(sessionId, loc, status) {
         instanceId: 1
       });
     }
-  } catch (e) {}
+  } catch (e) { }
 
   // Update completedDistricts count
   let completedDistrictsCount = 0;
   if (session.fullHierarchy && Array.isArray(session.fullHierarchy)) {
     session.fullHierarchy.forEach(d => {
-      const allMandalsDone = (d.mandals || []).every(m => 
+      const allMandalsDone = (d.mandals || []).every(m =>
         session.completedTargetsMap[m.toLowerCase().trim()] === 'completed'
       );
       if (allMandalsDone) completedDistrictsCount++;
     });
   }
   session.completedDistricts = completedDistrictsCount;
-  
+
   // Calculate ETA & Velocity
   let velocity = '0.0';
   let totalFound = 0;
@@ -225,7 +260,7 @@ function updateSessionTargetState(sessionId, loc, status) {
     totalFound = vendors.filter(v => v.sessionId === sessionId).length;
     const elapsedSec = Math.max(1, (Date.now() - session.startTime) / 1000);
     velocity = (totalFound / elapsedSec).toFixed(1);
-  } catch (e) {}
+  } catch (e) { }
 
   const totalZonesCount = session.totalMandalsAcrossAll || session.totalMandals || (Array.isArray(session.zones) ? session.zones.length : Object.keys(session.completedTargetsMap).length);
 
@@ -259,19 +294,19 @@ function updateSessionTargetState(sessionId, loc, status) {
       fullHierarchy: session.fullHierarchy,
       targetsMap: session.completedTargetsMap
     });
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Register tasks
-registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster = false, scope = null) => {
+registerTask('scrapeGoogleLocalFinder', async (q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster = false, scope = null, countryHint = null) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster, scope), 'Google Local Finder Scrape', addLog, 'google-local-finder');
+  const res = await safeExecute(() => scrapeGoogleLocalFinder(q, cat, loc, sessionId, maxPages, district, stateName, centerCoords, cityHint, mapsBackup, isMaster, scope, countryHint), 'Google Local Finder Scrape', addLog, 'google-local-finder');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeGooglePlaces', async (q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster = false, scope = null) => {
+registerTask('scrapeGooglePlaces', async (q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster = false, scope = null, mandal = null, countryHint = null) => {
   updateSessionTargetState(sessionId, loc, 'running');
-  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster, scope), 'Google Places Scrape', addLog, 'maps');
+  const res = await safeExecute(() => scrapeGooglePlaces(q, cat, loc, sessionId, centerLat, centerLng, radiusKm, strategy, district, stateName, boundingbox, cityHint, isMaster, scope, mandal, countryHint), 'Google Places Scrape', addLog, 'maps');
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
@@ -288,7 +323,7 @@ registerTask('scrapeJustDial', async (cat, loc, dummy, sessionId) => {
   return res;
 });
 registerTask('scrapeWeddingBazaar', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingBazaar(cat, loc, sessionId), 'WeddingBazaar Scrape', addLog, 'weddingbazaar'));
-registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId), 'WeddingWire Scrape', addLog, 'weddingwire'));
+registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId, countryCode) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId, countryCode), 'WeddingWire Scrape', addLog, 'weddingwire'));
 registerTask('scrapeMandap', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeMandap(cat, loc, sessionId), 'Mandap Scrape', addLog, 'mandap'));
 registerTask('scrapeOpenStreetMap', async (cat, loc, dummy, sessionId, lat, lng, radiusKm) => {
   const res = await safeExecute(
@@ -299,9 +334,9 @@ registerTask('scrapeOpenStreetMap', async (cat, loc, dummy, sessionId, lat, lng,
   );
   return res;
 });
-registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId) => {
+registerTask('scrapeDuckDuckGoDork', async (domain, q, cat, loc, sessionId, countryCode = 'IN', userId = 'admin_1') => {
   const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
-  return safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, sig, sessionId), `DDG Dork ${domain}`, addLog, 'social');
+  return safeExecute(() => scrapeDuckDuckGoDork(domain, q, cat, loc, sig, sessionId, countryCode, userId), `Social Engine ${domain}`, addLog, 'social');
 });
 registerTask('scrapeBraveDork', async (domain, q, cat, loc, sessionId) => safeExecute(() => scrapeBraveDork(domain, q, cat, loc, sessionId), `Brave Dork ${domain}`, addLog, 'brave'));
 registerTask('scrapeCrawleeDeep', async (url, vendorName, cat, loc, sessionId) => safeExecute(() => scrapeCrawleeDeep(url, vendorName, cat, loc, sessionId), 'Crawlee Deep Scrape', addLog));
@@ -311,7 +346,57 @@ registerTask('scrapePuppeteerIndiaMart', async (cat, loc, dummy, sessionId) => {
   updateSessionTargetState(sessionId, loc, 'completed');
   return res;
 });
-registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null, isMaster = false) =>
+registerTask('scrapeYellowPagesGlobal', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setYpDeps === 'function') setYpDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeYellowPagesGlobal(cat, loc, sessionId, opts), `YellowPages Global ${opts.countryCode || ''}`, addLog, 'yellowpages');
+});
+registerTask('scrapeYelp', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setYelpDeps === 'function') setYelpDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeYelp(cat, loc, sessionId, opts), `Yelp ${opts.countryCode || ''}`, addLog, 'yelp');
+});
+registerTask('scrapeBingPlaces', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setBingPlacesDeps === 'function') setBingPlacesDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeBingPlaces(cat, loc, sessionId, opts), `Bing Places ${opts.countryCode || ''}`, addLog, 'bing-places');
+});
+registerTask('scrapeTripAdvisor', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setTripAdvisorDeps === 'function') setTripAdvisorDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeTripAdvisor(cat, loc, sessionId, opts), `TripAdvisor ${opts.countryCode || ''}`, addLog, 'tripadvisor');
+});
+registerTask('scrapeWikidata', async (cat, loc, sessionId, countryCode = 'US') => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setWikidataDeps === 'function') setWikidataDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeWikidata(cat, loc, sessionId, countryCode), `Wikidata ${countryCode}`, addLog, 'wikidata');
+});
+registerTask('scrapeSocialDorkIntl', async (cat, loc, sessionId, countryCode = 'US') => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setSocialDorkDeps === 'function') setSocialDorkDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeSocialDorkIntl(cat, loc, sessionId, countryCode), `Social Dork ${countryCode}`, addLog, 'social-dork');
+});
+registerTask('scrapeFreeIndexUK', async (cat, loc, sessionId) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setFreeIndexDeps === 'function') setFreeIndexDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeFreeIndexUK(cat, loc, sessionId), 'FreeIndex UK', addLog, 'freeindex');
+});
+registerTask('scrapeGoldenPagesIE', async (cat, loc, sessionId) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setGoldenPagesDeps === 'function') setGoldenPagesDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeGoldenPagesIE(cat, loc, sessionId), 'GoldenPages Ireland', addLog, 'goldenpages');
+});
+registerTask('scrapeCylex', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setCylexDeps === 'function') setCylexDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeCylex(cat, loc, sessionId, opts), `Cylex ${opts.countryCode || ''}`, addLog, 'cylex');
+});
+registerTask('scrapeTrustpilot', async (cat, loc, sessionId, opts = {}) => {
+  const sig = (sessionId && sessionAbortSignals.get(sessionId)) || globalAbortSignal;
+  if (typeof setTrustpilotDeps === 'function') setTrustpilotDeps({ logger: addLog, emitVendorEvent, abortSignal: sig });
+  return safeExecute(() => scrapeTrustpilot(cat, loc, sessionId, opts), `Trustpilot ${opts.countryCode || ''}`, addLog, 'trustpilot');
+});
+registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters = {}, plan = null, isMaster = false, country = null) =>
   safeExecute(() => runOmniSearchOrchestrator(category, baseLocation, strategy, radius, gridDensity, enabledEngines, sessionId, userId, filters, plan, isMaster, {
     activeSessions,
     sessionAbortSignals,
@@ -324,7 +409,7 @@ registerTask('scrapeOmniOrchestrator', async (category, baseLocation, strategy, 
     emitProgressEvent: (...args) => emitProgressEvent(...args),
     emitActivePointEvent: (...args) => emitActivePointEvent(...args),
     isSessionAborted
-  }), 'Omni Search Orchestrator', addLog)
+  }, country), 'Omni Search Orchestrator', addLog)
 );
 
 function setDeps(deps) {
@@ -342,13 +427,23 @@ function setDeps(deps) {
   if (typeof setDorkLogger !== 'undefined') setDorkLogger(deps.logger);
   if (typeof setSerpDeps !== 'undefined') setSerpDeps(deps);
   if (typeof setCrawleeDeps !== 'undefined') setCrawleeDeps(deps);
-  
+
   if (typeof setJDDeps !== 'undefined') setJDDeps(deps);
   if (typeof setWBDeps !== 'undefined') setWBDeps(deps);
   if (typeof setWWDeps !== 'undefined') setWWDeps(deps);
   if (typeof setMandapDeps !== 'undefined') setMandapDeps(deps);
   if (typeof setBraveDeps !== 'undefined') setBraveDeps(deps);
   if (typeof setIndiaMartDeps !== 'undefined') setIndiaMartDeps(deps);
+  if (typeof setYpDeps !== 'undefined') setYpDeps(deps);
+  if (typeof setYelpDeps !== 'undefined') setYelpDeps(deps);
+  if (typeof setBingPlacesDeps !== 'undefined') setBingPlacesDeps(deps);
+  if (typeof setTripAdvisorDeps !== 'undefined') setTripAdvisorDeps(deps);
+  if (typeof setWikidataDeps !== 'undefined') setWikidataDeps(deps);
+  if (typeof setSocialDorkDeps !== 'undefined') setSocialDorkDeps(deps);
+  if (typeof setFreeIndexDeps !== 'undefined') setFreeIndexDeps(deps);
+  if (typeof setGoldenPagesDeps !== 'undefined') setGoldenPagesDeps(deps);
+  if (typeof setCylexDeps !== 'undefined') setCylexDeps(deps);
+  if (typeof setTrustpilotDeps !== 'undefined') setTrustpilotDeps(deps);
 
   initQueue(deps);
 }
@@ -359,10 +454,10 @@ const { resolveIntervention } = require('../utils/manualIntervention');
 router.post('/resolve-intervention', (req, res) => {
   const { platform, action } = req.body;
   if (!platform || !action) return res.status(400).json({ error: 'Missing platform or action' });
-  
+
   const shouldContinue = action === 'yes';
   const resolved = resolveIntervention(platform, shouldContinue);
-  
+
   if (resolved) {
     res.json({ success: true, message: `Intervention for ${platform} resolved as ${action}` });
   } else {
@@ -416,6 +511,7 @@ router.get('/jobs', (req, res) => {
     status: s.finished ? (s.status === 'failed' ? 'failed' : 'completed') : 'running',
     sessionActive: !s.finished,
     finishedAt: s.finishedAt || null,
+    startTime: s.startTime || null,
     activeDistrict: s.activeDistrict,
     activeMandal: s.activeMandal,
     completedCount: s.overallCompletedMandals,
@@ -485,14 +581,14 @@ router.get('/active', (req, res) => {
 
 router.post('/jobs/update', (req, res) => {
   const { category, action, intervalMs, location } = req.body;
-  
+
   if (action === 'create') {
     if (!category || !location) return res.status(400).json({ error: 'Category and location required' });
     const ms = intervalMs || 24 * 60 * 60 * 1000; // default 24h
     if (activeCronJobs[category]) {
       clearInterval(activeCronJobs[category].timer);
     }
-    
+
     // Create new scheduled job
     activeCronJobs[category] = {
       category,
@@ -506,7 +602,7 @@ router.post('/jobs/update', (req, res) => {
         addScrapeJob('scrapeGooglePlaces', [searchUrl, category, location, 'scheduled', null, null, 10, 'mandal']);
       }, ms)
     };
-    
+
     // Also trigger it immediately the first time
     addLog(`[Scheduler] Triggering initial scrape for ${category} in ${location}`);
     const searchString = `${category} in ${location}`;
@@ -539,10 +635,10 @@ router.post('/jobs/update', (req, res) => {
     job.interval = intervalMs;
     job.status = 'running';
     job.timer = setInterval(() => {
-        addLog(`[Scheduler] Triggering scheduled scrape for ${job.category} in ${job.location}`);
-        const searchString = `${job.category} in ${job.location}`;
-        const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchString)}`;
-        addScrapeJob('scrapeGooglePlaces', [searchUrl, job.category, job.location, 'scheduled', null, null, 10, 'mandal']);
+      addLog(`[Scheduler] Triggering scheduled scrape for ${job.category} in ${job.location}`);
+      const searchString = `${job.category} in ${job.location}`;
+      const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchString)}`;
+      addScrapeJob('scrapeGooglePlaces', [searchUrl, job.category, job.location, 'scheduled', null, null, 10, 'mandal']);
     }, intervalMs);
   }
 
@@ -553,7 +649,7 @@ router.post('/jobs/update', (req, res) => {
 router.post('/maps', async (req, res) => {
   const { query, category, location, radius } = req.body;
   if (!query) return res.status(400).json({ error: 'Query required' });
-  
+
   addLog(`[Google Maps] Manual scrape triggered for: "${query}"`);
   addScrapeJob('scrapeGooglePlaces', [query, category, location, [], 'manual-maps', null, null, radius || 10]);
   res.json({ success: true, message: 'Google Maps scrape initiated' });
@@ -584,16 +680,16 @@ router.post('/parse-location', async (req, res) => {
 router.post('/preflight', async (req, res) => {
   const { location } = req.body;
   if (!location) return res.status(400).json({ error: 'Location required' });
-  
+
   // Auto-correct location typos before checking scope
   const parsed = parseNaturalLanguageQuery(location);
   const cleanLocation = parsed.location || parsed.category || location;
   const correctedLoc = intelligentExtractor.correctLocationTypo(cleanLocation);
-  
+
   try {
     const scopeData = await intelligentExtractor.analyzeGeographicScope(correctedLoc);
     res.json(scopeData);
-  } catch(err) {
+  } catch (err) {
     res.json({ type: "specific" });
   }
 });
@@ -657,7 +753,10 @@ router.post('/omni', async (req, res) => {
 
   // Client Restriction: Client can ONLY scrape individual cities and mandals!
   const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
-  if (!isMaster) {
+  const requestedCode = requestedCountry(req);
+  const detectedCountry = require('../services/localBrain/countries').detectCountry(parsed.location || '');
+  const runCountry = requestedCode || (detectedCountry && detectedCountry.code) || 'IN';
+  if (!isMaster && runCountry === 'IN') {
     const { classifyLocation } = require('../utils/universalGeoCluster');
     const locClassification = classifyLocation(parsed.location);
     if (locClassification.type === 'state' || locClassification.type === 'district') {
@@ -708,7 +807,9 @@ router.post('/omni', async (req, res) => {
       : null;
   const resolvedEngines = (explicitEngines && !explicitEngines.includes('auto'))
     ? [...new Set(explicitEngines)]
-    : categoryRouter.pickAutoEngines(classification);
+    : (runCountry === 'IN'
+      ? categoryRouter.pickAutoEngines(classification)
+      : require('../services/sources/registry').enginesForCountry(runCountry));
 
   // Register session immediately so jobs watchdog and client learn about active session
   const estimatedClassification = classifyLocation(baseLocation);
@@ -737,6 +838,9 @@ router.post('/omni', async (req, res) => {
     addLog(`[Omni] Deep-cancel skipped: ${deepStopError.message}`);
   }
 
+  const { resolveUniversalZones } = require('../utils/universalGeoCluster');
+  const resolvedPlanZones = resolveUniversalZones(baseLocation, matchedCategory, isMaster) || [];
+
   res.json({
     message: 'Omni Search Started in Background via BullMQ.',
     sessionId: finalSessionId,
@@ -748,6 +852,7 @@ router.post('/omni', async (req, res) => {
       family: classification.family,
       familyLabel: classification.label,
       engines: resolvedEngines,
+      zones: resolvedPlanZones,
       auto: true
     }
   });
@@ -756,7 +861,7 @@ router.post('/omni', async (req, res) => {
   addLog(`[Omni Search] Family ${classification.label} · engines ${resolvedEngines.join(', ')}`);
 
   // Add the orchestrator task to the background queue so it starts running
-  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster]);
+  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster, runCountry]);
 });
 
 /**
@@ -785,84 +890,98 @@ router.post('/auto', async (req, res) => {
     // Client Restriction: Whole-district (18+ mandals) & state sweeps are restricted to Master!
     // Individual mandals (and their constituent villages), cities, towns, and localities are fully supported in Client.
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    const detectedCountry = require('../services/localBrain/countries').detectCountry(plan.location || '');
+    const country = requestedCountry(req) || (detectedCountry && detectedCountry.code) || 'IN';
     const { classifyLocation } = require('../utils/universalGeoCluster');
     const locClassification = classifyLocation(plan.location);
 
-    if (!isMaster) {
-      if (locClassification.type === 'state' || locClassification.type === 'district') {
-        return res.status(403).json({
-          error: `Client searches are restricted to individual cities, mandals, and villages. Wide-area ${locClassification.type} sweeps (${locClassification.name}) across all mandals require Master Command Center access.`,
-          classification: locClassification,
-          allowedScopes: ['mandal', 'city', 'locality', 'town', 'village'],
-          suggestedZones: locClassification.subZones?.slice(0, 8) || []
-        });
-      }
-    }
-
-    // Auto-populate constituent zones (e.g. all villages for a mandal, or commercial sectors for a city)
-    try {
-      const sweepScopePolicy = require('../services/sweepScopePolicy');
-      if (locClassification.type === 'mandal') {
-        const mandalPlan = sweepScopePolicy.buildScopeZones('mandal', plan.location);
-        if (mandalPlan && Array.isArray(mandalPlan.zones) && mandalPlan.zones.length) {
-          plan.zones = mandalPlan.zones;
-          plan.resolvedScope = 'mandal';
-          plan.district = mandalPlan.district;
-          plan.state = mandalPlan.state;
-          plan.mandal = mandalPlan.title;
-          addLog(`[Auto Plan] Auto-resolved mandal "${plan.location}" into ${plan.zones.length} constituent villages/zones.`);
-        }
-      } else if (locClassification.type === 'city' || locClassification.type === 'town' || locClassification.type === 'metro') {
-        const { resolveUniversalZones, AUTHORITATIVE_CLUSTERS } = require('../utils/universalGeoCluster');
-        const cleanLoc = (plan.location || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (AUTHORITATIVE_CLUSTERS[cleanLoc]) {
-          const uniZones = resolveUniversalZones(plan.location, plan.category, isMaster);
-          if (uniZones && uniZones.length) {
-            plan.zones = uniZones.map(z => ({ name: z.zoneName, ...z }));
-            plan.resolvedScope = 'city';
-            addLog(`[Auto Plan] Auto-resolved authoritative city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+    // Auto-populate constituent zones (e.g. all villages for a mandal, commercial sectors for a city, or mandals for a district)
+    if (country === 'IN') {
+      try {
+        const sweepScopePolicy = require('../services/sweepScopePolicy');
+        const scopeOpts = { category: plan.category, isMaster };
+        if (locClassification.type === 'mandal') {
+          const mandalPlan = sweepScopePolicy.buildScopeZones('mandal', plan.location, scopeOpts);
+          if (mandalPlan && Array.isArray(mandalPlan.zones) && mandalPlan.zones.length) {
+            plan.zones = mandalPlan.zones;
+            plan.resolvedScope = 'mandal';
+            plan.district = mandalPlan.district;
+            plan.state = mandalPlan.state;
+            plan.mandal = mandalPlan.title;
+            addLog(`[Auto Plan] Auto-resolved mandal "${plan.location}" into ${plan.zones.length} constituent villages/zones.`);
           }
-        } else {
-          const cityPlan = sweepScopePolicy.buildScopeZones('city', plan.location);
-          if (cityPlan && Array.isArray(cityPlan.zones) && cityPlan.zones.length > 1) {
-            plan.zones = cityPlan.zones;
-            plan.resolvedScope = 'city';
-            plan.district = cityPlan.district;
-            plan.state = cityPlan.state;
-            addLog(`[Auto Plan] Auto-resolved city "${plan.location}" into ${plan.zones.length} commercial zones.`);
-          } else {
+        } else if (locClassification.type === 'city' || locClassification.type === 'town' || locClassification.type === 'metro') {
+          const { resolveUniversalZones, AUTHORITATIVE_CLUSTERS } = require('../utils/universalGeoCluster');
+          const cleanLoc = (plan.location || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (AUTHORITATIVE_CLUSTERS[cleanLoc] || AUTHORITATIVE_CLUSTERS[cleanLoc.replace(/city|town/g, '')]) {
             const uniZones = resolveUniversalZones(plan.location, plan.category, isMaster);
             if (uniZones && uniZones.length) {
               plan.zones = uniZones.map(z => ({ name: z.zoneName, ...z }));
               plan.resolvedScope = 'city';
+              addLog(`[Auto Plan] Auto-resolved authoritative city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+            }
+          } else {
+            const cityPlan = sweepScopePolicy.buildScopeZones('city', plan.location, scopeOpts);
+            if (cityPlan && Array.isArray(cityPlan.zones) && cityPlan.zones.length > 1) {
+              plan.zones = cityPlan.zones;
+              plan.resolvedScope = 'city';
+              plan.district = cityPlan.district;
+              plan.state = cityPlan.state;
               addLog(`[Auto Plan] Auto-resolved city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+            } else {
+              const uniZones = resolveUniversalZones(plan.location, plan.category, isMaster);
+              if (uniZones && uniZones.length) {
+                plan.zones = uniZones.map(z => ({ name: z.zoneName, ...z }));
+                plan.resolvedScope = 'city';
+                addLog(`[Auto Plan] Auto-resolved city "${plan.location}" into ${plan.zones.length} commercial zones.`);
+              }
             }
           }
+        } else if (locClassification.type === 'district') {
+          const districtPlan = sweepScopePolicy.buildScopeZones('district', plan.location, scopeOpts);
+          if (districtPlan && Array.isArray(districtPlan.zones) && districtPlan.zones.length) {
+            plan.zones = districtPlan.zones;
+            plan.resolvedScope = 'district';
+            plan.district = districtPlan.title || plan.location;
+            plan.state = districtPlan.state;
+            addLog(`[Auto Plan] Auto-resolved district "${plan.location}" into ${plan.zones.length} constituent mandals & urban centers.`);
+          }
+        } else if (locClassification.type === 'state') {
+          const statePlan = sweepScopePolicy.buildScopeZones('state', plan.location, scopeOpts);
+          if (statePlan && Array.isArray(statePlan.zones) && statePlan.zones.length) {
+            plan.zones = statePlan.zones;
+            plan.resolvedScope = 'state';
+            plan.state = statePlan.title || plan.location;
+            addLog(`[Auto Plan] Auto-resolved state "${plan.location}" into ${plan.zones.length} regional district centers & commercial hubs.`);
+          }
+        } else if (locClassification.type === 'village') {
+          const villagePlan = sweepScopePolicy.buildScopeZones('village', plan.location, scopeOpts);
+          if (villagePlan && Array.isArray(villagePlan.zones) && villagePlan.zones.length) {
+            plan.zones = villagePlan.zones;
+            plan.resolvedScope = 'village';
+            plan.district = villagePlan.district;
+            plan.state = villagePlan.state;
+            addLog(`[Auto Plan] Auto-resolved village "${plan.location}" into ${plan.zones.length} zones.`);
+          }
         }
-      } else if (locClassification.type === 'village') {
-        const villagePlan = sweepScopePolicy.buildScopeZones('village', plan.location);
-        if (villagePlan && Array.isArray(villagePlan.zones) && villagePlan.zones.length) {
-          plan.zones = villagePlan.zones;
-          plan.resolvedScope = 'village';
-          plan.district = villagePlan.district;
-          plan.state = villagePlan.state;
-          addLog(`[Auto Plan] Auto-resolved village "${plan.location}" into ${plan.zones.length} zones.`);
-        }
+      } catch (scopeErr) {
+        addLog(`[Auto Plan] Scope resolution error: ${scopeErr.message}`);
       }
-    } catch (scopeErr) {
-      addLog(`[Auto Plan] Scope resolution error: ${scopeErr.message}`);
+    } else {
+      // The orchestrator will build the country's coordinate lattice. Keep the
+      // scope label so the UI still says "city".
+      plan.zones = [];
+      plan.resolvedScope = 'city';
+      addLog(`[Auto Plan] ${country} run: coordinate lattice will be planned by the orchestrator.`);
     }
 
-    // One city / town / village per client search, and a hard zone cap so a
-    // customer run stays minutes, not hours. Master keeps full territorial
-    // coverage (state 1200, district 2600, mandal 400, city 200). Before this
-    // cap, a client city search could resolve to 96+ zones because the
-    // universal builder and the scope policy disagreed on the limit.
-    const CLIENT_ZONE_CAP = 64;
-    if (!isMaster && Array.isArray(plan.zones) && plan.zones.length > CLIENT_ZONE_CAP) {
+    // High-yield territorial zone allocation:
+    // Allow comprehensive multi-locality, sub-vector, and GPS grid sweeps without artificial 64-zone bottlenecks.
+    const MAX_AUTO_ZONES = isMaster ? 2600 : 400;
+    if (Array.isArray(plan.zones) && plan.zones.length > MAX_AUTO_ZONES) {
       const before = plan.zones.length;
-      plan.zones = plan.zones.slice(0, CLIENT_ZONE_CAP);
-      addLog(`[Auto Plan] Client zone cap applied: ${CLIENT_ZONE_CAP} of ${before} zones for "${plan.location}" (district and state sweeps are Master-only).`);
+      plan.zones = plan.zones.slice(0, MAX_AUTO_ZONES);
+      addLog(`[Auto Plan] High-yield zone cap applied: ${MAX_AUTO_ZONES} of ${before} zones for "${plan.location}".`);
     }
 
     const explicitEngines = (Array.isArray(enabledEngines) && enabledEngines.length)
@@ -933,7 +1052,8 @@ router.post('/auto', async (req, res) => {
       userId,
       {},
       plan,
-      isMaster
+      isMaster,
+      country
     ]);
   } catch (error) {
     addLog(`[Auto Scrape Error] ${error.message}`);
@@ -957,7 +1077,7 @@ router.get('/engines/status', (req, res) => {
     let httpCache = null;
     try {
       httpCache = require('../utils/fastGoogleHttp').getHttpCacheStats();
-    } catch (e) {}
+    } catch (e) { }
     res.json({ ok: true, ...status, queue: metrics, httpCache, breakers: { localFinder: require('../services/serpBreaker').snapshot() }, resilience: requestGuard.snapshot() });
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
@@ -982,10 +1102,27 @@ router.post('/master-sweep/preview', async (req, res) => {
     const { scope = 'district', name, deep = false } = req.body || {};
     if (!name) return res.status(400).json({ error: 'A place name is required.' });
 
-    const plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
+    // India resolves through the offline gazetteer; every other country uses the
+    // territory planner (curated children or a real lattice over the bbox).
+    // Without this branch a US county preview silently became a city sweep.
+    const previewCountry = requestedCountry(req) || 'IN';
+    let plan;
+    if (previewCountry === 'IN') {
+      plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
+    } else {
+      plan = await buildCountrySweepPlan({
+        scope,
+        name,
+        countryCode: previewCountry,
+        category: req.body.category || '',
+        deep: deep === true || deep === 'true'
+      });
+    }
     if (!plan) {
       return res.status(404).json({
-        error: `Could not resolve "${name}" in the offline India gazetteer.`,
+        error: previewCountry === 'IN'
+          ? `Could not resolve "${name}" in the offline India gazetteer.`
+          : `Could not resolve "${name}" in ${previewCountry}. Try adding the state or country, e.g. "Oakland County, Michigan".`,
         name
       });
     }
@@ -1044,16 +1181,31 @@ router.post('/master-sweep', async (req, res) => {
       return res.status(400).json({ error: 'Both category and target location name are required for a Master Sweep.' });
     }
 
-    // Resolve the requested scope through the India-aware policy layer:
-    //   state    → every district + every sub-district (mandal / taluk / tehsil / block)
-    //   district → every sub-district of the district (each query covers its villages)
-    //   mandal   → every revenue village / ward in the sub-district
-    //   city     → commercial localities + street grid inside the city
-    // `deep` adds every village of a district as its own zone.
-    const plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
+    // Resolve the requested scope through the country-aware planner:
+    //   India    → gazetteer policy (state / district / mandal / city, exhaustive)
+    //   Anywhere → buildCountrySweepPlan (curated child territories when the
+    //              taxonomy knows them, otherwise a lattice over the real
+    //              administrative bounding box, labelled `sampled`)
+    // `deep` adds every village of a district in India and a 3×3 lattice inside
+    // every zone elsewhere.
+    const sweepCountry = requestedCountry(req) || 'IN';
+    let plan;
+    if (sweepCountry === 'IN') {
+      plan = buildScopeZones(scope, name, { deep: deep === true || deep === 'true' });
+    } else {
+      plan = await buildCountrySweepPlan({
+        scope,
+        name,
+        countryCode: sweepCountry,
+        category,
+        deep: deep === true || deep === 'true'
+      });
+    }
     if (!plan) {
       return res.status(404).json({
-        error: `Could not resolve "${name}" in the offline India gazetteer. Try a district, mandal, state or city name, or add the parent district.`
+        error: sweepCountry === 'IN'
+          ? `Could not resolve "${name}" in the offline India gazetteer. Try a district, mandal, state or city name, or add the parent district.`
+          : `Could not resolve "${name}" in ${sweepCountry}. Try adding the state or country, e.g. "Oakland County, Michigan".`
       });
     }
 
@@ -1099,7 +1251,7 @@ router.post('/master-sweep', async (req, res) => {
     addLog(`\n[Master Sweep] 🗺️ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
     addLog(`[Master Sweep] Coverage policy: ${plan.policy.label}. ${plan.policy.note}`);
 
-        addScrapeJob('scrapeOmniOrchestrator', [
+    addScrapeJob('scrapeOmniOrchestrator', [
       category,
       sweepTitle,
       strategy,
@@ -1110,7 +1262,8 @@ router.post('/master-sweep', async (req, res) => {
       userId || 'master',
       filters,
       plan,
-      true
+      true,
+      requestedCountry(req)
     ]);
 
   } catch (error) {
@@ -1151,7 +1304,7 @@ router.post('/district-audit', async (req, res) => {
         const file = path.join(SESSIONS_DIR, dir.name, `${sessionId}.json`);
         if (fs.existsSync(file)) candidates.push(file);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Audit the rows the operator can actually see (the folder) plus any richer
     // store copy of the same id. Auditing only the store silently dropped folder
@@ -1159,7 +1312,7 @@ router.post('/district-audit', async (req, res) => {
     const storeRows = dbAdapter.getVendorsBySession(sessionId);
     let folderData = null;
     if (candidates.length) {
-      try { folderData = JSON.parse(fs.readFileSync(candidates[0], 'utf8')); } catch (e) {}
+      try { folderData = JSON.parse(fs.readFileSync(candidates[0], 'utf8')); } catch (e) { }
     }
     const byId = new Map();
     for (const lead of (folderData?.leads || [])) {
@@ -1209,7 +1362,7 @@ router.post('/district-audit', async (req, res) => {
       });
       archived = result.archived || 0;
       for (const lead of rejected) {
-        try { dbAdapter.dropFromSession(lead.id, sessionId); } catch (e) {}
+        try { dbAdapter.dropFromSession(lead.id, sessionId); } catch (e) { }
       }
     }
 
@@ -1374,7 +1527,7 @@ router.post('/deep-enrich', async (req, res) => {
 
                 try {
                   emitVendorEvent(item, 'updated');
-                } catch (e) {}
+                } catch (e) { }
 
                 enrichedCount++;
               }
@@ -1442,12 +1595,12 @@ router.post('/upload', async (req, res) => {
   for (const t of tasks) {
     const engines = t.engines || ['maps'];
     const aiKeywords = await getKeywordSynonyms(t.category);
-    
+
     // Free geocoding (OpenStreetMap Nominatim first)
     const resolvedData = await geocodeLocation(t.location);
     const accurateLocation = resolvedData && resolvedData.lat ? resolvedData.formattedLocation : t.location;
     const q = `${t.category} in ${accurateLocation}`;
-    
+
     if (engines.includes('maps') || engines.includes('google')) {
       await addScrapeJob('scrapeGooglePlaces', [q, t.category, accurateLocation, aiKeywords, 'legacy', null, null, null]);
     }
@@ -1504,31 +1657,31 @@ const handleMasterStopAll = async (req, res) => {
     try {
       const { streamingEnricher } = require('../services/phoneBackfillService');
       await streamingEnricher.stop();
-    } catch (e) {}
+    } catch (e) { }
     try {
       require('../services/deepProfileService').stopAll('user pressed stop');
-    } catch (e) {}
+    } catch (e) { }
     try {
       const { closeAllBrowsers } = require('../scrapers/browserFactory');
       await closeAllBrowsers();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // 4. Snappy queue clearing & browser cleanup
   if (bodySessionId) {
-    await clearQueueForSession(bodySessionId).catch(() => {});
+    await clearQueueForSession(bodySessionId).catch(() => { });
   } else if (targets.length > 0 && targets.length < runningSessions.length) {
     for (const s of targets) {
-      await clearQueueForSession(s.sessionId).catch(() => {});
+      await clearQueueForSession(s.sessionId).catch(() => { });
     }
   } else {
-    await clearQueue().catch(() => {});
+    await clearQueue().catch(() => { });
     batchProgress.isActive = false;
     batchProgress.currentTask = 'Aborted';
   }
 
   // 5. Flush the atomic store before persisting
-  try { dbAdapter.flushSync(); } catch (e) {}
+  try { dbAdapter.flushSync(); } catch (e) { }
 
   // 6. Persist each running session as aborted with preserved leads and zone metadata
   let totalPreserved = 0;
@@ -1554,7 +1707,7 @@ const handleMasterStopAll = async (req, res) => {
           zones: session.zones || []
         }
       });
-    } catch (e) {}
+    } catch (e) { }
     session.finished = true;
     session.finishedAt = Date.now();
     try {
@@ -1566,7 +1719,7 @@ const handleMasterStopAll = async (req, res) => {
         totalLeads: sessionLeads.length,
         currentTask: `Scrape safely terminated. Collected ${sessionLeads.length} stores saved to folder.`
       });
-    } catch (e) {}
+    } catch (e) { }
   }
 
   addLog(`🛑 [SYSTEM] STOP EXECUTED. Safely committed ${totalPreserved} collected stores into session folder with 'Aborted' badge.`);
@@ -1700,7 +1853,7 @@ router.post('/resume', async (req, res) => {
       try {
         const rebuilt = buildScopeZones('district', resumeDistrict);
         resumeBoundary = rebuilt?.boundary || null;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const resumePlan = {
@@ -1748,7 +1901,8 @@ router.post('/resume', async (req, res) => {
       userId,
       {},
       resumePlan,
-      isMaster
+      isMaster,
+      requestedCountry(req)
     ]);
 
   } catch (err) {
@@ -1790,7 +1944,7 @@ router.post('/enrich-now', async (req, res) => {
     sessionId: sessionId || 'manual_enrich',
     budgetMs: Math.min(300_000, Math.max(60_000, missingMobile.length * 2_000)),
     concurrency: 8,
-    emit: (vendor, type) => { try { emitVendorEvent(vendor, type); } catch (e) {} },
+    emit: (vendor, type) => { try { emitVendorEvent(vendor, type); } catch (e) { } },
     log: addLog
   }).then(summary => {
     addLog(`[On-Demand Enrich] Finished: ${summary.filled} contacts enriched (${summary.mobilesFound} mobile, ${summary.landlinesFound} landline).`);

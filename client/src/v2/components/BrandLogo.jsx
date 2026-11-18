@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { useId } from 'react';
 
 /**
- * Unified Scraper.co.in Brand Icon Mark
- * High-velocity geometric S monogram with royal violet-to-cyan mesh gradient,
- * forward velocity chevron spark, and emerald live verification jewel.
+ * Unified Scraper.co.in Brand Icon Mark (Fortune-500 Grade 3D Emerald Enamel Emblem)
+ * High-velocity geometric 'S' monogram in optic white, forward cyan velocity spark,
+ * and live amber/emerald verification jewel set on a beveled 3D emerald porcelain squircle.
  */
 export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
+  const reactId = useId().replace(/:/g, '');
   const s = typeof size === 'number' ? size : size === 'sm' ? 24 : size === 'lg' ? 42 : 34;
-  const gradId = `${idPrefix}-bg-${s}`;
-  const sparkId = `${idPrefix}-spk-${s}`;
+  const emGradId = `${idPrefix}-emgrad-${reactId}-${s}`;
+  const emHlId = `${idPrefix}-emhl-${reactId}-${s}`;
+  const emShadowId = `${idPrefix}-emsh-${reactId}-${s}`;
 
   return (
     <svg
@@ -22,25 +24,34 @@ export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
       aria-hidden="true"
     >
       <defs>
-        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#7C3AED" />
-          <stop offset="50%" stopColor="#4F46E5" />
-          <stop offset="100%" stopColor="#0284C7" />
+        {/* Luxury 3D Emerald Gradient */}
+        <linearGradient id={emGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#10B981" />
+          <stop offset="60%" stopColor="#059669" />
+          <stop offset="100%" stopColor="#047857" />
         </linearGradient>
 
-        <linearGradient id={sparkId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#38BDF8" />
-          <stop offset="100%" stopColor="#00F0FF" />
+        {/* 3D Glass Surface Highlight */}
+        <linearGradient id={emHlId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
+
+        {/* Soft Tactile Elevation Shadow */}
+        <filter id={emShadowId} x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
+          <feDropShadow dx="0" dy="2.5" stdDeviation="3" floodColor="#059669" floodOpacity="0.32" />
+          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#047857" floodOpacity="0.2" />
+        </filter>
       </defs>
 
-      {/* Squircle Base with Highlight Rim */}
-      <rect x="2" y="2" width="60" height="60" rx="15" fill={`url(#${gradId})`} />
-      <rect x="3" y="3" width="58" height="58" rx="14" fill="none" stroke="#FFFFFF" strokeOpacity="0.35" strokeWidth="1.5" />
+      {/* 3D Beveled Emerald Squircle Base */}
+      <rect x="3" y="3" width="58" height="58" rx="16" fill={`url(#${emGradId})`} filter={`url(#${emShadowId})`} />
+      <rect x="3" y="3" width="58" height="58" rx="16" fill="none" stroke="#047857" strokeWidth="1.5" />
+      <rect x="4.5" y="4.5" width="55" height="55" rx="14.5" fill="none" stroke={`url(#${emHlId})`} strokeWidth="1.5" />
 
-      {/* High-Velocity "S" Monogram Vector */}
+      {/* High-Velocity "S" Monogram in Optic White */}
       <path
-        d="M44 20 C44 15 39 13 32 13 C22 13 17 18 17 24 C17 32 35 30 35 37 C35 42 30 44 23 44 C17 44 13 40.5 13 37"
+        d="M43 20 C43 14.8 38.5 13 32 13 C21.5 13 16.5 18 16.5 24.5 C16.5 33 35.5 30.5 35.5 37.5 C35.5 43.5 30 46.5 23 46.5 C16.5 46.5 12.5 42.5 12.5 37.5"
         fill="none"
         stroke="#FFFFFF"
         strokeWidth="6.5"
@@ -48,32 +59,32 @@ export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
         strokeLinejoin="round"
       />
 
-      {/* Forward Velocity Chevron Spark */}
+      {/* Forward Velocity Cyan Vector Spark */}
       <path
         d="M37 36 L44 43.5 L37 51"
         fill="none"
-        stroke={`url(#${sparkId})`}
+        stroke="#67E8F9"
         strokeWidth="4.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
 
-      {/* Emerald Live Verification Jewel */}
-      <circle cx="46" cy="17" r="4.2" fill="#10B981" stroke="#FFFFFF" strokeWidth="1.8" />
+      {/* Live Radar Beacon Jewel with Concentric Optical Highlight */}
+      <circle cx="45" cy="18" r="4.8" fill="#F59E0B" stroke="#FFFFFF" strokeWidth="2" />
+      <circle cx="45" cy="18" r="2.2" fill="#FFFFFF" />
     </svg>
   );
 }
 
 /**
- * Unified Scraper.co.in Brand Logo Component
- * Works seamlessly across Light surfaces (Landing page) and Dark surfaces (Cockpit/Master).
+ * Unified Scraper.co.in Brand Logo Component (White Luxury Executive Aesthetic)
  */
 export default function BrandLogo({
   size = 34,
   variant = 'full', // 'full' | 'icon' | 'compact'
-  theme = 'auto',   // 'auto' | 'light' | 'dark'
+  theme = 'light',  // 'light' (default) | 'dark'
   showTagline = false,
-  tagline = 'Direct Decision-Maker Intelligence',
+  tagline = 'Autonomous Lead Radar',
   className = '',
   style = {},
   onClick
@@ -90,7 +101,7 @@ export default function BrandLogo({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: isCompact ? 9 : 11,
+        gap: isCompact ? 10 : 12,
         cursor: onClick ? 'pointer' : 'default',
         userSelect: 'none',
         textDecoration: 'none',
@@ -101,13 +112,13 @@ export default function BrandLogo({
       <BrandIcon size={iconSize} />
 
       {!isIconOnly && (
-        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15, textAlign: 'left' }}>
           <span
             style={{
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif',
               fontWeight: 850,
-              fontSize: isCompact ? '16px' : '18px',
-              letterSpacing: '-0.025em',
+              fontSize: isCompact ? '16px' : '18.5px',
+              letterSpacing: '-0.03em',
               color: isDark ? '#FFFFFF' : '#0F172A',
               display: 'inline-flex',
               alignItems: 'baseline'
@@ -116,12 +127,12 @@ export default function BrandLogo({
             <span>Scraper</span>
             <span
               style={{
-                background: 'linear-gradient(135deg, #7C3AED 0%, #0284C7 100%)',
+                background: 'linear-gradient(135deg, #10B981 0%, #2563EB 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 fontWeight: 850,
-                letterSpacing: '-0.01em',
-                marginLeft: '1px'
+                letterSpacing: '-0.015em',
+                marginLeft: '1.5px'
               }}
             >
               .co.in
@@ -131,12 +142,12 @@ export default function BrandLogo({
           {showTagline && (
             <span
               style={{
-                fontSize: '9px',
+                fontSize: '9.5px',
                 fontWeight: 750,
-                letterSpacing: '0.14em',
+                letterSpacing: '0.12em',
                 textTransform: 'uppercase',
                 color: isDark ? '#94A3B8' : '#64748B',
-                marginTop: '2px'
+                marginTop: '2.5px'
               }}
             >
               {tagline}

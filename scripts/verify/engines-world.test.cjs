@@ -34,7 +34,18 @@ const ENGINE_MODULES = {
   justdial: 'engine-justdial',
   weddingbazaar: 'engine-weddingbazaar',
   weddingwire: 'engine-weddingwire',
-  mandap: 'engine-mandap'
+  mandap: 'engine-mandap',
+  social: 'engine-social-dork',
+  yellowpages: 'engine-yellowpages-global',
+  yelp: 'engine-yelp',
+  'bing-places': 'engine-bing-places',
+  tripadvisor: 'engine-tripadvisor',
+  'wikidata-businesses': 'engine-wikidata-businesses',
+  'social-dork-intl': 'engine-social-dork-intl',
+  cylex: 'engine-cylex',
+  trustpilot: 'engine-trustpilot',
+  'freeindex-uk': 'engine-freeindex-uk',
+  'goldenpages-ie': 'engine-goldenpages-ie'
 };
 
 let passed = 0;

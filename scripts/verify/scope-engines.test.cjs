@@ -6,8 +6,8 @@
  * engines run, and that client and Master runs differ deliberately:
  *
  *   city/mandal   directory engines once at the settlement, never a swarm
- *   district      + JustDial from up to 6 mandal towns          (Master only)
- *   state         + JustDial from up to 8 district cities       (Master only)
+ *   district      + JustDial from every resolved town              (Master only)
+ *   state         + JustDial from every district city              (Master only)
  *   client + district/state  falls back to the city plan and says so
  *
  * Run: node scripts/verify/scope-engines.test.cjs
@@ -64,12 +64,14 @@ check('scope aliases', () => {
 });
 
 console.log('\ncity plan (client)');
-check('no JustDial swarm, no district extras', () => {
+check('one JustDial query at the city, no swarm', () => {
   const plan = planScopeEngines({ ...baseCtx, zones: towns });
   assert.equal(plan.scope, 'city');
   assert.equal(plan.swarmTowns.length, 0);
-  assert.equal(plan.limits.zoneBudget.client, 64);
-  assert.equal(plan.jobs.some(job => job.task === 'scrapeJustDial'), false);
+  // No coverage cap: every resolved zone is dispatched.
+  assert.equal(plan.limits.zoneBudget.client, Infinity);
+  // JustDial runs once at the settlement in every scope, client included.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 1);
 });
 check('directory engines are queried once at the city', () => {
   const plan = planScopeEngines({ ...baseCtx, zones: towns });
@@ -79,35 +81,38 @@ check('directory engines are queried once at the city', () => {
 });
 
 console.log('\nmandal plan (client)');
-check('mandal sweep has no swarm and a 64-zone client budget', () => {
+check('mandal sweep has no swarm and no zone cap', () => {
   const plan = planScopeEngines({ ...baseCtx, plan: { resolvedScope: 'mandal' }, zones: towns });
   assert.equal(plan.scope, 'mandal');
   assert.equal(plan.swarmTowns.length, 0);
-  assert.equal(plan.jobs.some(job => job.task === 'scrapeJustDial'), false);
-  assert.equal(plan.limits.zoneBudget.client, 64);
-  assert.equal(plan.limits.zoneBudget.master, 400);
+  // One JustDial query at the mandal HQ, no swarm.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 1);
+  assert.equal(plan.limits.zoneBudget.client, Infinity);
+  assert.equal(plan.limits.zoneBudget.master, Infinity);
 });
 
 console.log('\ndistrict plan (Master)');
-check('district adds at most six mandal towns for JustDial', () => {
+check('district swarms JustDial across every resolved town', () => {
   const plan = planScopeEngines({
     ...baseCtx, isMaster: true, plan: { resolvedScope: 'district', district: 'Guntur' }, zones: towns
   });
   assert.equal(plan.scope, 'district');
-  assert.equal(plan.swarmTowns.length, 6);
+  // 8 towns, minus the base location "Guntur" -> 7 swarm centres. No cap.
+  assert.equal(plan.swarmTowns.length, 7);
   assert.deepEqual(plan.swarmTowns.slice(0, 2), ['Tenali', 'Mangalagiri']);
-  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 6);
+  // 7 swarm towns + 1 base JustDial query at the district HQ.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 8);
 });
-check('district uses the 2600-zone master budget', () => {
+check('district has no zone cap', () => {
   const plan = planScopeEngines({
     ...baseCtx, isMaster: true, plan: { resolvedScope: 'district', district: 'Guntur' }, zones: towns
   });
-  assert.equal(plan.limits.zoneBudget.master, 2600);
+  assert.equal(plan.limits.zoneBudget.master, Infinity);
   assert.equal(plan.limits.zoneBudget.client, 0);
 });
 
 console.log('\nstate plan (Master)');
-check('state swarms from district cities only, capped at eight', () => {
+check('state swarms JustDial across every district city', () => {
   const zones = [...towns, ...['Vijayawada', 'Visakhapatnam', 'Tirupati', 'Kurnool', 'Rajahmundry']
     .map(name => ({ zoneName: name, kind: 'district' }))];
   const plan = planScopeEngines({
@@ -116,7 +121,8 @@ check('state swarms from district cities only, capped at eight', () => {
   assert.equal(plan.scope, 'state');
   assert.equal(plan.swarmTowns.length, 5);
   assert.equal(plan.swarmTowns.includes('Tenali'), false);
-  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 5);
+  // 5 district-city swarm queries + 1 base JustDial query.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 6);
 });
 
 console.log('\nclient vs Master guard');
@@ -127,7 +133,8 @@ check('client district plan falls back to city and explains why', () => {
   assert.equal(plan.scope, 'city');
   assert.equal(plan.requestedScope, 'district');
   assert.equal(plan.clientAllowed, false);
-  assert.equal(plan.jobs.some(job => job.task === 'scrapeJustDial'), false);
+  // The fallback is a city plan: one JustDial query at the city, no swarm.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 1);
   assert.match(plan.notes.join(' '), /Master-only/);
 });
 check('master keeps the requested scope', () => {

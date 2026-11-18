@@ -176,34 +176,33 @@ async function buildGodLevelExcelBuffer(leads = [], options = {}) {
       const reviewVal = parseInt(lead.reviewsCount || lead.reviewCount || 0, 10);
       const isTopTier = ratingVal >= 4.5 && reviewVal >= 50;
 
-      // Phone Classification & Secondary Numbers
+      // Phone Classification & Secondary Numbers (Country-Aware)
+      const leadCountry = String(lead.country || 'IN').toUpperCase();
       const rawPhone = lead.phone || lead.primaryPhone || '';
-      const parsedPhone = rawPhone ? normalizePhone(rawPhone) : null;
+      const parsedPhone = rawPhone ? normalizePhone(rawPhone, { defaultCountry: leadCountry, allowInternational: true }) : null;
       let displayPhone = '';
       let phoneType = 'Unlisted';
-      let whatsappUrl = '';
-      let callUrl = '';
+      let whatsappUrl = lead.whatsappLink || '';
+      let callUrl = lead.callUrl || '';
 
       if (parsedPhone) {
+        displayPhone = parsedPhone.displayPhone || parsedPhone.e164 || rawPhone;
         if (parsedPhone.isMobile) {
-          displayPhone = parsedPhone.displayPhone || `+91 ${parsedPhone.national.slice(0, 5)} ${parsedPhone.national.slice(5)}`;
           phoneType = 'Mobile';
-          whatsappUrl = `https://wa.me/91${parsedPhone.national}`;
-          callUrl = parsedPhone.callUrl || `tel:+91${parsedPhone.national}`;
+          if (!whatsappUrl) whatsappUrl = `https://wa.me/${parsedPhone.digits || (leadCountry === 'IN' ? `91${parsedPhone.national}` : parsedPhone.national)}`;
+          if (!callUrl) callUrl = parsedPhone.callUrl || `tel:${parsedPhone.e164 || parsedPhone.national}`;
         } else if (parsedPhone.isLandline) {
-          displayPhone = parsedPhone.displayPhone || ('0' + parsedPhone.national);
-          phoneType = 'STD Landline';
+          phoneType = leadCountry === 'IN' ? 'STD Landline' : 'Landline';
           whatsappUrl = '';
-          callUrl = parsedPhone.callUrl || `tel:0${parsedPhone.national}`;
+          if (!callUrl) callUrl = parsedPhone.callUrl || `tel:${parsedPhone.e164 || parsedPhone.national}`;
         } else {
-          displayPhone = rawPhone;
           phoneType = 'Other';
-          callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+          if (!callUrl) callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
         }
       } else if (rawPhone) {
         displayPhone = rawPhone;
-        phoneType = rawPhone.trim().startsWith('0') ? 'STD Landline' : 'Contact';
-        callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
+        phoneType = rawPhone.trim().startsWith('0') ? (leadCountry === 'IN' ? 'STD Landline' : 'Landline') : 'Contact';
+        if (!callUrl) callUrl = `tel:${rawPhone.replace(/\D/g, '')}`;
       }
 
       // Alternate phone numbers deduplicated by national digits
@@ -212,11 +211,11 @@ async function buildGodLevelExcelBuffer(leads = [], options = {}) {
       const seenAltDigits = new Set([primaryDigits]);
       const alternatePhones = [];
       for (const p of allPhones) {
-        const parsedAlt = normalizePhone(p);
-        const altDigits = parsedAlt ? parsedAlt.national : String(p).replace(/\D/g, '').slice(-10);
+        const parsedAlt = normalizePhone(p, { defaultCountry: leadCountry, allowInternational: true });
+        const altDigits = parsedAlt ? (parsedAlt.digits || parsedAlt.national) : String(p).replace(/\D/g, '');
         if (altDigits && altDigits.length >= 7 && !seenAltDigits.has(altDigits)) {
           seenAltDigits.add(altDigits);
-          alternatePhones.push(parsedAlt ? parsedAlt.displayPhone : p);
+          alternatePhones.push(parsedAlt ? (parsedAlt.displayPhone || parsedAlt.e164) : p);
         }
       }
       const alternateStr = alternatePhones.join(', ');

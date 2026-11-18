@@ -15,8 +15,9 @@ const { baseDirectoryJobs, serpJobs } = require('./base');
 
 const LIMITS = {
   scope: 'district',
-  zoneBudget: { client: 0, master: 2600 },
-  justdialSwarm: 6,
+  zoneBudget: { client: 0, master: Infinity },
+  // No swarm cap: JustDial is queried from the HQ and every resolved town.
+  justdialSwarm: Infinity,
   deepEnrich: true
 };
 
@@ -29,7 +30,7 @@ function buildSwarmTowns({ zones, plan, baseLocation }) {
   const towns = (Array.isArray(zones) ? zones : [])
     .map(zone => zone.zoneName)
     .filter(name => name && !skip.has(String(name).trim().toLowerCase()));
-  return [...new Set(towns)].slice(0, LIMITS.justdialSwarm);
+  return [...new Set(towns)];
 }
 
 function buildPlan(ctx) {

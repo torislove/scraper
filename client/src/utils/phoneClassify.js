@@ -58,6 +58,86 @@ function isObviousSequence(national) {
 }
 
 /**
+ * Adaptive Phone Parser that supports India (+91) AND international numbers (US/CA +1, UK +44, AU +61, etc.)
+ */
+export function parseAdaptivePhone(value, defaultCountry = 'IN') {
+  const rawValue = (value && typeof value === 'object')
+    ? (value.displayPhone || value.display || value.e164 || value.national || value.phone || value.raw || '')
+    : value;
+  const text = String(rawValue == null ? '' : rawValue).trim();
+  if (!text || /requires|obfuscated/i.test(text)) return null;
+
+  for (const candidate of candidatesFrom(text)) {
+    let parsed;
+    try {
+      parsed = parsePhoneNumberFromString(candidate, defaultCountry || 'IN');
+    } catch (e) {
+      continue;
+    }
+    if (!parsed || !parsed.isValid()) {
+      try {
+        parsed = parsePhoneNumberFromString(candidate);
+      } catch (e) {
+        continue;
+      }
+    }
+    if (!parsed || !parsed.isValid()) continue;
+
+    const country = parsed.country || defaultCountry || 'IN';
+    const national = parsed.nationalNumber || '';
+    if (national.length < 5) continue;
+    if (isObviousSequence(national)) continue;
+
+    const type = parsed.getType ? (parsed.getType() || 'UNKNOWN') : 'UNKNOWN';
+    const isLandline = type === 'FIXED_LINE';
+    const isMobile = type === 'MOBILE' || type === 'FIXED_LINE_OR_MOBILE' || (!isLandline && national.length >= 7);
+    const digits = String(parsed.number).replace(/\D/g, '');
+
+    const display = parsed.formatInternational ? parsed.formatInternational() : parsed.number;
+    const callUrl = `tel:${parsed.number}`;
+    const whatsappUrl = isMobile ? `https://wa.me/${digits}` : '';
+
+    return {
+      raw: text,
+      display,
+      e164: parsed.number,
+      national,
+      country,
+      type: isMobile ? 'MOBILE' : 'FIXED_LINE',
+      phoneType: isMobile ? 'mobile' : 'landline',
+      isMobile,
+      isLandline,
+      callUrl,
+      whatsappUrl
+    };
+  }
+
+  const cleanDigits = text.replace(/\D/g, '');
+  if (cleanDigits.length >= 7) {
+    const isUS = defaultCountry === 'US' || defaultCountry === 'CA' || (cleanDigits.length === 10 && !cleanDigits.startsWith('91'));
+    const display = isUS && cleanDigits.length === 10
+      ? `(${cleanDigits.slice(0, 3)}) ${cleanDigits.slice(3, 6)}-${cleanDigits.slice(6)}`
+      : text;
+    const fullDigits = (isUS && cleanDigits.length === 10) ? `1${cleanDigits}` : cleanDigits;
+    return {
+      raw: text,
+      display,
+      e164: `+${fullDigits}`,
+      national: cleanDigits.slice(-10),
+      country: defaultCountry,
+      type: 'MOBILE',
+      phoneType: 'mobile',
+      isMobile: true,
+      isLandline: false,
+      callUrl: `tel:+${fullDigits}`,
+      whatsappUrl: `https://wa.me/${fullDigits}`
+    };
+  }
+
+  return null;
+}
+
+/**
  * Parse one phone string (or a phone entry object) using Indian rules.
  * @returns {null|{raw:string,display:string,e164:string,national:string,type:string,phoneType:string,isMobile:boolean,isLandline:boolean,callUrl:string,whatsappUrl:string}}
  */
@@ -156,24 +236,58 @@ export function getDisplayPhone(vendor) {
   return null;
 }
 
-export function isMobilePhone(phoneStr) {
+export function isMobilePhone(phoneStr, countryHint = null) {
   if (!phoneStr) return false;
+  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
+  if (adaptive) return Boolean(adaptive.isMobile);
+
   const parsed = parseIndianPhone(phoneStr);
   if (parsed) return Boolean(parsed.isMobile);
+
   const digits = String(phoneStr).replace(/\D/g, '');
   const last10 = digits.slice(-10);
-  return last10.length === 10 && /^[6-9]/.test(last10);
+  return last10.length === 10;
 }
 
-export function whatsappNumber(phoneStr) {
+export function whatsappNumber(phoneStr, countryHint = null) {
+  if (!phoneStr) return '';
+  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
+  if (adaptive && adaptive.isMobile) {
+    return adaptive.e164 ? adaptive.e164.replace(/\D/g, '') : adaptive.national;
+  }
   const parsed = parseIndianPhone(phoneStr);
-  return parsed && parsed.isMobile ? parsed.national : '';
+  if (parsed && parsed.isMobile) {
+    return `91${parsed.national}`;
+  }
+  const digits = String(phoneStr).replace(/\D/g, '');
+  return digits.length >= 10 ? digits : '';
 }
 
-export function classifyPhone(phoneStr) {
+export function classifyPhone(phoneStr, countryHint = null) {
   if (!phoneStr || String(phoneStr).includes('Requires')) {
     return { type: 'none', phoneType: 'none', raw: '', digits: '', display: 'No contact', isMobile: false, isLandline: false, hasWhatsapp: false };
   }
+  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
+  if (adaptive) {
+    const isMobile = Boolean(adaptive.isMobile);
+    const digits = adaptive.e164 ? adaptive.e164.replace(/\D/g, '') : (adaptive.national || String(phoneStr).replace(/\D/g, ''));
+    return {
+      type: isMobile ? 'mobile' : 'landline',
+      phoneType: isMobile ? 'mobile' : 'landline',
+      isMobile,
+      isLandline: !isMobile,
+      hasWhatsapp: isMobile,
+      raw: phoneStr,
+      digits,
+      display: adaptive.display || phoneStr,
+      callUrl: adaptive.callUrl || `tel:${phoneStr}`,
+      whatsappUrl: (name, city, category, rating) => {
+        const text = `Hi ${name || 'there'}, I found your ${category || 'business'} listing${city ? ` in ${city}` : ''}${rating ? ` (${rating}★)` : ''} and wanted to connect.`;
+        return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+      }
+    };
+  }
+
   const parsed = parseIndianPhone(phoneStr);
   if (parsed && parsed.isMobile) {
     const national = parsed.national;
