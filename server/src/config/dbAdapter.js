@@ -1,24 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const mongoose = require('mongoose');
-
-// Background MongoDB Connection for Persistent Dual-Storage (Disabled as requested)
-/*
-if (process.env.MONGODB_URI) {
-  mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ Connected to MongoDB (Dual-Persistence Active)'))
-    .catch(e => console.error('MongoDB Connection Error:', e.message));
-}
-*/
-
-// Flexible Schema to accept all scraped fields
-const vendorSchema = new mongoose.Schema({
-  id: { type: String, required: true, unique: true },
-  userId: String,
-  name: String
-}, { strict: false });
-
-const VendorModel = mongoose.models.Vendor || mongoose.model('Vendor', vendorSchema);
 
 const { DATA_DIR: dataDir } = require('./paths');
 const credits = require('../services/credits');
@@ -65,38 +46,8 @@ let isWritingOob = false;
 let pendingOobFlush = false;
 let currentOobRun = null;
 
-let pendingMongoUpdates = {};
-let mongoWriteTimeout = null;
-
 function flushSync() {
   vendorStore.flushNow();
-}
-
-function _flushMongo() {
-  const updates = Object.values(pendingMongoUpdates);
-  if (updates.length === 0) return;
-  pendingMongoUpdates = {};
-
-  if (mongoose.connection.readyState === 1) {
-    const bulkOps = updates.map(vendor => ({
-      updateOne: {
-        filter: { id: vendor.id },
-        update: { $set: vendor },
-        upsert: true
-      }
-    }));
-    VendorModel.bulkWrite(bulkOps)
-      .then(res => {
-        console.log(`[MongoDB Dual-Persistence] Bulk upserted ${updates.length} vendors to cloud database.`);
-      })
-      .catch(err => {
-        console.error('[MongoDB Dual-Persistence] Bulk write failed, attempting individual fallbacks:', err.message);
-        updates.forEach(vendor => {
-          VendorModel.updateOne({ id: vendor.id }, vendor, { upsert: true })
-            .catch(e => console.error('[MongoDB Dual-Persistence] Fallback write failed:', e.message));
-        });
-      });
-  }
 }
 
 function _flushOutOfBounds() {
@@ -218,10 +169,6 @@ function saveVendor(userId, vendor) {
   }
 
   vendorStore.upsert(vendor);
-
-  pendingMongoUpdates[vendor.id] = vendor;
-  clearTimeout(mongoWriteTimeout);
-  mongoWriteTimeout = setTimeout(_flushMongo, 2000);
   return true;
 }
 
