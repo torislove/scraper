@@ -1309,6 +1309,131 @@ textarea:focus {
   box-shadow: var(--gb-emboss-sm) !important;
 }
 
+/* ---------- CRM Kanban, saved folders, vendor drawer ----------
+   v2.css paints the Kanban board, the folder grid and the lead drawer as a
+   navy glass deck with !important. They were the last black surfaces in the
+   command centre, so they get the same moulded cream shell as the tables. */
+.v2-crm-board-view,
+.v2-folders-view,
+.v2-leads-view {
+  background: transparent !important;
+}
+
+.v2-crm-column {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-3) 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+}
+
+/* The CRM scorecard uses Tailwind's dark-theme text-*-400 colours and a
+   near-white value colour, both of which vanish on a cream card. */
+.v2-crm-board-stats {
+  background: var(--gb-shell-3) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+}
+
+.v2-crm-stat-box {
+  background: #fffef9 !important;
+}
+
+.v2-crm-board-stats span { color: var(--gb-ink-muted) !important; }
+.v2-crm-board-stats b { color: var(--gb-ink) !important; }
+.v2-crm-board-stats .text-cyan-400 { color: #1c6b6b !important; }
+.v2-crm-board-stats .text-emerald-400 { color: #1f6b3a !important; }
+.v2-crm-board-stats .text-lime-400 { color: var(--gb-green-deep) !important; }
+
+.v2-view-kicker { color: var(--gb-green-deep) !important; }
+
+.v2-crm-column > header {
+  background: linear-gradient(180deg, #fffef9, var(--gb-shell-2)) !important;
+  border-bottom: 1px solid var(--gb-line) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-crm-column > header b { color: var(--gb-ink) !important; }
+.v2-crm-column > header small { color: var(--gb-ink-muted) !important; }
+
+.v2-crm-card {
+  background: linear-gradient(180deg, #fffef9 0%, #f4f1e2 100%) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-crm-card:hover {
+  border-color: var(--gb-green) !important;
+  box-shadow: 0 6px 18px rgba(79, 102, 25, 0.18) !important;
+  transform: translateY(-2px) !important;
+}
+
+.v2-crm-card b { color: var(--gb-ink) !important; }
+.v2-crm-card > header small { color: var(--gb-ink-muted) !important; }
+.v2-crm-card-meta { color: var(--gb-ink-soft) !important; }
+.v2-crm-card-meta svg { color: var(--gb-green-deep) !important; }
+
+.v2-crm-card footer select {
+  background: #fffef9 !important;
+  color: var(--gb-ink) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+}
+
+.v2-crm-card footer button {
+  background: var(--gb-shell-2) !important;
+  color: var(--gb-ink) !important;
+  border: 1px solid var(--gb-line) !important;
+}
+
+.v2-crm-column-empty { color: var(--gb-ink-faint) !important; }
+
+.v2-run-card {
+  background: linear-gradient(180deg, #fffef9 0%, #f1eedd 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-run-card:hover {
+  border-color: var(--gb-green) !important;
+  box-shadow: 0 10px 26px rgba(79, 102, 25, 0.18) !important;
+  transform: translateY(-2px) !important;
+}
+
+.v2-run-card.is-active {
+  border-color: var(--gb-green) !important;
+  background: linear-gradient(180deg, #f7f4e4 0%, #e9e5cd 100%) !important;
+  box-shadow: 0 0 0 2px rgba(79, 102, 25, 0.16) !important;
+}
+
+.v2-run-title { color: var(--gb-ink) !important; }
+
+.v2-folder-head {
+  background: linear-gradient(180deg, #fffef9, var(--gb-shell-2)) !important;
+  color: var(--gb-ink) !important;
+  border-bottom: 1px solid var(--gb-line) !important;
+}
+
+.v2-vendor-drawer {
+  background: linear-gradient(180deg, #fffef9 0%, #f0ecd8 100%) !important;
+  border-left: 2px solid var(--gb-line-strong) !important;
+  box-shadow: -15px 0 50px rgba(58, 70, 48, 0.18) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-drawer-data-card {
+  background: rgba(255, 254, 249, 0.92) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  border-radius: 10px !important;
+}
+
+.v2-drawer-card-head {
+  border-bottom: 1px solid var(--gb-line) !important;
+  color: var(--gb-ink-muted) !important;
+}
+
+.v2-data-val { color: var(--gb-ink) !important; }
+.v2-data-label { color: var(--gb-ink-muted) !important; }
+
 } /* #root */
 
 @keyframes gb-swarm-pulse {

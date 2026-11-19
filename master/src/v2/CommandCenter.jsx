@@ -1852,74 +1852,114 @@ export default function CommandCenter() {
   };
 
   const effectiveRuns = useMemo(() => {
-    const map = new Map();
+    const liveId = (run?.status === 'running' ? (run.sessionId || run.id) : '') || activeSessionIdRef.current || '';
+
+    // Vendor groups exist only to keep the live run's card growing and to give
+    // each folder its in-memory vendor ids. They are never allowed to invent a
+    // folder or to override a saved folder's own count.
+    const vendorGroups = new Map();
     for (const vendor of vendors) {
       const id = vendor.sessionId || 'unassigned';
-      const existing = map.get(id) || {
+      const group = vendorGroups.get(id) || {
         id,
-        category: vendor.category || 'Business search',
-        location: [vendor.city || vendor.village, vendor.district, vendor.state].filter(Boolean).join(', ') || 'India',
-        timestamp: vendor.scrapedAt || null,
         leadCount: 0,
         phoneCount: 0,
         deepCount: 0,
         dealValueTotal: 0,
-        status: 'saved',
-        vendorIds: []
+        vendorIds: [],
+        timestamp: null
       };
-      existing.leadCount += 1;
-      if (getDisplayPhone(vendor)) existing.phoneCount += 1;
-      if (vendor.deepExtractedAt) existing.deepCount += 1;
-      if (vendor.dealValue) existing.dealValueTotal = (existing.dealValueTotal || 0) + (Number(vendor.dealValue) || 0);
-      if (vendor.scrapedAt && (!existing.timestamp || new Date(vendor.scrapedAt) > new Date(existing.timestamp))) existing.timestamp = vendor.scrapedAt;
-      existing.vendorIds.push(vendor.id);
-      map.set(id, existing);
+      group.leadCount += 1;
+      if (getDisplayPhone(vendor)) group.phoneCount += 1;
+      if (vendor.deepExtractedAt) group.deepCount += 1;
+      if (vendor.dealValue) group.dealValueTotal += Number(vendor.dealValue) || 0;
+      if (vendor.scrapedAt && (!group.timestamp || new Date(vendor.scrapedAt) > new Date(group.timestamp))) group.timestamp = vendor.scrapedAt;
+      group.vendorIds.push(vendor.id);
+      vendorGroups.set(id, group);
     }
+
+    const map = new Map();
+
+    // Saved folders are authoritative: the card must describe exactly the rows
+    // its folder opens and exports.
     for (const session of sessions) {
-      const existing = map.get(session.id) || {
+      const group = vendorGroups.get(session.id);
+      const isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
+      // Out-of-Bound folders are rejected rows kept for review. They are never
+      // a client folder and must not be labelled as a district sweep.
+      const isOutOfBound = Boolean(session.isOutOfBound || session.metadata?.isOutOfBound);
+      const hierarchy = session.hierarchy || null;
+      const mandals = Array.isArray(hierarchy?.mandals) ? hierarchy.mandals : null;
+      map.set(session.id, {
         id: session.id,
         category: session.category || 'Business search',
         location: session.location || 'India',
         timestamp: session.timestamp,
         leadCount: session.leadCount || 0,
         phoneCount: session.phoneCount || 0,
-        deepCount: 0,
-        dealValueTotal: 0,
-        status: session.metadata?.status || 'saved',
-        vendorIds: []
-      };
-      existing.customName = session.customName || existing.customName || '';
-      existing.name = session.customName || session.name || existing.name || (session.category ? `${session.category} in ${session.location || 'India'}` : 'Lead Folder');
-      existing.category = session.category || existing.category;
-      existing.location = session.location || existing.location;
-      existing.timestamp = session.timestamp || existing.timestamp;
-      existing.leadCount = Math.max(existing.leadCount, session.leadCount || 0);
-      existing.phoneCount = Math.max(existing.phoneCount, session.phoneCount || 0);
-      existing.tags = Array.isArray(session.tags) ? session.tags : existing.tags || [];
-      existing.color = session.color || existing.color || '';
-      existing.notes = session.notes || existing.notes || '';
-      if (session.dealValueTotal != null && Number(session.dealValueTotal) > 0) {
-        existing.dealValueTotal = Number(session.dealValueTotal);
-      }
-      existing.isMasterSweep = Boolean(session.isMasterSweep || session.metadata?.isMasterSweep || /master_/i.test(session.id) || /sweep/i.test(session.location || ''));
-      // Out-of-Bound folders are rejected rows kept for review. They are never
-      // a client folder and must not be labelled as a district sweep.
-      existing.isOutOfBound = Boolean(session.isOutOfBound || session.metadata?.isOutOfBound);
-      existing.oobDistrict = session.oobDistrict || session.metadata?.oobDistrict || existing.oobDistrict || null;
-      existing.hierarchy = session.hierarchy || existing.hierarchy || null;
-      const mandals = Array.isArray(session.hierarchy?.mandals) ? session.hierarchy.mandals : null;
-      if (mandals) {
-        existing.mandalCount = mandals.length;
-        existing.villageCount = mandals.reduce((sum, m) => sum + (Array.isArray(m.villages) ? m.villages.length : 0), 0);
-      }
-      existing.masterScope = existing.isOutOfBound
-        ? null
-        : (session.masterScope || (existing.isMasterSweep ? (/state/i.test(existing.location || '') ? 'state' : 'district') : null));
-      existing.status = session.metadata?.status || existing.status;
-      map.set(session.id, existing);
+        deepCount: group ? group.deepCount : 0,
+        dealValueTotal: Number(session.dealValueTotal) > 0
+          ? Number(session.dealValueTotal)
+          : (group ? group.dealValueTotal : 0),
+        status: session.status || session.metadata?.status || 'saved',
+        vendorIds: group ? group.vendorIds : [],
+        customName: session.customName || '',
+        name: session.customName || session.name || (session.category ? `${session.category} in ${session.location || 'India'}` : 'Lead Folder'),
+        tags: Array.isArray(session.tags) ? session.tags : [],
+        color: session.color || '',
+        notes: session.notes || '',
+        isMasterSweep,
+        isOutOfBound,
+        oobDistrict: session.oobDistrict || session.metadata?.oobDistrict || null,
+        hierarchy,
+        mandalCount: mandals ? mandals.length : undefined,
+        villageCount: mandals ? mandals.reduce((sum, m) => sum + (Array.isArray(m.villages) ? m.villages.length : 0), 0) : undefined,
+        masterScope: isOutOfBound
+          ? null
+          : (session.masterScope || (isMasterSweep ? (/state/i.test(session.location || '') ? 'state' : 'district') : null))
+      });
     }
+
+    // A run that is still writing may not have written its folder file yet.
+    // That live run is the only card the store is allowed to create.
+    if (liveId && liveId !== 'unassigned') {
+      const group = vendorGroups.get(liveId);
+      const existing = map.get(liveId);
+      if (existing) {
+        if (group && group.leadCount > existing.leadCount) {
+          existing.leadCount = group.leadCount;
+          existing.phoneCount = Math.max(existing.phoneCount, group.phoneCount);
+        }
+        existing.status = 'running';
+        if (group?.timestamp) existing.timestamp = group.timestamp;
+      } else if (group) {
+        const sample = vendors.find(v => (v.sessionId || 'unassigned') === liveId) || {};
+        map.set(liveId, {
+          id: liveId,
+          category: run?.category || sample.category || 'Business search',
+          location: [sample.city || sample.village, sample.district, sample.state].filter(Boolean).join(', ') || run?.location || 'India',
+          timestamp: group.timestamp,
+          leadCount: group.leadCount,
+          phoneCount: group.phoneCount,
+          deepCount: group.deepCount,
+          dealValueTotal: group.dealValueTotal,
+          status: 'running',
+          vendorIds: group.vendorIds,
+          name: run?.category ? `${run.category} in ${run.location || 'India'}` : '',
+          tags: [],
+          color: '',
+          notes: '',
+          isMasterSweep: false,
+          isOutOfBound: false,
+          oobDistrict: null,
+          hierarchy: null,
+          masterScope: null
+        });
+      }
+    }
+
     return Array.from(map.values()).sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
-  }, [vendors, sessions]);
+  }, [vendors, sessions, run]);
 
   const activeScrapeId = (run?.status === 'running' || run?.status === 'aborted' || run?.status === 'complete' || run?.status === 'completed') ? (run.sessionId || run.id) : null;
   const effectiveSessionFilter = sessionFilter || activeScrapeId || activeSessionIdRef.current || (effectiveRuns[0]?.id && effectiveRuns[0]?.id !== 'unassigned' ? effectiveRuns[0]?.id : null);

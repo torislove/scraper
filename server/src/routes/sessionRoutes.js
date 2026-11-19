@@ -167,31 +167,60 @@ function purgeSessionLeads(sessionId) {
 }
 
 /**
- * Folders are snapshots. Deep enrichment and late stragglers keep improving the
- * live store after a run finishes, so an export must read the freshest version
- * of every lead or the customer silently loses a phone number they paid for.
+ * A folder is the set of leads its own run produced. The live store is shared
+ * by every run, and `bySession()` also matches rows that merely list a session
+ * in their history, so reading it naively mixed leads from other folders into
+ * this one (a 405-lead folder exported 829 rows, 424 of them from other runs).
  *
- * With master filters in play we only refresh rows the folder already contains;
- * we never re-introduce a lead that was filtered out on purpose.
+ * This helper is the single definition of folder membership used by the
+ * sidebar header, the folder viewer and every export format:
+ *   1. the rows saved in the folder file,
+ *   2. refreshed in place with their freshest store version,
+ *   3. plus store rows the run itself owns (`sessionId`/`lastSessionId`),
+ *      which covers late stragglers a crashed run never wrote to disk.
+ * Rows that only reference the session in `sessionIds` stay in their own folder.
  */
-function freshenLeadsFromStore(sessionId, folderLeads, metadata) {
-  const base = Array.isArray(folderLeads) ? folderLeads : [];
+function leadIdentity(lead) {
+  if (!lead) return '';
+  if (lead.id) return `id:${lead.id}`;
+  const name = String(lead.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const phone = String(lead.phone || lead.primaryPhone || '').replace(/\D/g, '').slice(-10);
+  const city = String(lead.city || lead.area || '').toLowerCase().trim();
+  return `name:${name}|${phone}|${city}`;
+}
+
+function withOwnSessionLeads(sessionId, folderLeads) {
+  const base = Array.isArray(folderLeads) ? folderLeads.slice() : [];
   if (!sessionId) return base;
   try {
     const dbAdapter = require('../config/dbAdapter');
     const live = dbAdapter.getVendorsBySession(sessionId);
     if (!Array.isArray(live) || !live.length) return base;
 
-    const filters = metadata && metadata.filters;
-    const allowAdd = !(filters && Object.keys(filters).length);
-    const byId = new Map(base.filter(Boolean).map(lead => [lead.id, lead]));
+    // An empty folder is a recovery case: any row that references it is better
+    // than showing nothing. A populated folder only accepts its own rows.
+    const recovery = base.length === 0;
+    const index = new Map();
+    for (const lead of base) {
+      if (!lead) continue;
+      index.set(leadIdentity(lead), lead);
+    }
 
     for (const row of live) {
-      if (!row || !row.id) continue;
-      if (byId.has(row.id)) byId.set(row.id, row);
-      else if (allowAdd) byId.set(row.id, row);
+      if (!row) continue;
+      const owns = row.sessionId === sessionId || row.lastSessionId === sessionId;
+      if (!owns && !recovery) continue;
+
+      const key = leadIdentity(row);
+      const existing = index.get(key) || (row.id ? index.get(`id:${row.id}`) : null);
+      if (existing) {
+        Object.assign(existing, row);
+      } else {
+        base.push(row);
+        index.set(key, row);
+      }
     }
-    return Array.from(byId.values());
+    return base;
   } catch (e) {
     return base;
   }
@@ -369,11 +398,21 @@ function buildLeadHierarchy(leads, { boundary = null, fallbackDistrict = '' } = 
   };
 }
 
+function storeLeadRevision() {
+  try {
+    const rows = require('../config/dbAdapter').getVendors();
+    return Array.isArray(rows) ? rows.length : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
 function readSessionHeader(filePath, fallbackClientId) {
   try {
     const stat = fs.statSync(filePath);
+    const revision = storeLeadRevision();
     const cached = sessionHeaderCache.get(filePath);
-    if (cached && cached.mtimeMs === stat.mtimeMs) {
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.revision === revision) {
       return cached.summary;
     }
 
@@ -381,27 +420,9 @@ function readSessionHeader(filePath, fallbackClientId) {
     const data = JSON.parse(raw);
     if (!data || !data.id) return null;
 
-    let leads = Array.isArray(data.leads) ? data.leads : [];
-    // Instant Database Auto-Backfill: If vault file has 0 leads but DB has harvested leads, recover immediately!
-    if (leads.length === 0) {
-      try {
-        const dbAdapter = require('../config/dbAdapter');
-        const dbLeads = (dbAdapter.getVendors() || []).filter(v =>
-          v.sessionId === data.id ||
-          v.lastSessionId === data.id ||
-          (Array.isArray(v.sessionIds) && v.sessionIds.includes(data.id))
-        );
-        if (dbLeads.length > 0) {
-          leads = dbLeads;
-          data.leads = dbLeads;
-          // Read paths never write. The old code persisted this backfill here,
-          // which mutated a folder merely because the sidebar listed it.
-          data.leadCount = dbLeads.length;
-          data.phoneCount = dbLeads.filter(l => isMobileNumber(l.phone)).length;
-          data.verifiedCount = dbLeads.filter(l => l.verified || l.phone).length;
-        }
-      } catch (e) {}
-    }
+    // The folder header must count exactly what the folder viewer and the
+    // exports will return: the saved rows plus this run's own late stragglers.
+    const leads = withOwnSessionLeads(data.id, data.leads);
 
     // The file is the source of truth. `leadCount` used to be a stale header
     // field (the sidebar showed 151 while the folder held 114), so it is always
@@ -478,7 +499,7 @@ function readSessionHeader(filePath, fallbackClientId) {
       metadata: data.metadata || {}
     };
 
-    sessionHeaderCache.set(filePath, { mtimeMs: stat.mtimeMs, summary });
+    sessionHeaderCache.set(filePath, { mtimeMs: stat.mtimeMs, revision, summary });
     return summary;
   } catch (e) {
     return null;
@@ -1078,25 +1099,10 @@ router.get('/export/:sessionId', async (req, res) => {
     }
     if (!data) return res.status(404).json({ error: 'Session not found' });
 
-    let leads = freshenLeadsFromStore(sessionId, data.leads, data.metadata);
-    // Instant DB auto-backfill if vault file was empty
-    if (!Array.isArray(leads) || leads.length === 0) {
-      try {
-        const dbAdapter = require('../config/dbAdapter');
-        leads = (dbAdapter.getVendors() || []).filter(v =>
-          v.sessionId === sessionId ||
-          v.lastSessionId === sessionId ||
-          (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
-        );
-      } catch (e) {}
-    }
+    // Exactly the same rows the folder viewer shows, so the file a customer
+    // downloads is the folder they opened - not a mix of other runs.
+    const leads = withOwnSessionLeads(sessionId, data.leads);
 
-    try {
-      const { isVendorRelevant } = require('../services/categoryFidelity');
-      if (data.category && Array.isArray(leads)) {
-        leads = leads.filter(l => isVendorRelevant(l, data.category));
-      }
-    } catch (e) {}
     const baseName = `${data.category || 'leads'}_${data.location || 'india'}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
 
     const exportOptions = {
@@ -1538,45 +1544,11 @@ router.get(['/:sessionId', '/:userId/:sessionId'], (req, res) => {
           return res.status(403).json({ error: 'Access denied: Master territorial sweeps are restricted to Master Command Center.' });
         }
 
-        // A folder is returned exactly as it was saved. Category fidelity and
-        // dedupe already ran before the save; repeating them here silently
-        // removed rows (114 → 104) and made two views of the same folder
-        // disagree. Any clean-up must be an explicit, archived audit instead.
-
-        // Merge with current live dbAdapter vendors for freshest CRM stages, notes, and contacts!
-        try {
-          const dbAdapter = require('../config/dbAdapter');
-          const liveVendors = dbAdapter.getVendors() || [];
-          const liveMap = new Map(liveVendors.map(v => [v.id, v]));
-
-          const dbSessionLeads = liveVendors.filter(v =>
-            v.sessionId === safeSessionId ||
-            v.lastSessionId === safeSessionId ||
-            (Array.isArray(v.sessionIds) && v.sessionIds.includes(safeSessionId))
-          );
-
-          if ((!Array.isArray(data.leads) || data.leads.length === 0) && dbSessionLeads.length > 0) {
-            data.leads = dbSessionLeads;
-            data.leadCount = dbSessionLeads.length;
-            data.phoneCount = dbSessionLeads.filter(l => isMobileNumber(l.phone)).length;
-            data.verifiedCount = dbSessionLeads.filter(l => l.verified || l.phone).length;
-            // In-memory recovery only; the folder file is never rewritten here.
-          } else if (Array.isArray(data.leads)) {
-            data.leads = data.leads.map(lead => {
-              const live = liveMap.get(lead.id);
-              if (!live) return lead;
-              return {
-                ...lead,
-                ...live,
-                phone: live.phone || lead.phone,
-                crmStage: live.crmStage || lead.crmStage || 'new',
-                crmStatus: live.crmStatus || lead.crmStatus || 'new',
-                crmNotes: live.crmNotes || lead.crmNotes,
-                crmTasks: live.crmTasks || lead.crmTasks
-              };
-            });
-          }
-        } catch (e) { /* ignore merge error */ }
+        // Same definition of folder membership as the sidebar and the exports:
+        // saved rows, refreshed in place, plus this run's own late stragglers.
+        // A lead that only lists this session in its history stays in the
+        // folder it was first scraped into.
+        data.leads = withOwnSessionLeads(safeSessionId, data.leads);
 
         // Always derive the counts and the district → mandal → village tree from
         // the rows actually returned, so the folder header and the sidebar agree.
@@ -1668,13 +1640,7 @@ router.get('/export/:userId/:sessionId', async (req, res) => {
     }
 
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    let leads = freshenLeadsFromStore(safeSessionId, data.leads, data.metadata);
-    try {
-      const { isVendorRelevant } = require('../services/categoryFidelity');
-      if (data.category && Array.isArray(leads)) {
-        leads = leads.filter(l => isVendorRelevant(l, data.category));
-      }
-    } catch (e) {}
+    const leads = withOwnSessionLeads(safeSessionId, data.leads);
     const baseName = `${data.category || 'leads'}_${data.location || 'india'}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
 
     // God-Level Excel Format

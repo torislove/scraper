@@ -230,6 +230,17 @@ const PRESETS = [
 ];
 
 async function main() {
+  // Merge with the previous report instead of overwriting it. Measuring one
+  // engine at a time is the only practical way to run this harness (each
+  // engine can take two minutes), so a single-engine run must not erase the
+  // results the other engines already produced for the same city.
+  let previous = null;
+  try {
+    previous = JSON.parse(fs.readFileSync(OUT_FILE, 'utf8'));
+  } catch (e) {
+    previous = null;
+  }
+
   const report = {
     generatedAt: new Date().toISOString(),
     perEngineTimeoutMs: PER_ENGINE_TIMEOUT_MS,
@@ -264,6 +275,20 @@ async function main() {
 
     report.runs.push({ ...preset, results });
   }
+
+  // Fold this run's engines into the previous report, keeping every engine
+  // that was measured earlier for the same city.
+  const keyOf = run => `${run.country}|${run.city}|${run.category}`.toLowerCase();
+  const carried = new Map((previous?.runs || []).map(run => [keyOf(run), run]));
+  for (const run of report.runs) {
+    const prev = carried.get(keyOf(run));
+    if (!prev) continue;
+    const byEngine = new Map((prev.results || []).map(r => [r.key, r]));
+    for (const r of run.results) byEngine.set(r.key, r);
+    run.results = [...byEngine.values()];
+    carried.delete(keyOf(run));
+  }
+  for (const leftover of carried.values()) report.runs.push(leftover);
 
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, JSON.stringify(report, null, 2));

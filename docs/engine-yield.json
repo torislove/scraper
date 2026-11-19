@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T02:25:04.613Z",
+  "generatedAt": "2026-11-19T04:25:28.379Z",
   "perEngineTimeoutMs": 180000,
   "runs": [
     {
@@ -12,7 +12,7 @@
           "label": "Web Discovery",
           "ok": true,
           "rows": 6,
-          "ms": 130473,
+          "ms": 134261,
           "skipped": null,
           "phones": 0,
           "websites": 0,
@@ -22,8 +22,8 @@
           "key": "bing-places",
           "label": "Bing Places",
           "ok": true,
-          "rows": 9,
-          "ms": 18585,
+          "rows": 0,
+          "ms": 133799,
           "skipped": null,
           "phones": 0,
           "websites": 0,
@@ -34,11 +34,19 @@
           "label": "TripAdvisor",
           "ok": true,
           "rows": 0,
-          "ms": 121692,
+          "ms": 122656,
           "skipped": null,
           "phones": 0,
           "websites": 0,
           "emails": 0
+        },
+        {
+          "key": "social-dork",
+          "label": "Social Dork (Intl)",
+          "ok": false,
+          "rows": 0,
+          "ms": 180023,
+          "error": "Social Dork (Intl) timed out after 180s"
         }
       ]
     }
