@@ -17,6 +17,7 @@ a paid data source — it only moves the existing keyless engines into container
 |---|---|
 | One Node process, port 5002 | `api` Deployment (3+ pods) behind an Ingress |
 | Scrapes run in-process (`activeSessions`) | one **Kubernetes Job per scrape**, created by a controller |
+| A scrape only starts if the process is free | every scrape is accepted, queued with a job ID, then run |
 | Leads in `scraped_vendors.json` (17.6 MB, single writer, `.store.lock`) | Postgres `leads` + `session_leads` |
 | Queue in `data/jobs.json` | Postgres `jobs` table + Redis wake-up |
 | SSE hub in one process | Redis pub/sub fan-out, any api pod can serve the stream |
@@ -179,6 +180,67 @@ Every transition is one `UPDATE jobs SET status=…` plus one `job_events` row. 
 Resume already exists (`completedZoneIndices` / `completedZoneNames` in the orchestrator).
 It becomes: controller re-creates a Job with `RESUME_ZONES=<json>` and the worker skips
 those zones.
+
+### 3.4 Demand, admission and capacity
+
+The requirement is "if 100 customers, 100 scrapes; if 10,000, 10,000". That is a
+**queue** requirement, not a pod-count requirement, and the plan treats it that way.
+
+Every request is accepted immediately:
+
+```
+POST /api/scrape/omni  →  202 { jobId, status: "queued", queuePosition, etaSeconds }
+```
+
+The row is written to `jobs` before the response leaves the api. Nothing is rejected because
+the browser pool is busy. The controller then runs as many Jobs as the *source budget* and
+the cluster allow:
+
+```
+running = min(queue_depth, MAX_PARALLEL_JOBS, source_budget, cluster_capacity)
+```
+
+Why not literally 10,000 pods at once:
+
+| Resource | 10,000 simultaneous workers | Reality |
+|---|---|---|
+| CPU | 20,000 vCPU (2 per pod) | GKE quota is raised per request; cost at spot ≈ $600/hour |
+| Memory | ~40 TB | Not a realistic single-cluster shape |
+| Chromium | 10,000 browser processes | Each needs ~300 MB and `/dev/shm` |
+| Nominatim | 10,000 geocode lookups | Policy is ~1 request/second per application |
+| Bing | ~20,000 searches | At 0.2 req/s that is ~27 hours of searching |
+| Egress IPs | 10,000 pods behind one NAT | The sources see one IP and throttle it |
+
+So the honest model is: **10,000 queued and visible, N running at once**, where N is a dial.
+
+| Tier | Concurrent pods | vCPU | Throughput at ~4 min/scrape | Fits |
+|---|---|---|---|---|
+| Launch | 10 | 20 | ~150 jobs/hour | first paying clients |
+| Growth | 50 | 100 | ~750 jobs/hour | a city-level campaign |
+| Scale | 200 | 400 | ~3,000 jobs/hour | multi-state master sweeps |
+| Ceiling | 1,000 | 2,000 | ~15,000 jobs/hour | source throttling binds before compute |
+
+At 10,000 jobs arriving in an hour, the average concurrency is ~667 pods, which sits between
+Scale and Ceiling. That is a capacity-planning conversation (quota + budget), not a code
+change: `MAX_PARALLEL_JOBS` and the node-pool maximum move together.
+
+Fairness and backpressure:
+
+* `clients.max_concurrent_jobs` (default 2) caps one workspace, so a single client cannot
+  occupy the pool.
+* Priority classes: interactive client scrape → master sweep shard → enrichment → backfill.
+* When the queue passes `QUEUE_SOFT_LIMIT` (default 500), the cockpit shows queue position
+  and a measured ETA instead of a fake "25–40 s".
+* Master sweeps reserve at most `SWEEP_POOL_SHARE` (default 40%) of the pool, so a state
+  sweep never starves client work.
+* If a source is blocked, its share is redistributed to the other engines and the run reports
+  `degraded` rather than silently returning fewer leads.
+
+**At 10,000-scale the binding constraint is the keyless sources, not Kubernetes.** The local
+gazetteer (619k villages) absorbs most geocoding, OSM/Overpass and direct directory reads
+carry discovery, and Bing/DuckDuckGo stay supplementary and cached. That is a product
+consequence of staying keyless, and the plan states it instead of hiding it behind a
+"no limits" claim.
 
 ---
 
@@ -522,17 +584,35 @@ spec:
 
 `/dev/shm` is not optional — Chromium crashes on the default 64 MB with several pages open.
 
-### 8.4 Node pools
+### 8.4 Node pools (GKE Autopilot)
 
-| Pool | Instance | Taint | Runs |
-|---|---|---|---|
-| `system` | 2 vCPU / 8 GB | — | api, controller, web, metrics |
-| `browser` | 4 vCPU / 16 GB, spot allowed | `browser=:NoSchedule` | scrape Jobs (4–5 pods per node) |
-| `data` | managed service or 2 vCPU / 16 GB | — | Postgres/Redis if self-hosted |
+Autopilot removes node management, but the browser pool still needs a shape. Two supported
+options:
 
-Cluster autoscaler (or Karpenter) on `browser` with `min=0` gives true scale-to-zero when no
-scrape is running. Spot is safe because a scrape is resumable: the controller re-creates the
-Job and passes `RESUME_ZONES`.
+| Option | How | When |
+|---|---|---|
+| **Autopilot + compute classes** | `cloud.google.com/compute-class: burst` for api/web, `scale-out` for workers; Spot via `cloud.google.com/gke-spot: "true"` | recommended start; no node ops |
+| Autopilot + a Standard browser pool | a second node pool with `browser=:NoSchedule` | once sustained concurrency passes ~100 pods |
+
+Autopilot caveats the chart accounts for:
+
+* DaemonSet-based image pre-pull is restricted. Keep the worker image layers stable and let
+  the node image cache do the work; cold start is 8–15 s, not minutes, after the first pull.
+* `hostPath` and `privileged` are rejected — the worker uses `emptyDir` for `/dev/shm`, which
+  is allowed.
+* Pods must declare requests; the Job template in §8.3 already does.
+* Spot pods are evicted with 30 s notice; the Job is resumable via `RESUME_ZONES`, so this is
+  a retry, not a lost run.
+
+| Pool / class | Shape | Runs |
+|---|---|---|
+| `burst` (system) | 2 vCPU / 8 GB | api, controller, web, metrics |
+| `scale-out` (browser) | 4 vCPU / 16 GB, spot | scrape Jobs, 4–5 pods per node |
+| data | managed Cloud SQL + Memorystore | Postgres / Redis |
+
+`min=0` on the browser class gives true scale-to-zero. The cluster maximum is the concurrency
+dial: start at `max 50 nodes`, raise it with the quota request when the queue warrants it.
+
 
 ### 8.5 Autoscaling
 
@@ -838,8 +918,10 @@ controller leader fails over in <30 s without losing a job.
 * Load test: 40 concurrent jobs, 3 api pods, measure p95 latency and error rate.
 * Runbooks: stuck job, blocked engine, DB failover, certificate renewal.
 
-**Accept:** 40 concurrent jobs with <1% job failure, queue drains, browser pool scales to
-zero after 15 min idle, restore drill passes.
+**Accept:** 1,000 jobs submitted in 10 minutes are all accepted with distinct job IDs and none
+lost; with `MAX_PARALLEL_JOBS=25` the queue drains at the measured rate and the cockpit shows
+honest queue position and ETA; 40 concurrent jobs run with <1% failure; the browser pool
+scales to zero after 15 min idle; the restore drill passes.
 
 ### Phase 7 — Cutover (2 days)
 * Freeze writes on the old box, run the importer, verify the three fixtures plus a full
@@ -870,22 +952,38 @@ with identical counts; the old box can be powered off without loss.
 
 ---
 
-## 15. Decisions needed before Phase 1
+## 15. Decisions
 
-| # | Decision | Options | Recommendation |
+Decided on 2026-11-19:
+
+| # | Decision | Chosen | Consequence in the chart |
 |---|---|---|---|
-| 1 | Cloud | EKS / GKE / AKS / on-prem k3s | **GKE Autopilot or EKS** — best autoscaler + spot story |
-| 2 | Postgres | managed (RDS/Cloud SQL) / in-cluster | **Managed** for v1; in-cluster only for dev |
-| 3 | Redis | managed (ElastiCache/Memorystore) / in-cluster | **Managed** with AOF |
-| 4 | Object storage | S3 / GCS / MinIO | **S3-compatible**; MinIO in compose |
-| 5 | Auth | JWT built-in / Auth0 / Clerk | **Built-in JWT** — no new paid dependency |
-| 6 | Isolation | shared DB + RLS / namespace per client / DB per client | **Shared DB + RLS** |
-| 7 | Expected concurrency | 5 / 20 / 40+ jobs at once | drives pool size and `max_parallel_shards` |
-| 8 | Domain layout | `app.` + `master.` + `api.` / path-based | **Subdomains** — cleanest for cookies and CSP |
-| 9 | Master data access | read shared tables / signed ingest / both | **Read shared + ingest endpoint** for external installs |
+| 1 | Cloud | **GKE Autopilot** | compute classes + Spot; no node pool to maintain |
+| 2 | Postgres | **Managed (Cloud SQL)** | private IP, automated backups, PgBouncer sidecar |
+| 3 | Redis | **Managed (Memorystore)** | AOF, same VPC, no Sentinel to run |
+| 4 | Object storage | **GCS** (S3-compatible API) | exports + backups; MinIO in compose |
+| 5 | Auth | **Built-in JWT + Google Sign-In** | no new paid identity dependency |
+| 6 | Isolation | **Shared DB + RLS** | one schema, `client_id` everywhere, master role bypass |
+| 7 | Concurrency | **queue-first, elastic** | accept every job, run `min(queue, MAX_PARALLEL_JOBS, source budget)`; see §3.4 |
+| 8 | Domain layout | **`app.` + `master.` + `api.`** | separate images and cookies |
+| 9 | Master data access | **Read shared tables + HMAC ingest** | real-time view, plus external installs |
 
-Defaults assumed by the effort estimates above: 3 api pods, 40 max worker pods, managed
-Postgres/Redis, shared-DB isolation, GKE or EKS.
+Still open, but not blocking Phase 1:
+
+| # | Decision | Default until changed |
+|---|---|---|
+| 10 | Launch `MAX_PARALLEL_JOBS` | **25** (raise with the GKE quota) |
+| 11 | Per-client cap | **2** concurrent jobs |
+| 12 | Master sweep share of the pool | **40%** |
+| 13 | Queue soft limit before ETA warnings | **500** |
+| 14 | Google client ID | set later; email/password works now |
+| 15 | First `master.` operator account | created with `scripts/create-user.js` |
+
+The 10,000-scrape answer is handled as §3.4 describes: every request is accepted and queued
+with a job ID, and throughput scales by raising `MAX_PARALLEL_JOBS` and the node maximum.
+Literal 10,000 simultaneous Chromium pods is a quota-and-budget decision, not an architecture
+change, and the keyless sources throttle long before the cluster does.
+
 
 ---
 
@@ -905,6 +1003,12 @@ WORKER_IMAGE=ghcr.io/<org>/scraper-worker:1.0.0
 MAX_PARALLEL_SHARDS=10
 SWEEP_SHARD_SIZE=8
 JOB_DEADLINE_SECONDS=3600
+
+# admission / capacity (see §3.4)
+MAX_PARALLEL_JOBS=25               # concurrent worker pods; raise with the GKE quota
+CLIENT_MAX_CONCURRENT_JOBS=2       # per-workspace fair share
+SWEEP_POOL_SHARE=0.4               # master sweeps never take more than 40% of the pool
+QUEUE_SOFT_LIMIT=500               # above this the cockpit shows queue position + measured ETA
 
 # auth — implemented, Google optional
 AUTH_REQUIRED=0                    # 1 = reject anonymous API calls

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, Check, Globe2, Layers, Mail, MapPin,
+  ArrowRight, Check, Globe2, Layers, LogIn, Mail, MapPin,
   Phone, Plus, ShieldCheck, Zap
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
@@ -155,6 +155,15 @@ export default function LandingV2() {
               <span className="gb-online-dot" />
               {online ? 'Online' : 'Offline'}
             </span>
+            <button
+              type="button"
+              className="gb-btn gb-btn-ghost gb-signin"
+              onClick={() => navigate('/login')}
+              title="Sign in to your workspace"
+            >
+              <LogIn size={14} />
+              <span>Sign in</span>
+            </button>
             <button type="button" className="gb-btn gb-btn-primary" onClick={() => openCommand()}>
               Open Command Center
               <ArrowRight size={15} />

@@ -246,6 +246,20 @@
   box-shadow: var(--gb-emboss-sm);
 }
 
+/* A quiet way into /login; the primary CTA still opens the workspace. */
+.gb-signin {
+  gap: 6px;
+  padding: 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+@media (max-width: 720px) {
+  .gb-signin span { display: none; }
+  .gb-signin { padding: 0 9px; }
+}
+
 /* ── Hero ────────────────────────────────────────────────────────────────── */
 .gb-hero {
   position: relative;
