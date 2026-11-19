@@ -274,7 +274,13 @@ async function scrapeMandap(category, location, sessionId = 'legacy') {
 
   if (!slugs.length) {
     deps.logger(`[Mandap] Skipped: "${category}" is not a venue category. Mandap.com only lists venues.`);
-    return { totalScraped: 0, newInserted: 0, updated: 0, skipped: 'not-a-venue-category' };
+    return {
+      totalScraped: 0,
+      newInserted: 0,
+      updated: 0,
+      skipped: 'not-a-venue-category',
+      note: `Skipped: "${category}" is not a venue category`
+    };
   }
 
   deps.logger(`[Mandap] Starting live scrape for "${category}" in "${location}" (${slugs.join(', ')})`);

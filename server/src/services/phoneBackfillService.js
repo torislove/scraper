@@ -68,7 +68,23 @@ const PAGE_TIMEOUT_MS = 12_000;
 
 function hasValidMobile(value, countryCode = 'IN') {
   const parsed = normalizePhone(value, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN' });
-  return Boolean(parsed && parsed.isMobile);
+  return Boolean(parsed && parsed.isMobile && phoneBelongsToCountry(parsed, countryCode));
+}
+
+// Dialling prefix per market we ship. Used to reject a number that cannot
+// belong to the lead's country — the guard that stops +91 leaking onto a US row.
+const DIAL_PREFIX = {
+  IN: '91', US: '1', CA: '1', GB: '44', UK: '44', AU: '61', AE: '971',
+  SG: '65', NZ: '64', ZA: '27', IE: '353', DE: '49'
+};
+
+function phoneBelongsToCountry(parsed, countryCode) {
+  const cc = String(countryCode || 'IN').toUpperCase();
+  const expected = DIAL_PREFIX[cc];
+  if (!expected) return true; // market we do not know: do not judge
+  const digits = String(parsed.e164 || parsed.digits || '').replace(/\D/g, '');
+  if (!digits) return false;
+  return digits.startsWith(expected);
 }
 
 function normalizeName(value) {
@@ -281,7 +297,7 @@ function readPlaceDetails(page) {
       }
     });
 
-    // Universal scan of container text for all 245 countries (India, US, UK, CA, AU, UAE, SG, Global)
+    // Universal scan of container text for every country's phone shape
     try {
       const container = document.querySelector('div[role="main"], div.m6QErb') || document.body;
       if (container) {
@@ -415,11 +431,16 @@ function pickNumbers(rawValues, countryCode = 'IN') {
       }
     }
 
+    // Last resort. This used to omit defaultCountry, so phoneUtils fell back to
+    // India and stamped +91 on foreign leads. Always carry the lead's country.
     if (!parsed) {
-      parsed = normalizePhone(raw, { allowInternational: true });
+      parsed = normalizePhone(raw, { defaultCountry: countryCode, allowInternational: true });
     }
 
     if (!parsed) continue;
+    // A number that does not belong to the lead's country is not this lead's
+    // number. Dropping it here stops an Indian mobile appearing on a US row.
+    if (!phoneBelongsToCountry(parsed, countryCode)) continue;
     if (all.some(p => p.national === parsed.national || p.e164 === parsed.e164)) continue;
     all.push(parsed);
   }

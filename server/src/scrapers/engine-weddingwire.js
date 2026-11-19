@@ -29,7 +29,38 @@ function setDeps(newDeps) {
 
 const MAX_DETAIL_PAGES = 10;
 const DETAIL_WORKERS = 2;
-const LIST_ATTEMPTS = 3;
+const LIST_ATTEMPTS = 2;
+
+// Phrases a consent/verification wall shows instead of listings. Checked only
+// when zero tiles rendered, so a normal page mentioning "consent" in a privacy
+// link cannot trigger it.
+const WALL_PATTERNS = [
+  /before you continue/i,
+  /verify you are (?:a )?human/i,
+  /are you a robot/i,
+  /unusual traffic/i,
+  /access denied/i,
+  /captcha/i,
+  /enable javascript and cookies/i
+];
+
+async function detectWall(page) {
+  try {
+    const state = await page.evaluate(() => ({
+      title: document.title || '',
+      body: ((document.body && document.body.innerText) || '').slice(0, 1500),
+      tiles: document.querySelectorAll('li.vendorTile').length
+    }));
+    if (state.tiles > 0) return null;
+    const haystack = `${state.title}\n${state.body}`;
+    for (const pattern of WALL_PATTERNS) {
+      if (pattern.test(haystack)) return `consent/verification wall (${pattern.source})`;
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
@@ -424,11 +455,23 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy', count
       extraHTTPHeaders: { 'Accept-Language': isUS ? 'en-US,en;q=0.9' : 'en-IN,en;q=0.9' }
     });
     const page = await context.newPage();
+    let wallReason = null;
 
     for (let attempt = 1; attempt <= LIST_ATTEMPTS && !deps.abortSignal.aborted; attempt++) {
+      const attemptStartedAt = Date.now();
       try {
         deps.logger(`[WeddingWire] List attempt ${attempt}/${LIST_ATTEMPTS}`);
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+        // Check for a wall before paying for the selector wait and scrolling.
+        // Without this, three attempts on a consent page cost ~80 seconds and
+        // return nothing, which is exactly what the health board recorded.
+        wallReason = await detectWall(page);
+        if (wallReason) {
+          deps.logger(`[WeddingWire] ${wallReason} after ${Date.now() - attemptStartedAt}ms — stopping instead of retrying.`);
+          break;
+        }
+
         await page.waitForSelector('li.vendorTile', { timeout: 15000 }).catch(() => {});
         await page.waitForTimeout(1800);
 
@@ -448,8 +491,16 @@ async function scrapeWeddingWire(category, location, sessionId = 'legacy', count
     }
 
     if (!cards.length) {
-      deps.logger('[WeddingWire] No live tiles returned. Leaving the database untouched.');
-      return { totalScraped: 0, newInserted: 0, updated: 0 };
+      deps.logger(wallReason
+        ? `[WeddingWire] Blocked: ${wallReason}. Leaving the database untouched.`
+        : '[WeddingWire] No live tiles returned. Leaving the database untouched.');
+      return {
+        totalScraped: 0,
+        newInserted: 0,
+        updated: 0,
+        skipped: wallReason ? 'blocked' : 'no-tiles',
+        note: wallReason || ''
+      };
     }
 
     // Detail pages: same browser session, small worker pool.

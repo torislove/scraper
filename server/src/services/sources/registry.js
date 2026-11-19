@@ -499,7 +499,6 @@ const INTERNATIONAL_ENGINES = [
   'wikidata-businesses',
   'social-dork-intl',
   'cylex',
-  'trustpilot',
   'freeindex-uk',
   'goldenpages-ie'
 ];

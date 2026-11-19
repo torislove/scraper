@@ -14,10 +14,11 @@
  * Zero paid API keys.
  */
 
-const axios = require('axios');
 const cheerio = require('cheerio');
 const dv = require('./directoryVendor');
 const { extractPhones } = require('../utils/phoneUtils');
+const { searchBingHtml } = require('./bingSearch');
+const { getBrowser } = require('./browserFactory');
 
 let deps = {
   logger: console.log,
@@ -29,22 +30,15 @@ function setDeps(newDeps) {
   deps = { ...deps, ...newDeps };
 }
 
-function decodeBingUrl(href) {
-  if (!href) return '';
-  if (!href.includes('bing.com/ck/')) return href;
-  const match = href.match(/[?&]u=a1([a-zA-Z0-9_-]+)/);
-  if (!match) return href;
-  try {
-    let b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (b64.length % 4) b64 += '=';
-    return Buffer.from(b64, 'base64').toString('utf8');
-  } catch (e) {
-    return href;
-  }
-}
-
 /**
- * Searches Bing for TripAdvisor listing URLs, then parses JSON-LD metadata from public profiles
+ * Finds TripAdvisor listing URLs through the shared Bing helper, then reads the
+ * public profile pages in the stealth browser and parses their JSON-LD.
+ *
+ * Bing is not queried with a forged URL: from this network that returns cached
+ * unrelated pages. `bingSearch.js` types the query into Bing's own box.
+ * TripAdvisor itself refuses plain HTTP clients, so the profile pages are read
+ * through `browserFactory` as well, with a consent-wall check that skips
+ * instead of fighting the wall.
  */
 async function scrapeTripAdvisor(category, location, sessionId = 'legacy', opts = {}) {
   const countryCode = String(opts.countryCode || 'US').toUpperCase();
@@ -54,79 +48,79 @@ async function scrapeTripAdvisor(category, location, sessionId = 'legacy', opts 
   const query = `site:tripadvisor.com "${category}" "${location}"`;
 
   try {
-    const market = countryCode === 'IN' ? 'en-IN' : `en-${countryCode}`;
-    const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en&mkt=${market}&count=20`;
-
-    const resp = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9'
-      },
-      timeout: 15000
+    const { rows, blocked } = await searchBingHtml(query, {
+      maxPages: 2,
+      logger: deps.logger,
+      abortSignal: deps.abortSignal
     });
 
-    const $ = cheerio.load(resp.data);
+    if (blocked) {
+      deps.logger(`[TripAdvisor ${countryCode}] Bing served a challenge — skipping instead of bypassing it.`);
+    }
+
     const urls = [];
-
-    $('li.b_algo h2 a').each((_, el) => {
-      const rawHref = $(el).attr('href');
-      const href = decodeBingUrl(rawHref);
-      if (href && href.includes('tripadvisor.') && !href.includes('/Search?') && !href.includes('/UserReview-')) {
-        urls.push(href);
-      }
-    });
+    for (const row of rows) {
+      const href = row.url || '';
+      if (!href.includes('tripadvisor.')) continue;
+      if (href.includes('/Search?') || href.includes('/UserReview-')) continue;
+      if (urls.includes(href)) continue;
+      urls.push(href);
+    }
 
     deps.logger(`[TripAdvisor ${countryCode}] Discovered ${urls.length} candidate listing URLs.`);
 
-    // Fetch up to 8 candidate pages and extract JSON-LD
-    const toFetch = urls.slice(0, 8);
-    for (const listingUrl of toFetch) {
-      if (deps.abortSignal && deps.abortSignal.aborted) break;
-
+    const toFetch = urls.slice(0, 6);
+    if (toFetch.length) {
+      const browser = await getBrowser();
+      const context = await browser.newContext({ locale: 'en-US' });
       try {
-        const pageResp = await axios.get(listingUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9'
-          },
-          timeout: 12000
-        });
-
-        const p$ = cheerio.load(pageResp.data);
-        p$('script[type="application/ld+json"]').each((_, s) => {
+        const page = await context.newPage();
+        page.setDefaultTimeout(20000);
+        for (const listingUrl of toFetch) {
+          if (deps.abortSignal && deps.abortSignal.aborted) break;
           try {
-            const json = JSON.parse(p$(s).html() || '{}');
-            const data = Array.isArray(json) ? json[0] : json;
-
-            if (data && (data['@type'] === 'Restaurant' || data['@type'] === 'Hotel' || data['@type'] === 'LocalBusiness' || data['@type'] === 'TouristAttraction')) {
-              const addr = data.address || {};
-              const fullAddress = [addr.streetAddress, addr.addressLocality, addr.addressRegion, addr.postalCode].filter(Boolean).join(', ');
-
-              results.push({
-                name: data.name || '',
-                phone: data.telephone || '',
-                address: fullAddress || location,
-                city: addr.addressLocality || location,
-                state: addr.addressRegion || '',
-                website: data.url || listingUrl,
-                profileUrl: listingUrl,
-                rating: data.aggregateRating?.ratingValue ? Number(data.aggregateRating.ratingValue) : null,
-                reviewCount: data.aggregateRating?.reviewCount ? Number(data.aggregateRating.reviewCount) : null,
-                priceRange: data.priceRange || '',
-                latitude: data.geo?.latitude ? Number(data.geo.latitude) : null,
-                longitude: data.geo?.longitude ? Number(data.geo.longitude) : null,
-                image: data.image || ''
-              });
+            await page.goto(listingUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
+            const html = await page.content();
+            if (/before you continue|consent|verify you are a human|unusual traffic|captcha/i.test(html.slice(0, 4000))) {
+              deps.logger(`[TripAdvisor ${countryCode}] Consent/verification wall on ${listingUrl} — skipping.`);
+              continue;
             }
-          } catch (e) {}
-        });
+            const p$ = cheerio.load(html);
+            p$('script[type="application/ld+json"]').each((_, s) => {
+              try {
+                const json = JSON.parse(p$(s).html() || '{}');
+                const data = Array.isArray(json) ? json[0] : json;
 
-      } catch (err) {
-        // Continue politely on network or single-page error
+                if (data && (data['@type'] === 'Restaurant' || data['@type'] === 'Hotel' || data['@type'] === 'LocalBusiness' || data['@type'] === 'TouristAttraction')) {
+                  const addr = data.address || {};
+                  const fullAddress = [addr.streetAddress, addr.addressLocality, addr.addressRegion, addr.postalCode].filter(Boolean).join(', ');
+
+                  results.push({
+                    name: data.name || '',
+                    phone: data.telephone || '',
+                    address: fullAddress || location,
+                    city: addr.addressLocality || location,
+                    state: addr.addressRegion || '',
+                    website: data.url || listingUrl,
+                    profileUrl: listingUrl,
+                    rating: data.aggregateRating?.ratingValue ? Number(data.aggregateRating.ratingValue) : null,
+                    reviewCount: data.aggregateRating?.reviewCount ? Number(data.aggregateRating.reviewCount) : null,
+                    priceRange: data.priceRange || '',
+                    latitude: data.geo?.latitude ? Number(data.geo.latitude) : null,
+                    longitude: data.geo?.longitude ? Number(data.geo.longitude) : null,
+                    image: data.image || ''
+                  });
+                }
+              } catch (e) { /* malformed JSON-LD block */ }
+            });
+          } catch (err) {
+            deps.logger(`[TripAdvisor ${countryCode}] Listing read warning: ${err.message}`);
+          }
+        }
+      } finally {
+        try { await context.close(); } catch (e) {}
       }
     }
-
   } catch (err) {
     deps.logger(`[TripAdvisor ${countryCode}] Search error: ${err.message}`);
   }

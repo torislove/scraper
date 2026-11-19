@@ -15,9 +15,8 @@
  * Zero paid API keys, zero subscriptions.
  */
 
-const axios = require('axios');
-const cheerio = require('cheerio');
 const { getBrowser } = require('./browserFactory');
+const { searchBingHtml } = require('./bingSearch');
 const dv = require('./directoryVendor');
 const { extractPhones } = require('../utils/phoneUtils');
 
@@ -49,9 +48,10 @@ async function scrapeBingPlaces(category, location, sessionId = 'legacy', opts =
   const results = [];
 
   try {
-    const market = countryCode === 'IN' ? 'en-IN' : `en-${countryCode}`;
     const query = `${category} in ${location}`;
-    const searchUrl = `https://www.bing.com/maps?q=${encodeURIComponent(query)}&setlang=en&mkt=${market}&cc=${countryCode}`;
+    // Bing Maps ranks on the query text. `mkt=`/`cc=` are ignored from this
+    // network and only add noise, so the location stays inside the query.
+    const searchUrl = `https://www.bing.com/maps?q=${encodeURIComponent(query)}&setlang=en`;
 
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     try {
@@ -124,33 +124,35 @@ async function scrapeBingPlaces(category, location, sessionId = 'legacy', opts =
       return rows;
     });
 
-    // Fallback to Bing Local search query if maps returns zero cards
+    // Fallback to Bing Local search query if maps returned zero cards.
+    // `items` holds the Maps entities; without pushing them into `results`
+    // every Maps hit was discarded and the engine could only ever return the
+    // weaker organic-search rows (or nothing at all).
+    results.push(...(Array.isArray(items) ? items : []));
     if (results.length === 0) {
+      // Organic fallback goes through the same human-path Bing helper as every
+      // other engine: a forged `?q=` URL is answered with cached junk here.
       try {
-        const localUrl = `https://www.bing.com/search?q=${encodeURIComponent(query + ' phone address')}&setlang=en&mkt=${market}&cc=${countryCode}&count=20`;
-        await page.goto(localUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-        const fallbackItems = await page.evaluate(() => {
-          const rows = [];
-          document.querySelectorAll('li.b_algo').forEach(card => {
-            const h2 = card.querySelector('h2 a');
-            if (!h2) return;
-            const name = (h2.innerText || '').replace(/\s*[-–|].*$/, '').trim();
-            if (!name || name.length < 2 || /wikipedia|thesaurus/i.test(name)) return;
-            const text = card.innerText || '';
-            const phoneM = text.match(/(?:\+?\d{1,4}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,5}/);
-            const phone = phoneM ? phoneM[0] : '';
-            const website = h2.getAttribute('href') || '';
-            rows.push({
-              name,
-              phone,
-              address: name,
-              website: website.startsWith('http') ? website : ''
-            });
-          });
-          return rows;
+        const { rows } = await searchBingHtml(`${query} phone address`, {
+          maxPages: 1,
+          logger: deps.logger,
+          abortSignal: deps.abortSignal
         });
-        results.push(...fallbackItems);
-      } catch (e) {}
+        for (const row of rows) {
+          const name = String(row.title || '').replace(/\s*[-–|].*$/, '').trim();
+          if (!name || name.length < 2 || /wikipedia|thesaurus/i.test(name)) continue;
+          const text = `${row.title || ''} ${row.snippet || ''}`;
+          const phoneM = text.match(/(?:\+?\d{1,4}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,5}/);
+          results.push({
+            name,
+            phone: phoneM ? phoneM[0] : '',
+            address: location,
+            website: /^https?:\/\//i.test(row.url || '') ? row.url : ''
+          });
+        }
+      } catch (e) {
+        deps.logger(`[Bing Places ${countryCode}] Organic fallback warning: ${e.message}`);
+      }
     }
 
   } catch (err) {

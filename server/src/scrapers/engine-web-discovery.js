@@ -19,6 +19,7 @@
  */
 
 const { getBrowser } = require('./browserFactory');
+const { searchBingHtml, unwrapBingUrl } = require('./bingSearch');
 const dv = require('./directoryVendor');
 const { scrapeWebContact, setDeps: setWebContactDeps } = require('./engine-web-contact');
 const { extractPhones } = require('../utils/phoneUtils');
@@ -121,24 +122,6 @@ function originOf(url) {
   }
 }
 
-function unwrapBingUrl(raw) {
-  if (!raw) return '';
-  try {
-    if (!/bing\.com/i.test(raw)) return raw;
-    const parsed = new URL(raw);
-    const encoded = parsed.searchParams.get('u');
-    if (!encoded) return raw;
-    let base64 = (encoded.startsWith('a1') ? encoded.slice(2) : encoded)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const decoded = Buffer.from(base64, 'base64').toString('utf8');
-    return /^https?:\/\//i.test(decoded) ? decoded : raw;
-  } catch (e) {
-    return raw;
-  }
-}
-
 function cleanTitle(title) {
   const raw = String(title || '').replace(/\s+/g, ' ').trim();
   if (!raw) return '';
@@ -208,15 +191,10 @@ function unwrapDdgUrl(raw) {
 }
 
 /**
- * Bing's `cc=`/`mkt=` pair is only honoured from a matching edge node. Served
- * from an Indian IP it answered a `cc=US` query with unrelated summer-travel
- * results, so the market parameters are deliberately omitted: the location is
- * already inside the query string, which is the signal Bing actually ranks on.
+ * Bing no longer honours a forged `?q=` URL from this network: it answers with
+ * unrelated cached pages and ignores `cc=`/`mkt=`. Every Bing read therefore
+ * goes through `bingSearch.js`, which types the query into Bing's own box.
  */
-function bingSearchUrl(query, page) {
-  const firstParam = page > 1 ? `&first=${(page - 1) * 10 + 1}` : '';
-  return `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en${firstParam}`;
-}
 
 function ddgSearchUrl(query, page) {
   const sParam = page > 1 ? `&s=${(page - 1) * 30}` : '';
@@ -225,28 +203,6 @@ function ddgSearchUrl(query, page) {
 
 function looksBlocked(html) {
   return /verify you are a human|unusual traffic|captcha|are you a robot|access denied/i.test(html);
-}
-
-async function readBingPage(page, url) {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25000 });
-  try { await page.waitForSelector('li.b_algo', { timeout: 6000 }); } catch (e) {}
-  const html = await page.content();
-  if (looksBlocked(html)) return { rows: [], blocked: true };
-  const rows = await page.evaluate(() => {
-    const out = [];
-    document.querySelectorAll('li.b_algo').forEach(el => {
-      const link = el.querySelector('h2 a');
-      const snippetEl = el.querySelector('.b_caption p') || el.querySelector('.b_algoSlug');
-      if (!link) return;
-      out.push({
-        title: (link.innerText || '').trim(),
-        url: link.getAttribute('href') || '',
-        snippet: snippetEl ? snippetEl.innerText.trim() : ''
-      });
-    });
-    return out;
-  });
-  return { rows, blocked: false };
 }
 
 async function readDdgPage(page, url) {
@@ -272,37 +228,36 @@ async function readDdgPage(page, url) {
 }
 
 async function searchBing(query, country = 'IN', maxPages = 3) {
-  const browser = await getBrowser();
-  const context = await browser.newContext();
-  const page = await context.newPage();
   const allRows = [];
   let bingBlocked = false;
   const push = (row, url) => {
     if (!url || allRows.some(x => x.url === url)) return;
     allRows.push({ ...row, url });
   };
-  try {
-    // ── Primary: Bing, plain URL (no cc/mkt — see bingSearchUrl) ──────────
-    for (let p = 1; p <= maxPages; p++) {
-      if (deps.abortSignal && deps.abortSignal.aborted) break;
-      try {
-        const { rows, blocked } = await readBingPage(page, bingSearchUrl(query, p));
-        if (blocked) {
-          bingBlocked = true;
-          deps.logger('[Web Discovery] Bing served a verification page — falling back to DuckDuckGo instead of trying to bypass it.');
-          break;
-        }
-        if (!rows.length) break;
-        for (const r of rows) push(r, unwrapBingUrl(r.url));
-      } catch (pageErr) {
-        deps.logger(`[Web Discovery] Bing page ${p} warning: ${pageErr.message}`);
-        break;
-      }
-    }
 
-    // ── Fallback: DuckDuckGo HTML (independent index, same query) ─────────
-    if (allRows.length === 0) {
-      deps.logger(`[Web Discovery] Bing returned ${bingBlocked ? 'a challenge' : 'no rows'}; trying DuckDuckGo HTML.`);
+  // ── Primary: Bing through its own search box (see bingSearch.js) ────────
+  try {
+    const { rows, blocked } = await searchBingHtml(query, {
+      maxPages,
+      logger: deps.logger,
+      abortSignal: deps.abortSignal
+    });
+    bingBlocked = Boolean(blocked);
+    if (blocked) {
+      deps.logger('[Web Discovery] Bing served a verification page — falling back to DuckDuckGo instead of trying to bypass it.');
+    }
+    for (const r of rows) push(r, r.url);
+  } catch (pageErr) {
+    deps.logger(`[Web Discovery] Bing warning: ${pageErr.message}`);
+  }
+
+  // ── Fallback: DuckDuckGo HTML (independent index, same query) ─────────
+  if (allRows.length === 0) {
+    deps.logger(`[Web Discovery] Bing returned ${bingBlocked ? 'a challenge' : 'no rows'}; trying DuckDuckGo HTML.`);
+    const browser = await getBrowser();
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
       for (let p = 1; p <= maxPages; p++) {
         if (deps.abortSignal && deps.abortSignal.aborted) break;
         try {
@@ -319,12 +274,12 @@ async function searchBing(query, country = 'IN', maxPages = 3) {
           break;
         }
       }
+    } finally {
+      try { await context.close(); } catch (e) {}
     }
-
-    return { rows: allRows, blocked: false };
-  } finally {
-    try { await context.close(); } catch (e) {}
   }
+
+  return { rows: allRows, blocked: false };
 }
 
 /**
@@ -451,7 +406,7 @@ module.exports = {
   // exported for tests
   _internals: {
     categoryStems, stemToken, isRelevantResult, hostOf, isExcluded, cleanTitle,
-    searchBing, unwrapBingUrl, unwrapDdgUrl, bingSearchUrl, ddgSearchUrl, looksBlocked,
+    searchBing, unwrapBingUrl, unwrapDdgUrl, ddgSearchUrl, looksBlocked,
     classifyResultUrl, originOf
   }
 };

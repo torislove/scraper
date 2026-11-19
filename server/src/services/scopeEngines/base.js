@@ -9,6 +9,19 @@
 
 const WEDDING_INTENT = /wedding|marriage|shaadi|shadi|vivah|pelli|kalyana|kalyan|banquet|mandap|reception|engagement|haldi|sangeet|mehendi|bridal|bride|groom|caterer|catering|decorat|florist|invitation|lehenga|saree|jewel|honeymoon|event planner|event management|tent house|venue|function hall|convention/i;
 
+// The registry names a few engines differently from the task keys used here.
+// Without this map the country bundle could never be consulted, and every
+// international engine ran in every country regardless of whether the registry
+// said it serves that market.
+const BUNDLE_KEY = {
+  wikidata: 'wikidata-businesses',
+  'social-dork': 'social-dork-intl',
+  freeindex: 'freeindex-uk',
+  goldenpages: 'goldenpages-ie',
+  bing: 'bing-places',
+  yell: 'yellowpages'
+};
+
 function isWeddingIntent(category) {
   return WEDDING_INTENT.test(String(category || ''));
 }
@@ -34,18 +47,39 @@ function serpJobs(ctx) {
 
 function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
   const { category, baseLocation, sessionId, hasEngine, weddingIntent } = ctx;
-  const jobs = skipSerp ? [] : serpJobs(ctx);
-  if (hasEngine('weddingbazaar') && weddingIntent) {
+
+  const countryCode = String(ctx.countryCode || 'IN').toUpperCase();
+
+  // The country bundle is authoritative, not advisory. `hasEngine` answers
+  // "did the operator tick this?", the bundle answers "does this engine serve
+  // this market at all?". Both must be true. This is what makes removing an
+  // engine from the registry actually stop it running.
+  let bundle = null;
+  try {
+    const { enginesForCountry } = require('../sources/registry');
+    bundle = new Set(enginesForCountry(countryCode));
+  } catch (error) {
+    bundle = null; // registry unavailable: fall back to hasEngine alone
+  }
+  const allowed = key => {
+    if (!hasEngine(key)) return false;
+    if (!bundle) return true;
+    return bundle.has(BUNDLE_KEY[key] || key);
+  };
+
+  const jobs = skipSerp ? [] : serpJobs({ ...ctx, hasEngine: allowed });
+
+  if (allowed('weddingbazaar') && weddingIntent) {
     jobs.push({ task: 'scrapeWeddingBazaar', args: [category, baseLocation, 'omni', sessionId] });
   }
-  if (hasEngine('weddingwire') && weddingIntent) {
-    jobs.push({ task: 'scrapeWeddingWire', args: [category, baseLocation, 'omni', sessionId, ctx.countryCode] });
+  if (allowed('weddingwire') && weddingIntent) {
+    jobs.push({ task: 'scrapeWeddingWire', args: [category, baseLocation, 'omni', sessionId, countryCode] });
   }
-  if (hasEngine('mandap') && weddingIntent) {
+  if (allowed('mandap') && weddingIntent) {
     jobs.push({ task: 'scrapeMandap', args: [category, baseLocation, 'omni', sessionId] });
   }
 
-  if (hasEngine('social') && ctx.countryCode === 'IN') {
+  if (countryCode === 'IN' && allowed('social')) {
     const platforms = ['instagram.com', 'facebook.com', 'linkedin.com'];
     for (const p of platforms) {
       jobs.push({
@@ -55,19 +89,17 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
   }
 
-  const countryCode = String(ctx.countryCode || 'IN').toUpperCase();
-
   // JustDial is India's largest local directory. It is a base job at every
   // scope, so a client city/mandal run and a Master district/state run all
   // query it once at the settlement. District/state plans add a swarm of town
   // queries on top of this.
-  if (countryCode === 'IN' && hasEngine('justdial')) {
+  if (countryCode === 'IN' && allowed('justdial')) {
     jobs.push({ task: 'scrapeJustDial', args: [category, baseLocation, 'omni', sessionId] });
   }
 
   if (countryCode !== 'IN') {
     // 1. Yelp for US, CA, AU
-    if (['US', 'CA', 'AU'].includes(countryCode) && (hasEngine('yelp') || !ctx.engines?.length || ctx.engines.includes('auto'))) {
+    if (['US', 'CA', 'AU'].includes(countryCode) && allowed('yelp')) {
       jobs.push({
         task: 'scrapeYelp',
         args: [category, baseLocation, sessionId, { countryCode }]
@@ -75,7 +107,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 2. Bing Places Local Directory (Global)
-    if (hasEngine('bing-places') || hasEngine('bing') || !ctx.engines?.length || ctx.engines.includes('auto')) {
+    if (allowed('bing-places')) {
       jobs.push({
         task: 'scrapeBingPlaces',
         args: [category, baseLocation, sessionId, { countryCode }]
@@ -83,15 +115,17 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 3. TripAdvisor Global (Hospitality, dining, venues, events, tourism)
-    if (hasEngine('tripadvisor') || weddingIntent || !ctx.engines?.length || ctx.engines.includes('auto')) {
-      jobs.push({
-        task: 'scrapeTripAdvisor',
-        args: [category, baseLocation, sessionId, { countryCode }]
-      });
+    if (allowed('tripadvisor') || weddingIntent) {
+      if (allowed('tripadvisor')) {
+        jobs.push({
+          task: 'scrapeTripAdvisor',
+          args: [category, baseLocation, sessionId, { countryCode }]
+        });
+      }
     }
 
     // 4. Wikidata Open Business Graph (Global SPARQL)
-    if (hasEngine('wikidata') || !ctx.engines?.length || ctx.engines.includes('auto')) {
+    if (allowed('wikidata')) {
       jobs.push({
         task: 'scrapeWikidata',
         args: [category, baseLocation, sessionId, countryCode]
@@ -99,15 +133,15 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 5. International Social & Web Contact Dorking
-    if (hasEngine('social-dork') || hasEngine('social') || !ctx.engines?.length || ctx.engines.includes('auto')) {
+    if (allowed('social-dork')) {
       jobs.push({
         task: 'scrapeSocialDorkIntl',
         args: [category, baseLocation, sessionId, countryCode]
       });
     }
 
-    // 6. YellowPages Global (US, UK, CA, AU, NZ, AE, SG, MY, ZA)
-    if (hasEngine('yellowpages') || hasEngine('yell') || !ctx.engines?.length || ctx.engines.includes('auto')) {
+    // 6. YellowPages Global (US, UK, CA, AU, NZ, AE, SG, ZA)
+    if (allowed('yellowpages')) {
       jobs.push({
         task: 'scrapeYellowPagesGlobal',
         args: [category, baseLocation, sessionId, { countryCode }]
@@ -115,7 +149,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 7. FreeIndex for United Kingdom
-    if (['GB', 'UK'].includes(countryCode) && (hasEngine('freeindex') || !ctx.engines?.length || ctx.engines.includes('auto'))) {
+    if (['GB', 'UK'].includes(countryCode) && allowed('freeindex')) {
       jobs.push({
         task: 'scrapeFreeIndexUK',
         args: [category, baseLocation, sessionId]
@@ -123,7 +157,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 8. GoldenPages for Ireland
-    if (countryCode === 'IE' && (hasEngine('goldenpages') || !ctx.engines?.length || ctx.engines.includes('auto'))) {
+    if (countryCode === 'IE' && allowed('goldenpages')) {
       jobs.push({
         task: 'scrapeGoldenPagesIE',
         args: [category, baseLocation, sessionId]
@@ -131,7 +165,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 9. Cylex for UK, AU, CA, AE, SG, US
-    if (['GB', 'UK', 'AU', 'CA', 'AE', 'SG', 'US'].includes(countryCode) && (hasEngine('cylex') || !ctx.engines?.length || ctx.engines.includes('auto'))) {
+    if (['GB', 'UK', 'AU', 'CA', 'AE', 'SG', 'US'].includes(countryCode) && allowed('cylex')) {
       jobs.push({
         task: 'scrapeCylex',
         args: [category, baseLocation, sessionId, { countryCode }]
@@ -139,7 +173,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     }
 
     // 10. Trustpilot Verified Businesses
-    if (hasEngine('trustpilot') || !ctx.engines?.length || ctx.engines.includes('auto')) {
+    if (allowed('trustpilot')) {
       jobs.push({
         task: 'scrapeTrustpilot',
         args: [category, baseLocation, sessionId, { countryCode }]
@@ -154,7 +188,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     jobs.push({ task: 'scrapeBraveDork', args: ['instagram.com', `${category} ${baseLocation}`, category, baseLocation, sessionId] });
   }
 
-  if (hasEngine('indiamart') && !weddingIntent && countryCode === 'IN') {
+  if (countryCode === 'IN' && allowed('indiamart') && !weddingIntent) {
     jobs.push({ task: 'scrapePuppeteerIndiaMart', args: [category, baseLocation, 'omni', sessionId] });
   }
 

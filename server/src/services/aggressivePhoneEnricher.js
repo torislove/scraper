@@ -8,7 +8,7 @@
  *  Vector 1: Multi-Page Deep Official Website Crawl (Home, /contact, /about, /book, etc.)
  *  Vector 2: Stealth SERP Phone Dorking (DuckDuckGo HTML, Google Local SERP, Bing HTML)
  *  Vector 3: Social Media Bio & Meta Extractor (Instagram & Facebook public bios)
- *  Vector 4: Direct WhatsApp & Telecom Normalization (Supports all 245 countries)
+ *  Vector 4: Direct WhatsApp & Telecom Normalization (every country libphonenumber knows)
  */
 
 const axios = require('axios');
@@ -219,9 +219,13 @@ async function dorkPhoneFromSearch(vendorName, locationName, countryCode = 'IN')
   if (!vendorName) return result;
 
   const query = `"${vendorName}" "${locationName}" (phone OR mobile OR contact OR tel OR call OR whatsapp)`;
+  // DuckDuckGo's HTML endpoint still answers a plain GET. Bing does not: from
+  // this network a forged `?q=` URL returns unrelated cached pages, and the
+  // working path (typing into Bing's box) is far too heavy to run once per
+  // vendor inside a sweep. So this enrichment pass is DuckDuckGo-only, and the
+  // Bing-based engines go through `scrapers/bingSearch.js` instead.
   const searchUrls = [
-    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-    `https://www.bing.com/search?q=${encodeURIComponent(query)}`
+    `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
   ];
 
   for (const url of searchUrls) {

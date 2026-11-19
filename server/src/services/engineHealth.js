@@ -95,6 +95,16 @@ const ENGINES = [
     note: 'Reads only the public site already linked to the lead. robots.txt is obeyed for every host; no CAPTCHA or login is ever bypassed.'
   },
   {
+    key: 'web-discovery',
+    label: 'Web Discovery',
+    kind: 'browser',
+    group: 'web',
+    taskNames: ['scrapeWebDiscovery'],
+    requires: ['playwright'],
+    detail: 'Keyless Bing + DuckDuckGo discovery of business sites, filtered for relevance',
+    note: 'Runs in the Tier-0 burst. Aggregators and social platforms are filtered out so a result is a real business site, not a directory listing.'
+  },
+  {
     key: 'weddingbazaar',
     label: 'WeddingBazaar',
     kind: 'browser',
@@ -138,6 +148,118 @@ const ENGINES = [
     taskNames: ['scrapeBraveDork'],
     requires: [],
     detail: 'Independent web index fallback'
+  },
+  // ---------------------------------------------------------------------
+  // International keyless engines. Keys here are the exact keys the task
+  // queue records through safeExecute(), so the board shows real runs.
+  // `registryKey` maps back to sources/registry.js canonical names.
+  // ---------------------------------------------------------------------
+  {
+    key: 'yellowpages',
+    label: 'YellowPages / Yell',
+    kind: 'browser',
+    group: 'directory',
+    taskNames: ['scrapeYellowPagesGlobal'],
+    requires: ['playwright'],
+    registryKey: 'yellowpages',
+    countries: ['US', 'GB', 'CA', 'AU', 'NZ', 'AE', 'SG', 'ZA'],
+    detail: 'Country-specific YellowPages and Yell indexes'
+  },
+  {
+    key: 'yelp',
+    label: 'Yelp',
+    kind: 'browser',
+    group: 'directory',
+    taskNames: ['scrapeYelp'],
+    requires: ['playwright'],
+    registryKey: 'yelp',
+    countries: ['US', 'CA', 'AU'],
+    detail: 'Local business reviews and contact details'
+  },
+  {
+    key: 'bing-places',
+    label: 'Bing Places',
+    kind: 'browser',
+    group: 'directory',
+    taskNames: ['scrapeBingPlaces'],
+    requires: ['playwright'],
+    registryKey: 'bing-places',
+    detail: 'Bing local business index'
+  },
+  {
+    key: 'tripadvisor',
+    label: 'TripAdvisor',
+    kind: 'http',
+    group: 'directory',
+    taskNames: ['scrapeTripAdvisor'],
+    requires: [],
+    registryKey: 'tripadvisor',
+    detail: 'Hospitality, dining, venues and tourism listings'
+  },
+  {
+    key: 'wikidata',
+    label: 'Wikidata Businesses',
+    kind: 'http',
+    group: 'open-data',
+    taskNames: ['scrapeWikidata'],
+    requires: [],
+    registryKey: 'wikidata-businesses',
+    detail: 'Free CC0 knowledge graph of organisations by city'
+  },
+  {
+    key: 'social-dork',
+    label: 'Social Dork (Intl)',
+    kind: 'http',
+    group: 'web',
+    taskNames: ['scrapeSocialDorkIntl'],
+    requires: [],
+    registryKey: 'social-dork-intl',
+    detail: 'Instagram / Facebook / LinkedIn footprint outside India'
+  },
+  {
+    key: 'freeindex',
+    label: 'FreeIndex UK',
+    kind: 'http',
+    group: 'directory',
+    taskNames: ['scrapeFreeIndexUK'],
+    requires: [],
+    registryKey: 'freeindex-uk',
+    countries: ['GB'],
+    detail: 'UK free business directory'
+  },
+  {
+    key: 'goldenpages',
+    label: 'GoldenPages Ireland',
+    kind: 'http',
+    group: 'directory',
+    taskNames: ['scrapeGoldenPagesIE'],
+    requires: [],
+    registryKey: 'goldenpages-ie',
+    countries: ['IE'],
+    detail: 'Irish business directory'
+  },
+  {
+    key: 'cylex',
+    label: 'Cylex',
+    kind: 'http',
+    group: 'directory',
+    taskNames: ['scrapeCylex'],
+    requires: [],
+    registryKey: 'cylex',
+    countries: ['GB', 'AU', 'CA', 'AE', 'SG', 'US'],
+    detail: 'Multi-country local business directory'
+  },
+  {
+    key: 'trustpilot',
+    label: 'Trustpilot',
+    kind: 'http',
+    group: 'directory',
+    taskNames: ['scrapeTrustpilot'],
+    requires: [],
+    registryKey: 'trustpilot',
+    paused: true,
+    pauseReason: 'Removed from the bundle: Trustpilot answers both its search API and its website with HTTP 403 to non-browser clients. We will not bypass it, so it no longer runs.',
+    detail: 'Verified business profiles with contact data'
   },
   {
     key: 'geocoder',

@@ -1,81 +1,38 @@
-const { launchStealthBrowser } = require('./browserFactory');
 const dbAdapter = require('../config/dbAdapter');
 const { verifyWithAI } = require('../utils/aiParser');
 const { extractPhones, normalizePhone } = require('../utils/phoneUtils');
+const { searchBingHtml } = require('./bingSearch');
 
 // Shared logging utility callback
 let logCallback = console.log;
 function setLogger(cb) { logCallback = cb; }
 function addLog(msg) { logCallback(msg); }
 
-/* Bing wraps outbound links: https://www.bing.com/ck/a?...&u=a1<base64url>. */
-function unwrapBingUrl(raw) {
-  if (!raw) return '';
-  try {
-    if (!/bing\.com/i.test(raw)) return raw;
-    const parsed = new URL(raw);
-    const encoded = parsed.searchParams.get('u');
-    if (!encoded) return raw;
-    let base64 = (encoded.startsWith('a1') ? encoded.slice(2) : encoded)
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-    while (base64.length % 4) base64 += '=';
-    const decoded = Buffer.from(base64, 'base64').toString('utf8');
-    return /^https?:\/\//i.test(decoded) ? decoded : raw;
-  } catch (err) {
-    return raw;
-  }
-}
-
 /**
  * One Bing result page, already link-unwrapped.
  * Returns { rows, captcha, error } and never throws.
+ *
+ * Bing is driven through its own search box (`bingSearch.js`) rather than a
+ * forged `?q=` URL, which this network answers with unrelated cached pages.
  */
 async function bingRows(query, platformName, pageIndex = 0) {
-  let browser = null;
-  let context = null;
   try {
-    const { browser: stealthBrowser } = await launchStealthBrowser(false);
-    browser = stealthBrowser;
-    context = await browser.newContext();
-    const page = await context.newPage();
-    const firstParam = pageIndex > 0 ? `&first=${pageIndex * 10 + 1}` : '';
-    await page.goto(`https://www.bing.com/search?q=${encodeURIComponent(query)}${firstParam}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
+    const { rows, blocked } = await searchBingHtml(query, {
+      maxPages: Math.max(1, pageIndex + 1),
+      logger: addLog
     });
-
-    // Bing paints results a moment after the HTML arrives.
-    try { await page.waitForSelector('li.b_algo', { timeout: 8000 }); } catch (e) {}
-
-    const html = await page.content();
-    if (html.includes('verify you are a human') || html.includes('captcha')) {
+    if (blocked) {
       addLog(`[Social Discovery] Bing served a human-verification page for ${platformName}.`);
       return { rows: [], captcha: true };
     }
-
-    const raw = await page.evaluate(() => {
-      const results = [];
-      document.querySelectorAll('li.b_algo').forEach(el => {
-        const titleEl = el.querySelector('h2 a');
-        const snippetEl = el.querySelector('.b_caption p') || el.querySelector('.b_algoSlug');
-        const title = titleEl ? titleEl.innerText.trim() : '';
-        const url = titleEl ? titleEl.getAttribute('href') : '';
-        const snippet = snippetEl ? snippetEl.innerText.trim() : (el.innerText || '');
-        if (url) results.push({ title, description: snippet, url });
-      });
-      return results;
-    });
-
-    // Bing hides every destination behind /ck/a?u=a1<base64>. Without decoding
-    // it first, the domain filter never matches a single real profile.
-    return { rows: raw.map(item => ({ ...item, url: unwrapBingUrl(item.url) })), captcha: false };
+    // `searchBingHtml` already decodes Bing's /ck/a redirects.
+    return {
+      rows: rows.map(item => ({ title: item.title, description: item.snippet, url: item.url })),
+      captcha: false
+    };
   } catch (err) {
-    addLog(`[Social Discovery] Browser error for ${platformName}: ${err.message}`);
+    addLog(`[Social Discovery] Bing error for ${platformName}: ${err.message}`);
     return { rows: [], error: err.message };
-  } finally {
-    try { if (context) await context.close(); } catch (e) {}
-    try { if (browser) await browser.close(); } catch (e) {}
   }
 }
 

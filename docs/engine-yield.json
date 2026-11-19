@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-11-18T02:25:04.613Z",
+  "perEngineTimeoutMs": 180000,
+  "runs": [
+    {
+      "country": "US",
+      "city": "Troy",
+      "category": "Photographers",
+      "results": [
+        {
+          "key": "web-discovery",
+          "label": "Web Discovery",
+          "ok": true,
+          "rows": 6,
+          "ms": 130473,
+          "skipped": null,
+          "phones": 0,
+          "websites": 0,
+          "emails": 0
+        },
+        {
+          "key": "bing-places",
+          "label": "Bing Places",
+          "ok": true,
+          "rows": 9,
+          "ms": 18585,
+          "skipped": null,
+          "phones": 0,
+          "websites": 0,
+          "emails": 0
+        },
+        {
+          "key": "tripadvisor",
+          "label": "TripAdvisor",
+          "ok": true,
+          "rows": 0,
+          "ms": 121692,
+          "skipped": null,
+          "phones": 0,
+          "websites": 0,
+          "emails": 0
+        }
+      ]
+    }
+  ]
+}

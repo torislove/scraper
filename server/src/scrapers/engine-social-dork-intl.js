@@ -14,11 +14,10 @@
  * Zero paid APIs, zero subscriptions.
  */
 
-const axios = require('axios');
-const cheerio = require('cheerio');
 const dv = require('./directoryVendor');
 const { extractPhones } = require('../utils/phoneUtils');
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
+const { searchBingHtml } = require('./bingSearch');
 
 let deps = {
   logger: console.log,
@@ -28,20 +27,6 @@ let deps = {
 
 function setDeps(newDeps) {
   deps = { ...deps, ...newDeps };
-}
-
-function decodeBingUrl(href) {
-  if (!href) return '';
-  if (!href.includes('bing.com/ck/')) return href;
-  const match = href.match(/[?&]u=a1([a-zA-Z0-9_-]+)/);
-  if (!match) return href;
-  try {
-    let b64 = match[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (b64.length % 4) b64 += '=';
-    return Buffer.from(b64, 'base64').toString('utf8');
-  } catch (e) {
-    return href;
-  }
 }
 
 // Country phone prefix hints for high-precision regex extraction
@@ -80,28 +65,22 @@ async function scrapeSocialDorkIntl(category, location, sessionId = 'legacy', co
     if (deps.abortSignal && deps.abortSignal.aborted) break;
 
     try {
-      const market = code === 'IN' ? 'en-IN' : `en-${code}`;
-      const searchUrl = `https://www.bing.com/search?q=${encodeURIComponent(dork)}&setlang=en&mkt=${market}&count=15`;
-      const resp = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9'
-        },
-        timeout: 12000
+      const { rows, blocked } = await searchBingHtml(dork, {
+        maxPages: 2,
+        logger: deps.logger,
+        abortSignal: deps.abortSignal
       });
+      if (blocked) {
+        deps.logger(`[Social Dork ${code}] Bing served a challenge — skipping instead of bypassing it.`);
+        continue;
+      }
 
-      const $ = cheerio.load(resp.data);
-      $('li.b_algo, div.b_algo').each((_, el) => {
-        const titleAnchor = $(el).find('h2 a');
-        const snippetEl = $(el).find('.b_caption p, .b_snippet, p');
-        
-        const title = (titleAnchor.text() || '').trim();
-        const snippet = (snippetEl.text() || '').trim();
-        const rawLink = titleAnchor.attr('href') || '';
-        const link = decodeBingUrl(rawLink);
+      for (const row of rows) {
+        const title = (row.title || '').trim();
+        const snippet = (row.snippet || '').trim();
+        const link = row.url || '';
 
-        if (!title || title.length < 3) return;
+        if (!title || title.length < 3) continue;
 
         // Clean company name
         const cleanName = title
@@ -112,7 +91,7 @@ async function scrapeSocialDorkIntl(category, location, sessionId = 'legacy', co
           .trim();
 
         // Skip generic directories or wiki
-        if (/wikipedia|dictionary|thesaurus/i.test(cleanName)) return;
+        if (/wikipedia|dictionary|thesaurus/i.test(cleanName)) continue;
 
         // Extract phone from snippet
         const phoneMatches = snippet.match(phoneRegex);
@@ -145,8 +124,7 @@ async function scrapeSocialDorkIntl(category, location, sessionId = 'legacy', co
             socials: { linkedin, facebook }
           });
         }
-      });
-
+      }
     } catch (err) {
       deps.logger(`[Social Dork ${code}] Dork query warning: ${err.message}`);
     }

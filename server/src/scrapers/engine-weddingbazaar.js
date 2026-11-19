@@ -254,7 +254,13 @@ async function scrapeWeddingBazaar(category, location, sessionId = 'legacy') {
   // photographers/caterers returns banquet halls, so only venue searches use it.
   if (!fidelity.isVenueCategory(category)) {
     deps.logger(`[WeddingBazaar] Skipped: "${category}" is not a venue category.`);
-    return { totalScraped: 0, newInserted: 0, updated: 0, skipped: 'not-a-venue-category' };
+    return {
+      totalScraped: 0,
+      newInserted: 0,
+      updated: 0,
+      skipped: 'not-a-venue-category',
+      note: `Skipped: "${category}" is not a venue category`
+    };
   }
   const url = listingUrl(location);
   const cityPart = citySlug(location);

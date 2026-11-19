@@ -73,11 +73,13 @@ check('one JustDial query at the city, no swarm', () => {
   // JustDial runs once at the settlement in every scope, client included.
   assert.equal(plan.jobs.filter(job => job.task === 'scrapeJustDial').length, 1);
 });
-check('directory engines are queried once at the city', () => {
+check('blocked engines are never dispatched', () => {
   const plan = planScopeEngines({ ...baseCtx, zones: towns });
-  const serp = plan.jobs.filter(job => job.task === 'scrapeGoogleSerp');
-  assert.equal(serp.length, 2);
-  assert.equal(serp[0].args[2], 'Guntur');
+  // Google SERP and IndiaMART are marked blocked in the registry, so the
+  // country bundle excludes them and no job may be queued for them. Queuing a
+  // permanently blocked engine only burns a queue slot on every sweep.
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapeGoogleSerp').length, 0);
+  assert.equal(plan.jobs.filter(job => job.task === 'scrapePuppeteerIndiaMart').length, 0);
 });
 
 console.log('\nmandal plan (client)');
@@ -161,7 +163,9 @@ check('wedding category queues wedding portals, others do not', () => {
   assert.equal(wedding.jobs.some(job => job.task === 'scrapeWeddingBazaar'), true);
   const plumbing = planScopeEngines({ ...baseCtx, engines: ['auto'], category: 'Plumbers' });
   assert.equal(plumbing.jobs.some(job => job.task === 'scrapeWeddingBazaar'), false);
-  assert.equal(plumbing.jobs.some(job => job.task === 'scrapePuppeteerIndiaMart'), true);
+  // IndiaMART is blocked in the registry (bot wall, no keyless path), so the
+  // bundle excludes it and a non-wedding category must not queue it.
+  assert.equal(plumbing.jobs.some(job => job.task === 'scrapePuppeteerIndiaMart'), false);
 });
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

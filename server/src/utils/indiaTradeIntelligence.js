@@ -324,36 +324,89 @@ function normalizeBrandToken(name) {
     .trim();
 }
 
+// Words that describe a trade, not a business. "Catering By Grand GRT" and
+// "Ghiza Family Restaurant & Arabian Mandi" share almost nothing once these
+// are removed, which is exactly the point: they are different businesses.
+const NAME_NOISE = new Set([
+  'the', 'and', 'by', 'of', 'for', 'pvt', 'ltd', 'limited', 'private', 'llp',
+  'inc', 'co', 'company', 'best', 'top', 'new', 'near', 'sri', 'shri', 'sai',
+  'catering', 'catterings', 'caterers', 'caterer', 'restaurant', 'restaurants',
+  'family', 'arabian', 'mandi', 'hotel', 'hotels', 'foods', 'food', 'events',
+  'event', 'services', 'service', 'solutions', 'group', 'grand', 'royal',
+  'centre', 'center', 'hub', 'works', 'enterprises', 'enterprise'
+]);
+
+function coreNameTokens(name) {
+  return String(name || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(token => token.length >= 3 && !NAME_NOISE.has(token));
+}
+
 /**
- * Determines if two vendor entries are near-duplicates based on brand core token
- * and city proximity.
+ * How much two business names actually share, 0..1.
+ * Uses the distinctive words only, so "Grand GRT" vs "Ghiza" scores 0.
+ */
+function nameSimilarity(nameA, nameB) {
+  const a = new Set(coreNameTokens(nameA));
+  const b = new Set(coreNameTokens(nameB));
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const token of a) if (b.has(token)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+
+// Directory switchboards that appear on hundreds of unrelated listings. A
+// shared number alone must never merge two businesses; these are the ones we
+// have actually seen repeated (JustDial's own Bangalore line, for example).
+const SHARED_DIRECTORY_NUMBERS = new Set([
+  '08062210155',
+  '18602080808',
+  '18001234567'
+]);
+
+function sameCity(a, b) {
+  const ca = String(a.city || a.locality || '').toLowerCase().trim();
+  const cb = String(b.city || b.locality || '').toLowerCase().trim();
+  if (!ca || !cb) return true; // cannot judge, do not block
+  return ca === cb || ca.includes(cb) || cb.includes(ca);
+}
+
+/**
+ * Determines if two vendor entries are near-duplicates.
+ *
+ * A shared phone number is NOT enough on its own: directory sites reuse a
+ * switchboard across unrelated vendors, and trusting it chain-merged 26
+ * different Vijayawada caterers into one row. Phone overlap now needs name
+ * evidence too.
  */
 function areNearDuplicates(leadA, leadB) {
   if (!leadA || !leadB) return false;
+  if (!sameCity(leadA, leadB)) return false;
 
-  // 1. Direct phone overlap
-  const phonesA = (Array.isArray(leadA.phones) ? leadA.phones : [leadA.phone]).filter(Boolean);
-  const phonesB = (Array.isArray(leadB.phones) ? leadB.phones : [leadB.phone]).filter(Boolean);
-  for (const pa of phonesA) {
-    const cleanA = String(pa).replace(/\D/g, '').slice(-10);
-    if (cleanA.length === 10) {
-      for (const pb of phonesB) {
-        const cleanB = String(pb).replace(/\D/g, '').slice(-10);
-        if (cleanB.length === 10 && cleanA === cleanB) {
-          return true;
-        }
-      }
-    }
-  }
-
-  // 2. Exact normalized brand token match (if at least 4 characters long)
   const tokenA = normalizeBrandToken(leadA.name);
   const tokenB = normalizeBrandToken(leadB.name);
+  const similarity = nameSimilarity(leadA.name, leadB.name);
 
+  // 1. Exact normalized brand token match (if at least 4 characters long)
   if (tokenA && tokenB && tokenA.length >= 4 && tokenB.length >= 4) {
     if (tokenA === tokenB) return true;
     if (tokenA.length >= 6 && tokenB.length >= 6) {
       if (tokenA.includes(tokenB) || tokenB.includes(tokenA)) return true;
+    }
+  }
+
+  // 2. Shared phone, but only when the names agree that this is the same shop.
+  const phonesA = (Array.isArray(leadA.phones) ? leadA.phones : [leadA.phone]).filter(Boolean);
+  const phonesB = (Array.isArray(leadB.phones) ? leadB.phones : [leadB.phone]).filter(Boolean);
+  for (const pa of phonesA) {
+    const cleanA = String(pa).replace(/\D/g, '').slice(-10);
+    if (cleanA.length !== 10 || SHARED_DIRECTORY_NUMBERS.has(cleanA)) continue;
+    for (const pb of phonesB) {
+      const cleanB = String(pb).replace(/\D/g, '').slice(-10);
+      if (cleanB.length !== 10 || cleanA !== cleanB) continue;
+      if (similarity >= 0.6) return true;
     }
   }
 
@@ -396,6 +449,10 @@ function mergeVendorLeads(primary, secondary) {
     return scoreB - scoreA;
   });
 
+  // A real business has a handful of lines, not dozens. Anything beyond six
+  // means we were merging unrelated vendors; keep the best six and move on.
+  const MAX_PHONES_PER_LEAD = 6;
+  if (cleanPhones.length > MAX_PHONES_PER_LEAD) cleanPhones.length = MAX_PHONES_PER_LEAD;
   merged.phones = cleanPhones.length ? cleanPhones : (primary.phones || [primary.phone].filter(Boolean));
   merged.phone = cleanPhones[0] || primary.phone || secondary.phone || null;
 
