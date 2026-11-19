@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper-master
+  namespace: scraper-prod
+  labels:
+    app: scraper-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scraper-master
+  template:
+    metadata:
+      labels:
+        app: scraper-master
+    spec:
+      containers:
+        - name: master
+          image: ghcr.io/scraper-coin/scraper-master:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scraper-master-service
+  namespace: scraper-prod
+  labels:
+    app: scraper-master
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: scraper-master

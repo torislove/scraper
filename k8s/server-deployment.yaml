@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper-server
+  namespace: scraper-prod
+  labels:
+    app: scraper-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: scraper-server
+  template:
+    metadata:
+      labels:
+        app: scraper-server
+    spec:
+      containers:
+        - name: server
+          image: ghcr.io/scraper-coin/scraper-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5002
+              name: http
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+            - secretRef:
+                name: scraper-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "3Gi"
+          volumeMounts:
+            # Crucial: Chromium requires shared memory (/dev/shm) to prevent crashes on high-concurrency tabs
+            - name: dshm
+              mountPath: /dev/shm
+            - name: storage
+              mountPath: /app/server/db
+              subPath: db
+            - name: storage
+              mountPath: /app/server/data
+              subPath: data
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5002
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 2
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+        - name: storage
+          persistentVolumeClaim:
+            claimName: scraper-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scraper-server-service
+  namespace: scraper-prod
+  labels:
+    app: scraper-server
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5002
+      targetPort: 5002
+      protocol: TCP
+      name: http
+  selector:
+    app: scraper-server

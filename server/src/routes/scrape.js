@@ -43,6 +43,7 @@ const credits = require('../services/credits');
 const engineHealth = require('../services/engineHealth');
 const requestGuard = require('../utils/requestGuard');
 const { buildScopeZones } = require('../services/sweepScopePolicy');
+const { makeSessionId } = require('../utils/sessionId');
 const { buildCountrySweepPlan } = require('../services/countrySweepPlan');
 const { runOmniSearchOrchestrator, isInsideDistrictBoundary } = require('../services/omniSearchOrchestrator');
 const { persistSessionVault } = require('../services/sessionVaultService');
@@ -486,20 +487,27 @@ router.post('/settings', (req, res) => {
 const activeCronJobs = {};
 
 router.get('/jobs', (req, res) => {
-  const cronJobs = Object.keys(activeCronJobs).map(cat => ({
+  const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+  const requestingUserId = req.headers['x-user-id'];
+
+  const cronJobs = isMaster ? Object.keys(activeCronJobs).map(cat => ({
     category: cat,
     interval: activeCronJobs[cat].interval,
     status: activeCronJobs[cat].status,
     location: activeCronJobs[cat].location
-  }));
+  })) : [];
 
-  // Include recent sessions, finished or running. A finished record is how the
-  // client watchdog learns that a run actually completed instead of guessing
-  // from silence.
+  // Include recent sessions, finished or running, filtered by user identity
   const now = Date.now();
   const recentSessions = Object.values(activeSessions).filter(s => {
     const started = Number(s.startTime) || 0;
-    return !started || now - started < 2 * 60 * 60 * 1000;
+    const isRecent = !started || now - started < 2 * 60 * 60 * 1000;
+    if (!isRecent) return false;
+    if (isMaster) return true;
+    if (!requestingUserId || requestingUserId === 'anonymous') {
+      return !s.userId || s.userId === 'anonymous';
+    }
+    return s.userId === requestingUserId || s.clientId === requestingUserId;
   });
 
   const activeQueue = (typeof getActiveJobs === 'function') ? getActiveJobs() : [];
@@ -521,7 +529,7 @@ router.get('/jobs', (req, res) => {
   }));
 
   // If queue has jobs running, also expose them
-  if (omniJobs.length === 0 && activeQueue.length > 0) {
+  if (omniJobs.length === 0 && activeQueue.length > 0 && isMaster) {
     activeQueue.forEach((qJob, idx) => {
       omniJobs.push({
         id: `queue_${idx}`,
@@ -538,13 +546,19 @@ router.get('/jobs', (req, res) => {
 });
 
 router.get('/active', (req, res) => {
-  const sessions = Object.values(activeSessions);
-  // Prefer the genuinely live session, newest first. The old predicate only
-  // checked `completed < total`, so a stale session left in memory (aborted,
-  // failed, or completed before the live-snapshot fix) could be returned while
-  // a different run was actually in flight - and its frozen ETA/zone counts
-  // leaked into the panel. Finished sessions are still available as a fallback
-  // so an idle UI can show the last run.
+  const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+  const requestingUserId = req.headers['x-user-id'];
+
+  let sessions = Object.values(activeSessions);
+  if (!isMaster) {
+    if (requestingUserId && requestingUserId !== 'anonymous') {
+      sessions = sessions.filter(s => s.userId === requestingUserId || s.clientId === requestingUserId);
+    } else {
+      sessions = sessions.filter(s => !s.userId || s.userId === 'anonymous');
+    }
+  }
+
+  // Prefer the genuinely live session, newest first.
   const newestFirst = (a, b) => (b.startTime || 0) - (a.startTime || 0);
   const liveSession = sessions
     .filter(s => s.sessionActive && !s.finished && s.status !== 'aborted' && s.status !== 'completed' && !globalAbortSignal.aborted)
@@ -554,9 +568,6 @@ router.get('/active', (req, res) => {
     || null;
 
   const activeQueue = (typeof getActiveJobs === 'function') ? getActiveJobs() : [];
-  // An aborted/completed session can never be "scraping", even while the last
-  // browser job is still settling. Otherwise the stop button leaves the UI
-  // spinner running for a few extra seconds after the folder is already saved.
   const sessionIsLive = Boolean(
     runningSession
     && !runningSession.finished
@@ -564,7 +575,7 @@ router.get('/active', (req, res) => {
     && runningSession.status !== 'completed'
     && runningSession.overallCompletedMandals < (runningSession.overallTotalMandals || 1)
   );
-  const isScraping = activeQueue.length > 0 || sessionIsLive;
+  const isScraping = (isMaster && activeQueue.length > 0) || sessionIsLive;
 
   res.json({
     isScraping: Boolean(isScraping),
@@ -796,7 +807,7 @@ router.post('/omni', async (req, res) => {
     dbAdapter.flushSync();
   }
 
-  const finalSessionId = sessionId || 'omni_' + Date.now().toString(36);
+  const finalSessionId = sessionId || makeSessionId('omni');
   const classification = categoryRouter.classifyCategory(matchedCategory);
 
   // If explicit engines are provided by the user/UI, honor them; otherwise route automatically.
@@ -1000,7 +1011,7 @@ router.post('/auto', async (req, res) => {
     }
     if (creditsPreflight(res)) return;
 
-    const finalSessionId = sessionId || ((isMaster ? 'master_sweep_' : 'client_auto_') + Date.now().toString(36));
+    const finalSessionId = sessionId || makeSessionId(isMaster ? 'master_sweep' : 'client_auto');
     globalAbortSignal.aborted = false;
     sessionAbortSignals.set(finalSessionId, { aborted: false });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
@@ -1219,7 +1230,7 @@ router.post('/master-sweep', async (req, res) => {
     if (req.body.hasWebsite === true) filters.hasWebsite = true;
     if (req.body.verifiedOnly === true) filters.verifiedOnly = true;
 
-    const sessionId = req.body.sessionId || `master_sweep_${Date.now().toString(36)}`;
+    const sessionId = req.body.sessionId || makeSessionId('master_sweep');
     const finalLocation = `${sweepTitle} (${resolvedScope.toUpperCase()} SWEEP)`;
 
     // Reset abort signals for fresh master sweep
@@ -1627,20 +1638,32 @@ const handleMasterStopAll = async (req, res) => {
   );
 
   let targets = [];
+  const requestingUserId = req.headers['x-user-id'];
   if (bodySessionId) {
     targets = runningSessions.filter(session => session.sessionId === bodySessionId);
     if (targets.length === 0 && activeSessions[bodySessionId]) {
       targets = [activeSessions[bodySessionId]];
     }
+    // Prevent client users from stopping another client's session
+    if (workspaceScope !== 'master' && requestingUserId && requestingUserId !== 'anonymous') {
+      targets = targets.filter(session => session.userId === requestingUserId || session.clientId === requestingUserId);
+      if (targets.length === 0) {
+        return res.status(403).json({ error: 'Forbidden: Cannot abort another user\'s scrape session' });
+      }
+    }
   } else if (workspaceScope === 'master') {
     targets = runningSessions.filter(session => session.isMaster || session.sessionId.startsWith('master_'));
   } else if (workspaceScope === 'client') {
-    targets = runningSessions.filter(session => !session.isMaster && !session.sessionId.startsWith('master_'));
+    targets = runningSessions.filter(session => !session.isMaster && !session.sessionId.startsWith('master_') && 
+      (!requestingUserId || requestingUserId === 'anonymous' || session.userId === requestingUserId));
   } else {
     targets = runningSessions;
   }
-  // ALWAYS unconditionally set globalAbortSignal.aborted so active Playwright loops terminate immediately
-  globalAbortSignal.aborted = true;
+
+  // Only trigger global abort if no specific session targeted and master invoked
+  if (!bodySessionId && workspaceScope === 'master') {
+    globalAbortSignal.aborted = true;
+  }
 
   // 2. Mark targets as aborted and signal per-session abort controllers
   for (const session of targets) {

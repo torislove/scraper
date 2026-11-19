@@ -1,0 +1,58 @@
+services:
+  scraper-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: scraper-server
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - NODE_ENV=production
+      - SCRAPER_ALLOW_REMOTE=1
+      - PLAYWRIGHT_CONCURRENCY=4
+      - AUTH_REQUIRED=1
+      - SESSION_SECRET=${SESSION_SECRET:-scraper-super-secure-session-secret-change-me}
+      - MASTER_KEY=${MASTER_KEY:-master-admin-secret-key-change-me}
+    volumes:
+      # Persistent storage for vaults, lead database, and users
+      - scraper_data:/app/server/data
+      - scraper_db:/app/server/db
+    shm_size: "1gb" # Essential: Chromium requires >=1GB shared memory to avoid crashes
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  scraper-client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: scraper-client
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      scraper-server:
+        condition: service_healthy
+
+  scraper-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.master
+    container_name: scraper-master
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    depends_on:
+      scraper-server:
+        condition: service_healthy
+
+volumes:
+  scraper_data:
+    name: scraper_production_data
+  scraper_db:
+    name: scraper_production_db

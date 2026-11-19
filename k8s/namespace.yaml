@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scraper-prod
+  labels:
+    app.kubernetes.io/name: scraper
+    app.kubernetes.io/part-of: scraper-suite

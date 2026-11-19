@@ -25,6 +25,8 @@ const saveUpdatedVendor = (vendors, updated) => {
 router.get('/', (req, res) => {
   try {
     const { userId, since, sessionId } = req.query;
+    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    const requestingUserId = req.headers['x-user-id'] || userId;
     let data = (dbAdapter.getVendors() || []).slice();
 
     // Session-scoped view. The live store is append-only, so the panel asks for
@@ -35,6 +37,9 @@ router.get('/', (req, res) => {
         || v.lastSessionId === sessionId
         || (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
       );
+    } else if (!isMaster && requestingUserId && requestingUserId !== 'anonymous') {
+      // Multi-tenant protection: non-master callers without sessionId only see their own leads
+      data = data.filter(v => v.userId === requestingUserId || v.clientId === requestingUserId);
     }
 
     if (since && Number(since) > 0) {

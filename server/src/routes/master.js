@@ -26,6 +26,15 @@ function requireMaster(req, res, next) {
   if (key && req.headers['x-master-key'] !== key) {
     return res.status(403).json({ error: 'Master key required.', code: 'master_key_required' });
   }
+
+  // Verify master scope or role
+  const isMaster = req.headers['x-workspace-scope'] === 'master' || 
+                   req.identity?.role === 'master' || 
+                   req.identity?.role === 'admin';
+  if (!isMaster && process.env.AUTH_REQUIRED === '1') {
+    return res.status(403).json({ error: 'Forbidden: Master administrative privileges required.', code: 'master_required' });
+  }
+
   return next();
 }
 
@@ -130,6 +139,103 @@ router.post('/notifications', (req, res) => {
     res.json({ ok: true, notification });
   } catch (error) {
     res.status(400).json({ error: error.message });
+  }
+});
+
+/* ------------------------------------------------------------ master lead bank */
+
+router.get('/leads', (req, res) => {
+  try {
+    const { client = 'all', country, state, district, category, q, hasPhone, limit = 100, page = 1 } = req.query;
+    const maxLimit = Math.min(Number(limit) || 100, 500);
+    const pageNum = Math.max(Number(page) || 1, 1);
+    const skip = (pageNum - 1) * maxLimit;
+
+    const dirsToScan = [];
+    if (fs.existsSync(SESSIONS_DIR)) {
+      const subdirs = fs.readdirSync(SESSIONS_DIR).filter(f => {
+        try { return fs.statSync(path.join(SESSIONS_DIR, f)).isDirectory(); } catch (e) { return false; }
+      });
+      for (const sd of subdirs) {
+        if (client === 'all' || client === sd) {
+          dirsToScan.push({ dir: path.join(SESSIONS_DIR, sd), clientId: sd });
+        }
+      }
+    }
+
+    const leadDedupeMap = new Map();
+    const queryLower = q ? String(q).toLowerCase() : null;
+    const catLower = category ? String(category).toLowerCase() : null;
+    const countryUpper = country ? String(country).toUpperCase() : null;
+    const stateLower = state ? String(state).toLowerCase() : null;
+    const distLower = district ? String(district).toLowerCase() : null;
+    const requirePhone = String(hasPhone) === 'true' || hasPhone === '1';
+
+    for (const { dir, clientId } of dirsToScan) {
+      if (!fs.existsSync(dir)) continue;
+      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+
+      for (const file of files) {
+        try {
+          const sessionData = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'));
+          if (!sessionData || !Array.isArray(sessionData.leads)) continue;
+
+          for (const lead of sessionData.leads) {
+            if (!lead || !lead.name) continue;
+
+            const phone = lead.phone || lead.mobile || '';
+            const phoneValid = phone && !/Obfuscated|Requires/i.test(String(phone));
+            if (requirePhone && !phoneValid) continue;
+
+            if (countryUpper && lead.country && String(lead.country).toUpperCase() !== countryUpper) continue;
+            if (catLower && lead.category && !String(lead.category).toLowerCase().includes(catLower)) continue;
+            if (stateLower && lead.state && !String(lead.state).toLowerCase().includes(stateLower)) continue;
+            if (distLower && lead.district && !String(lead.district).toLowerCase().includes(distLower)) continue;
+
+            if (queryLower) {
+              const match = (lead.name && lead.name.toLowerCase().includes(queryLower)) ||
+                            (phone && phone.includes(queryLower)) ||
+                            (lead.city && lead.city.toLowerCase().includes(queryLower)) ||
+                            (lead.address && lead.address.toLowerCase().includes(queryLower));
+              if (!match) continue;
+            }
+
+            // Deduplicate by normalized phone or name + city
+            const normPhone = phone.replace(/[^0-9]/g, '');
+            const dedupeKey = normPhone && normPhone.length >= 8
+              ? `phone_${normPhone}`
+              : `name_${String(lead.name).toLowerCase().trim()}_${String(lead.city || '').toLowerCase().trim()}`;
+
+            if (!leadDedupeMap.has(dedupeKey)) {
+              leadDedupeMap.set(dedupeKey, {
+                ...lead,
+                clientId,
+                sessionId: sessionData.id,
+                discoveredAt: sessionData.timestamp || sessionData.createdAt || null
+              });
+            }
+          }
+        } catch (e) {
+          // Skip corrupt file
+        }
+      }
+    }
+
+    const allLeads = Array.from(leadDedupeMap.values());
+    const totalCount = allLeads.length;
+    const paginatedLeads = allLeads.slice(skip, skip + maxLimit);
+
+    res.json({
+      success: true,
+      leads: paginatedLeads,
+      totalCount,
+      page: pageNum,
+      limit: maxLimit,
+      totalPages: Math.ceil(totalCount / maxLimit)
+    });
+  } catch (error) {
+    console.error('[Master] Failed to query leads:', error);
+    res.status(500).json({ error: 'Failed to query master lead bank' });
   }
 });
 

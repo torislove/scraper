@@ -1,12 +1,16 @@
-# Manoj's Scraper.co.in Autonomous Cloud Server
-FROM node:20-bullseye-slim
+# ==========================================
+# Scraper.co.in - Autonomous Scraping Engine
+# Production Container Image (Playwright Chromium)
+# ==========================================
 
-# Install system dependencies required for Chromium / Playwright
+FROM node:20-bookworm-slim
+
+# Install system dependencies required for Chromium & Playwright
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    gnupg \
-    ca-certificates \
+    curl \
+    dumb-init \
     procps \
+    ca-certificates \
     libnss3 \
     libatk1.0-0 \
     libatk-bridge2.0-0 \
@@ -24,27 +28,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
+# Set up shared Playwright browser directory accessible by node user
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir -p /ms-playwright && chown -R node:node /ms-playwright
+
 WORKDIR /app
 
-# Copy root gazetteer data
-COPY data/ ./data/
+# Copy root gazetteer and metadata data
+COPY --chown=node:node data/ ./data/
 
-# Copy server package definitions
-COPY server/package*.json ./server/
+# Copy server dependency manifests
+COPY --chown=node:node server/package*.json ./server/
 
 WORKDIR /app/server
-RUN npm ci --only=production
 
-# Install Playwright browser binary
+# Install production dependencies and Playwright Chromium binary
+RUN npm ci --omit=dev
 RUN npx playwright install chromium
 
-# Copy server source code
-COPY server/ ./
+# Copy server application source code
+COPY --chown=node:node server/ ./
 
-ENV PORT=8080
+# Create data directories with appropriate permissions
+RUN mkdir -p /app/server/data /app/server/db/user_sessions && chown -R node:node /app/server/data /app/server/db
+
+# Switch to non-root node user for security
+USER node
+
+# Production environment defaults
+ENV PORT=5002
 ENV NODE_ENV=production
-ENV PLAYWRIGHT_CONCURRENCY=5
+ENV SCRAPER_ALLOW_REMOTE=1
+ENV PLAYWRIGHT_CONCURRENCY=4
 
-EXPOSE 8080
+EXPOSE 5002
 
+# Health check probe
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:5002/api/health || exit 1
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "index.js"]

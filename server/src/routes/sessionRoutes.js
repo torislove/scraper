@@ -30,22 +30,37 @@ function safeSessionKey(id) {
  * List, get, rename, merge and delete all use it, so a folder can never be
  * visible but undeletable (or deletable but invisible).
  */
-function listSessionDirs({ isMaster = false } = {}) {
+function listSessionDirs({ isMaster = false, userId = null } = {}) {
   const dirs = [];
   if (!fs.existsSync(SESSIONS_DIR)) return dirs;
-  for (const entry of fs.readdirSync(SESSIONS_DIR)) {
-    // Internal folders (recovery bins, guard backups, migration output) are not
-    // user vaults. Listing them made the sidebar show a backup's 151 rows while
-    // the real folder held 114, and could shadow the real folder entirely.
-    if (!entry || entry.startsWith('_') || entry.startsWith('.')) continue;
-    try {
-      if (!fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) continue;
-    } catch (e) {
-      continue;
+
+  if (isMaster) {
+    for (const entry of fs.readdirSync(SESSIONS_DIR)) {
+      if (!entry || entry.startsWith('_') || entry.startsWith('.')) continue;
+      try {
+        if (!fs.statSync(path.join(SESSIONS_DIR, entry)).isDirectory()) continue;
+      } catch (e) {
+        continue;
+      }
+      dirs.push(path.join(SESSIONS_DIR, entry));
     }
-    if (!isMaster && entry === 'master') continue;
-    dirs.push(path.join(SESSIONS_DIR, entry));
+  } else {
+    // Client view: ONLY scan the client's own directory (plus anonymous if unauthenticated)
+    const rawUser = userId ? String(userId).trim() : 'anonymous';
+    const safeUser = rawUser.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const userDir = path.join(SESSIONS_DIR, safeUser);
+    if (fs.existsSync(userDir)) {
+      dirs.push(userDir);
+    }
+    // Also include anonymous vault if caller is anonymous or has no userDir yet
+    if (safeUser === 'anonymous' || !dirs.length) {
+      const anonDir = path.join(SESSIONS_DIR, 'anonymous');
+      if (fs.existsSync(anonDir) && !dirs.includes(anonDir)) {
+        dirs.push(anonDir);
+      }
+    }
   }
+
   dirs.sort((a, b) => {
     const an = path.basename(a);
     const bn = path.basename(b);
@@ -57,10 +72,10 @@ function listSessionDirs({ isMaster = false } = {}) {
 }
 
 /** Every on-disk copy of one folder, in the directories the caller may see. */
-function resolveSessionFiles(sessionId, { isMaster = false } = {}) {
+function resolveSessionFiles(sessionId, { isMaster = false, userId = null } = {}) {
   const safeId = safeSessionKey(sessionId);
   const files = [];
-  for (const dir of listSessionDirs({ isMaster })) {
+  for (const dir of listSessionDirs({ isMaster, userId })) {
     const filePath = path.join(dir, `${safeId}.json`);
     if (fs.existsSync(filePath)) files.push(filePath);
   }
@@ -920,7 +935,7 @@ router.get(['/list', '/list/:userId'], (req, res) => {
       // Client view: Access client session folders (own user ID, anonymous, and guest/client runs).
       // STRICT RULE: Master territorial sweeps are filtered out and inaccessible.
       const userId = req.headers['x-user-id'] || req.params.userId || 'anonymous';
-      const userDirs = listSessionDirs({ isMaster: false });
+      const userDirs = listSessionDirs({ isMaster: false, userId });
 
       for (const userDir of userDirs) {
         if (!fs.existsSync(userDir)) continue;
