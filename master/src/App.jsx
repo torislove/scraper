@@ -21,17 +21,9 @@ const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
 const FeatureShell = lazyRetry(() => import('./v2/FeatureShell'));
-const WhatsAppPage = lazyRetry(() => import('./v2/whatsapp/WhatsAppPage'));
 const MasterClients = lazyRetry(() => import('./v2/MasterClients'));
 const LearningCenter = lazyRetry(() => import('./v2/LearningCenter'));
 const LiveAnimationTheater = lazyRetry(() => import('./v2/LiveAnimationTheater'));
-
-function WhatsAppRoute() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const targetLead = location.state?.targetLead || null;
-  return <WhatsAppPage onBack={() => navigate('/command')} targetLead={targetLead} />;
-}
 
 function LearningRoute() {
   return (
@@ -201,7 +193,7 @@ export default function App() {
           <Route path="/login" element={<LoginV2 variant="master" />} />
           <Route path="/logout" element={<LogoutRoute />} />
           <Route path="/landing" element={<LandingV2 />} />
-          <Route path="/whatsapp" element={<WhatsAppRoute />} />
+          <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
           <Route path="/clients" element={<MasterClients />} />
           <Route path="/learning" element={<LearningRoute />} />
           <Route path="/theater" element={<TheaterRoute />} />

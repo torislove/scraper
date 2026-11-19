@@ -83,10 +83,8 @@ const publicUsersRoutes = require('./src/routes/publicUsers');
 const locationsRoutes = require('./src/routes/locations');
 const automationsRoutes = require('./src/routes/automations');
 const sessionRoutes = require('./src/routes/sessionRoutes');
-const crmRoutes = require('./src/routes/crm');
 const deepProfileRoutes = require('./src/routes/deepProfile');
 const searchRoutes = require('./src/routes/search');
-const whatsappRoutes = require('./src/routes/whatsapp');
 const openApiV2Routes = require('./src/routes/openApiV2');
 
 const app = express();
@@ -321,10 +319,8 @@ app.use('/api/locations', locationsRoutes);
 app.use('/api/location', locationsRoutes);
 app.use('/api/automations', automationsRoutes);
 app.use('/api/sessions', sessionRoutes);
-app.use('/api/crm', crmRoutes);
 app.use('/api/deep-profile', deepProfileRoutes);
 app.use('/api/search', searchRoutes);
-app.use('/api/wa', whatsappRoutes);
 app.use('/api/v2', openApiV2Routes);
 
 // Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)
@@ -448,7 +444,6 @@ app.get(['/api/export/sample-excel', '/api/sessions/export/sample-excel', '/api/
 app.use('/api/api/locations', locationsRoutes);
 app.use('/api/api/deep-profile', deepProfileRoutes);
 app.use('/api/api/location', locationsRoutes);
-app.use('/api/api/crm', crmRoutes);
 app.use('/api/api/vendors', vendorsRoutes);
 app.use('/api/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/api/sessions', sessionRoutes);
@@ -634,17 +629,6 @@ const httpServer = app.listen(PORT, HOST, () => {
       console.warn('[warmup] suggestion warmup skipped:', error.message);
     }
   }, 350);
-
-  // Scheduled WhatsApp messages and chat-list sync. Nothing is sent unless the
-  // customer turned auto-send on and connected their own WhatsApp.
-  setTimeout(() => {
-    try {
-      require('./src/services/whatsapp/waScheduler').start();
-      console.log('[wa] scheduler started');
-    } catch (error) {
-      console.warn('[wa] scheduler skipped:', error.message);
-    }
-  }, 1200);
 });
 
 httpServer.on('error', (err) => {
