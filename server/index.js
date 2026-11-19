@@ -77,9 +77,7 @@ const authRoutes = require('./src/routes/auth');
 const { apiRouter, setLogGetter } = require('./src/routes/api');
 const { scrapeRouter, setDeps } = require('./src/routes/scrape');
 const vendorsRoutes = require('./src/routes/vendors');
-const employeesRoutes = require('./src/routes/employees');
 const uploadRoutes = require('./src/routes/upload');
-const publicUsersRoutes = require('./src/routes/publicUsers');
 const locationsRoutes = require('./src/routes/locations');
 const automationsRoutes = require('./src/routes/automations');
 const sessionRoutes = require('./src/routes/sessionRoutes');
@@ -308,9 +306,7 @@ app.use('/api', apiRouter);
 app.use('/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/master', masterRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/public', publicUsersRoutes);
 app.use('/api/vendors', vendorsRoutes);
-app.use('/api/employees', employeesRoutes);
 app.use('/api/upload', uploadRoutes);
 // The upload route historically returned `/api/uploads/<file>` while being
 // mounted at `/api/upload`. Serve both so old avatars keep resolving.

@@ -7,7 +7,7 @@ import {
 import { formatNumber, cx } from '../../ui';
 import FilterBar from '../cards/FilterBar';
 import { VendorAvatar, EmptyState } from '../cards/MetricCard';
-import { CRM_STAGES, crmStageOf } from '../../CrmBoard';
+import { CRM_STAGES, crmStageOf } from '../../utils/leadStages';
 import { qualityOf, calculateHaversineKm } from '../../utils/leadHelpers';
 import { isMobilePhone, whatsappNumber, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';

@@ -16,7 +16,7 @@ import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
 import EngineStatusBoard from './EngineStatusBoard';
 import MasterTerminalView from './MasterTerminalView';
-import CrmBoard, { CRM_STAGES, crmStageOf, formatInr } from './CrmBoard';
+import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
@@ -34,13 +34,6 @@ import {
 import { createLiveStream } from './liveStream';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
-import {
-  DEFAULT_PRODUCTS,
-  CATALOG_TEMPLATES,
-  formatProductMessage,
-  copyImageToClipboard,
-  exportLeadsToVcf
-} from '../utils/whatsappCatalog';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 
@@ -78,7 +71,6 @@ import { MetricCard, ToggleTile, VendorAvatar, EmptyState, MapLegend, DeepJobRow
 import FilterBar, { SORTS } from './components/cards/FilterBar';
 import RenameModal from './components/modals/RenameModal';
 import MergeModal from './components/modals/MergeModal';
-import WhatsAppCampaignModal from './components/modals/WhatsAppCampaignModal';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
@@ -2535,20 +2527,6 @@ export default function CommandCenter() {
         </button>
         <button
           type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'crm' && 'is-active')}
-          onClick={() => setActiveTab('crm')}
-        >
-          {activeTab === 'crm' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Users size={14} /> CRM <b>{formatNumber(vendors.filter(v => crmStageOf(v) !== 'new').length)}</b>
-        </button>
-        <button
-          type="button"
           className={cx('v2-tab-pill-btn', activeTab === 'runs' && 'is-active')}
           onClick={() => setActiveTab('runs')}
         >
@@ -2829,16 +2807,6 @@ export default function CommandCenter() {
                 mapZoom={mapZoom}
                 estimate={estimate}
                 setSelectedVendor={setSelectedVendor}
-              />
-            )}
-
-            {activeTab === 'crm' && (
-              <CrmBoard
-                vendors={vendors}
-                onOpen={setSelectedVendor}
-                onStageChange={updateCrmStage}
-                onValueChange={updateDealValue}
-                savingId={crmSavingId}
               />
             )}
 

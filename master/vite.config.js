@@ -2,9 +2,6 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
 
-// Unified self-contained 3D design system inside src/ui3d
-const ui3dRoot = fileURLToPath(new URL('./src/ui3d', import.meta.url))
-
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -45,16 +42,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
-        '@ui3d': ui3dRoot,
-        // shared/ui3d lives outside this app root, so bare imports must be
-        // pointed at this app's own copy. Same physical module → no duplicate
-        // React, and the desktop bundle stays self-contained.
         react: fileURLToPath(new URL('./node_modules/react', import.meta.url)),
         'react-dom': fileURLToPath(new URL('./node_modules/react-dom', import.meta.url)),
       },
-    },
-    optimizeDeps: {
-      include: ['react-window', 'react-virtualized-auto-sizer'],
     },
     define: {
       'process.env': {},

@@ -7,10 +7,7 @@ import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
-import '@ui3d/tokens.css';
-import '@ui3d/kit.css';
 import './v2/v2.css';
-import './v2/ui3d.css';
 import './v2/revamp.css';
 import './v2/glass3d.css';
 import './v2/whiteTheme.css';
@@ -21,9 +18,6 @@ import './v2/retroEmboss.css';
 const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
-// Dev-only surface gallery. `import.meta.env.DEV` is statically false in every
-// build, so this import is removed from production and desktop bundles.
-const Lab = import.meta.env.DEV ? lazyRetry(() => import('./v2/Lab')) : null;
 
 function PageLoader() {
   return (
@@ -175,7 +169,6 @@ export default function App() {
           <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
           <Route path="/login" element={<LoginV2 />} />
           <Route path="/logout" element={<LogoutRoute />} />
-          {import.meta.env.DEV && Lab ? <Route path="/lab" element={<Lab />} /> : null}
 
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<Terms />} />

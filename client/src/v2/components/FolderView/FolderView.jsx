@@ -11,13 +11,12 @@ import {
   WifiOff, X, Zap, Edit3, GitMerge, Plus
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
-import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
 import { EmptyState, MapLegend, VendorAvatar } from '../cards/MetricCard';
 import { extractLeadArea, CarriedBadge, qualityOf } from '../../utils/leadHelpers';
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, scoreLead, highlightMatches
 } from '../../../utils/universalSearchEngine';
-import { CRM_STAGES, crmStageOf, formatInr } from '../../CrmBoard';
+import { CRM_STAGES, crmStageOf, formatInr } from '../../utils/leadStages';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber, relativeTime } from '../../ui';
@@ -43,7 +42,6 @@ export default function FolderView({
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'map' | 'telecaller' | 'analytics'
   const [copied, setCopied] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [showWaCampaign, setShowWaCampaign] = useState(false);
   const [sortField, setSortField] = useState('default');
   const [sortOrder, setSortOrder] = useState('asc');
 
@@ -438,14 +436,6 @@ export default function FolderView({
             >
               <FileSpreadsheet size={11} /> JSON
             </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-green v2-btn-xs"
-              onClick={() => setShowWaCampaign(true)}
-              title="Launch Paced 1-Click WhatsApp Outreach Campaign"
-            >
-              <MessageSquare size={11} /> ⚡ WhatsApp Campaign
-            </button>
           </div>
 
           <div className="v2-ribbon-group is-right">
@@ -627,14 +617,6 @@ export default function FolderView({
           <div className="v2-folder-bulk-bar">
             <span><b>{selectedIds.size}</b> leads selected</span>
             <div className="v2-bulk-actions">
-              <button
-                type="button"
-                className="v2-btn v2-btn-xs v2-btn-green"
-                onClick={() => setShowWaCampaign(true)}
-                title="Launch personalized WhatsApp outreach queue"
-              >
-                <MessageSquare size={11} /> ⚡ WhatsApp Campaign ({selectedIds.size})
-              </button>
               <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={copyAllMobiles}>
                 <Copy size={11} /> Copy Mobiles ({selectedIds.size})
               </button>
@@ -967,14 +949,6 @@ export default function FolderView({
             </div>
           )}
         </div>
-
-        {showWaCampaign && (
-          <WhatsAppCampaignModal
-            leads={selectedIds.size > 0 ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`)) : phoneLeads}
-            onClose={() => setShowWaCampaign(false)}
-            onUpdateStage={onStageChange}
-          />
-        )}
       </div>
     </div>
   );

@@ -5,10 +5,9 @@ import {
   MapPin, Phone, Search, Sliders, SlidersHorizontal, Sparkles, Square, Target, Wand2, X, Zap,
   Compass, ShieldCheck
 } from 'lucide-react';
-import { SignalOrb } from '@ui3d';
 import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch } from './api';
-import { cx } from './ui';
+import { cx, SignalOrb } from './ui';
 import { tokenizeQuery, matchesFolder } from '../utils/universalSearchEngine';
 import { parseQuerySemantic } from './utils/semanticClient';
 import { examplesFor, placeholderFor, scopeHintFor } from './data/searchExamples';

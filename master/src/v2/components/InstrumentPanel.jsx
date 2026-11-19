@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL } from '../../apiConfig';
-import { SignalOrb, Hint } from '@ui3d';
+import { SignalOrb, Hint } from '../ui';
 import './instrument.css';
 
 /**

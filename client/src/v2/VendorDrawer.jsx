@@ -12,7 +12,7 @@ import {
 import {
   CopyButton, StatusPill, ScoreRing, Unknown, cx, formatNumber, relativeTime
 } from './ui';
-import { CRM_STAGES, crmStageOf } from './CrmBoard';
+import { CRM_STAGES, crmStageOf } from './utils/leadStages';
 import { parseAdaptivePhone, parseIndianPhone, isIndianMobile } from '../utils/phoneClassify';
 
 function isCssOrCodeSnippet(text) {

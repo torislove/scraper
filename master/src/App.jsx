@@ -7,8 +7,6 @@ import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
-import '@ui3d/tokens.css';
-import '@ui3d/kit.css';
 import './v2/v2.css';
 import './v2/revamp.css';
 import './v2/glass3d.css';

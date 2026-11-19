@@ -12,11 +12,10 @@ import ParallelEnginesStatus from '../ParallelEnginesStatus';
 import ConcentricZoneRadar from '../ConcentricZoneRadar';
 import FilterBar from '../cards/FilterBar';
 import CommandMap from '../../CommandMap';
-import WhatsAppCampaignModal from '../modals/WhatsAppCampaignModal';
 import CockpitFolderRow from './CockpitFolderRow';
 import { EmptyState, VendorAvatar } from '../cards/MetricCard';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from '../../utils/leadHelpers';
-import { CRM_STAGES, crmStageOf, formatInr } from '../../CrmBoard';
+import { CRM_STAGES, crmStageOf, formatInr } from '../../utils/leadStages';
 import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber, relativeTime } from '../../ui';
@@ -607,14 +606,6 @@ export default function CockpitView({
               </button>
             </div>
           </div>
-        )}
-
-        {showCockpitWaModal && (
-          <WhatsAppCampaignModal
-            leads={pageRows.filter(v => cockpitSelectedIds.has(v.id || `${v.name}-${v.phone}`))}
-            onClose={() => setShowCockpitWaModal(false)}
-            onUpdateStage={onStageChange}
-          />
         )}
       </section>
 

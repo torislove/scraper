@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Play, Pause, RotateCcw, MapPin, Phone, CheckCircle, Sparkles, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
-import { OrbitalRadar } from '@ui3d';
+import { OrbitalRadar } from './ui';
 import './theater.css';
 
 const SIMULATION_PRESETS = [

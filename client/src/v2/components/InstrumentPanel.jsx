@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { API_URL } from '../../apiConfig';
-import { SignalOrb } from '@ui3d';
+import { SignalOrb } from '../ui';
 import { ChevronDown, ChevronUp, Zap, MapPin, Globe2, Layers, Cpu } from 'lucide-react';
 import './instrument.css';
 

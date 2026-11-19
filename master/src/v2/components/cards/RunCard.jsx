@@ -4,7 +4,7 @@ import {
   FolderArchive, Layers, Loader2, MapPin, Phone, Play, Square, Tag, Trash2, ShieldCheck
 } from 'lucide-react';
 import { StatusPill, cx, formatNumber, relativeTime } from '../../ui';
-import { formatInr } from '../../CrmBoard';
+import { formatInr } from '../../utils/leadStages';
 
 export default function RunCard({
   run,
