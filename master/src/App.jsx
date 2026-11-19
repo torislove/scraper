@@ -6,6 +6,7 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
+import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
 import '@ui3d/tokens.css';
 import '@ui3d/kit.css';
 import './v2/v2.css';
@@ -18,6 +19,7 @@ import './v2/retroEmboss.css';
 // lazyRetry keeps a single flaky chunk download from taking down the workspace.
 const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
+const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
 const FeatureShell = lazyRetry(() => import('./v2/FeatureShell'));
 const WhatsAppPage = lazyRetry(() => import('./v2/whatsapp/WhatsAppPage'));
 const MasterClients = lazyRetry(() => import('./v2/MasterClients'));
@@ -155,6 +157,19 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+function RequireAuth({ children }) {
+  const location = useLocation();
+  if (IS_DESKTOP || !AUTH_REQUIRED) return children;
+  if (getSession()) return children;
+  const next = encodeURIComponent(`${location.pathname}${location.search}`);
+  return <Navigate to={`/login?next=${next}`} replace />;
+}
+
+function LogoutRoute() {
+  React.useEffect(() => { logout(); }, []);
+  return <Navigate to="/login" replace />;
+}
+
 export default function App() {
   return (
     <>
@@ -180,9 +195,11 @@ export default function App() {
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* LeadHarvest Master Command Center */}
-          <Route path="/" element={<CommandCenter isMaster />} />
-          <Route path="/master" element={<CommandCenter isMaster />} />
-          <Route path="/command" element={<CommandCenter isMaster />} />
+          <Route path="/" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+          <Route path="/master" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+          <Route path="/command" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+          <Route path="/login" element={<LoginV2 variant="master" />} />
+          <Route path="/logout" element={<LogoutRoute />} />
           <Route path="/landing" element={<LandingV2 />} />
           <Route path="/whatsapp" element={<WhatsAppRoute />} />
           <Route path="/clients" element={<MasterClients />} />
@@ -196,7 +213,6 @@ export default function App() {
           <Route path="/privacy" element={<Privacy />} />
 
           {/* Old URLs all land in the one workspace. */}
-          <Route path="/login" element={<Navigate to="/command" replace />} />
           <Route path="/app/*" element={<Navigate to="/command" replace />} />
           <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
           <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />

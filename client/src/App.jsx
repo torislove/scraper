@@ -1,11 +1,12 @@
 import React, { Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
+import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
 import '@ui3d/tokens.css';
 import '@ui3d/kit.css';
 import './v2/v2.css';
@@ -19,6 +20,7 @@ import './v2/retroEmboss.css';
 // lazyRetry keeps a single flaky chunk download from taking down the workspace.
 const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
+const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
 // Dev-only surface gallery. `import.meta.env.DEV` is statically false in every
 // build, so this import is removed from production and desktop bundles.
 const Lab = import.meta.env.DEV ? lazyRetry(() => import('./v2/Lab')) : null;
@@ -130,6 +132,21 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+function RequireAuth({ children }) {
+  const location = useLocation();
+  // The packaged desktop build runs on the operator's own machine; a login
+  // wall there would only lock the owner out of their own data.
+  if (IS_DESKTOP || !AUTH_REQUIRED) return children;
+  if (getSession()) return children;
+  const next = encodeURIComponent(`${location.pathname}${location.search}`);
+  return <Navigate to={`/login?next=${next}`} replace />;
+}
+
+function LogoutRoute() {
+  React.useEffect(() => { logout(); }, []);
+  return <Navigate to="/login" replace />;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -155,7 +172,9 @@ export default function App() {
         <Routes>
           {/* The Windows build has no marketing site: it opens the workspace. */}
           <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
-          <Route path="/command" element={<CommandCenter />} />
+          <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
+          <Route path="/login" element={<LoginV2 />} />
+          <Route path="/logout" element={<LogoutRoute />} />
           {import.meta.env.DEV && Lab ? <Route path="/lab" element={<Lab />} /> : null}
 
           <Route path="/pricing" element={<PricingPage />} />
@@ -163,7 +182,6 @@ export default function App() {
           <Route path="/privacy" element={<Privacy />} />
 
           {/* Old URLs all land in the one workspace. */}
-          <Route path="/login" element={<Navigate to="/command" replace />} />
           <Route path="/app/*" element={<Navigate to="/command" replace />} />
           <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
           <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />

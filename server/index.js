@@ -65,6 +65,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
 }
 const { createLicenseGate } = require('./src/middleware/licenseGate');
 const clientGate = require('./src/middleware/clientGate');
+const resolveIdentity = require('./src/middleware/resolveIdentity');
 const masterRoutes = require('./src/routes/master');
 const notificationRoutes = require('./src/routes/notifications');
 
@@ -304,6 +305,7 @@ setInterventionEmitter(emitInterventionEvent);
 
 // Apply Routes
 app.use('/api/auth', authRoutes);
+app.use('/api', resolveIdentity);
 app.use('/api', apiRouter);
 app.use('/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/master', masterRoutes);

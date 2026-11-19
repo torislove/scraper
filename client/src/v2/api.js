@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { API_URL } from '../apiConfig';
 import { getUserId } from '../utils/sessionManager';
+import { getToken, withStreamToken } from './auth';
 
 const client = axios.create({
   baseURL: API_URL,
@@ -14,6 +15,10 @@ client.interceptors.request.use(config => {
     const uid = getUserId();
     if (uid) config.headers['x-user-id'] = uid;
     config.headers['x-workspace-scope'] = 'client';
+    // A signed session, when present, is the real identity: the engine verifies
+    // the token and overwrites the headers above from its claims.
+    const token = getToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
   } catch (e) {}
   return config;
 });
@@ -280,7 +285,7 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
 }
 
 export function streamUrl() {
-  return `${API_URL}/logs/stream`;
+  return withStreamToken(`${API_URL}/logs/stream`);
 }
 
 export async function getGeoHierarchy(params = {}) {

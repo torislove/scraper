@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_URL } from '../apiConfig';
+import { getToken, withStreamToken } from './auth';
 
 const client = axios.create({
   baseURL: API_URL,
@@ -17,6 +18,10 @@ client.interceptors.request.use(config => {
   try {
     const key = window.localStorage.getItem('scraper_master_key');
     if (key) config.headers['x-master-key'] = key;
+    // A verified master token is stronger than the hardcoded header above: the
+    // engine overwrites both headers from the token's claims.
+    const token = getToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
   } catch (e) {
     /* storage blocked */
   }
@@ -329,7 +334,7 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
 }
 
 export function streamUrl() {
-  return `${API_URL}/logs/stream`;
+  return withStreamToken(`${API_URL}/logs/stream`);
 }
 
 export async function getGeoHierarchy(params = {}) {
