@@ -586,21 +586,12 @@ export default function CommandMap({
                       </button>
                     )}
                     {vendor.phone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onOpenWhatsApp) {
-                            onOpenWhatsApp(vendor);
-                          } else {
-                            const clean = String(vendor.phone).replace(/\D/g, '');
-                            const link = vendor.whatsappLink || `https://wa.me/${clean.length === 10 ? `91${clean}` : clean}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, reaching out regarding your business.`)}`;
-                            window.open(link, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                        style={{ color: '#059669', fontWeight: 750, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      <a
+                        href={`tel:${vendor.phone}`}
+                        style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
                       >
-                        WhatsApp CRM
-                      </button>
+                        <Phone size={12} /> Call
+                      </a>
                     )}
                     {vendor.mapsLink && (
                       <a href={vendor.mapsLink} target="_blank" rel="noreferrer">

@@ -404,15 +404,15 @@ export default function FolderView({
             </b>
           </div>
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">DEALS WON</span>
-            <b className="v2-scorecard-value is-gold">
-              <CheckCircle2 size={13} /> {formatNumber(wonLeads.length)}
+            <span className="v2-scorecard-label">TOTAL BUSINESSES</span>
+            <b className="v2-scorecard-value">
+              <Users size={13} /> {formatNumber(leads.length)}
             </b>
           </div>
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">PIPELINE VALUE</span>
+            <span className="v2-scorecard-label">AREAS COVERED</span>
             <b className="v2-scorecard-value is-cyan">
-              {formatInr(pipelineTotal)}
+              <MapPin size={13} /> {formatNumber(areaSubfolders.length)}
             </b>
           </div>
         </div>
@@ -669,9 +669,9 @@ export default function FolderView({
               type="button"
               className={cx('v2-vtoggle-btn', viewMode === 'telecaller' && 'is-active')}
               onClick={() => setViewMode('telecaller')}
-              title="Fast speed-dial & WhatsApp cards for outreach"
+              title="Clean business contact cards with tap-to-call"
             >
-              <PhoneCall size={12} /> Telecaller Cards ({phoneLeads.length})
+              <PhoneCall size={12} /> Contact Cards ({phoneLeads.length})
             </button>
             <button
               type="button"
@@ -759,15 +759,6 @@ export default function FolderView({
               <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={downloadVcfContacts}>
                 <Smartphone size={11} /> Export .VCF
               </button>
-              <div className="v2-bulk-stage-wrap">
-                <span>Set Stage:</span>
-                <select onChange={e => { if (e.target.value) handleBulkStageChange(e.target.value); }}>
-                  <option value="">Choose Stage...</option>
-                  {CRM_STAGES.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
               <button type="button" className="v2-bulk-clear" onClick={() => setSelectedIds(new Set())}>
                 Clear
               </button>
@@ -832,18 +823,14 @@ export default function FolderView({
                             <PhoneCall size={12} />
                             <span>{phone}</span>
                           </a>
-                          {isMob && (
-                            <a
-                              href={`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${lead.name || 'there'}, I found your business listing and wanted to connect.`)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="v2-tc-btn-wa"
-                              title="1-Click WhatsApp outreach"
-                            >
-                              <MessageSquare size={12} />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
+                          <button
+                            type="button"
+                            className="v2-btn v2-btn-ghost v2-btn-xs"
+                            onClick={() => { navigator.clipboard?.writeText(phone); toast.success(`Copied ${phone}`); }}
+                            title="Copy phone number"
+                          >
+                            <Copy size={11} /> Copy
+                          </button>
                         </>
                       ) : (
                         <span className="v2-tc-nophone">No direct phone listed</span>
@@ -851,16 +838,7 @@ export default function FolderView({
                     </div>
 
                     <div className="v2-tc-footer">
-                      <span className="v2-tc-stage-label">Stage:</span>
-                      <select
-                        className={cx('v2-stage-select', `stage-${stage}`)}
-                        value={stage}
-                        onChange={e => onStageChange?.(lead, e.target.value)}
-                      >
-                        {CRM_STAGES.map(s => (
-                          <option key={s.id} value={s.id}>{s.label}</option>
-                        ))}
-                      </select>
+                      <span className="v2-muted" style={{ fontSize: 11 }}>{lead.category || session?.category || 'Business'}</span>
                       <button
                         type="button"
                         className="v2-tc-inspect-btn"
@@ -956,7 +934,6 @@ export default function FolderView({
                     <th>LOCALITY</th>
                     <th>VERIFIED CONTACT</th>
                     <th>WEBSITE</th>
-                    <th>CRM STAGE</th>
                     <th>ACTION</th>
                   </tr>
                 </thead>
@@ -1008,56 +985,40 @@ export default function FolderView({
                               <a href={`tel:${phone}`} className="v2-phone-link" onClick={e => e.stopPropagation()}>
                                 <Phone size={11} /> {highlightMatches(phone, searchTokens)}
                               </a>
-                              {!isMob && (
-                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
-                                  LANDLINE
-                                </span>
-                              )}
-                              {isMob && (
-                                <a
-                                  href={`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${lead.name || 'there'}, I found your business and wanted to connect.`)}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="v2-whatsapp-chip"
-                                  title="1-Click WhatsApp"
-                                  onClick={e => e.stopPropagation()}
+                                {!isMob && (
+                                  <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
+                                    LANDLINE
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={e => { e.stopPropagation(); navigator.clipboard?.writeText(phone); toast.success(`Copied ${phone}`); }}
+                                  style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '4px', background: '#F8FAFC', color: '#334155', border: '1px solid #CBD5E1', cursor: 'pointer' }}
                                 >
-                                  WhatsApp
-                                </a>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="v2-muted">No phone</span>
-                          )}
-                        </td>
-                        <td>
-                          {lead.website ? (
-                            <a
-                              href={lead.website}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="v2-site-link"
-                              title={lead.website}
-                            >
-                              <Globe2 size={11} /> Website
-                            </a>
-                          ) : (
-                            <span className="v2-muted">—</span>
-                          )}
-                        </td>
-                        <td>
-                          <select
-                            className={cx('v2-stage-select', `stage-${stage}`)}
-                            value={stage}
-                            onChange={e => onStageChange?.(lead, e.target.value)}
-                          >
-                            {CRM_STAGES.map(s => (
-                              <option key={s.id} value={s.id}>{s.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <button
+                                  Copy
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="v2-muted">No phone</span>
+                            )}
+                          </td>
+                          <td>
+                            {lead.website ? (
+                              <a
+                                href={lead.website}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="v2-site-link"
+                                title={lead.website}
+                              >
+                                <Globe2 size={11} /> Website
+                              </a>
+                            ) : (
+                              <span className="v2-muted">—</span>
+                            )}
+                          </td>
+                          <td>
+                            <button
                             type="button"
                             className="v2-folder-row-inspect"
                             onClick={() => {

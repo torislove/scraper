@@ -735,6 +735,33 @@ const CATEGORY_CATALOG = [
   { label: 'Agricultural Supplies & Nurseries', family: 'industrial', aliases: ['agriculture', 'seeds shop', 'fertilizer dealer', 'plant nursery', 'tractor dealer', 'pesticides'] },
   { label: 'CNC & Laser Cutting', family: 'industrial', aliases: ['cnc', 'laser cutting', 'cnc machining', 'metal fabrication', 'sheet metal'] },
 
+  // Universal High-Frequency Retail & Specialty Shops (prevents generic "shops" hijacking)
+  { label: 'Flower Shops & Florists', family: 'retail', aliases: ['flower shop', 'flower shops', 'florist', 'florists', 'bouquet shop', 'fresh flowers'] },
+  { label: 'Book Shops & Stationery', family: 'retail', aliases: ['book shop', 'book shops', 'bookstore', 'book store', 'stationery shop', 'stationery store', 'notebooks'] },
+  { label: 'Gift & Toy Shops', family: 'retail', aliases: ['gift shop', 'gift shops', 'toy shop', 'toy shops', 'novelty store', 'gift articles'] },
+  { label: 'Footwear & Shoe Shops', family: 'retail', aliases: ['shoe shop', 'shoe shops', 'footwear shop', 'footwear store', 'shoe store', 'chappal shop'] },
+  { label: 'Optical Shops & Opticians', family: 'retail', aliases: ['optical shop', 'optical shops', 'optician', 'eyewear store', 'spectacles shop', 'sunglasses shop'] },
+  { label: 'Watch & Clock Shops', family: 'retail', aliases: ['watch shop', 'watch shops', 'watch repair', 'clock shop', 'watch showroom'] },
+  { label: 'Cycle & Bicycle Shops', family: 'retail', aliases: ['cycle shop', 'cycle shops', 'bicycle shop', 'bicycle store', 'cycle repair'] },
+  { label: 'Sports Goods Shops', family: 'retail', aliases: ['sports shop', 'sports shops', 'sports store', 'fitness equipment shop', 'cricket shop'] },
+  { label: 'Sweet Shops & Mithai', family: 'food', aliases: ['sweet shop', 'sweet shops', 'mithai shop', 'sweets store', 'halwai', 'laddu shop'] },
+  { label: 'Bakeries & Cake Shops', family: 'food', aliases: ['bakery shop', 'bakery shops', 'cake shop', 'cake shops', 'pastry shop', 'bakehouse'] },
+  { label: 'Medical Stores & Pharmacies', family: 'health', aliases: ['medical shop', 'medical shops', 'medical store', 'medical stores', 'pharmacy', 'chemist', 'drug store'] },
+  { label: 'Tyre & Battery Shops', family: 'auto', aliases: ['tyre shop', 'tyre shops', 'tire shop', 'tire shops', 'car battery shop', 'wheel alignment', 'puncture shop'] },
+  { label: 'Paint Shops & Dealers', family: 'home-services', aliases: ['paint shop', 'paint shops', 'paint dealer', 'asian paints dealer', 'wall putty shop'] },
+  { label: 'Tailors & Boutiques', family: 'retail', aliases: ['tailor shop', 'tailor shops', 'tailors', 'ladies tailor', 'mens tailor', 'stitching centre'] },
+  { label: 'Meat & Fish Shops', family: 'food', aliases: ['meat shop', 'meat shops', 'chicken shop', 'mutton shop', 'fish shop', 'seafood shop'] },
+  { label: 'Fruit & Vegetable Shops', family: 'food', aliases: ['fruit shop', 'fruit shops', 'vegetable shop', 'vegetable market', 'organic store'] },
+  { label: 'Tea & Coffee Shops', family: 'food', aliases: ['tea shop', 'tea shops', 'coffee shop', 'coffee shops', 'chai shop', 'tea stall'] },
+  { label: 'Hardware & Tools Shops', family: 'industrial', aliases: ['hardware shop', 'hardware shops', 'hardware store', 'tools shop', 'nuts and bolts shop', 'plywood shop'] },
+  { label: 'Cosmetics & Beauty Shops', family: 'retail', aliases: ['cosmetics shop', 'cosmetic shop', 'fancy store', 'bangle store', 'makeup store'] },
+  { label: 'Curtains & Furnishing Shops', family: 'retail', aliases: ['curtain shop', 'furnishing shop', 'handloom shop', 'bedsheet shop', 'mattress shop'] },
+  { label: 'Utensils & Kitchenware Shops', family: 'retail', aliases: ['utensils shop', 'steel shop', 'kitchenware shop', 'crockery shop', 'home appliances shop'] },
+  { label: 'Printing & Xerox Shops', family: 'professional', aliases: ['print shop', 'print shops', 'xerox shop', 'photocopy shop', 'digital printing', 'offset printing', 'flex printing'] },
+  { label: 'Cold Storage & Warehouses', family: 'logistics', aliases: ['cold storage', 'warehouse', 'godown', 'storage facility'] },
+  { label: 'Scrap & Recycling Dealers', family: 'industrial', aliases: ['scrap shop', 'scrap dealer', 'junk buyer', 'metal recycling'] },
+  { label: 'Plant Nurseries & Gardens', family: 'retail', aliases: ['plant nursery', 'nursery', 'garden shop', 'indoor plants shop'] },
+
   // Generic fallback so a location-only pick still produces a valid run.
   { label: 'Businesses', family: 'generic', aliases: ['business', 'vendors', 'local business'] }
 ];
@@ -817,33 +844,66 @@ function stemWord(w) {
   return word;
 }
 
+const GENERIC_HEAD_NOUNS = new Set([
+  'shop', 'shops', 'store', 'stores', 'center', 'centre', 'centers', 'centres',
+  'service', 'services', 'servicing', 'dealer', 'dealers', 'supplier', 'suppliers',
+  'agency', 'agencies', 'studio', 'studios', 'clinic', 'clinics', 'house', 'houses',
+  'mart', 'marts', 'point', 'hub', 'world', 'zone', 'works', 'showroom', 'showrooms',
+  'company', 'companies', 'contractor', 'contractors', 'repair', 'repairs',
+  'maker', 'makers', 'vendor', 'vendors', 'business', 'businesses', 'outlet', 'outlets',
+  'emporium', 'palace', 'bazaar', 'market', 'traders', 'trader', 'enterprise', 'enterprises',
+  'solutions', 'consultants', 'consultant', 'firm', 'firms', 'care', 'near', 'best', 'top', 'in', 'at', 'for', 'of'
+]);
+
 function tokenMatchScore(queryWords, candidateWords) {
-  const { consonantSkeleton } = require('../utils/tradeIntelligence');
-  const { COMMON_WORD_WHITELIST } = require('../utils/tradeIntelligence');
-  let score = 0;
-  for (const qw of queryWords) {
-    if (qw.length < 2) continue;
+  const { consonantSkeleton, COMMON_WORD_WHITELIST } = require('../utils/tradeIntelligence');
+  const uniqueQuery = [...new Set((queryWords || []).filter(w => w && w.length >= 2))];
+  const uniqueCand = [...new Set((candidateWords || []).filter(w => w && w.length >= 2))];
+  if (!uniqueQuery.length || !uniqueCand.length) return 0;
+
+  const subjectWords = uniqueQuery.filter(w => !GENERIC_HEAD_NOUNS.has(w));
+  const hasSubject = subjectWords.length > 0;
+  let subjectScore = 0;
+  let genericBonus = 0;
+
+  for (const qw of uniqueQuery) {
+    const isGeneric = GENERIC_HEAD_NOUNS.has(qw);
     const isProtected = COMMON_WORD_WHITELIST.has(qw);
     const qStem = stemWord(qw);
     const qSkel = consonantSkeleton(qw);
-    for (const cw of candidateWords) {
-      if (cw.length < 2) continue;
+    let bestWordScore = 0;
+
+    for (const cw of uniqueCand) {
+      if (isGeneric && !GENERIC_HEAD_NOUNS.has(cw)) continue;
+      if (!isGeneric && GENERIC_HEAD_NOUNS.has(cw)) continue;
       const cStem = stemWord(cw);
       const cSkel = consonantSkeleton(cw);
-      if (qw === cw) score += 320;
-      else if (qStem === cStem) score += 280;
-      else if (cw.startsWith(qw) || qw.startsWith(cw)) score += 220;
-      else if (qw.length >= 4 && cw.includes(qw)) score += 160;
-      else if (cw.length >= 4 && qw.includes(cw)) score += 160;
-      else if (!isProtected && qw.length >= 5 && qw[0] === cw[0] && qSkel && cSkel && qSkel.length >= 4 && qSkel === cSkel) {
-        if (levenshtein(qw, cw) <= (qw.length >= 8 ? 3 : 2)) score += 240;
+      let s = 0;
+      if (qw === cw) s = 320;
+      else if (qStem === cStem) s = 280;
+      else if (cw.startsWith(qw) || qw.startsWith(cw)) s = 220;
+      else if (qw.length >= 4 && cw.includes(qw)) s = 160;
+      else if (cw.length >= 4 && qw.includes(cw)) s = 160;
+      else if (!isProtected && !isGeneric && qw.length >= 5 && qw[0] === cw[0] && qSkel && cSkel && qSkel.length >= 4 && qSkel === cSkel) {
+        if (levenshtein(qw, cw) <= (qw.length >= 8 ? 3 : 2)) s = 240;
+      } else if (!isProtected && !isGeneric && qw.length >= 5 && cw.length >= 5 && qw[0] === cw[0] && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length >= 8 ? 2 : 1)) {
+        s = 190;
       }
-      else if (!isProtected && qw.length >= 5 && cw.length >= 5 && qw[0] === cw[0] && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length >= 8 ? 2 : 1)) {
-        score += 190;
-      }
+      if (s > bestWordScore) bestWordScore = s;
+    }
+
+    if (isGeneric) {
+      if (bestWordScore > 0) genericBonus += 35;
+    } else {
+      subjectScore += bestWordScore;
     }
   }
-  return score;
+
+  // CRITICAL: If query contains a real subject word (e.g. "flower" in "flower shops"),
+  // matching ONLY the generic word ("shops") must NEVER hijack to an unrelated category like "Pet Shops"!
+  if (hasSubject && subjectScore === 0) return 0;
+
+  return subjectScore + genericBonus;
 }
 
 function titleCase(value) {

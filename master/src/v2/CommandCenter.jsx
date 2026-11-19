@@ -2420,18 +2420,43 @@ export default function CommandCenter() {
 
       <header className="v2-cmd-top">
         <div className="v2-cmd-brand">
-          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Dashboard' : 'Back to landing'}>
+          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Dashboard' : 'Back to home'}>
             <Logo compact />
           </button>
           <span className="mc-sovereign-badge">
             <span className="mc-dot" />
-            SOVEREIGN MASTER
+            MASTER
           </span>
-          <span className="v2-cmd-breadcrumb">
-            <span>OPERATIONS</span>
-            <b>/</b>
-            <code>{run ? run.id : 'STANDBY'}</code>
-          </span>
+          <div className="lx-top-nav is-master">
+            <button
+              type="button"
+              className={cx('lx-nav-chip', activeTab === 'cockpit' && 'is-active')}
+              onClick={() => setActiveTab('cockpit')}
+            >
+              <LayoutDashboard size={13} /> Workspace
+            </button>
+            <button
+              type="button"
+              className={cx('lx-nav-chip', activeTab === 'runs' && 'is-active')}
+              onClick={() => setActiveTab('runs')}
+            >
+              <FolderArchive size={13} /> Folders <b>{formatNumber(clientRuns.length + masterRuns.length)}</b>
+            </button>
+            <button
+              type="button"
+              className={cx('lx-nav-chip', activeTab === 'intelligence' && 'is-active')}
+              onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}
+            >
+              <Brain size={13} /> AI Simulator
+            </button>
+            <button
+              type="button"
+              className="lx-nav-chip"
+              onClick={() => navigate('/clients')}
+            >
+              <Users size={13} /> Clients
+            </button>
+          </div>
         </div>
 
         <div className="v2-cmd-top-status">
@@ -2439,27 +2464,7 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
-          <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} leads · 11 Locked Markets
-            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
-          </span>
 
-          <button
-            type="button"
-            className="v2-btn v2-btn-ghost v2-btn-sm"
-            onClick={() => navigate('/clients')}
-            title="Manage Client Accounts, Quotas, Imports & Broadcasts"
-          >
-            <Users size={13} /> Clients
-          </button>
-          <button
-            type="button"
-            className="v2-btn v2-btn-ghost v2-btn-sm"
-            onClick={() => navigate('/master')}
-            title="Open Full-Screen Territory Sweep Map"
-          >
-            <Compass size={13} /> Territory Sweeps
-          </button>
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
             <button
@@ -2473,6 +2478,10 @@ export default function CommandCenter() {
             </button>
             {toolsOpen && (
               <div className="v2-tools-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
+                  <MapPin size={14} />
+                  <span><b>Full Screen Map</b><small>Explore all pins &amp; territory zones</small></span>
+                </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('intelligence'); fetchTaxonomy(); }}>
                   <Brain size={14} />
                   <span><b>AI Intelligence &amp; Simulator</b><small>Test queries across 11 markets</small></span>
@@ -2489,26 +2498,13 @@ export default function CommandCenter() {
                   <Users size={14} />
                   <span><b>Client Accounts</b><small>Quotas, vaults &amp; broadcasts</small></span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/learning'); }}>
-                  <Sparkles size={14} />
-                  <span><b>Learning Center</b><small>Engine memory &amp; heuristics</small></span>
-                </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
                   <Zap size={14} />
                   <span><b>Profile Engine</b><small>52-field vendor enrichment</small></span>
                 </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setToolsOpen(false);
-                    const target = run || sessions[0];
-                    if (target?.id) exportFolder(target, 'csv');
-                    else toast.error('Run a search first, then export its folder.');
-                  }}
-                >
-                  <Download size={14} />
-                  <span><b>Export CSV</b><small>Download current folder</small></span>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setTrashOpen(true); }}>
+                  <Trash2 size={14} />
+                  <span><b>Deleted Folders Trash</b><small>Restore archived folders</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Data refreshed.'); }}>
                   <RefreshCw size={14} />
@@ -2520,243 +2516,74 @@ export default function CommandCenter() {
         </div>
       </header>
 
-      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
-
-      <nav className="v2-cmd-tabs">
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'cockpit' && 'is-active')}
-          onClick={() => setActiveTab('cockpit')}
-        >
-          {activeTab === 'cockpit' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <LayoutDashboard size={14} /> Workspace
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'leads' && 'is-active')}
-          onClick={() => setActiveTab('leads')}
-        >
-          {activeTab === 'leads' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'map' && 'is-active')}
-          onClick={() => setActiveTab('map')}
-        >
-          {activeTab === 'map' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'runs' && 'is-active')}
-          onClick={() => setActiveTab('runs')}
-        >
-          {activeTab === 'runs' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <FolderArchive size={14} /> Saved Folders <b>{formatNumber(clientRuns.length + masterRuns.length)}</b>
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'intelligence' && 'is-active')}
-          onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}
-        >
-          {activeTab === 'intelligence' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Brain size={14} /> AI Intelligence
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'engines' && 'is-active')}
-          onClick={() => setActiveTab('engines')}
-        >
-          {activeTab === 'engines' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Activity size={14} /> Engines
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'terminal' && 'is-active')}
-          onClick={() => setActiveTab('terminal')}
-        >
-          {activeTab === 'terminal' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Terminal size={14} /> Terminal
-        </button>
-        <span className="v2-cmd-tabs-spacer" />
-        <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
-          <RefreshCw size={13} /> Refresh
-        </button>
-      </nav>
-
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>
-          <SearchConsole
-            mode={runMode}
-            onModeChange={setRunMode}
-            country={searchCountry}
-            value={autoQuery}
-            onChange={setAutoQuery}
-            category={form.category}
-            location={form.location}
-            onCategoryChange={value => updateForm('category', value)}
-            onLocationChange={value => updateForm('location', value)}
-            strategy={form.strategy}
-            strategies={STRATEGIES}
-            onStrategyChange={value => updateForm('strategy', value)}
-            targetLeads={form.targetLeads}
-            onTargetChange={value => updateForm('targetLeads', value)}
-            form={form}
-            onToggle={key => updateForm(key, !form[key])}
-            onDeploy={startRun}
-            onStop={stopRun}
-            busy={launching}
-            running={(() => {
-              if (!run || finishingRef.current) return false;
-              if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
-              if (run.status === 'running') return true;
-              const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
-              const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
-              // Zones still outstanding means the sweep is alive, even if the
-              // last progress frame reported sessionActive:false between
-              // phases. Without this the Stop button flipped back to
-              // "Find Leads" while two thirds of the zones were still crawling.
-              return Boolean(
-                (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
-                (total > 0 && done < total)
-              );
-            })()}
-            compact={activeTab === 'cockpit'}
-            onResolve={setScanPlan}
-            onMasterSweep={handleStartMasterSweep}
-            progress={progress}
-            eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
-            runs={effectiveRuns}
-            onOpenFolder={openFolder}
-            runLeadCount={runLeadCount}
-            runStartedAt={run?.startedAt || 0}
-          />
-
-          <section className="v2-cmd-stats">
-            <MetricCard
-              label={targetSessionId ? "SESSION LEADS" : "LEADS FOUND"}
-              value={formatNumber(targetSessionId ? sessionVendors.length : vendors.length)}
-              sub={run?.status === 'running' ? `${formatNumber(runLeadCount)} live this search` : `${formatNumber(vendors.length)} total database`}
-              icon={Users}
-              tone="lime"
-              pulse={run?.status === 'running'}
+          <div className="lx-top-controls">
+            <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
+            <SearchConsole
+              mode={runMode}
+              onModeChange={setRunMode}
+              country={searchCountry}
+              value={autoQuery}
+              onChange={setAutoQuery}
+              category={form.category}
+              location={form.location}
+              onCategoryChange={value => updateForm('category', value)}
+              onLocationChange={value => updateForm('location', value)}
+              strategy={form.strategy}
+              strategies={STRATEGIES}
+              onStrategyChange={value => updateForm('strategy', value)}
+              targetLeads={form.targetLeads}
+              onTargetChange={value => updateForm('targetLeads', value)}
+              form={form}
+              onToggle={key => updateForm(key, !form[key])}
+              onDeploy={startRun}
+              onStop={stopRun}
+              busy={launching}
+              running={(() => {
+                if (!run || finishingRef.current) return false;
+                if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
+                if (run.status === 'running') return true;
+                const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
+                const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
+                return Boolean(
+                  (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
+                  (total > 0 && done < total)
+                );
+              })()}
+              compact={activeTab === 'cockpit'}
+              onResolve={setScanPlan}
+              onMasterSweep={handleStartMasterSweep}
+              progress={progress}
+              eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
+              runs={effectiveRuns}
+              onOpenFolder={openFolder}
+              runLeadCount={runLeadCount}
+              runStartedAt={run?.startedAt || 0}
             />
-            <MetricCard
-              label="MOBILE NUMBERS"
-              value={formatNumber(targetSessionId ? runMobilesCount : stats.phones)}
-              sub={`${(targetSessionId ? sessionVendors.length : vendors.length) ? Math.round(((targetSessionId ? runMobilesCount : stats.phones) / (targetSessionId ? sessionVendors.length : vendors.length)) * 100) : 0}% have a phone`}
-              icon={Phone}
-              tone="cyan"
-            />
-            <MetricCard
-              label="COMPLETE PROFILES"
-              value={formatNumber(targetSessionId ? sessionVendors.filter(v => v.deepExtractedAt).length : stats.deep)}
-              sub={`${stats.avg}% avg profile quality`}
-              icon={Zap}
-              tone="violet"
-            />
-            <MetricCard
-              label="SAVED FOLDERS"
-              value={formatNumber(effectiveRuns.length)}
-              sub={`${formatNumber(estimate?.zones?.count || 0)} areas in this search`}
-              icon={FolderArchive}
-              tone="amber"
-            />
-          </section>
+          </div>
 
           {run?.status === 'running' && (
-            <div className="v2-live-run-strip">
-              <div className="v2-live-run-pulse" />
-              <div className="v2-live-run-info">
-                <span className="v2-live-run-badge">⚡ SWARM ACTIVE</span>
-                <b>{run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}</b>
-                {progress?.activeMandal && <span className="v2-live-zone-chip">📍 {progress.activeMandal}</span>}
-                <span style={{ fontSize: 11, color: '#64748B', marginLeft: 8 }}>
-                  {progress?.phase || 'Scanning Municipal Zones & JustDial / SERP Indices...'}
-                </span>
+            <div className="lx-live-progress-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span className="lx-live-dot" />
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                  Sweeping <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
+                  {progress?.activeMandal ? (
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {progress.activeMandal} ({runDone}/{runTotal || '—'})</span>
+                  ) : null}
+                </div>
               </div>
-              <div className="v2-live-run-metrics">
-                <div className="v2-live-metric-item">
-                  <Users size={13} style={{ color: '#059669' }} />
-                  <span>LEADS:</span>
-                  <b>{formatNumber(runLeadCount)}</b>
-                </div>
-                <div className="v2-live-metric-item">
-                  <Zap size={13} style={{ color: '#7C3AED' }} />
-                  <span>SPEED:</span>
-                  <b>{runElapsed > 5 ? `${Math.round((runLeadCount / runElapsed) * 60)}/min` : 'Calibrating...'}</b>
-                </div>
-                <div className="v2-live-metric-item">
-                  <MapPin size={13} style={{ color: '#2563EB' }} />
-                  <span>ZONES:</span>
-                  <b>{runDone}/{runTotal || '—'}</b>
-                </div>
-                <div className="v2-live-metric-item">
-                  <Phone size={13} style={{ color: '#0284C7' }} />
-                  <span>MOBILES:</span>
-                  <b>{formatNumber(runMobilesCount)}</b>
-                </div>
-                <div className="v2-live-metric-item">
-                  <Clock size={13} style={{ color: '#D97706' }} />
-                  <span>EST. TIME:</span>
-                  <b>{progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : 'Calculating…')}</b>
-                </div>
-                <button type="button" className="v2-btn-3d-stop" onClick={stopRun} title="Safely stop swarm and save collected leads">
-                  <Square size={11} fill="#FFFFFF" /> Stop Swarm
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <b style={{ fontSize: 14, fontWeight: 800, color: '#4f46e5', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatNumber(runLeadCount)} leads · {formatNumber(runMobilesCount)} mobiles
+                </b>
+                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun}>
+                  <Square size={11} /> Stop
                 </button>
               </div>
             </div>
           )}
-
-          <InstrumentPanel
-            running={run?.status === 'running'}
-            leadCount={runLeadCount}
-            progress={progress}
-            compact={activeTab === 'cockpit'}
-          />
 
           {!scanning && run && ['aborted', 'failed', 'interrupted'].includes(run.status) && (bannerTotal === 0 || bannerDone < bannerTotal) && (
             <div className="v2-recovery-banner">

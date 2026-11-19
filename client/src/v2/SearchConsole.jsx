@@ -1,16 +1,64 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, Check, FolderOpen, Loader2, MapPin, Search,
+  ArrowRight, Check, Clock, FolderOpen, Loader2, MapPin, Search,
   Sparkles, Square, X, Zap
 } from 'lucide-react';
-import { suggestSearch } from './api';
+import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
 import { examplesFor } from './data/searchExamples';
 
 // Instant 0ms client-side LRU cache for backspace and repeat keystrokes
 const suggestCache = new Map();
-const MAX_CACHE = 250;
+const MAX_CACHE = 300;
+const RECENT_KEY = 'scraper_recent_searches_v1';
+
+function loadRecent(country) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+    const list = raw[String(country || 'IN').toUpperCase()];
+    return Array.isArray(list) ? list.slice(0, 5) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveRecent(country, query) {
+  const clean = String(query || '').trim();
+  if (clean.length < 3) return;
+  try {
+    const code = String(country || 'IN').toUpperCase();
+    const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+    const prev = Array.isArray(raw[code]) ? raw[code] : [];
+    const next = [clean, ...prev.filter(item => item.toLowerCase() !== clean.toLowerCase())].slice(0, 5);
+    raw[code] = next;
+    localStorage.setItem(RECENT_KEY, JSON.stringify(raw));
+  } catch (e) {}
+}
+
+// Google-style match highlighting inside dropdown rows
+function HighlightedLabel({ text, query }) {
+  const str = String(text || '');
+  const tokens = String(query || '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(t => t.length >= 2 && !['in', 'at', 'near', 'for', 'of'].includes(t));
+
+  if (!tokens.length) return <>{str}</>;
+
+  const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const parts = str.split(new RegExp(`(${escaped})`, 'gi'));
+  return (
+    <>
+      {parts.map((part, idx) =>
+        tokens.some(t => part.toLowerCase() === t)
+          ? <mark key={idx} className="lx-hl">{part}</mark>
+          : <React.Fragment key={idx}>{part}</React.Fragment>
+      )}
+    </>
+  );
+}
 
 function useFastSuggestions(query, country, onResolve) {
   const [response, setResponse] = useState(null);
@@ -72,7 +120,7 @@ function useFastSuggestions(query, country, onResolve) {
       } finally {
         if (reqIdRef.current === reqId) setLoading(false);
       }
-    }, 85);
+    }, 70);
 
     return () => {
       clearTimeout(timerRef.current);
@@ -103,11 +151,31 @@ function SearchConsole({
   const [draft, setDraft] = useState(value || '');
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
+  const [recentSearches, setRecentSearches] = useState(() => loadRecent(country));
 
   const wrapRef = useRef(null);
   const inputRef = useRef(null);
   const focusedRef = useRef(false);
   const lastExternalRef = useRef(value || '');
+
+  useEffect(() => {
+    setRecentSearches(loadRecent(country));
+  }, [country]);
+
+  // Global / and Ctrl+K shortcut to jump straight to search bar
+  useEffect(() => {
+    const handleGlobalKey = (e) => {
+      if ((e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) &&
+          document.activeElement?.tagName !== 'INPUT' &&
+          document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKey);
+    return () => window.removeEventListener('keydown', handleGlobalKey);
+  }, []);
 
   // Sync only when external caller explicitly resets/changes query (never fight active typing)
   useEffect(() => {
@@ -130,7 +198,7 @@ function SearchConsole({
         'Interior designers in Mumbai',
         'Dental clinics in Hyderabad',
         'Mobile repair in Vijayawada',
-        'Wedding photographers in Tenali'
+        'Flower shops in Chennai'
       ];
     }
     return (market?.prompts || []).slice(0, 5);
@@ -147,6 +215,23 @@ function SearchConsole({
   }, [draft, runs]);
 
   const groups = useMemo(() => {
+    if (draft.trim().length < 2) {
+      const out = [];
+      if (recentSearches.length) {
+        out.push({
+          title: 'Recent Searches',
+          icon: Clock,
+          items: recentSearches.map(q => ({ type: 'recent', value: q, label: q, subtitle: 'Run again instantly', detail: 'RECENT' }))
+        });
+      }
+      out.push({
+        title: 'Popular Examples',
+        icon: Sparkles,
+        items: examples.map(q => ({ type: 'recent', value: q, label: q, subtitle: 'Click to search immediately', detail: 'TRY' }))
+      });
+      return out;
+    }
+
     const list = Array.isArray(response?.suggestions) ? response.suggestions : [];
     const seen = new Set();
     const categories = [];
@@ -170,10 +255,10 @@ function SearchConsole({
       out.push({ title: 'Suggested Searches', icon: Sparkles, items: categories.slice(0, 6) });
     }
     if (locations.length) {
-      out.push({ title: 'Matching Places', icon: MapPin, items: locations.slice(0, 5) });
+      out.push({ title: 'Matching Places', icon: MapPin, items: locations.slice(0, 6) });
     }
     return out;
-  }, [response]);
+  }, [response, draft, recentSearches]);
 
   const flatItems = useMemo(() => groups.flatMap(g => g.items), [groups]);
 
@@ -193,6 +278,7 @@ function SearchConsole({
 
   const parsedCategory = response?.category?.value || response?.fragments?.category || '';
   const parsedLocation = response?.location?.value || response?.fragments?.location || '';
+  const relatedSynonyms = Array.isArray(response?.relatedSynonyms) ? response.relatedSynonyms : [];
   const didYouMean = response?.didYouMean && response.didYouMean.toLowerCase() !== draft.trim().toLowerCase()
     ? response.didYouMean
     : null;
@@ -201,7 +287,7 @@ function SearchConsole({
   const handleInput = useCallback((text) => {
     focusedRef.current = true;
     setDraft(text);
-    setOpen(text.trim().length >= 2);
+    setOpen(true);
   }, []);
 
   const commitAndDeploy = useCallback((overrideText = null, catOverride = '', locOverride = '') => {
@@ -215,6 +301,15 @@ function SearchConsole({
     const finalCat = catOverride || parsedCategory || category;
     const finalLoc = locOverride || parsedLocation || location;
 
+    saveRecent(country, queryText);
+    setRecentSearches(loadRecent(country));
+    sendSearchFeedback({
+      rawQuery: queryText,
+      selectedCategory: finalCat,
+      selectedLocation: finalLoc,
+      country
+    });
+
     lastExternalRef.current = queryText;
     onChange?.(queryText);
     if (finalCat) onCategoryChange?.(finalCat);
@@ -226,35 +321,60 @@ function SearchConsole({
       category: finalCat,
       location: finalLoc
     });
-  }, [running, onStop, draft, busy, parsedCategory, parsedLocation, category, location, onChange, onCategoryChange, onLocationChange, onDeploy]);
+  }, [running, onStop, draft, busy, parsedCategory, parsedLocation, category, location, country, onChange, onCategoryChange, onLocationChange, onDeploy]);
 
   const pickSuggestion = useCallback((item) => {
     if (!item) return;
+    if (item.type === 'recent') {
+      setDraft(item.value);
+      lastExternalRef.current = item.value;
+      onChange?.(item.value);
+      setOpen(false);
+      commitAndDeploy(item.value);
+      return;
+    }
+
     let nextText = '';
+    let nextCat = parsedCategory || category;
+    let nextLoc = parsedLocation || location;
+
     if (item.type === 'location') {
-      const cat = parsedCategory || category;
-      nextText = cat ? `${cat} in ${item.value}` : item.value;
+      nextLoc = item.value;
+      nextText = nextCat ? `${nextCat} in ${item.value}` : item.value;
       onLocationChange?.(item.value);
     } else {
       const rawLabel = String(item.label || item.value || '').trim();
       const hasLoc = /\s+(?:in|near|at)\s+/i.test(rawLabel);
-      const loc = parsedLocation || location;
-      nextText = hasLoc ? rawLabel : (loc ? `${rawLabel} in ${loc}` : rawLabel);
-      onCategoryChange?.(item.value || rawLabel);
+      nextCat = item.value || rawLabel;
+      nextText = hasLoc ? rawLabel : (nextLoc ? `${rawLabel} in ${nextLoc}` : rawLabel);
+      onCategoryChange?.(nextCat);
     }
+
+    sendSearchFeedback({
+      rawQuery: draft,
+      selectedCategory: nextCat,
+      selectedLocation: nextLoc,
+      country
+    });
+
     setDraft(nextText);
     lastExternalRef.current = nextText;
     onChange?.(nextText);
     setOpen(false);
     inputRef.current?.focus();
-  }, [parsedCategory, parsedLocation, category, location, onChange, onCategoryChange, onLocationChange]);
+  }, [draft, parsedCategory, parsedLocation, category, location, country, onChange, onCategoryChange, onLocationChange, commitAndDeploy]);
 
   const onKeyDown = useCallback((event) => {
+    if (event.key === 'Tab' && open && flatItems.length > 0) {
+      event.preventDefault();
+      pickSuggestion(flatItems[activeIdx >= 0 ? activeIdx : 0]);
+      return;
+    }
     if (!open || !flatItems.length) {
       if (event.key === 'Enter') {
         event.preventDefault();
         commitAndDeploy();
-      } else if (event.key === 'ArrowDown' && draft.trim().length >= 2) {
+      } else if (event.key === 'ArrowDown') {
         setOpen(true);
         event.preventDefault();
       }
@@ -279,9 +399,8 @@ function SearchConsole({
       setOpen(false);
       setActiveIdx(-1);
     }
-  }, [open, flatItems, activeIdx, draft, pickSuggestion, commitAndDeploy]);
+  }, [open, flatItems, activeIdx, pickSuggestion, commitAndDeploy]);
 
-  // Listen for external search suggestion events
   useEffect(() => {
     const handler = (e) => {
       const q = e?.detail?.query;
@@ -312,7 +431,7 @@ function SearchConsole({
             onChange={e => handleInput(e.target.value)}
             onFocus={() => {
               focusedRef.current = true;
-              if (draft.trim().length >= 2) setOpen(true);
+              setOpen(true);
             }}
             onBlur={() => {
               setTimeout(() => { focusedRef.current = false; }, 180);
@@ -334,7 +453,7 @@ function SearchConsole({
                 setDraft('');
                 lastExternalRef.current = '';
                 onChange?.('');
-                setOpen(false);
+                setOpen(recentSearches.length > 0);
                 inputRef.current?.focus();
               }}
               aria-label="Clear search"
@@ -385,7 +504,7 @@ function SearchConsole({
                 </div>
               )}
 
-              <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.3fr 0.9fr' : '1fr' }}>
+              <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.35fr 0.85fr' : '1fr' }}>
                 {groups.map(group => {
                   const Icon = group.icon;
                   return (
@@ -412,10 +531,12 @@ function SearchConsole({
                               }}
                             >
                               <span className="v2-suggest-mark">
-                                {item.type === 'location' ? <MapPin size={13} /> : <Search size={13} />}
+                                {item.type === 'location' ? <MapPin size={13} /> : item.type === 'recent' ? <Clock size={13} /> : <Search size={13} />}
                               </span>
                               <span className="v2-suggest-copy">
-                                <b className="v2-suggest-title">{item.label || item.value}</b>
+                                <b className="v2-suggest-title">
+                                  <HighlightedLabel text={item.label || item.value} query={draft} />
+                                </b>
                                 {item.subtitle && <small>{item.subtitle}</small>}
                               </span>
                               {item.detail && <span className="v2-suggest-fix">{item.detail}</span>}
@@ -427,63 +548,40 @@ function SearchConsole({
                   );
                 })}
               </div>
+
+              <div className="lx-suggest-foot">
+                <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                <span><kbd>Tab</kbd> complete</span>
+                <span><kbd>Enter</kbd> search</span>
+                <span><kbd>Esc</kbd> close</span>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Clean, Human-Friendly Search Understanding (Zero Technical Jargon) */}
-      {(parsedCategory || parsedLocation || didYouMean) && (
-        <div className="lx-intent-strip">
-          {parsedCategory && (
-            <span className="lx-intent-pill is-ready">
-              <Sparkles size={12} />
-              Looking for: <b>{parsedCategory}</b>
-            </span>
-          )}
-          {parsedLocation && (
-            <span className="lx-intent-pill is-ready">
-              <MapPin size={12} />
-              Area: <b>{parsedLocation}</b>
-            </span>
-          )}
-          {didYouMean && (
-            <button
-              type="button"
-              className="lx-example-chip"
-              style={{ borderColor: '#6ee7b7', background: '#ecfdf5', color: '#065f46' }}
-              onClick={() => {
-                setDraft(didYouMean);
-                lastExternalRef.current = didYouMean;
-                onChange?.(didYouMean);
-              }}
-            >
-              <Check size={12} style={{ verticalAlign: '-2px', marginRight: 4 }} />
-              Did you mean <b>{didYouMean}</b>?
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Friendly Quick Example Searches */}
-      {!running && (
-        <div className="lx-console-examples">
-          <span className="lx-examples-label">Try searching:</span>
-          {examples.map(example => (
-            <button
-              key={example}
-              type="button"
-              className="lx-example-chip"
-              onClick={() => {
-                setDraft(example);
-                lastExternalRef.current = example;
-                onChange?.(example);
-                inputRef.current?.focus();
-              }}
-            >
-              {example}
-            </button>
-          ))}
+      {/* Only show compact typo-heal bar when there is a real typo correction */}
+      {didYouMean && (
+        <div className="lx-didyoumean-bar">
+          <span>Did you mean</span>
+          <button
+            type="button"
+            onClick={() => {
+              sendSearchFeedback({
+                rawQuery: draft,
+                selectedCategory: parsedCategory,
+                selectedLocation: parsedLocation,
+                country,
+                correctedFrom: draft
+              });
+              setDraft(didYouMean);
+              lastExternalRef.current = didYouMean;
+              onChange?.(didYouMean);
+              commitAndDeploy(didYouMean);
+            }}
+          >
+            <Check size={12} /> <b>{didYouMean}</b>
+          </button>
         </div>
       )}
     </section>

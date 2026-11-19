@@ -1764,11 +1764,22 @@ export default function CommandCenter() {
           <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Workspace' : 'Back to home'}>
             <Logo compact />
           </button>
-          <span className="v2-cmd-breadcrumb">
-            <span>Lead Workspace</span>
-            <b>/</b>
-            <code>{run?.category ? `${run.category}${run.location ? ` · ${run.location}` : ''}` : 'Ready to Search'}</code>
-          </span>
+          <div className="lx-top-nav">
+            <button
+              type="button"
+              className={cx('lx-nav-chip', activeTab === 'cockpit' && 'is-active')}
+              onClick={() => setActiveTab('cockpit')}
+            >
+              <LayoutDashboard size={13} /> Workspace
+            </button>
+            <button
+              type="button"
+              className={cx('lx-nav-chip', activeTab === 'runs' && 'is-active')}
+              onClick={() => setActiveTab('runs')}
+            >
+              <FolderArchive size={13} /> Saved Lists <b>{formatNumber(effectiveRuns.length)}</b>
+            </button>
+          </div>
         </div>
 
         <div className="v2-cmd-top-status">
@@ -1776,9 +1787,6 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
             {sseStatus === 'open' ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
-          <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} businesses · {(findCountry(searchCountry) || { name: 'India' }).name}
-          </span>
 
           <NotificationBell />
           <DesktopBadge />
@@ -1794,13 +1802,13 @@ export default function CommandCenter() {
             </button>
             {toolsOpen && (
               <div className="v2-tools-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
+                  <MapPin size={14} />
+                  <span><b>Full Screen Map</b><small>Explore every discovered business on the map</small></span>
+                </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
                   <Sparkles size={14} />
                   <span><b>Find Missing Contacts</b><small>Look up missing phones, emails &amp; websites</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
-                  <MapPin size={14} />
-                  <span><b>Full Territory Map</b><small>Explore every discovered business on the map</small></span>
                 </button>
                 <button
                   type="button"
@@ -1838,174 +1846,66 @@ export default function CommandCenter() {
         </div>
       </header>
 
-      <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
-
-      <nav className="v2-cmd-tabs">
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'cockpit' && 'is-active')}
-          onClick={() => setActiveTab('cockpit')}
-        >
-          {activeTab === 'cockpit' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <LayoutDashboard size={14} /> Workspace
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'leads' && 'is-active')}
-          onClick={() => setActiveTab('leads')}
-        >
-          {activeTab === 'leads' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <Table2 size={14} /> Leads <b>{formatNumber(filteredVendors.length)}</b>
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'map' && 'is-active')}
-          onClick={() => setActiveTab('map')}
-        >
-          {activeTab === 'map' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <MapPin size={14} /> Map <b>{formatNumber(filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length)}</b>
-        </button>
-        <button
-          type="button"
-          className={cx('v2-tab-pill-btn', activeTab === 'runs' && 'is-active')}
-          onClick={() => setActiveTab('runs')}
-        >
-          {activeTab === 'runs' && (
-            <motion.div
-              layoutId="activeTabPill"
-              className="v2-tab-indicator"
-              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-            />
-          )}
-          <FolderArchive size={14} /> Saved Folders <b>{formatNumber(effectiveRuns.length)}</b>
-        </button>
-        <span className="v2-cmd-tabs-spacer" />
-        <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
-          <RefreshCw size={13} /> Refresh
-        </button>
-      </nav>
-
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>
-          <SearchConsole
-            mode={runMode}
-            onModeChange={setRunMode}
-            country={searchCountry}
-            value={autoQuery}
-            onChange={setAutoQuery}
-            category={form.category}
-            location={form.location}
-            onCategoryChange={value => updateForm('category', value)}
-            onLocationChange={value => updateForm('location', value)}
-            strategy={form.strategy}
-            strategies={STRATEGIES}
-            onStrategyChange={value => updateForm('strategy', value)}
-            targetLeads={form.targetLeads}
-            onTargetChange={value => updateForm('targetLeads', value)}
-            form={form}
-            onToggle={key => updateForm(key, !form[key])}
-            onDeploy={startRun}
-            onStop={stopRun}
-            busy={launching}
-            running={(() => {
-              if (!run || finishingRef.current) return false;
-              if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
-              if (run.status === 'running') return true;
-              const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
-              const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
-              // Zones still outstanding means the sweep is alive, even if the
-              // last progress frame reported sessionActive:false between phases.
-              // Without this the Stop button flipped back to "Find Leads" while
-              // two thirds of the zones were still being crawled.
-              return Boolean(
-                (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
-                (total > 0 && done < total)
-              );
-            })()}
-            compact={activeTab === 'cockpit'}
-            onResolve={setScanPlan}
-            progress={progress}
-            eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
-            runs={effectiveRuns}
-            onOpenFolder={openFolder}
-          />
-
-          <section className="v2-cmd-stats">
-            <MetricCard
-              label="BUSINESSES FOUND"
-              value={formatNumber(vendors.length)}
-              sub={run?.status === 'running' ? `${formatNumber(runLeadCount)} live right now` : 'Ready in your workspace'}
-              icon={Users}
-              tone="lime"
-              pulse={Boolean((run?.status === 'running' || scanning) && !finishingRef.current)}
+          <div className="lx-top-controls">
+            <CountryFlagStrip selected={searchCountry} onSelect={handleCountrySelect} onMeta={setCountryMeta} />
+            <SearchConsole
+              mode={runMode}
+              onModeChange={setRunMode}
+              country={searchCountry}
+              value={autoQuery}
+              onChange={setAutoQuery}
+              category={form.category}
+              location={form.location}
+              onCategoryChange={value => updateForm('category', value)}
+              onLocationChange={value => updateForm('location', value)}
+              strategy={form.strategy}
+              strategies={STRATEGIES}
+              onStrategyChange={value => updateForm('strategy', value)}
+              targetLeads={form.targetLeads}
+              onTargetChange={value => updateForm('targetLeads', value)}
+              form={form}
+              onToggle={key => updateForm(key, !form[key])}
+              onDeploy={startRun}
+              onStop={stopRun}
+              busy={launching}
+              running={(() => {
+                if (!run || finishingRef.current) return false;
+                if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
+                if (run.status === 'running') return true;
+                const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
+                const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
+                return Boolean(
+                  (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
+                  (total > 0 && done < total)
+                );
+              })()}
+              compact={activeTab === 'cockpit'}
+              onResolve={setScanPlan}
+              progress={progress}
+              eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
+              runs={effectiveRuns}
+              onOpenFolder={openFolder}
             />
-            <MetricCard
-              label="DIRECT PHONES"
-              value={formatNumber(stats.phones)}
-              sub={`${vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}% ready to call`}
-              icon={Phone}
-              tone="cyan"
-              percent={vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}
-            />
-            <MetricCard
-              label="COMPLETE DETAILS"
-              value={formatNumber(stats.deep)}
-              sub={`${stats.avg}% avg profile quality`}
-              icon={Sparkles}
-              tone="violet"
-              percent={stats.avg || 0}
-            />
-            <MetricCard
-              label="SAVED LISTS"
-              value={formatNumber(effectiveRuns.length)}
-              sub="Permanent downloadable folders"
-              icon={FolderArchive}
-              tone="amber"
-            />
-          </section>
+          </div>
 
           {run?.status === 'running' && (
             <div className="lx-live-progress-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span className="lx-live-dot" />
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: '#059669', textTransform: 'uppercase' }}>
-                    Discovering Verified Businesses
-                  </div>
-                  <div style={{ fontSize: 14.5, fontWeight: 750, color: '#0f172a' }}>
-                    {run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}
-                    {(effectiveActiveZone?.name || progress?.activeMandal) ? (
-                      <span style={{ fontWeight: 600, color: '#475569', fontSize: 13 }}> · Checking {effectiveActiveZone?.name || progress?.activeMandal}</span>
-                    ) : null}
-                  </div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
+                  Searching <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
+                  {(effectiveActiveZone?.name || progress?.activeMandal) ? (
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {effectiveActiveZone?.name || progress?.activeMandal}</span>
+                  ) : null}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <b style={{ display: 'block', fontSize: 18, fontWeight: 850, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
-                    {formatNumber(runLeadCount)} leads
-                  </b>
-                  <small style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Streaming live into your list &amp; map</small>
-                </div>
-                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun} title="Stop search and keep all leads found so far">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <b style={{ fontSize: 14, fontWeight: 800, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatNumber(runLeadCount)} leads found
+                </b>
+                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun}>
                   <Square size={11} /> Stop
                 </button>
               </div>

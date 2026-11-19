@@ -180,34 +180,34 @@ export default function App() {
       />
 
       <ErrorBoundary>
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          {/* LeadHarvest Master Command Center */}
-          <Route path="/" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
-          <Route path="/master" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
-          <Route path="/command" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
-          <Route path="/login" element={<LoginV2 variant="master" />} />
-          <Route path="/logout" element={<LogoutRoute />} />
-          <Route path="/landing" element={<LandingV2 />} />
-          <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
-          <Route path="/clients" element={<MasterClients />} />
-          <Route path="/learning" element={<LearningRoute />} />
-          <Route path="/theater" element={<TheaterRoute />} />
-          <Route path="/engines" element={<Navigate to="/command?tab=engines" replace />} />
-          <Route path="/terminal" element={<Navigate to="/command?tab=terminal" replace />} />
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            {/* LeadHarvest Master Command Center */}
+            <Route path="/" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+            <Route path="/master" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+            <Route path="/command" element={<RequireAuth><CommandCenter isMaster /></RequireAuth>} />
+            <Route path="/login" element={<LoginV2 variant="master" />} />
+            <Route path="/logout" element={<LogoutRoute />} />
+            <Route path="/landing" element={<LandingV2 />} />
+            <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
+            <Route path="/clients" element={<MasterClients />} />
+            <Route path="/learning" element={<LearningRoute />} />
+            <Route path="/theater" element={<TheaterRoute />} />
+            <Route path="/engines" element={<Navigate to="/command?tab=engines" replace />} />
+            <Route path="/terminal" element={<Navigate to="/command?tab=terminal" replace />} />
 
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
 
-          {/* Old URLs all land in the one workspace. */}
-          <Route path="/app/*" element={<Navigate to="/command" replace />} />
-          <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
-          <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-          <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-        </Routes>
-      </Suspense>
-    </ErrorBoundary>
+            {/* Old URLs all land in the one workspace. */}
+            <Route path="/app/*" element={<Navigate to="/command" replace />} />
+            <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
+            <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+            <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
     </>
   );
 }

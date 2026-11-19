@@ -30,7 +30,7 @@ export default function FilterBar({ filters, onChange, total, shown, compact = f
           type="button"
           className={cx('v2-btn-prime-filter', filters.primeOnly && 'is-active')}
           onClick={() => onChange('primeOnly', !filters.primeOnly)}
-          title="Filter to Prime Leads: Rating ≥ 4.0★ with verified WhatsApp mobile and reviews"
+          title="Filter to Prime Leads: Rating ≥ 4.0★ with direct verified phone and reviews"
         >
           🔥 Prime Leads
         </button>

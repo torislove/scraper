@@ -347,24 +347,9 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
             </div>
           </section>
 
-          {/* 3D Tactile Action Bar (WhatsApp, Call, Email, Direct Maps, Website, Enrich) */}
+          {/* 3D Tactile Action Bar (Call, Email, Direct Maps, Website, Enrich) */}
           <div className="v2-drawer-3d-actions">
-            {/* If Mobile: Render 💬 WhatsApp Outreach */}
-            {isMobile && parsedPhone ? (
-              <button
-                type="button"
-                className="v2-3d-action-btn v2-btn-wa"
-                onClick={() => {
-                  if (onOpenWhatsApp) onOpenWhatsApp(vendor);
-                  else window.open(whatsappUrl, '_blank');
-                }}
-                title={`Open WhatsApp outreach for ${parsedPhone.national}`}
-              >
-                <MessageSquare size={14} /> 💬 WhatsApp Outreach
-              </button>
-            ) : null}
-
-            {/* If Landline: Primary prominent 📞 Call Landline Button */}
+            {/* Primary Call Button */}
             {isLandline ? (
               <a
                 href={callUrl || `tel:${primaryPhone}`}
@@ -493,18 +478,13 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                           {formattedDisplayPhone}
                         </a>
                         {isMobile && (
-                          <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <MessageSquare size={10} /> WhatsApp
-                          </a>
+                          <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 750 }}>
+                            Mobile
+                          </span>
                         )}
                         {isLandline && (
                           <span style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 750 }}>
-                            📞 Call Only (Landline)
+                            Landline
                           </span>
                         )}
                         <CopyButton value={formattedDisplayPhone} />
@@ -554,17 +534,6 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                               )}
                             </span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              {p.isMobile && p.whatsappUrl && (
-                                <a
-                                  href={p.whatsappUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ background: '#25D366', color: '#FFFFFF', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                                  title="WhatsApp"
-                                >
-                                  <MessageSquare size={10} /> WA
-                                </a>
-                              )}
                               <a
                                 href={p.callUrl}
                                 style={{ background: '#F1F5F9', color: '#334155', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
@@ -814,85 +783,7 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
               </div>
             )}
 
-            {/* Card 6: Sales Pipeline & Telecaller CRM */}
-            <div className="v2-drawer-data-card">
-              <div className="v2-drawer-card-head">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MessageSquare size={13} style={{ color: '#059669' }} /> SALES PIPELINE & TELECALLER CRM
-                </span>
-                <span style={{ color: '#059669', fontWeight: 750, textTransform: 'uppercase' }}>{crmStage.replace(/_/g, ' ')}</span>
-              </div>
-              <div className="v2-drawer-card-body">
-                <div className="v2-crm-stage-chips" role="group" aria-label="CRM stage" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {CRM_STAGES.map(stage => (
-                    <button
-                      type="button"
-                      key={stage.id}
-                      className={cx('v2-crm-stage-chip', `tone-${stage.tone}`, crmStage === stage.id && 'is-on')}
-                      onClick={() => setCrmStage(stage.id)}
-                      aria-pressed={crmStage === stage.id}
-                    >
-                      {stage.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#64748B', letterSpacing: '0.06em' }}>LOG CALL OR ADD NOTE</span>
-                  <textarea
-                    value={crmNote}
-                    onChange={event => setCrmNote(event.target.value)}
-                    placeholder="Called owner, interested in catering. Follow-up next Tuesday..."
-                    rows={2}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: 12,
-                      fontFamily: 'inherit',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                  <button
-                    type="button"
-                    className="v2-3d-action-btn v2-btn-wa"
-                    style={{ padding: '6px 14px', fontSize: 11 }}
-                    onClick={saveCrm}
-                    disabled={crmSaving}
-                  >
-                    {crmSaving ? <Loader2 size={12} className="v2-spin" /> : <Check size={12} />}
-                    Save CRM Status
-                  </button>
-                  {crmMessage && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: crmMessage === 'Saved' ? '#059669' : '#DC2626' }}>
-                      {crmMessage}
-                    </span>
-                  )}
-                </div>
-
-                {crmNotes.length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: '1px solid #E2E8F0', paddingTop: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 750, color: '#64748B', textTransform: 'uppercase' }}>
-                      Note History ({crmNotes.length})
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-                      {crmNotes.slice(0, 5).map((note, idx) => (
-                        <div key={idx} style={{ padding: '6px 10px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 11 }}>
-                          <p style={{ margin: 0, color: '#1E293B' }}>{note.text}</p>
-                          <small style={{ color: '#94A3B8', fontSize: 9.5 }}>{note.author || 'User'} · {relativeTime(note.date)}</small>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Card 7: Data Source & Audit Trail */}
+            {/* Card 6: Data Source & Audit Trail */}
             <div className="v2-drawer-data-card">
               <div className="v2-drawer-card-head">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

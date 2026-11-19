@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Filter, Globe2,
+  ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Filter, Globe2,
   MapPin, Phone, Search, X
 } from 'lucide-react';
 import { formatNumber, cx } from '../../ui';
 import FilterBar from '../cards/FilterBar';
 import { VendorAvatar, EmptyState } from '../cards/MetricCard';
-import { CRM_STAGES, crmStageOf } from '../../utils/leadStages';
 import { qualityOf, calculateHaversineKm } from '../../utils/leadHelpers';
-import { isMobilePhone, whatsappNumber, getDisplayPhone } from '../../../utils/phoneClassify';
+import { isMobilePhone, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import FloatingActionDock from '../cards/FloatingActionDock';
 import { soundFx } from '../../utils/soundEffects';
@@ -25,8 +24,6 @@ export default function LeadsTableView({
   pageRows = [],
   mapCenter,
   setSelectedVendor,
-  updateCrmStage,
-  crmSavingId,
   currentPage = 1,
   pageSize = 100,
   pageCount = 1,
@@ -42,7 +39,7 @@ export default function LeadsTableView({
     if (selectedIds.size === pageRows.length && pageRows.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(pageRows.map(v => v.id || `${v.name}-${v.phone}`)));
+      setSelectedIds(new Set(pageRows.map((v, idx) => v.id || `${v.name}-${v.phone || idx}`)));
     }
   };
 
@@ -53,27 +50,28 @@ export default function LeadsTableView({
     setSelectedIds(next);
   };
 
+  const handleCopyPhone = (phone, e) => {
+    if (e) e.stopPropagation();
+    if (!phone) return;
+    navigator.clipboard?.writeText(phone);
+    toast.success(`Copied ${phone}`);
+  };
+
   const handleCopyMobiles = () => {
-    const target = pageRows.filter(v => selectedIds.has(v.id || `${v.name}-${v.phone}`));
-    const rawPhones = target.map(l => {
-      const p = getDisplayPhone(l);
-      if (!p) return null;
-      const digits = whatsappNumber(p, l.country || country);
-      if (!digits) return null;
-      if (digits.startsWith('91') || (l.country || country) === 'IN') return `+91 ${digits.replace(/^91/, '')}`;
-      return `+${digits}`;
-    }).filter(Boolean);
-    if (!rawPhones.length) {
-      toast.error('No mobile numbers found in selected rows.');
+    const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
+    const rawPhones = target.map(l => getDisplayPhone(l)).filter(Boolean);
+    const unique = [...new Set(rawPhones)];
+    if (!unique.length) {
+      toast.error('No phone numbers found in selected rows.');
       return;
     }
     soundFx.playSuccess();
-    navigator.clipboard?.writeText(rawPhones.join('\n'));
-    toast.success(`Copied ${rawPhones.length} mobile numbers to clipboard!`);
+    navigator.clipboard?.writeText(unique.join('\n'));
+    toast.success(`Copied ${unique.length} phone numbers to clipboard!`);
   };
 
   const handleExportVcf = () => {
-    const target = pageRows.filter(v => selectedIds.has(v.id || `${v.name}-${v.phone}`));
+    const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
     if (!target.length) {
       toast.error('No leads selected for VCF export.');
       return;
@@ -83,9 +81,44 @@ export default function LeadsTableView({
     toast.success(`Exported ${target.length} leads to vCard (.vcf)!`);
   };
 
+  const handleExportCsv = () => {
+    const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
+    if (!target.length) {
+      toast.error('No leads selected for CSV export.');
+      return;
+    }
+    soundFx.playSuccess();
+    const headers = ['Business Name', 'Category', 'Phone', 'Locality', 'City', 'District', 'State', 'Rating', 'Reviews', 'Website'];
+    const lines = [headers.join(',')];
+    target.forEach(r => {
+      lines.push([
+        `"${(r.name || '').replace(/"/g, '""')}"`,
+        `"${(r.category || '').replace(/"/g, '""')}"`,
+        `"${getDisplayPhone(r) || ''}"`,
+        `"${(r.locality || r.area || '').replace(/"/g, '""')}"`,
+        `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
+        `"${(r.district || '').replace(/"/g, '""')}"`,
+        `"${(r.state || '').replace(/"/g, '""')}"`,
+        `"${r.rating || ''}"`,
+        `"${r.reviewsCount || ''}"`,
+        `"${(r.website || '').replace(/"/g, '""')}"`
+      ].join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `master_leads_${target.length}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${target.length} leads to CSV!`);
+  };
+
   const flagOf = code => {
     const iso = String(code || '').toUpperCase();
-    if (!/^[A-Z]{2}$/.test(iso)) return '🌐';
+    if (!/^[A-Z]{2}$/.test(iso)) return '';
     return String.fromCodePoint(...[...iso].map(ch => 0x1f1e6 + ch.charCodeAt(0) - 65));
   };
 
@@ -121,16 +154,15 @@ export default function LeadsTableView({
                 </th>
                 <th>BUSINESS</th>
                 <th>LOCATION</th>
-                <th>CONTACT</th>
+                <th>DIRECT CONTACT</th>
                 <th>RATING</th>
-                <th>CRM STAGE</th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {(pageRows || []).map((vendor, index) => {
                 const quality = qualityOf(vendor);
-                const stage = crmStageOf(vendor);
+                const rowKey = vendor.id || `${vendor.name}-${vendor.phone || index}`;
                 const vLat = vendor.latitude ?? vendor.lat;
                 const vLng = vendor.longitude ?? vendor.lng;
                 const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
@@ -153,18 +185,21 @@ export default function LeadsTableView({
                   seenParts.add(key);
                   return true;
                 }).join(', ');
+                const activePhone = getDisplayPhone(vendor);
+                const isMob = activePhone ? isMobilePhone(activePhone, vendor.country || country) : false;
+
                 return (
                   <tr
-                    key={vendor.id}
-                    className={cx('v2-lead-animated-row', selectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`) && 'is-selected')}
-                    style={{ animationDelay: `${Math.min(index * 25, 400)}ms` }}
+                    key={rowKey}
+                    className={cx('v2-lead-animated-row', selectedIds.has(rowKey) && 'is-selected')}
+                    style={{ animationDelay: `${Math.min(index * 20, 350)}ms` }}
                     onClick={() => setSelectedVendor(vendor)}
                   >
                     <td style={{ width: 34 }} onClick={event => event.stopPropagation()}>
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(vendor.id || `${vendor.name}-${vendor.phone}`)}
-                        onChange={() => toggleSelectOne(vendor.id || `${vendor.name}-${vendor.phone}`)}
+                        checked={selectedIds.has(rowKey)}
+                        onChange={() => toggleSelectOne(rowKey)}
                       />
                     </td>
                     <td>
@@ -186,22 +221,22 @@ export default function LeadsTableView({
                         <div className="v2-geo-hierarchy-chips">
                           {(vendor.zoneName || vendor.locality) && (
                             <span className="v2-geo-chip v2-geo-chip-zone" title="Commercial zone or neighbourhood">
-                              📍 {vendor.zoneName || vendor.locality}
+                              {vendor.zoneName || vendor.locality}
                             </span>
                           )}
                           {leadIsIndia && vendor.mandal && (
                             <span className="v2-geo-chip v2-geo-chip-mandal" title="Revenue Mandal / Taluk">
-                              🏛️ {vendor.mandal.toLowerCase().includes('mandal') ? vendor.mandal : `${vendor.mandal} Mandal`}
+                              {vendor.mandal.toLowerCase().includes('mandal') ? vendor.mandal : `${vendor.mandal} Mandal`}
                             </span>
                           )}
                           {!leadIsIndia && !vendor.zoneName && vendor.mandal && (
                             <span className="v2-geo-chip v2-geo-chip-zone" title="City">
-                              📍 {vendor.mandal}
+                              {vendor.mandal}
                             </span>
                           )}
                           {vendor.district && (
                             <span className="v2-geo-chip v2-geo-chip-dist" title="Administrative district">
-                              🗺️ {leadIsIndia && !vendor.district.toLowerCase().includes('dist') ? `${vendor.district} Dist` : vendor.district}
+                              {leadIsIndia && !vendor.district.toLowerCase().includes('dist') ? `${vendor.district} Dist` : vendor.district}
                             </span>
                           )}
                           {vendor.state && vendor.state !== 'India' && (
@@ -211,7 +246,7 @@ export default function LeadsTableView({
                           )}
                           {distKm != null && distKm <= 500 && (
                             <span className="v2-distance-badge" title="Distance from search origin">
-                              📏 {distKm} km
+                              {distKm} km
                             </span>
                           )}
                         </div>
@@ -219,38 +254,29 @@ export default function LeadsTableView({
                     </td>
                     <td>
                       <div className="v2-contact-cell">
-                        {(() => {
-                          const activePhone = getDisplayPhone(vendor);
-                          const isMob = isMobilePhone(activePhone, vendor.country || country);
-                          const waNum = whatsappNumber(activePhone, vendor.country || country);
-                          return activePhone && !String(activePhone).includes('Requires') ? (
-                            <div className="v2-phone-cluster">
-                              <a
-                                href={vendor.callUrl || `tel:${String(activePhone).replace(/\s+/g, '')}`}
-                                className={`v2-phone-badge ${isMob ? 'is-mobile' : 'is-landline'}`}
-                                title={isMob ? 'Verified Mobile' : 'STD Landline Contact'}
-                                onClick={event => event.stopPropagation()}
-                              >
-                                <Phone size={11} /> {activePhone}
-                                <span className="v2-phone-type-tag">{isMob ? 'Mobile' : 'Landline'}</span>
-                              </a>
-                              {isMob && (
-                                <a
-                                  href={vendor.whatsappLink || `https://wa.me/${waNum || String(activePhone).replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20listing%20and%20wanted%20to%20connect.`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="v2-wa-quick-btn"
-                                  title="Chat on WhatsApp"
-                                  onClick={event => event.stopPropagation()}
-                                >
-                                  💬 WhatsApp
-                                </a>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="v2-muted">No phone yet</span>
-                          );
-                        })()}
+                        {activePhone ? (
+                          <div className="v2-phone-cluster">
+                            <a
+                              href={vendor.callUrl || `tel:${String(activePhone).replace(/\s+/g, '')}`}
+                              className={`v2-phone-badge ${isMob ? 'is-mobile' : 'is-landline'}`}
+                              title={isMob ? 'Verified Mobile' : 'Landline Contact'}
+                              onClick={event => event.stopPropagation()}
+                            >
+                              <Phone size={11} /> {activePhone}
+                              <span className="v2-phone-type-tag">{isMob ? 'Mobile' : 'Landline'}</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={event => handleCopyPhone(activePhone, event)}
+                              style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 7px', borderRadius: 6, background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}
+                              title="Copy phone number"
+                            >
+                              <Copy size={10} /> Copy
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="v2-muted">No phone yet</span>
+                        )}
                         <span className="v2-contact-sub">
                           {vendor.website
                             ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> website</a>
@@ -260,18 +286,7 @@ export default function LeadsTableView({
                       </div>
                     </td>
                     <td>
-                      {vendor.rating != null ? <span className="v2-table-rating">{Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small></span> : <span className="v2-muted">—</span>}
-                    </td>
-                    <td>
-                      <select
-                        className={cx('v2-stage-select', `stage-${stage}`)}
-                        value={stage}
-                        onClick={event => event.stopPropagation()}
-                        onChange={event => updateCrmStage(vendor, event.target.value)}
-                        disabled={crmSavingId === vendor.id}
-                      >
-                        {CRM_STAGES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-                      </select>
+                      {vendor.rating != null ? <span className="v2-table-rating">★ {Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small></span> : <span className="v2-muted">—</span>}
                     </td>
                     <td>
                       <div className="v2-row-actions" onClick={event => event.stopPropagation()}>
@@ -288,7 +303,7 @@ export default function LeadsTableView({
             <EmptyState
               icon={Search}
               title="No vendors match this filter."
-              body="Clear the filters or start a search to populate the command center. Nothing is seeded or faked."
+              body="Clear the filters or start a search to populate the command center."
               action={() => setFilters({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
               actionLabel="Reset filters"
             />
@@ -301,17 +316,17 @@ export default function LeadsTableView({
           </span>
           <div className="v2-pagination">
             <select value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
-              <option value={25}>25 / page</option>
-              <option value={50}>50 / page</option>
               <option value={100}>100 / page</option>
               <option value={250}>250 / page</option>
               <option value={500}>500 / page</option>
-              <option value={1000}>1,000 / page</option>
-              <option value={100000}>All Leads</option>
             </select>
-            <button type="button" onClick={() => setPage(prev => Math.max(1, prev - 1))} disabled={currentPage <= 1}><ChevronLeft size={13} /></button>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} aria-label="Previous page">
+              <ChevronLeft size={14} />
+            </button>
             <span>{currentPage} / {pageCount}</span>
-            <button type="button" onClick={() => setPage(prev => Math.min(pageCount, prev + 1))} disabled={currentPage >= pageCount}><ChevronRight size={13} /></button>
+            <button type="button" disabled={currentPage >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))} aria-label="Next page">
+              <ChevronRight size={14} />
+            </button>
           </div>
         </footer>
       </div>
@@ -321,6 +336,7 @@ export default function LeadsTableView({
         onClear={() => setSelectedIds(new Set())}
         onCopyMobiles={handleCopyMobiles}
         onExportVcf={handleExportVcf}
+        onExportCsv={handleExportCsv}
       />
     </section>
   );

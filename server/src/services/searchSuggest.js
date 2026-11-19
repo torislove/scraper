@@ -557,6 +557,17 @@ function detectFragments(query) {
     };
   }
 
+  // Handle mid-typing trailing preposition cleanly ("computer shops in" -> category "computer shops")
+  const trailingPrep = text.match(/^(.+?)\s+(?:in|at|near|around|within|for|of)$/i);
+  if (trailingPrep) {
+    return {
+      categoryFragment: clean(trailingPrep[1]),
+      locationFragment: '',
+      splitBy: 'trailing-preposition',
+      locationCorrectedFrom: ''
+    };
+  }
+
   const words = text.split(/\s+/).filter(Boolean);
 
   // Common service suffix tokens (e.g. "car rental", "wedding cards", "real estate", "pest control")
@@ -917,8 +928,14 @@ function suggest(options = {}) {
     splitBy = parts.splitBy;
   }
 
-  // Auto-correct common trade typos
+  // Auto-correct common trade typos + learned user typo pairs
+  const rawCatBeforeFix = categoryFragment;
   categoryFragment = normalizeTradeTypos(categoryFragment);
+  try {
+    const taxonomyLearner = require('./taxonomyLearner');
+    const learnedFix = taxonomyLearner.resolveLearnedTypo(categoryFragment);
+    if (learnedFix) categoryFragment = learnedFix;
+  } catch (e) {}
 
   const intent = brandIntel.detect(categoryFragment);
   // The fuzzy category index is deliberately loose (it is tuned for typos), so
@@ -934,11 +951,32 @@ function suggest(options = {}) {
   let placeVariants = [];
   let locationMatches = [];
   if (locationFragment) {
+    const allowShortPrefix = splitBy === 'preposition' || splitBy === 'universal-nl';
     if (country && country !== 'IN') {
       try {
         const { searchInternationalPlaces } = require('./internationalGeoIndex');
-        locationMatches = searchInternationalPlaces(locationFragment, { country, limit, isMaster });
+        locationMatches = searchInternationalPlaces(locationFragment, { country, limit, isMaster, allowShortPrefix });
       } catch (e) {}
+    } else if (locationFragment.length <= 2 && allowShortPrefix) {
+      // Ultra-fast partial major-city completion right after "in " (e.g. "computer shops in g" -> Guntur, Gurugram, Guwahati...)
+      const locPrefix = norm(locationFragment);
+      locationMatches = MAJOR_CITY_KEYS
+        .filter(c => c.key.startsWith(locPrefix))
+        .slice(0, limit)
+        .map(c => ({
+          value: c.name,
+          label: c.name,
+          display: `${c.name}, India`,
+          level: 'city',
+          scope: 'city',
+          detail: 'City',
+          state: '',
+          district: '',
+          mandal: '',
+          lat: null,
+          lng: null,
+          corrected: false
+        }));
     } else {
       placeVariants = findPlaceVariants(locationFragment, limit, isMaster);
       locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit, isMaster);
@@ -978,12 +1016,14 @@ function suggest(options = {}) {
     ? getUniversalRichExpansions(bestCategory.value, bestCategory.family, bestLocation?.value || '')
     : (categoryFragment.length >= 3 ? getUniversalRichExpansions(titleCase(categoryFragment), 'generic', bestLocation?.value || '') : []);
 
-  // Self-Learning Feedback Loop: surface proven products, services, and categories learned from past runs
+  // Self-Learning Feedback Loop: surface proven products, services, synonyms, and popular searches
   let learnedRows = [];
+  let relatedSynonyms = [];
   if (categoryFragment.length >= 2) {
     try {
       const taxonomyLearner = require('./taxonomyLearner');
       const learned = taxonomyLearner.suggest(categoryFragment, 4) || [];
+      relatedSynonyms = taxonomyLearner.getSynonyms(categoryFragment, 5) || [];
       learnedRows = learned.map(item => ({
         type: 'category',
         value: item.label || item.name || item.value,
@@ -991,7 +1031,7 @@ function suggest(options = {}) {
           ? `${item.label || item.name || item.value} in ${bestLocation.value}`
           : (item.label || item.name || item.value),
         subtitle: item.subtitle || 'Learned from verified searches',
-        detail: item.group === 'brand' ? 'BRAND' : item.group === 'product' ? 'PRODUCT' : 'LEARNED',
+        detail: item.detail || (item.group === 'brand' ? 'BRAND' : item.group === 'product' ? 'PRODUCT' : 'LEARNED'),
         family: item.family || 'generic',
         familyLabel: item.subtitle || 'Verified Category',
         corrected: false,
@@ -1074,6 +1114,15 @@ function suggest(options = {}) {
   else if (bestCategory) correctedQuery = bestCategory.value;
   else if (bestLocation) correctedQuery = bestLocation.value;
 
+  const rawQNorm = norm(options.q || '');
+  const tradeFixedRaw = norm(normalizeTradeTypos(options.q || ''));
+  const hasSpellingHeal = Boolean(
+    bestCategory?.corrected ||
+    bestLocation?.corrected ||
+    (rawCatBeforeFix && norm(rawCatBeforeFix) !== norm(categoryFragment)) ||
+    (rawQNorm && tradeFixedRaw && rawQNorm !== tradeFixedRaw)
+  );
+
   return {
     ok: true,
     query: correctedQuery,
@@ -1086,7 +1135,8 @@ function suggest(options = {}) {
     },
     category: bestCategory,
     location: bestLocation,
-    didYouMean: (bestCategory?.corrected || bestLocation?.corrected) ? correctedQuery : null,
+    relatedSynonyms,
+    didYouMean: hasSpellingHeal && correctedQuery && norm(correctedQuery) !== rawQNorm ? correctedQuery : null,
     disambiguation: (() => {
       const allowedVariants = isMaster 
         ? placeVariants 
@@ -1146,11 +1196,16 @@ function warmSuggestions() {
   return Date.now() - started;
 }
 
+function clearSuggestCache() {
+  SUGGEST_CACHE.clear();
+}
+
 module.exports = {
   suggest: suggestCached,
   suggestUncached: suggest,
   suggestForCountry,
   warmSuggestions,
+  clearSuggestCache,
   detectFragments,
   findLocations,
   titleCase,

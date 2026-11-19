@@ -50,6 +50,31 @@ router.get('/suggest', async (req, res) => {
 });
 
 /**
+ * POST /api/search/feedback
+ *
+ * Self-learning live feedback loop: teaches taxonomyLearner whenever a user
+ * runs a search, selects an autocomplete suggestion, or accepts a correction.
+ */
+router.post('/feedback', (req, res) => {
+  try {
+    const taxonomyLearner = require('../services/taxonomyLearner');
+    const searchSuggest = require('../services/searchSuggest');
+    const { rawQuery, selectedCategory, selectedLocation, country, correctedFrom } = req.body || {};
+    const result = taxonomyLearner.recordFeedback({
+      rawQuery,
+      selectedCategory,
+      selectedLocation,
+      country,
+      correctedFrom
+    });
+    searchSuggest.clearSuggestCache();
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
  * GET /api/search/learned
  *
  * Full auto-learning catalogue for the master "What the engine learned" view.

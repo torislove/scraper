@@ -226,6 +226,10 @@ change: `MAX_PARALLEL_JOBS` and the node-pool maximum move together.
 
 Fairness and backpressure:
 
+* The worker queue already round-robins across runs: it dispatches the job whose
+  session currently holds the fewest slots, so a 1,200-zone master sweep and a
+  20-zone client scrape both progress. Inside one run, the existing priority
+  gradient is unchanged.
 * `clients.max_concurrent_jobs` (default 2) caps one workspace, so a single client cannot
   occupy the pool.
 * Priority classes: interactive client scrape → master sweep shard → enrichment → backfill.
@@ -665,6 +669,10 @@ not fit the function-as-a-service model and the plan does not pretend they do:
 
 If the target cloud offers **Knative**, the api can run there (scale-to-zero, request-based)
 while Jobs stay plain `batch/v1`. That is optional and phase 6.
+
+**The bill** is in `docs/COST-MODEL.md`: ~$229/month fixed at launch, ~$0.018 per
+scrape, ~$325/hour if 10,000 scrapes are ever run at the same instant. There are
+no data-source fees, because every engine is keyless.
 
 ---
 

@@ -32,14 +32,16 @@ const MAX_BRANDS = 1200;
 const MAX_EXPANSIONS = 16;
 
 let store = {
-  version: 2,
+  version: 3,
   updatedAt: null,
   queries: {},
   products: {},
   categories: {},
   services: {},
   brands: {},
-  localities: {}
+  localities: {},
+  synonyms: {},
+  typos: {}
 };
 let writeTimer = null;
 let loaded = false;
@@ -81,19 +83,21 @@ function load() {
     }
     if (raw && typeof raw === 'object') {
       store = {
-        version: 2,
+        version: 3,
         updatedAt: raw.updatedAt || null,
         queries: raw.queries || {},
         products: raw.products || {},
         categories: raw.categories || {},
         services: raw.services || {},
         brands: raw.brands || {},
-        localities: raw.localities || {}
+        localities: raw.localities || {},
+        synonyms: raw.synonyms || {},
+        typos: raw.typos || {}
       };
       absorbTypos();
     }
   } catch (err) {
-    store = { version: 2, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {}, localities: {} };
+    store = { version: 3, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {}, localities: {}, synonyms: {}, typos: {} };
   }
 }
 
@@ -332,6 +336,44 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
       }
     }
 
+    // Signal 1: Bidirectional Real-World Synonym Learning from Scraped Vendor Categories
+    // When searching "print shops" returns 15 vendors tagged "Digital printer" & "Commercial printer",
+    // automatically link them bidirectionally so future searches for either term surface both!
+    const catFreq = new Map();
+    for (const vendor of (Array.isArray(vendors) ? vendors : [])) {
+      const cat = canonical(vendorCategory(vendor));
+      const catKey = normalize(cat);
+      if (!catKey || catKey.length < 3 || catKey === norm || /^(business|vendor|store|shop|service|local|other|unknown|general)$/i.test(catKey)) continue;
+      const existing = catFreq.get(catKey) || { name: cat, count: 0 };
+      existing.count += 1;
+      catFreq.set(catKey, existing);
+    }
+    const topObservedCats = Array.from(catFreq.values())
+      .filter(item => item.count >= 2)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+    if (topObservedCats.length) {
+      if (!store.synonyms) store.synonyms = {};
+      const synNames = topObservedCats.map(c => c.name);
+      const rootSyn = store.synonyms[norm] || { key: norm, name: text, synonyms: [], count: 0 };
+      rootSyn.name = rootSyn.name || text;
+      rootSyn.synonyms = mergeList(rootSyn.synonyms, synNames, 12);
+      rootSyn.count = Number(rootSyn.count || 0) + 1;
+      rootSyn.lastAt = new Date().toISOString();
+      store.synonyms[norm] = rootSyn;
+
+      // Bidirectional reverse link so searching the Google Maps label also knows the user phrasing
+      for (const observed of topObservedCats) {
+        const obsKey = normalize(observed.name);
+        if (!obsKey || obsKey === norm) continue;
+        const rev = store.synonyms[obsKey] || { key: obsKey, name: observed.name, synonyms: [], count: 0 };
+        rev.synonyms = mergeList(rev.synonyms, [text], 12);
+        rev.count = Number(rev.count || 0) + 1;
+        rev.lastAt = new Date().toISOString();
+        store.synonyms[obsKey] = rev;
+      }
+    }
+
     // Learn micro-localities from lead addresses for this city
     const cityKey = normalize(location);
     if (cityKey) {
@@ -446,16 +488,48 @@ function suggest(text, limit = 2) {
   if (raw.length < 2) return [];
 
   const rows = [];
-  // Services first: a repair/local-service query should surface the labels the
-  // directories actually returned, not guessed product phrases.
+  const seen = new Set();
+  const pushRow = (row) => {
+    const k = normalize(row.value || row.label);
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    rows.push(row);
+  };
+
+  // 1. Direct Learned Synonyms first (highest real-world relevance)
+  const normRaw = normalize(raw);
+  if (store.synonyms && normRaw.length >= 2) {
+    const synMatches = matchEntries(store.synonyms, normRaw, 2);
+    for (const synEntry of synMatches) {
+      for (const syn of (synEntry.synonyms || []).slice(0, 3)) {
+        if (rows.length >= limit) break;
+        pushRow({
+          type: 'category',
+          group: 'synonym',
+          value: syn,
+          label: syn,
+          subtitle: `Related to “${synEntry.name}” · Auto-learned synonym`,
+          detail: 'SYNONYM',
+          family: 'generic',
+          familyLabel: 'Related Categories',
+          learned: true,
+          runs: synEntry.count || 1,
+          intentKind: 'synonym'
+        });
+      }
+    }
+  }
+
+  // 2. Services: real labels returned by live directories & user searches
   const services = matchServiceEntries(raw, 2);
   for (const service of services) {
-    rows.push({
+    if (rows.length >= limit) break;
+    pushRow({
       type: 'category',
       group: 'service',
       value: service.name,
       label: service.name,
-      subtitle: `Learned from ${service.count || 1} browser run${Number(service.count || 1) === 1 ? '' : 's'} · ${(service.samples || []).slice(0, 2).join(', ') || 'directory listings'}`,
+      subtitle: `Learned from ${service.count || 1} search${Number(service.count || 1) === 1 ? '' : 'es'}${service.samples?.length ? ` · ${service.samples.slice(0, 2).join(', ')}` : ''}`,
       detail: 'LEARNED',
       family: 'home-services',
       familyLabel: 'Learned services',
@@ -463,18 +537,19 @@ function suggest(text, limit = 2) {
       runs: service.count || 0,
       intentKind: 'local_service'
     });
-    if (rows.length >= limit) return rows;
   }
 
+  // 3. Learned products
   const products = matchEntries(store.products, raw, 2);
   for (const product of products) {
     for (const expansion of (product.expansions || []).slice(0, Math.max(1, limit - rows.length))) {
-      rows.push({
+      if (rows.length >= limit) break;
+      pushRow({
         type: 'category',
         group: 'product',
         value: expansion,
         label: expansion,
-        subtitle: `Learned from ${product.count || 1} successful run${Number(product.count || 1) === 1 ? '' : 's'} · “${product.name}”`,
+        subtitle: `Learned from ${product.count || 1} search${Number(product.count || 1) === 1 ? '' : 'es'} · “${product.name}”`,
         detail: 'LEARNED',
         family: 'generic',
         familyLabel: 'Learned suppliers',
@@ -482,32 +557,115 @@ function suggest(text, limit = 2) {
         runs: product.count || 0,
         intentKind: 'product'
       });
-      if (rows.length >= limit) break;
     }
     if (rows.length >= limit) break;
   }
 
-  if (!rows.length) {
-    const queries = matchEntries(store.queries, raw, 1);
+  // 4. Frequent user searches (Google-style trending/history recall)
+  if (rows.length < limit) {
+    const queries = matchEntries(store.queries, raw, 2);
     for (const entry of queries) {
-      if (!entry.product) continue;
-      rows.push({
+      if (rows.length >= limit) break;
+      pushRow({
         type: 'category',
-        group: 'product',
+        group: 'query',
         value: entry.text,
         label: entry.text,
-        subtitle: `Remembered from ${entry.count || 1} run${Number(entry.count || 1) === 1 ? '' : 's'} · ${entry.leadCount || 0} leads`,
-        detail: 'LEARNED',
+        subtitle: `Popular search · ${entry.count || 1} run${Number(entry.count || 1) === 1 ? '' : 's'}${entry.leadCount ? ` · ${entry.leadCount} leads` : ''}`,
+        detail: 'POPULAR',
         family: 'generic',
-        familyLabel: 'Learned searches',
+        familyLabel: 'Popular Searches',
         learned: true,
         runs: entry.count || 0,
-        intentKind: entry.kind || 'product'
+        intentKind: entry.kind || 'query'
       });
     }
   }
 
-  return rows;
+  return rows.slice(0, limit);
+}
+
+/**
+ * Signal 2: Live feedback learning from user searches, suggestion clicks, and accepted corrections.
+ * Strictly guarded by COMMON_WORD_WHITELIST so valid English/Indian words can never be poisoned.
+ */
+function recordFeedback({ rawQuery = '', selectedCategory = '', selectedLocation = '', country = 'IN', correctedFrom = '' } = {}) {
+  load();
+  const cat = String(selectedCategory || '').trim();
+  const raw = String(rawQuery || '').trim();
+  const catNorm = normalize(cat);
+  const rawNorm = normalize(raw);
+
+  if (catNorm && catNorm.length >= 3 && catNorm.length <= 80) {
+    bump(store.queries, catNorm, {
+      text: cat,
+      kind: 'user_feedback',
+      lastLocation: String(selectedLocation || '').slice(0, 120),
+      country: String(country || 'IN').toUpperCase().slice(0, 2)
+    });
+    const srv = bump(store.services, catNorm, {
+      name: cat,
+      query: raw || cat
+    });
+    if (rawNorm && rawNorm !== catNorm && rawNorm.length >= 3 && !rawNorm.includes(' in ')) {
+      srv.expansions = mergeList(srv.expansions, [raw], 12);
+    }
+  }
+
+  // Learn safe typo -> canonical correction ONLY when user explicitly accepts a correction
+  // AND the source token is NOT a valid dictionary word in COMMON_WORD_WHITELIST.
+  if (correctedFrom && cat) {
+    try {
+      const { COMMON_WORD_WHITELIST, levenshtein } = require('../utils/tradeIntelligence');
+      const fromNorm = normalize(correctedFrom);
+      const toNorm = normalize(cat);
+      const fromTokens = fromNorm.split(' ').filter(Boolean);
+      const isProtected = fromTokens.length > 0 && fromTokens.every(w => COMMON_WORD_WHITELIST.has(w));
+      if (!isProtected && fromNorm.length >= 4 && toNorm.length >= 4 && fromNorm !== toNorm && levenshtein(fromNorm, toNorm) <= 3) {
+        if (!store.typos) store.typos = {};
+        const prev = store.typos[fromNorm] || { from: fromNorm, to: cat, count: 0 };
+        prev.to = cat;
+        prev.count += 1;
+        prev.lastAt = new Date().toISOString();
+        store.typos[fromNorm] = prev;
+      }
+    } catch (e) {}
+  }
+
+  store.updatedAt = new Date().toISOString();
+  trimObject(store.queries, MAX_QUERIES);
+  trimObject(store.services, MAX_CATEGORIES);
+  invalidateSnapshot();
+  saveSoon();
+  return { ok: true, learned: cat || raw };
+}
+
+function getSynonyms(text, limit = 6) {
+  load();
+  const normText = normalize(text);
+  if (!normText || normText.length < 2 || !store.synonyms) return [];
+  const matches = matchEntries(store.synonyms, normText, 3);
+  const out = [];
+  const seen = new Set([normText]);
+  for (const m of matches) {
+    for (const s of (m.synonyms || [])) {
+      const k = normalize(s);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(s);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+function resolveLearnedTypo(text) {
+  load();
+  const normText = normalize(text);
+  if (!normText || !store.typos) return '';
+  const hit = store.typos[normText];
+  if (hit && hit.count >= 1 && hit.to) return hit.to;
+  return '';
 }
 
 function buildSnapshot() {
@@ -682,6 +840,9 @@ function getCatalog(limit = 150) {
 
 module.exports = {
   recordRun,
+  recordFeedback,
+  getSynonyms,
+  resolveLearnedTypo,
   suggest,
   expansionsFor,
   getSummary,

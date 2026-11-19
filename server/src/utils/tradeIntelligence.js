@@ -542,6 +542,13 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
 
   // 9. Decorators & Floral Design
   if (/decor|florist|flower|stage|balloon/i.test(norm)) {
+    if (/flower\s*shop|florist|bouquet/i.test(norm) && !/decor|stage|mandap/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Flower Shops & Florists', label: `Flower Shops & Florists${locSuffix}`, subtitle: 'Fresh Bouquets, Garlands & Same-Day Flower Delivery', detail: 'FLORISTS' },
+        { baseValue: 'Fresh Flower Decorators & Florists', label: `Fresh Flower Decorators & Florists${locSuffix}`, subtitle: 'Stage, Mandap & Event Floral Arrangements', detail: 'FLORAL DECOR' },
+        { baseValue: 'Wholesale Flower Markets & Suppliers', label: `Wholesale Flower Markets & Suppliers${locSuffix}`, subtitle: 'Bulk Fresh Flowers & Commercial Florists', detail: 'WHOLESALE' }
+      ], 'retail');
+    }
     return formatRows([
       { baseValue: 'Wedding & Event Decorators', label: `Wedding & Event Decorators${locSuffix}`, subtitle: 'Full Venue Styling, Lighting & Event Design', detail: 'DECOR' },
       { baseValue: 'Stage & Mandap Decorators', label: `Stage & Mandap Decorators${locSuffix}`, subtitle: 'Grand Reception Stages & Floral Backdrops', detail: 'WEDDING' },
@@ -592,6 +599,13 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
 
   // 13. Painting & Waterproofing
   if (/paint|waterproof/i.test(norm)) {
+    if (/paint\s*shop|paint\s*dealer|paint\s*store/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Paint Shops & Authorised Dealers', label: `Paint Shops & Authorised Dealers${locSuffix}`, subtitle: 'Wall Putty, Primers & Multi-Brand Paints', detail: 'DEALERS' },
+        { baseValue: 'Painting Contractors & Painters', label: `Painting Contractors & Painters${locSuffix}`, subtitle: 'Interior, Exterior & Texture House Painting', detail: 'PAINTING' },
+        { baseValue: 'Waterproofing Specialists', label: `Waterproofing Specialists${locSuffix}`, subtitle: 'Terrace, Bathroom & Wall Seepage Solutions', detail: 'WATERPROOFING' }
+      ], 'home-services');
+    }
     return formatRows([
       { baseValue: 'Painting Contractors & Painters', label: `Painting Contractors & Painters${locSuffix}`, subtitle: 'Interior, Exterior & Texture House Painting', detail: 'PAINTING' },
       { baseValue: 'Waterproofing Specialists', label: `Waterproofing Specialists${locSuffix}`, subtitle: 'Terrace, Bathroom & Wall Seepage Solutions', detail: 'WATERPROOFING' },
@@ -625,6 +639,28 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
 
   // 16. Healthcare, Clinics, Hospitals, Dental & Pharmacies
   if (/clinic|doctor|hospital|dentist|dental|pharmacy|medical|chemist|diagnostic|pathology|physio|eye care|dermatolog|veterinary|vet\b/i.test(norm)) {
+    if (/pharmacy|pharmacies|medical|chemist|drug/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Pharmacies & Medical Stores', label: `Pharmacies & Medical Stores${locSuffix}`, subtitle: '24-Hour Chemists, Prescription Medicines & Surgical Supplies', detail: 'PHARMACY' },
+        { baseValue: 'Wholesale Medicine Distributors', label: `Wholesale Medicine Distributors${locSuffix}`, subtitle: 'Pharma Stockists & Bulk Medical Suppliers', detail: 'WHOLESALE' },
+        { baseValue: 'Diagnostic Labs & Scan Centres', label: `Diagnostic Labs & Scan Centres${locSuffix}`, subtitle: 'Blood Tests, Pathology, X-Ray & MRI Scans', detail: 'DIAGNOSTICS' },
+        { baseValue: 'Clinics & Specialist Doctors', label: `Clinics & Specialist Doctors${locSuffix}`, subtitle: 'General Physicians, Specialists & Consultations', detail: 'HEALTHCARE' }
+      ], 'health');
+    }
+    if (/dentist|dental/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Dentists & Dental Clinics', label: `Dentists & Dental Clinics${locSuffix}`, subtitle: 'Implants, Braces, Root Canals & Cosmetic Care', detail: 'DENTAL' },
+        { baseValue: 'Dental Hospitals & Orthodontists', label: `Dental Hospitals & Orthodontists${locSuffix}`, subtitle: 'Multi-Chair Dental Centres & Oral Surgeons', detail: 'HOSPITALS' },
+        { baseValue: 'Clinics & Specialist Doctors', label: `Clinics & Specialist Doctors${locSuffix}`, subtitle: 'General Physicians, Specialists & Consultations', detail: 'HEALTHCARE' }
+      ], 'health');
+    }
+    if (/diagnostic|pathology|lab\b|scan/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Diagnostic Labs & Scan Centres', label: `Diagnostic Labs & Scan Centres${locSuffix}`, subtitle: 'Blood Tests, Pathology, X-Ray & MRI Scans', detail: 'DIAGNOSTICS' },
+        { baseValue: 'Multi-Speciality Hospitals', label: `Multi-Speciality Hospitals${locSuffix}`, subtitle: '24/7 Emergency Care, Diagnostics & Surgeries', detail: 'HOSPITALS' },
+        { baseValue: 'Pharmacies & Medical Stores', label: `Pharmacies & Medical Stores${locSuffix}`, subtitle: '24-Hour Chemists & Prescription Delivery', detail: 'PHARMACY' }
+      ], 'health');
+    }
     return formatRows([
       { baseValue: 'Clinics & Specialist Doctors', label: `Clinics & Specialist Doctors${locSuffix}`, subtitle: 'General Physicians, Specialists & Consultations', detail: 'HEALTHCARE' },
       { baseValue: 'Multi-Speciality Hospitals', label: `Multi-Speciality Hospitals${locSuffix}`, subtitle: '24/7 Emergency Care, Diagnostics & Surgeries', detail: 'HOSPITALS' },
@@ -635,7 +671,28 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
   }
 
   // 17. Restaurants, Cafes, Bakeries & Sweet Shops
-  if (/restaurant|cafe|coffee|dining|biryani|bakery|cake|sweet shop|mithai|food|cloud kitchen/i.test(norm)) {
+  if (/restaurant|cafe|coffee|tea shop|dining|biryani|bakery|cake|sweet|mithai|food|cloud kitchen/i.test(norm)) {
+    if (/sweet|mithai/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Sweet Shops & Mithai Stores', label: `Sweet Shops & Mithai Stores${locSuffix}`, subtitle: 'Traditional Sweets, Savouries & Bulk Gift Boxes', detail: 'SWEETS' },
+        { baseValue: 'Bakeries & Cake Shops', label: `Bakeries & Cake Shops${locSuffix}`, subtitle: 'Custom Cakes, Pastries & Fresh Breads', detail: 'BAKERY' },
+        { baseValue: 'Wedding & Event Caterers', label: `Wedding & Event Caterers${locSuffix}`, subtitle: 'Bulk Festive Sweets & Catering Orders', detail: 'CATERING' }
+      ], 'food');
+    }
+    if (/bakery|cake/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Bakeries & Cake Shops', label: `Bakeries & Cake Shops${locSuffix}`, subtitle: 'Custom Cakes, Pastries & Fresh Breads', detail: 'BAKERY' },
+        { baseValue: 'Sweet Shops & Mithai Stores', label: `Sweet Shops & Mithai Stores${locSuffix}`, subtitle: 'Traditional Sweets, Savouries & Gift Boxes', detail: 'SWEETS' },
+        { baseValue: 'Cafes & Coffee Shops', label: `Cafes & Coffee Shops${locSuffix}`, subtitle: 'Specialty Coffee, Snacks & Desserts', detail: 'CAFES' }
+      ], 'food');
+    }
+    if (/coffee|cafe|tea shop/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Cafes & Coffee Shops', label: `Cafes & Coffee Shops${locSuffix}`, subtitle: 'Specialty Coffee, Snacks & Work-Friendly Cafes', detail: 'CAFES' },
+        { baseValue: 'Bakeries & Cake Shops', label: `Bakeries & Cake Shops${locSuffix}`, subtitle: 'Custom Cakes, Pastries & Fresh Breads', detail: 'BAKERY' },
+        { baseValue: 'Restaurants', label: `Restaurants${locSuffix}`, subtitle: 'Top Rated Family Dining & Multi-Cuisine Spots', detail: 'DINING' }
+      ], 'food');
+    }
     return formatRows([
       { baseValue: 'Restaurants', label: `Restaurants${locSuffix}`, subtitle: 'Top Rated Family Dining & Multi-Cuisine Spots', detail: 'DINING' },
       { baseValue: 'Cafes & Coffee Shops', label: `Cafes & Coffee Shops${locSuffix}`, subtitle: 'Specialty Coffee, Snacks & Work-Friendly Cafes', detail: 'CAFES' },
@@ -646,6 +703,13 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
 
   // 18. Automotive, Showrooms, Garages, Tyres & Spare Parts
   if (/car|bike|garage|automobile|auto repair|mechanic|tyre|tire|spare parts|car wash|detailing|driving school/i.test(norm)) {
+    if (/tyre|tire|battery|wheel|puncture/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Tyre Shops & Auto Spare Parts', label: `Tyre Shops & Auto Spare Parts${locSuffix}`, subtitle: 'Multi-Brand Tyres, Wheel Alignment & Car Batteries', detail: 'PARTS & TYRES' },
+        { baseValue: 'Car Service Centres & Garages', label: `Car Service Centres & Garages${locSuffix}`, subtitle: 'Periodic Service, Denting, Painting & Engine Repair', detail: 'GARAGES' },
+        { baseValue: 'Two Wheeler Showrooms & Service', label: `Two Wheeler Showrooms & Service${locSuffix}`, subtitle: 'Bike Tyres, Servicing & Genuine Spares', detail: 'TWO WHEELERS' }
+      ], 'auto');
+    }
     return formatRows([
       { baseValue: 'Car Showrooms & Dealers', label: `Car Showrooms & Dealers${locSuffix}`, subtitle: 'New Cars, Pre-Owned Dealers & Test Drives', detail: 'SHOWROOMS' },
       { baseValue: 'Car Service Centres & Garages', label: `Car Service Centres & Garages${locSuffix}`, subtitle: 'Periodic Service, Denting, Painting & Engine Repair', detail: 'GARAGES' },
@@ -722,8 +786,22 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
     ], 'industrial');
   }
 
-  // 23. Retail, Fashion, Jewellery, Supermarkets & General Shops
-  if (family === 'retail' || /store|shop|showroom|boutique|jewel|cloth|garment|saree|footwear|supermarket|grocery|optical|gift/i.test(norm)) {
+  // 23. Specialty Shops (Flowers, Books, Gifts, Shoes, Opticals, Cycles) & General Retail
+  if (/flower|florist|bouquet/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Flower Shops & Florists', label: `Flower Shops & Florists${locSuffix}`, subtitle: 'Fresh Bouquets, Garlands & Same-Day Flower Delivery', detail: 'FLORISTS' },
+      { baseValue: 'Wedding Flower Decorators', label: `Wedding Flower Decorators${locSuffix}`, subtitle: 'Stage, Mandap & Event Floral Arrangements', detail: 'DECOR' },
+      { baseValue: 'Wholesale Flower Markets & Suppliers', label: `Wholesale Flower Markets & Suppliers${locSuffix}`, subtitle: 'Bulk Fresh Flowers & Commercial Florists', detail: 'WHOLESALE' }
+    ], 'retail');
+  }
+  if (/book\s*shop|bookstore|stationery|notebook/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Book Shops & Stationery Stores', label: `Book Shops & Stationery Stores${locSuffix}`, subtitle: 'Academic Books, Office Stationery & Art Supplies', detail: 'BOOKS & STATIONERY' },
+      { baseValue: 'Wholesale Stationery Suppliers', label: `Wholesale Stationery Suppliers${locSuffix}`, subtitle: 'School, Office & Bulk Corporate Supplies', detail: 'WHOLESALE' },
+      { baseValue: 'Printing & Xerox Shops', label: `Printing & Xerox Shops${locSuffix}`, subtitle: 'Spiral Binding, Photocopy & Digital Prints', detail: 'PRINTING' }
+    ], 'retail');
+  }
+  if (family === 'retail' || /store|shop|showroom|boutique|jewel|cloth|garment|saree|footwear|shoe|supermarket|grocery|optical|gift|toy|cycle|watch|sports/i.test(norm)) {
     const baseRetail = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|outlets|outlet)$/i, '').trim() || cleanLabel;
     return formatRows([
       { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Local ${cleanLabel} with Direct Phones`, detail: 'RETAIL & SHOPS' },

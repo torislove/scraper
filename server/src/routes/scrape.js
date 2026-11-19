@@ -872,7 +872,7 @@ router.post('/omni', async (req, res) => {
   addLog(`[Omni Search] Family ${classification.label} · engines ${resolvedEngines.join(', ')}`);
 
   // Add the orchestrator task to the background queue so it starts running
-  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster, runCountry]);
+  addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster, runCountry], 10, { sessionId: finalSessionId, userId, isMaster });
 });
 
 /**
@@ -1065,7 +1065,7 @@ router.post('/auto', async (req, res) => {
       plan,
       isMaster,
       country
-    ]);
+    ], 10, { sessionId: finalSessionId, userId, isMaster });
   } catch (error) {
     addLog(`[Auto Scrape Error] ${error.message}`);
     return res.status(500).json({ error: error.message });
@@ -1275,7 +1275,7 @@ router.post('/master-sweep', async (req, res) => {
       plan,
       true,
       requestedCountry(req)
-    ]);
+    ], 10, { sessionId, userId: userId || 'master', isMaster: true });
 
   } catch (error) {
     console.error('[Master Sweep Error]', error);
@@ -1926,7 +1926,7 @@ router.post('/resume', async (req, res) => {
       resumePlan,
       isMaster,
       requestedCountry(req)
-    ]);
+    ], 10, { sessionId, userId, isMaster });
 
   } catch (err) {
     console.error('[Resume Error]', err);

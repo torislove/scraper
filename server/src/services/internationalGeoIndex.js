@@ -428,7 +428,8 @@ function buildCompiledCatalog() {
  */
 function searchInternationalPlaces(rawQuery, options = {}) {
   const query = norm(rawQuery);
-  if (!query || query.length < 2) return [];
+  const minLen = options.allowShortPrefix ? 1 : 2;
+  if (!query || query.length < minLen) return [];
 
   const catalog = buildCompiledCatalog();
   const country = String(options.country || '').toUpperCase().slice(0, 2);

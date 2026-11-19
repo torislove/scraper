@@ -130,6 +130,12 @@ export async function suggestSearch(params = {}, options = {}) {
   return data;
 }
 
+export function sendSearchFeedback(payload = {}) {
+  try {
+    client.post('/search/feedback', payload).catch(() => {});
+  } catch (e) {}
+}
+
 export async function getGeoStats() {
   const { data } = await client.get('/locations/stats');
   return data;

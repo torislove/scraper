@@ -112,16 +112,10 @@ export default function RunCard({
           <b>{formatNumber(run.phoneCount)} <small>({percentMobiles}%)</small></b>
         </div>
         <div className="v2-run-metric-cell">
-          <span>{Number(run.dealValueTotal) > 0 ? 'PIPELINE' : 'SAVED'}</span>
-          {Number(run.dealValueTotal) > 0 ? (
-            <b className="is-small v2-text-cyan" title="Total Deal Value in this folder">
-              {formatInr(run.dealValueTotal)}
-            </b>
-          ) : (
-            <b className="is-small" title={run.timestamp ? new Date(run.timestamp).toLocaleString() : ''}>
-              {relativeTime(run.timestamp)}
-            </b>
-          )}
+          <span>SAVED</span>
+          <b className="is-small" title={run.timestamp ? new Date(run.timestamp).toLocaleString() : ''}>
+            {relativeTime(run.timestamp)}
+          </b>
         </div>
       </div>
 

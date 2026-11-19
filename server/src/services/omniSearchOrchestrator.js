@@ -1171,6 +1171,8 @@ async function runOmniSearchOrchestrator(
         state: targetState,
         country: countryCode,
         sessionId,
+        userId,
+        isMaster,
         active: true,
         coverageKind,
         boundaryKm: zoneRadius

@@ -1,11 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Copy, Contact, FileSpreadsheet, X, CheckSquare } from 'lucide-react';
+import { Copy, Contact, FileSpreadsheet, X, CheckSquare } from 'lucide-react';
 
 export default function FloatingActionDock({
   selectedCount = 0,
   onClear,
-  onWhatsAppCampaign,
   onCopyMobiles,
   onExportVcf,
   onExportCsv
@@ -29,27 +28,15 @@ export default function FloatingActionDock({
 
           <div className="v2-dock-divider" />
 
-          {onWhatsAppCampaign && (
-            <button
-              type="button"
-              className="v2-dock-btn is-wa"
-              onClick={onWhatsAppCampaign}
-              title="Launch Bulk WhatsApp Outreach"
-            >
-              <MessageSquare size={13} />
-              <span>WhatsApp Blast</span>
-            </button>
-          )}
-
           {onCopyMobiles && (
             <button
               type="button"
               className="v2-dock-btn"
               onClick={onCopyMobiles}
-              title="Copy mobile numbers to clipboard"
+              title="Copy phone numbers to clipboard"
             >
               <Copy size={13} />
-              <span>Copy Mobiles</span>
+              <span>Copy Phones</span>
             </button>
           )}
 

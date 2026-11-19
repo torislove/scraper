@@ -155,6 +155,25 @@ function getConcurrencyMetrics() {
 
 const activeJobs = new Map();
 
+/**
+ * How many worker slots each run currently holds.
+ *
+ * A run is one session (one folder). The scheduler uses this to round-robin
+ * between runs, so a 108-zone client sweep and a 1,200-zone master sweep can
+ * both progress at once instead of the larger one taking every slot until it
+ * finishes. With a single run every load is equal, so the existing priority
+ * ordering (the zone gradient) is unchanged.
+ */
+function activeSlotsBySession() {
+  const counts = new Map();
+  for (const job of activeJobs.values()) {
+    const sid = job?.meta?.sessionId || null;
+    if (!sid) continue;
+    counts.set(sid, (counts.get(sid) || 0) + 1);
+  }
+  return counts;
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    Deferred-job timer
    Pacing and cooldowns mean a job may not be runnable for a few seconds. Instead
@@ -202,6 +221,12 @@ async function processQueue() {
       let deferredWait = Infinity;
       let skipped = 0;
 
+      // Fair share across runs. Pick the runnable job whose session currently
+      // holds the fewest slots; ties fall back to the declared priority, which
+      // is what preserves the zone gradient inside a single run.
+      const sessionLoad = activeSlotsBySession();
+      let bestLoad = Infinity;
+
       for (let i = 0; i < inMemoryQueue.length; i++) {
         const candidate = inMemoryQueue[i];
         if (!candidate) continue;
@@ -233,9 +258,17 @@ async function processQueue() {
           continue;
         }
 
+        const sessionId = candidate.meta?.sessionId || null;
+        const load = sessionId ? (sessionLoad.get(sessionId) || 0) : 0;
+        const better = load < bestLoad
+          || (load === bestLoad
+            && jobIndex !== -1
+            && (candidate.priority || 0) > (inMemoryQueue[jobIndex].priority || 0));
+        if (!better) continue;
+
         jobIndex = i;
         isPlaywrightJob = isPlaywright;
-        break;
+        bestLoad = load;
       }
 
       if (jobIndex === -1) {
