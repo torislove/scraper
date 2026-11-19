@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import PricingPage from './pages/PricingPage';
@@ -6,13 +6,13 @@ import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
-import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
+import {
+  AUTH_REQUIRED, fetchAuthConfig, getCachedAuthConfig, logout, useAuthSession
+} from './v2/auth';
 import './v2/v2.css';
 import './v2/whiteTheme.css';
 import './v2/designSystem.css';
 
-// scraper.co.in has exactly one workspace: the command center.
-// lazyRetry keeps a single flaky chunk download from taking down the workspace.
 const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
@@ -26,20 +26,22 @@ function PageLoader() {
             width: 44,
             height: 44,
             borderRadius: '50%',
-            border: '2px solid rgba(37, 99, 235, 0.2)',
-            borderTopColor: '#2563eb',
+            border: '3px solid rgba(124, 58, 237, 0.18)',
+            borderTopColor: '#10b981',
+            borderRightColor: '#7c3aed',
             animation: 'v2-spin 0.8s linear infinite'
           }}
         />
         <span
           style={{
             fontFamily: 'ui-monospace, "JetBrains Mono", Consolas, monospace',
-            fontSize: 10,
+            fontSize: 10.5,
+            fontWeight: 700,
             letterSpacing: '0.22em',
-            color: '#94a3b8'
+            color: '#64748b'
           }}
         >
-          LOADING
+          LOADING WORKSPACE
         </span>
       </div>
     </div>
@@ -56,9 +58,6 @@ class ErrorBoundary extends React.Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error('App Uncaught Error:', error, errorInfo);
-    // A chunk that cannot be fetched is almost always transient (offline blip,
-    // proxy hiccup, or a stale tab holding pre-deploy asset names). Reload once
-    // automatically instead of parking the user on a crash screen.
     if (isChunkLoadError(error)) {
       try {
         const last = Number(sessionStorage.getItem('chunkReloadAt') || 0);
@@ -66,9 +65,7 @@ class ErrorBoundary extends React.Component {
           sessionStorage.setItem('chunkReloadAt', String(Date.now()));
           window.location.reload();
         }
-      } catch (e) {
-        // sessionStorage unavailable: fall through to the manual reload screen.
-      }
+      } catch (e) {}
     }
   }
   render() {
@@ -80,37 +77,39 @@ class ErrorBoundary extends React.Component {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#f8fafc',
+          backgroundColor: '#f5f7fb',
           color: '#0f172a',
           padding: '24px',
-          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif'
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif'
         }}>
           <div style={{
             maxWidth: '520px',
-            background: '#ffffff',
-            border: '1.5px solid #cbd5e1',
-            borderRadius: '16px',
-            padding: '28px',
-            boxShadow: '0 16px 40px rgba(15, 23, 42, 0.08)',
+            background: 'rgba(255, 255, 255, 0.86)',
+            backdropFilter: 'blur(20px)',
+            border: '1.5px solid rgba(255,255,255,0.95)',
+            borderRadius: '22px',
+            padding: '30px',
+            boxShadow: '0 24px 56px -14px rgba(15, 23, 42, 0.16)',
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#dc2626', marginBottom: '8px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#be123c', marginBottom: '8px' }}>
               Workspace Encountered a Problem
             </h2>
-            <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '13.5px', color: '#475569', marginBottom: '20px', lineHeight: 1.55 }}>
               {this.state.error?.message || 'An unexpected rendering error occurred.'}
             </p>
             <button
               onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
               style={{
-                background: 'linear-gradient(135deg, #10b981, #059669)',
+                background: 'linear-gradient(135deg, #059669, #10b981)',
                 color: '#ffffff',
-                fontWeight: 700,
-                fontSize: '13px',
+                fontWeight: 800,
+                fontSize: '13.5px',
                 border: 'none',
-                padding: '10px 24px',
-                borderRadius: '9px',
+                padding: '11px 24px',
+                borderRadius: '12px',
+                boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.4), 0 4px 0 #047857',
                 cursor: 'pointer'
               }}
             >
@@ -126,16 +125,28 @@ class ErrorBoundary extends React.Component {
 
 function RequireAuth({ children }) {
   const location = useLocation();
-  // The packaged desktop build runs on the operator's own machine; a login
-  // wall there would only lock the owner out of their own data.
-  if (IS_DESKTOP || !AUTH_REQUIRED) return children;
-  if (getSession()) return children;
+  const session = useAuthSession();
+  const [authRequired, setAuthRequired] = useState(
+    () => Boolean(AUTH_REQUIRED || getCachedAuthConfig().authRequired)
+  );
+
+  useEffect(() => {
+    if (IS_DESKTOP) return;
+    let alive = true;
+    fetchAuthConfig()
+      .then(cfg => { if (alive) setAuthRequired(Boolean(AUTH_REQUIRED || cfg?.authRequired)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  if (IS_DESKTOP || !authRequired) return children;
+  if (session?.token) return children;
   const next = encodeURIComponent(`${location.pathname}${location.search}`);
   return <Navigate to={`/login?next=${next}`} replace />;
 }
 
 function LogoutRoute() {
-  React.useEffect(() => { logout(); }, []);
+  useEffect(() => { logout(); }, []);
   return <Navigate to="/login" replace />;
 }
 
@@ -146,33 +157,34 @@ export default function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: '#ffffff',
+            background: 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(18px)',
             color: '#0f172a',
-            border: '1.5px solid #e2e8f0',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", Inter, sans-serif',
+            border: '1.5px solid rgba(255, 255, 255, 0.95)',
+            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
             fontSize: '13px',
             fontWeight: 650,
-            borderRadius: '12px',
-            boxShadow: '0 8px 30px rgba(15, 23, 42, 0.12)',
+            borderRadius: '14px',
+            boxShadow: '0 14px 36px -8px rgba(15, 23, 42, 0.18)',
           },
           success: { iconTheme: { primary: '#10b981', secondary: '#ffffff' } },
-          error: { iconTheme: { primary: '#ef4444', secondary: '#ffffff' } },
+          error: { iconTheme: { primary: '#e11d48', secondary: '#ffffff' } },
         }}
       />
 
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          {/* The Windows build has no marketing site: it opens the workspace. */}
           <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
           <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
-          <Route path="/login" element={<LoginV2 />} />
+          <Route path="/login" element={<LoginV2 initialMode="signin" />} />
+          <Route path="/signup" element={<LoginV2 initialMode="signup" />} />
+          <Route path="/forgot-password" element={<LoginV2 initialMode="reset" />} />
           <Route path="/logout" element={<LogoutRoute />} />
 
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
 
-          {/* Old URLs all land in the one workspace. */}
           <Route path="/app/*" element={<Navigate to="/command" replace />} />
           <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
           <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />

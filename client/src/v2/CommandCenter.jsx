@@ -46,6 +46,8 @@ import MergeModal from './components/modals/MergeModal';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
+import LeadsTableView from './components/views/LeadsTableView';
+import AccountMenu from './components/AccountMenu';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
@@ -196,6 +198,8 @@ export default function CommandCenter() {
   // the keyless global engines. The choice only pre-fills an empty location box,
   // so a user can still type any city and let the engine detect the country.
   const [searchCountry, setSearchCountry] = useState(() => {
+    const fromUrl = searchParams.get('country');
+    if (fromUrl) return String(fromUrl).toUpperCase();
     try { return localStorage.getItem('scraper-country') || 'IN'; } catch (e) { return 'IN'; }
   });
   // Filled by CountryFlagStrip after it reads /api/sources?country=XX. It carries
@@ -205,10 +209,10 @@ export default function CommandCenter() {
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
     try { localStorage.setItem('scraper-country', code); } catch (e) { }
-    toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
+    if (country?.name) toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
     setForm(prev => {
       if (prev.location && prev.location.trim()) return prev;
-      return { ...prev, location: code === 'IN' ? '' : country.name };
+      return { ...prev, location: code === 'IN' ? '' : (country?.name || '') };
     });
   }, []);
 
@@ -216,7 +220,7 @@ export default function CommandCenter() {
   // post-run deep extraction are resolved server-side by the category router.
   const [runMode, setRunMode] = useState('auto');
   const [autoQuery, setAutoQuery] = useState(
-    routerLocation.state?.query || ''
+    routerLocation.state?.query || searchParams.get('q') || ''
   );
   const [activeZone, setActiveZone] = useState(null);
   const [gridZones, setGridZones] = useState([]);
@@ -533,7 +537,7 @@ export default function CommandCenter() {
       microFlushTimer = setTimeout(() => {
         microFlushTimer = null;
         flushBuffers();
-      }, 50);
+      }, 24);
     };
 
     // A fresh EventSource is created on every reconnect, so the data handlers
@@ -1790,6 +1794,7 @@ export default function CommandCenter() {
 
           <NotificationBell />
           <DesktopBadge />
+          <AccountMenu variant="client" />
           <div className="v2-tools" ref={toolsRef}>
             <button
               type="button"
@@ -1884,6 +1889,8 @@ export default function CommandCenter() {
               compact={activeTab === 'cockpit'}
               onResolve={setScanPlan}
               progress={progress}
+              zonesDone={runDone}
+              zonesTotal={Math.max(1, runTotal || mapZones.length || 1)}
               eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
               runs={effectiveRuns}
               onOpenFolder={openFolder}
@@ -1900,13 +1907,17 @@ export default function CommandCenter() {
                     <span style={{ fontWeight: 500, color: '#475569' }}> · {effectiveActiveZone?.name || progress?.activeMandal}</span>
                   ) : null}
                 </div>
+                <span className="lx-zone-pill is-live">
+                  Zone {Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)} / {Math.max(1, runTotal || mapZones.length || 1)}
+                </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <b style={{ fontSize: 14, fontWeight: 800, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                   {formatNumber(runLeadCount)} leads found
                 </b>
                 <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun}>
-                  <Square size={11} /> Stop
+                  <span className="lx-gbc-keycap is-b">B</span>
+                  <Square size={11} /> Stop ({runDone}/{Math.max(1, runTotal || mapZones.length || 1)} Zones)
                 </button>
               </div>
             </div>
@@ -1959,164 +1970,24 @@ export default function CommandCenter() {
             )}
 
             {activeTab === 'leads' && (
-              <section className="v2-leads-view">
-                {sessionFilter && (
-                  <div className="v2-session-banner">
-                    <Filter size={13} />
-                    <span>Showing run <b>{sessionFilter}</b></span>
-                    <button type="button" onClick={() => setSessionFilter('')}><X size={12} /> Clear</button>
-                  </div>
-                )}
-
-                <FilterBar
-                  filters={filters}
-                  onChange={updateFilter}
-                  total={vendors.length}
-                  shown={filteredVendors.length}
-                />
-
-                <div className="v2-table-shell">
-                  <div className="v2-table-scroll">
-                    <table className="v2-lead-table">
-                      <thead>
-                        <tr>
-                          <th>BUSINESS</th>
-                          <th>LOCATION</th>
-                          <th>DIRECT CONTACT</th>
-                          <th>RATING</th>
-                          <th style={{ width: 40 }} />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageRows.map((vendor, index) => {
-                          const quality = qualityOf(vendor);
-                          const originLat = Array.isArray(mapCenter) ? mapCenter[0] : (mapCenter?.lat || null);
-                          const originLng = Array.isArray(mapCenter) ? mapCenter[1] : (mapCenter?.lng || null);
-                          const vLat = vendor.latitude ?? vendor.lat;
-                          const vLng = vendor.longitude ?? vendor.lng;
-                          const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
-                          const leadAddress = dedupeAddress(vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || (vendor.city || vendor.village || 'Locality'));
-                          const activePhone = getDisplayPhone(vendor);
-                          return (
-                            <tr
-                              key={vendor.id}
-                              className="v2-lead-animated-row"
-                              style={{ animationDelay: `${Math.min(index * 24, 360)}ms` }}
-                              onClick={() => setSelectedVendor(vendor)}
-                            >
-                              <td>
-                                <div className="v2-vendor-cell">
-                                  <VendorAvatar vendor={vendor} />
-                                  <span>
-                                    <b>{vendor.name || 'Local Business'}</b>
-                                    <small>{vendor.category || 'Business'}{vendor.subcategory ? ` · ${vendor.subcategory}` : ''}{quality != null ? ` · ${quality}% complete` : ''}</small>
-                                  </span>
-                                  {vendor.verified && <CheckCircle2 size={13} color="#059669" />}
-                                </div>
-                              </td>
-                              <td>
-                                <div className="v2-location-cell">
-                                  <div className="v2-lead-address-line" title={leadAddress}>
-                                    <MapPin size={11} color="#059669" style={{ flexShrink: 0 }} />
-                                    <span className="v2-lead-address">{leadAddress}</span>
-                                  </div>
-                                  <div className="v2-location-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                    <span>{vendor.city || vendor.village || vendor.mandal || 'Area'}</span>
-                                    <small>{dedupeAddress([vendor.district, vendor.state].filter(Boolean).join(', ')) || vendor.pincode || '—'}</small>
-                                    {distKm != null && distKm <= 500 && (
-                                      <span className="v2-distance-badge">{distKm} km</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </td>
-                              <td>
-                                <div className="v2-contact-cell">
-                                  {activePhone && !String(activePhone).includes('Requires') ? (
-                                    <div className="v2-phone-cluster">
-                                      <a href={`tel:${activePhone}`} className="v2-phone-badge" onClick={event => event.stopPropagation()}>
-                                        <Phone size={11} /> {activePhone}
-                                      </a>
-                                      <button
-                                        type="button"
-                                        onClick={event => {
-                                          event.stopPropagation();
-                                          navigator.clipboard?.writeText(activePhone);
-                                          toast.success(`Copied ${activePhone}`);
-                                        }}
-                                        title="Copy phone number"
-                                        style={{
-                                          border: '1px solid rgba(15, 23, 42, 0.12)',
-                                          background: '#ffffff',
-                                          borderRadius: 7,
-                                          width: 26,
-                                          height: 26,
-                                          display: 'grid',
-                                          placeItems: 'center',
-                                          cursor: 'pointer',
-                                          color: '#475569'
-                                        }}
-                                      >
-                                        <Copy size={11} />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <span className="v2-muted">Not listed</span>
-                                  )}
-                                  <span className="v2-contact-sub">
-                                    {vendor.website
-                                      ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> Website</a>
-                                      : <em>No website</em>}
-                                    {vendor.email && <a href={`mailto:${vendor.email}`} onClick={event => event.stopPropagation()}>Email</a>}
-                                  </span>
-                                </div>
-                              </td>
-                              <td>
-                                {vendor.rating != null ? (
-                                  <span className="v2-table-rating" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    <Star size={12} fill="#f59e0b" color="#d97706" />
-                                    {Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small>
-                                  </span>
-                                ) : <span className="v2-muted">—</span>}
-                              </td>
-                              <td>
-                                <div className="v2-row-actions" onClick={event => event.stopPropagation()}>
-                                  <button type="button" onClick={() => setSelectedVendor(vendor)} title="View business details"><ArrowRight size={13} /></button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-
-                    {pageRows.length === 0 && (
-                      <EmptyState
-                        icon={Search}
-                        title="No vendors match this filter."
-                        body="Clear the filters or start a search to populate the command center. Nothing is seeded or faked."
-                        action={() => setFilters({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
-                        actionLabel="Reset filters"
-                      />
-                    )}
-                  </div>
-
-                  <footer className="v2-table-foot">
-                    <span>
-                      Showing <b>{filteredVendors.length ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredVendors.length)}</b> of <b>{formatNumber(filteredVendors.length)}</b>
-                    </span>
-                    <div className="v2-pagination">
-                      <select value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
-                        {[25, 50, 100, 250, 500, 10000].map(size => (
-                          <option value={size} key={size}>{size === 10000 ? 'All Leads' : `${size} / page`}</option>
-                        ))}
-                      </select>
-                      <button type="button" onClick={() => setPage(prev => Math.max(1, prev - 1))} disabled={currentPage <= 1}><ChevronLeft size={13} /></button>
-                      <span>{currentPage} / {pageCount}</span>
-                      <button type="button" onClick={() => setPage(prev => Math.min(pageCount, prev + 1))} disabled={currentPage >= pageCount}><ChevronRight size={13} /></button>
-                    </div>
-                  </footer>
-                </div>
-              </section>
+              <LeadsTableView
+                sessionFilter={sessionFilter}
+                setSessionFilter={setSessionFilter}
+                filters={filters}
+                updateFilter={updateFilter}
+                setFilters={setFilters}
+                vendors={vendors}
+                filteredVendors={filteredVendors}
+                pageRows={pageRows}
+                mapCenter={mapCenter}
+                setSelectedVendor={setSelectedVendor}
+                currentPage={currentPage}
+                pageSize={pageSize}
+                pageCount={pageCount}
+                setPage={setPage}
+                setPageSize={setPageSize}
+                country={searchCountry}
+              />
             )}
 
             {activeTab === 'map' && (

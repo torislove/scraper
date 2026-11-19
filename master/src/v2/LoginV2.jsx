@@ -1,45 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  AlertCircle, ArrowRight, ArrowLeft, Check, Eye, EyeOff, Loader2,
-  LockKeyhole, Mail, ShieldCheck, Sparkles
+  AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, Eye, EyeOff,
+  Loader2, LockKeyhole, Mail, ShieldCheck
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
-import {
-  AUTH_REQUIRED, fetchAuthConfig, loginWithGoogle, loginWithPassword
-} from './auth';
+import Country3DFlag from './components/Country3DFlag';
+import { AUTH_REQUIRED, fetchAuthConfig, loginWithGoogle, loginWithPassword } from './auth';
 import './login.css';
 
 const MARKETS = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
-
-const COPY = {
-  client: {
-    eyebrow: 'LEAD WORKSPACE',
-    title: 'Find verified business leads',
-    titleAccent: 'in seconds.',
-    subtitle: 'Sign in to access your saved lists, live interactive territory maps, and instant Excel exports across 11 markets.',
-    cardTitle: 'Welcome back',
-    cardSubtitle: 'Sign in with Google or your workspace email.',
-    points: [
-      ['Any industry, any city', 'Find shops, clinics, suppliers, agencies and local services effortlessly.'],
-      ['Saved lists ready anytime', 'Every search is neatly stored for 1-click Excel, CSV or phone export.'],
-      ['India first + 10 global markets', 'Complete India village coverage plus US, UK, Canada, Australia, UAE, Germany & more.']
-    ]
-  },
-  master: {
-    eyebrow: 'MASTER CONTROL',
-    title: 'Global territory',
-    titleAccent: 'command center.',
-    subtitle: 'Manage client workspaces, launch state & county sweeps across all 11 markets, and oversee live intelligence.',
-    cardTitle: 'Master sign-in',
-    cardSubtitle: 'Restricted to authorized operators and administrators.',
-    points: [
-      ['Unified client directory', 'Manage customer plans, lead vaults and announcements in one view.'],
-      ['Full territory sweeps', 'Launch city, county, district and state sweeps across all 11 markets.'],
-      ['Live operational control', 'Monitor discovery throughput, self-learning AI and system health.']
-    ]
-  }
-};
 
 function GoogleMark({ size = 18 }) {
   return (
@@ -52,11 +22,9 @@ function GoogleMark({ size = 18 }) {
   );
 }
 
-export default function LoginV2({ variant = 'client' }) {
-  const copy = COPY[variant] || COPY.client;
+export default function LoginV2({ variant = 'master' }) {
   const navigate = useNavigate();
   const location = useLocation();
-
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -85,16 +53,13 @@ export default function LoginV2({ variant = 'client' }) {
 
   const finish = useCallback((session) => {
     if (!session) return;
-    if (session.user?.role === 'master' && variant !== 'master') {
-      // A master account that lands on the client host still belongs in master.
-      window.location.assign('/command');
+    if (session.user?.role !== 'master' && session.user?.role !== 'admin') {
+      setError('Access restricted: Master administrator credentials required.');
       return;
     }
     navigate(nextPath, { replace: true });
-  }, [navigate, nextPath, variant]);
+  }, [navigate, nextPath]);
 
-  /* Google Identity Services: rendered only when the server has a client ID.
-     The custom button below is the fallback while GOOGLE_CLIENT_ID is unset. */
   useEffect(() => {
     if (!config.googleEnabled || !config.googleClientId) return;
     if (googleInit.current) return;
@@ -118,24 +83,18 @@ export default function LoginV2({ variant = 'client' }) {
         }
       });
       window.google.accounts.id.renderButton(googleSlot.current, {
-        theme: 'outline',
+        theme: 'filled_black',
         size: 'large',
         shape: 'pill',
         text: 'continue_with',
         logo_alignment: 'left',
-        width: 336
+        width: 340
       });
     };
 
     if (window.google?.accounts?.id) {
       render();
       return;
-    }
-
-    const existing = document.querySelector('script[data-gsi]');
-    if (existing) {
-      existing.addEventListener('load', render);
-      return () => existing.removeEventListener('load', render);
     }
 
     const script = document.createElement('script');
@@ -152,12 +111,10 @@ export default function LoginV2({ variant = 'client' }) {
     event.preventDefault();
     setError('');
     setNotice('');
-
     if (!email.trim() || !password) {
-      setError('Enter your email and password.');
+      setError('Enter your administrator username/email and password.');
       return;
     }
-
     setBusy(true);
     try {
       const session = await loginWithPassword(email.trim(), password, { remember });
@@ -169,30 +126,23 @@ export default function LoginV2({ variant = 'client' }) {
     }
   }
 
-  function handleGooglePlaceholder() {
-    setError('');
-    setNotice(
-      config.googleEnabled
-        ? 'Google Sign-In is still loading. Try again in a moment, or sign in with your email below.'
-        : 'Please sign in with your workspace email and password below.'
-    );
-  }
+  const effectiveAuthRequired = Boolean(config.authRequired || AUTH_REQUIRED);
 
   return (
-    <div className={`login-shell login-shell--${variant}`}>
+    <div className={`login-shell login-shell--${variant || 'master'}`}>
       <div className="login-aurora" aria-hidden="true" />
 
       <header className="login-topbar">
-        <button type="button" className="login-brand" onClick={() => navigate('/')}>
-          <BrandLogo size={30} showTagline tagline={variant === 'master' ? 'Master Control' : 'Autonomous Lead Radar'} />
+        <button type="button" className="login-brand" onClick={() => navigate('/command')}>
+          <BrandLogo size={32} theme="dark" />
         </button>
 
         <div className="login-topbar-right">
           <span className="login-secure-chip">
-            <ShieldCheck size={13} /> Signed session
+            <ShieldCheck size={13} /> Sovereign Guard
           </span>
-          <button type="button" className="login-back" onClick={() => navigate('/')}>
-            <ArrowLeft size={13} /> Back to site
+          <button type="button" className="login-back" onClick={() => navigate('/command')}>
+            <ArrowLeft size={13} /> Workspace
           </button>
         </div>
       </header>
@@ -201,20 +151,26 @@ export default function LoginV2({ variant = 'client' }) {
         <section className="login-hero">
           <span className="login-eyebrow">
             <span className="login-eyebrow-dot" />
-            {copy.eyebrow}
+            SOVEREIGN MASTER CONTROL
           </span>
 
           <h1 className="login-title">
-            {copy.title}
-            <em>{copy.titleAccent}</em>
+            Global territory
+            <em>command center.</em>
           </h1>
 
-          <p className="login-subtitle">{copy.subtitle}</p>
+          <p className="login-subtitle">
+            Provision client workspaces, issue reset codes, launch full-territory sweeps across 11 markets, and supervise the self-learning search engine.
+          </p>
 
           <ul className="login-points">
-            {copy.points.map(([head, body], index) => (
-              <li key={head} style={{ animationDelay: `${0.08 + index * 0.07}s` }}>
-                <span className="login-point-icon"><Check size={12} strokeWidth={3} /></span>
+            {[
+              ['Client Login Provisioning', 'Create client credentials, set plans & quotas, or revoke sessions instantly.'],
+              ['Full 11-Market Sweeps', 'Coordinate city, district, county and state sweeps across all 11 locked markets.'],
+              ['Self-Learning Intelligence', 'Inspect live auto-learned synonyms, categories and AI routing metrics.']
+            ].map(([head, body]) => (
+              <li key={head}>
+                <span className="login-point-icon"><Check size={13} strokeWidth={3} /></span>
                 <span>
                   <b>{head}</b>
                   <i>{body}</i>
@@ -225,28 +181,36 @@ export default function LoginV2({ variant = 'client' }) {
 
           <div className="login-markets" aria-label="Eleven supported markets">
             {MARKETS.map(code => (
-              <span key={code} className={code === 'IN' ? 'is-home' : ''}>{code}</span>
+              <span key={code} className={`login-market-chip ${code === 'IN' ? 'is-home' : ''}`}>
+                <Country3DFlag code={code} size={18} isHome={code === 'IN'} />
+                {code}
+              </span>
             ))}
           </div>
         </section>
 
         <section className="login-card-wrap">
           <div className="login-card">
-            <div className="login-card-head">
-              <span className="login-card-badge">
-                {variant === 'master' ? <LockKeyhole size={11} /> : <Sparkles size={11} />}
-                {variant === 'master' ? 'RESTRICTED' : 'SECURE SIGN-IN'}
-              </span>
-              <h2>{copy.cardTitle}</h2>
-              <p>{copy.cardSubtitle}</p>
+            <div className="login-gbc-dots" aria-hidden="true">
+              <span className="login-gbc-dot is-kiwi" />
+              <span className="login-gbc-dot is-atomic" />
+              <span className="login-gbc-dot is-berry" />
             </div>
 
-            {!AUTH_REQUIRED && (
+            <div className="login-card-head">
+              <span className="login-card-badge">
+                <LockKeyhole size={11} /> RESTRICTED
+              </span>
+              <h2>Master sign-in</h2>
+              <p>Sign in with your administrator credentials to unlock Master Control.</p>
+            </div>
+
+            {!effectiveAuthRequired && (
               <div className="login-preview">
-                <b>Preview mode</b>
-                <span>Sign-in is not enforced yet. You can open the workspace directly.</span>
+                <b>Local Operator Mode</b>
+                <span>Authentication gate is optional on localhost. Sign in or open Master Control directly.</span>
                 <button type="button" onClick={() => navigate('/command')}>
-                  Open command center <ArrowRight size={13} />
+                  Open Master Control <ArrowRight size={13} />
                 </button>
               </div>
             )}
@@ -254,58 +218,47 @@ export default function LoginV2({ variant = 'client' }) {
             {config.googleEnabled ? (
               <div className="login-google-slot" ref={googleSlot} />
             ) : (
-              <button type="button" className="login-google" onClick={handleGooglePlaceholder}>
-                <GoogleMark />
-                <span>Continue with Google</span>
-                <em>SETUP</em>
+              <button
+                type="button"
+                className="login-google-btn"
+                onClick={() => setNotice('Sign in using your Master administrator credentials below.')}
+              >
+                <GoogleMark size={18} />
+                <span>Master Google SSO</span>
               </button>
             )}
 
-            <div className="login-divider"><span>or use your email</span></div>
-
-            {error && (
-              <div className="login-alert is-error" role="alert">
-                <AlertCircle size={14} />
-                <span>{error}</span>
-              </div>
-            )}
-            {notice && !error && (
-              <div className="login-alert is-info" role="status">
-                <ShieldCheck size={14} />
-                <span>{notice}</span>
-              </div>
-            )}
+            <div className="login-divider"><span>administrator credentials</span></div>
 
             <form className="login-form" onSubmit={handleSubmit} noValidate>
-              <label className="login-field">
-                <span className="login-label">Email</span>
-                <span className="login-input">
-                  <Mail size={15} />
+              <div className="login-field">
+                <label htmlFor="master-email">Username or email</label>
+                <div className="login-input-wrap">
+                  <span className="login-input-icon"><Mail size={15} /></span>
                   <input
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    inputMode="email"
-                    placeholder="you@company.com"
+                    id="master-email"
+                    type="text"
+                    className="login-input"
+                    placeholder="admin"
+                    autoComplete="username"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    disabled={busy}
                   />
-                </span>
-              </label>
+                </div>
+              </div>
 
-              <label className="login-field">
-                <span className="login-label">Password</span>
-                <span className="login-input">
-                  <LockKeyhole size={15} />
+              <div className="login-field">
+                <label htmlFor="master-password">Password</label>
+                <div className="login-input-wrap">
+                  <span className="login-input-icon"><LockKeyhole size={15} /></span>
                   <input
+                    id="master-password"
                     type={showPassword ? 'text' : 'password'}
-                    name="password"
+                    className="login-input"
+                    placeholder="Enter administrator password"
                     autoComplete="current-password"
-                    placeholder="Your password"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
-                    disabled={busy}
                   />
                   <button
                     type="button"
@@ -315,40 +268,43 @@ export default function LoginV2({ variant = 'client' }) {
                   >
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                   </button>
-                </span>
-              </label>
-
-              <div className="login-row">
-                <label className="login-check">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={e => setRemember(e.target.checked)}
-                  />
-                  <span>Keep me signed in</span>
-                </label>
-                <a className="login-link" href="mailto:support@scraper.co.in?subject=Password%20reset">
-                  Forgot password?
-                </a>
+                </div>
               </div>
 
+              <div className="login-row-between">
+                <label className="login-remember">
+                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
+                  <span>Keep session active (7 days)</span>
+                </label>
+              </div>
+
+              {error && (
+                <div className="login-alert is-error" role="alert">
+                  <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {notice && (
+                <div className="login-alert is-notice" role="status">
+                  <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{notice}</span>
+                </div>
+              )}
+
               <button type="submit" className="login-submit" disabled={busy}>
-                {busy ? <Loader2 size={16} className="login-spin" /> : null}
-                <span>{busy ? 'Signing in…' : variant === 'master' ? 'Enter control room' : 'Sign in'}</span>
-                {!busy && <ArrowRight size={15} />}
+                {busy ? (
+                  <><Loader2 size={16} className="login-spin" /> Authenticating…</>
+                ) : (
+                  <>Enter Master Control <ArrowRight size={16} /></>
+                )}
               </button>
             </form>
 
-            <p className="login-fine">
-              By continuing you agree to the{' '}
-              <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
-            </p>
+            <div className="login-card-foot">
+              <span>Role-verified HMAC-SHA256 Master session · Zero external auth dependency</span>
+            </div>
           </div>
-
-          <p className="login-footnote">
-            <ShieldCheck size={12} />
-            Secure workspace · Instant business leads across 11 markets
-          </p>
         </section>
       </main>
     </div>

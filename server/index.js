@@ -144,7 +144,7 @@ let systemLogs = [];
 /* now coalesce for 100 ms and are written once per client. The wire    */
 /* format is unchanged (`event: vendor`), so no client needs to change. */
 /* ------------------------------------------------------------------ */
-const VENDOR_SSE_FLUSH_MS = 100;
+const VENDOR_SSE_FLUSH_MS = 40;
 const VENDOR_OUTBOX_MAX = 400;
 let vendorOutbox = [];
 let vendorFlushTimer = null;
@@ -169,7 +169,7 @@ function flushVendorOutbox() {
 /* Console lines are coalesced the same way vendor rows are. A live sweep can
    print several lines per lead; one socket write per line was pure overhead and
    made a slow dashboard buffer thousands of tiny frames. */
-const LOG_SSE_FLUSH_MS = 120;
+const LOG_SSE_FLUSH_MS = 60;
 const LOG_OUTBOX_MAX = 60;
 let logOutbox = [];
 let logFlushTimer = null;

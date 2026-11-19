@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download,
-  Globe2, MapPin, Maximize2, Phone, Radar as RadarIcon, Search, X
+  Globe2, MapPin, Maximize2, Phone, Radar as RadarIcon, Search, X, Zap
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import { EmptyState, VendorAvatar } from '../cards/MetricCard';
@@ -30,10 +30,13 @@ export default function CockpitView({
   pageSize = 100,
   onPage,
   onPageSize,
-  run = null
+  run = null,
+  progress = null
 }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [hoveredLeadId, setHoveredLeadId] = useState(null);
+  const zoneTotal = Math.max(1, Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? mapZones?.length ?? 1));
+  const zoneDone = Math.max(0, Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0));
 
   const toggleSelectAll = () => {
     if (selectedIds.size === pageRows.length && pageRows.length > 0) {
@@ -154,6 +157,11 @@ export default function CockpitView({
           <div className="lx-pane-title">
             <span className={cx('lx-status-dot', scanning && 'is-live')} />
             <h2>Live Leads</h2>
+            {scanning && (
+              <span className="lx-zone-pill is-hot">
+                <Zap size={10} /> LIVE
+              </span>
+            )}
             <span className="lx-count-badge">{formatNumber(filteredVendors.length)}</span>
             <span className="lx-sub-stat">{formatNumber(phoneCount)} with phone</span>
           </div>
@@ -345,6 +353,11 @@ export default function CockpitView({
           <div className="lx-pane-title">
             <MapPin size={15} color="#4f46e5" />
             <h2>Live Map</h2>
+            <span className={cx('lx-zone-pill', scanning && 'is-live')}>
+              {scanning
+                ? `⚡ Zone ${Math.min(zoneTotal, zoneDone + 1)} of ${zoneTotal}`
+                : `${formatNumber(mapZones.length || 1)} Zones Ready`}
+            </span>
             <span className="lx-count-badge">{formatNumber(plottedCount)} pinned</span>
           </div>
           <button type="button" className="lx-chip-toggle" onClick={() => onTab?.('map')} title="Open full screen map">

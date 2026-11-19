@@ -160,17 +160,15 @@ function SmartMapController({ center, zoom, activePoint, scanning }) {
     const [lastLat, lastLng] = lastCenterRef.current;
     const distance = Math.hypot(targetLat - lastLat, targetLng - lastLng);
 
-    // Only pan if coordinate difference is genuine (> ~5km)
+    // Smooth animated transition whenever city/zone genuinely changes
     if (distance > 0.045) {
       lastCenterRef.current = [targetLat, targetLng];
       const targetZoom = Math.max(map.getZoom() || 11, zoom || 11);
       try {
         if (distance > 1.5) {
-          // Instantaneous jump across cities, states or continents
-          map.setView(center, targetZoom, { animate: false });
+          map.flyTo(center, targetZoom, { animate: true, duration: 0.72, easeLinearity: 0.22 });
         } else {
-          // Snappy local pan
-          map.panTo(center, { animate: true, duration: 0.3 });
+          map.panTo(center, { animate: true, duration: 0.32 });
         }
       } catch (e) { }
     }
@@ -182,7 +180,7 @@ function SmartMapController({ center, zoom, activePoint, scanning }) {
     try {
       const currentZoom = map.getZoom() || 12;
       const targetZoom = Math.max(currentZoom, 13);
-      map.flyTo(activePoint, targetZoom, { animate: true, duration: 0.9 });
+      map.flyTo(activePoint, targetZoom, { animate: true, duration: 0.7, easeLinearity: 0.25 });
     } catch (e) { }
   }, [activePoint, scanning, map]);
 
@@ -217,11 +215,11 @@ function InitialFit({ points, zonePoints = [], fitKey = 'default' }) {
     if (!targets.length || fittedKey.current === fitKey) return;
     fittedKey.current = fitKey;
     if (targets.length === 1) {
-      map.setView(targets[0], 12, { animate: false });
+      map.flyTo(targets[0], 12, { animate: true, duration: 0.55 });
       return;
     }
     const bounds = L.latLngBounds(targets);
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 13, animate: false });
+    map.fitBounds(bounds, { padding: [44, 44], maxZoom: 13, animate: true, duration: 0.55 });
   }, [map, points, zonePoints, fitKey]);
 
   return null;
@@ -246,7 +244,7 @@ export default function CommandMap({
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
-  const [tileMode, setTileMode] = useState('streets'); // 'streets' (Esri World Street Map, Vibrant 100% Free & Zero Watermark) | 'osm' | 'satellite' | 'light' | 'dark'
+  const [tileMode, setTileMode] = useState('voyager'); // Crisp vibrant 3D natural basemap by default
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -375,24 +373,38 @@ export default function CommandMap({
         width: '100%',
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: compact ? 10 : 14,
+        borderRadius: compact ? 12 : 14,
         perspective: is3DMode ? 1000 : undefined,
-        background: '#0a101d',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.45)'
+        background: '#eef4fb',
+        boxShadow: 'inset 0 2px 6px rgba(15, 23, 42, 0.06)'
       }}
     >
-      {/* Sleek Minimalist HUD Pill */}
+      {/* Pure White 3D Liquid Glass HUD Pill */}
       <div className="v2-map-hud-wrap" style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, pointerEvents: 'none' }}>
-        <div className="v2-map-hud-pill" style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 20, background: 'rgba(10, 16, 26, 0.88)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255, 255, 255, 0.12)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 10px #10b981' }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', color: '#f8fafc' }}>
+        <div
+          className="v2-map-hud-pill"
+          style={{
+            pointerEvents: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 13px',
+            borderRadius: 999,
+            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9))',
+            backdropFilter: 'blur(18px) saturate(190%)',
+            border: '1.5px solid #ffffff',
+            boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 24px -8px rgba(15, 23, 42, 0.18)'
+          }}
+        >
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #6ee7b7, #10b981)', boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }} />
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', color: '#0f172a' }}>
             {scopeTitle.toUpperCase()}
           </span>
-          <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#00f0ff', background: 'rgba(0, 240, 255, 0.1)', padding: '2px 6px', borderRadius: 6 }}>
-            {Number(safeCenter[0]).toFixed(2)}°N, {Math.abs(Number(safeCenter[1])).toFixed(2)}°W
+          <span style={{ fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', border: '1px solid #ddd6fe', padding: '2px 7px', borderRadius: 999 }}>
+            {Math.abs(Number(safeCenter[0])).toFixed(2)}°{Number(safeCenter[0]) >= 0 ? 'N' : 'S'}, {Math.abs(Number(safeCenter[1])).toFixed(2)}°{Number(safeCenter[1]) >= 0 ? 'E' : 'W'}
           </span>
-          <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8' }}>
-            <b style={{ color: '#10b981' }}>{formatNumber(validVendors.length)}</b> plotted
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+            <b style={{ color: '#059669' }}>{formatNumber(validVendors.length)}</b> pinned
           </span>
         </div>
       </div>
@@ -629,30 +641,30 @@ export default function CommandMap({
         )}
       </MapContainer>
 
-      {/* Floating 3D Map Interactive Control Bar (Executive Light & Glass) */}
+      {/* Floating White 3D Liquid Glass Map Control Bar */}
       <div
         className="v2-map-controls-floating"
         style={{
           position: 'absolute',
-          top: 14,
-          right: 14,
+          top: 12,
+          right: 12,
           zIndex: 1000,
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
-          background: 'rgba(255, 255, 255, 0.92)',
+          background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.88))',
           padding: 6,
-          borderRadius: 10,
-          border: '1px solid rgba(226, 232, 240, 0.9)',
-          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.08)',
-          backdropFilter: 'blur(10px)'
+          borderRadius: 14,
+          border: '1.5px solid #ffffff',
+          boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 26px -8px rgba(15, 23, 42, 0.2)',
+          backdropFilter: 'blur(18px)'
         }}
       >
         <button
           type="button"
           onClick={handleZoomIn}
           title="Zoom In"
-          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
         >
           <Plus size={15} />
         </button>
@@ -660,7 +672,7 @@ export default function CommandMap({
           type="button"
           onClick={handleZoomOut}
           title="Zoom Out"
-          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
         >
           <Minus size={15} />
         </button>
@@ -668,7 +680,7 @@ export default function CommandMap({
           type="button"
           onClick={handleResetCenter}
           title="Center Territory"
-          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#059669', cursor: 'pointer' }}
         >
           <Compass size={15} />
         </button>
@@ -677,15 +689,16 @@ export default function CommandMap({
           onClick={() => setIs3DMode(!is3DMode)}
           title={is3DMode ? '2D Flat View' : '3D Perspective Tilt'}
           style={{
-            width: 30,
-            height: 30,
+            width: 32,
+            height: 32,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: is3DMode ? '#7C3AED' : '#F1F5F9',
-            border: is3DMode ? '1px solid #7C3AED' : '1px solid #E2E8F0',
-            borderRadius: 6,
-            color: is3DMode ? '#FFFFFF' : '#0F172A',
+            background: is3DMode ? 'linear-gradient(135deg, #6d28d9, #7c3aed)' : '#ffffff',
+            border: is3DMode ? '1px solid #4c1d95' : '1px solid rgba(15,23,42,0.1)',
+            boxShadow: is3DMode ? '0 2px 0 #4c1d95' : '0 2px 0 rgba(15,23,42,0.08)',
+            borderRadius: 9,
+            color: is3DMode ? '#FFFFFF' : '#6d28d9',
             cursor: 'pointer'
           }}
         >
@@ -694,13 +707,13 @@ export default function CommandMap({
         <button
           type="button"
           onClick={() => setTileMode(prev => {
-            if (prev === 'light') return 'osm';
-            if (prev === 'osm') return 'streets';
-            if (prev === 'streets') return 'dark';
-            return 'light';
+            if (prev === 'voyager') return 'streets';
+            if (prev === 'streets') return 'satellite';
+            if (prev === 'satellite') return 'light';
+            return 'voyager';
           })}
-          title={`Basemap Layer: ${tileMode.toUpperCase()} (Zero Watermark • Click to cycle)`}
-          style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F1F5F9', border: '1px solid #E2E8F0', borderRadius: 6, color: '#0F172A', cursor: 'pointer' }}
+          title={`Map Style: ${tileMode.toUpperCase()} (Click to switch)`}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0284c7', cursor: 'pointer' }}
         >
           <Layers size={14} />
         </button>

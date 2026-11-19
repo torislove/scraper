@@ -15,6 +15,7 @@ const path = require('path');
 const router = express.Router();
 const { SESSIONS_DIR } = require('../config/paths');
 const store = require('../services/masterStore');
+const authModule = require('./auth');
 
 function safeId(value) {
   return String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
@@ -54,7 +55,61 @@ router.get('/overview', (req, res) => {
 /* ------------------------------------------------------------------ clients */
 
 router.get('/clients', (req, res) => {
-  res.json({ clients: store.listClients(), plans: store.PLAN_CREDITS });
+  const users = authModule.getUsers();
+  const byClientId = new Map();
+  users.forEach(u => {
+    if (u && u.clientId) byClientId.set(u.clientId, u);
+  });
+  const clients = store.listClients().map(c => {
+    const u = byClientId.get(c.id);
+    return {
+      ...c,
+      hasLogin: Boolean(u && (u.passwordHash || u.googleSub)),
+      loginEmail: u?.email || c.email || '',
+      lastLoginAt: u?.lastLoginAt || null
+    };
+  });
+  res.json({ clients, plans: store.PLAN_CREDITS });
+});
+
+router.post('/clients/:id/credentials', (req, res) => {
+  const existing = store.getClient(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Client not found' });
+  try {
+    const email = req.body?.email || existing.email;
+    const password = req.body?.password;
+    const user = authModule.provisionClientUser({
+      clientId: existing.id,
+      email,
+      name: req.body?.name || existing.name,
+      password,
+      plan: existing.plan || 'starter'
+    });
+    if (email && email !== existing.email) {
+      store.upsertClient({ id: existing.id, email });
+    }
+    res.json({ ok: true, user });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/clients/:id/reset-code', (req, res) => {
+  const existing = store.getClient(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Client not found' });
+  try {
+    const result = authModule.createResetCodeForClient(existing.id);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/clients/:id/revoke-sessions', (req, res) => {
+  const existing = store.getClient(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Client not found' });
+  const revoked = authModule.revokeUserSessions({ clientId: existing.id });
+  res.json({ ok: true, revoked });
 });
 
 router.post('/clients', (req, res) => {

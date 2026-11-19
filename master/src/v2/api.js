@@ -508,3 +508,20 @@ export async function updateWaSettings(patch) {
   const { data } = await client.patch('/wa/settings', patch);
   return data?.session;
 }
+
+/* ── Master Client Auth Provisioning ─────────────────────────────────────── */
+
+export async function setMasterClientCredentials(id, payload) {
+  const { data } = await client.post(`/master/clients/${encodeURIComponent(id)}/credentials`, payload);
+  return data;
+}
+
+export async function createMasterClientResetCode(id) {
+  const { data } = await client.post(`/master/clients/${encodeURIComponent(id)}/reset-code`);
+  return data;
+}
+
+export async function revokeMasterClientSessions(id) {
+  const { data } = await client.post(`/master/clients/${encodeURIComponent(id)}/revoke-sessions`);
+  return data;
+}

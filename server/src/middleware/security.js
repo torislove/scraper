@@ -116,11 +116,12 @@ const CSP = [
   "frame-ancestors 'none'",
   "form-action 'self'",
   // The SPA ships its own bundle. Inline is allowed for the JSON-LD block and
-  // React style attributes, but eval is never allowed.
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
+  // React style attributes; Google Identity Services is permitted for Sign-In.
+  "script-src 'self' 'unsafe-inline' https://accounts.google.com",
+  "style-src 'self' 'unsafe-inline' https://accounts.google.com https://fonts.googleapis.com",
+  "frame-src 'self' https://accounts.google.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://fonts.gstatic.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https:",
@@ -186,6 +187,42 @@ function createRateLimiter({ windowMs, max, name }) {
   };
 }
 
+function createAuthLimiter({ windowMs = 15 * 60_000, max = 12, name = 'Authentication' } = {}) {
+  const buckets = new Map();
+  const purge = setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of buckets) {
+      if (bucket.resetAt <= now) buckets.delete(key);
+    }
+  }, Math.max(60_000, windowMs));
+  if (typeof purge.unref === 'function') purge.unref();
+
+  return function authLimiter(req, res, next) {
+    const now = Date.now();
+    const ident = String(req.body?.email || req.body?.username || '').trim().toLowerCase().slice(0, 80);
+    const key = `${clientKey(req)}:${ident || 'anon'}`;
+    let bucket = buckets.get(key);
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, bucket);
+    }
+    bucket.count += 1;
+    res.setHeader('X-RateLimit-Limit', String(max));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, max - bucket.count)));
+    if (bucket.count > max) {
+      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfter));
+      return res.status(429).json({
+        success: false,
+        error: 'rate_limited',
+        message: `Too many ${name.toLowerCase()} attempts. Please wait ${retryAfter}s and try again.`,
+        retryAfter,
+      });
+    }
+    return next();
+  };
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    5. Input hygiene
    ──────────────────────────────────────────────────────────────────────────── */
@@ -240,9 +277,9 @@ const corsOptions = {
     if (originAllowed(origin)) return callback(null, true);
     return callback(null, false);
   },
-  credentials: false,
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'x-user-id', 'x-workspace-scope', 'x-master-key', 'x-request-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-workspace-scope', 'x-master-key', 'x-request-id'],
   maxAge: 600,
 };
 
@@ -273,6 +310,7 @@ module.exports = {
   corsOptions,
   createHostGuard,
   createRateLimiter,
+  createAuthLimiter,
   securityHeaders,
   sanitizeRequest,
   hardenHttpServer,

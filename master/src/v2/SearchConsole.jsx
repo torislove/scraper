@@ -148,8 +148,12 @@ function SearchConsole({
   onResolve,
   progress = null,
   runs = [],
-  onOpenFolder
+  onOpenFolder,
+  zonesDone = 0,
+  zonesTotal = 0
 }) {
+  const doneZones = Math.max(0, Number(zonesDone || progress?.overallCompletedMandals || progress?.completedMandals || 0));
+  const totalZones = Math.max(1, Number(zonesTotal || progress?.totalMandalsAcrossAll || progress?.totalMandals || 1));
   const [draft, setDraft] = useState(value || '');
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -483,12 +487,17 @@ function SearchConsole({
             onClick={() => commitAndDeploy()}
             disabled={busy || (!running && !canSearch)}
           >
+            {!busy && (
+              <span className={cx('lx-gbc-keycap', running ? 'is-b' : 'is-a')}>
+                {running ? 'B' : 'A'}
+              </span>
+            )}
             {busy ? <Loader2 size={16} className="v2-spin" /> : running ? <Square size={14} /> : <Zap size={16} />}
             <span>
               {busy
                 ? 'Starting…'
                 : running
-                  ? `Stop (${Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0)}/${Number(progress?.totalMandalsAcrossAll || progress?.totalMandals || 1)})`
+                  ? `Stop · ${doneZones}/${totalZones} Zones`
                   : locClassification?.type === 'district'
                     ? 'Sweep District'
                     : locClassification?.type === 'state'
@@ -507,7 +516,7 @@ function SearchConsole({
               initial={{ opacity: 0, y: -6, scale: 0.99 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -4, scale: 0.99 }}
-              transition={{ duration: 0.14, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.09, ease: [0.22, 1, 0.36, 1] }}
             >
               {matchedSavedFolder && (
                 <div

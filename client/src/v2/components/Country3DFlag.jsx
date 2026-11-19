@@ -2,15 +2,22 @@ import React, { useState } from 'react';
 import { flagOf } from '../data/countries';
 import './country3DFlag.css';
 
+const SIZE_MAP = {
+  xs: 18,
+  sm: 20,
+  md: 24,
+  lg: 28,
+  xl: 34
+};
+
 /**
  * Country3DFlag
- * Renders a crisp 3D embossed convex physical badge for any country code.
- * Solves the Windows OS flat-text emoji limitation by displaying high-res
- * circular flag imagery with specular glass lighting and 3D physical depth.
+ * Precision 3D optical glass flag sphere with specular dome reflection,
+ * Fresnel rim lighting, and crisp retina scaling across Windows/macOS/Linux.
  */
 export default function Country3DFlag({
   code = 'IN',
-  size = 28,
+  size = 20,
   active = false,
   isHome = false,
   onClick,
@@ -20,37 +27,51 @@ export default function Country3DFlag({
   const [imgFailed, setImgFailed] = useState(false);
   const safeCode = String(code || 'IN').toUpperCase();
   const lowerCode = safeCode.toLowerCase();
+  const px = typeof size === 'number' && Number.isFinite(size)
+    ? size
+    : (SIZE_MAP[size] || (Number.isFinite(Number(size)) && Number(size) > 0 ? Number(size) : 20));
 
-  // FlagCDN provides crisp, fast, lightweight flag assets for all ISO 3166-1 alpha-2 codes
   const flagUrl = `https://flagcdn.com/w80/${lowerCode}.png`;
 
+  const dimStyle = {
+    width: `${px}px`,
+    height: `${px}px`,
+    minWidth: `${px}px`,
+    minHeight: `${px}px`,
+    maxWidth: `${px}px`,
+    maxHeight: `${px}px`
+  };
+
   return (
-    <div
+    <span
       className={`flag-3d-wrapper ${className}`}
       onClick={onClick}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       title={title || safeCode}
+      style={dimStyle}
     >
-      <div
+      <span
         className={`flag-3d-badge ${active ? 'is-active' : ''} ${isHome ? 'is-home' : ''}`}
-        style={{ width: `${size}px`, height: `${size}px` }}
+        style={dimStyle}
       >
         {!imgFailed ? (
           <img
             src={flagUrl}
             alt={safeCode}
+            width={px}
+            height={px}
             className="flag-3d-img"
             loading="lazy"
             onError={() => setImgFailed(true)}
           />
         ) : (
-          <span className="flag-3d-fallback" style={{ fontSize: `${Math.round(size * 0.65)}px` }}>
+          <span className="flag-3d-fallback" style={{ fontSize: `${Math.round(px * 0.64)}px` }}>
             {flagOf(safeCode)}
           </span>
         )}
-        <div className="flag-3d-lens" aria-hidden="true" />
-      </div>
-    </div>
+        <span className="flag-3d-lens" aria-hidden="true" />
+      </span>
+    </span>
   );
 }

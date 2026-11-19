@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Check } from 'lucide-react';
+import { Globe2 } from 'lucide-react';
 import Country3DFlag from './Country3DFlag';
 
 const LOCKED_COUNTRIES = [
-  { code: 'IN', name: 'India' },
-  { code: 'US', name: 'USA' },
-  { code: 'GB', name: 'UK' },
+  { code: 'IN', name: 'India', home: true },
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
   { code: 'CA', name: 'Canada' },
   { code: 'AU', name: 'Australia' },
   { code: 'AE', name: 'UAE' },
@@ -40,7 +40,13 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
   }, [code]);
 
   return (
-    <div className="lx-flag-bar" role="region" aria-label="Select country">
+    <div className="lx-flag-bar" role="region" aria-label="11 Supported Markets">
+      <div className="lx-flag-dock-label" title="Strictly tuned across 11 markets">
+        <span className="lx-flag-power-led" aria-hidden="true" />
+        <Globe2 size={12} />
+        <span>11 MARKETS</span>
+      </div>
+
       <div className="lx-flag-scroll">
         {LOCKED_COUNTRIES.map(item => {
           const isActive = item.code === code;
@@ -48,13 +54,20 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
             <button
               key={item.code}
               type="button"
-              className={`lx-flag-pill${isActive ? ' is-active' : ''}`}
+              className={`lx-flag-pill${isActive ? ' is-active' : ''}${item.home ? ' is-home' : ''}`}
               onClick={() => onSelect?.(item.code)}
               aria-pressed={isActive}
+              title={`Search businesses in ${item.name}`}
             >
-              <Country3DFlag code={item.code} size="xs" />
-              <span>{item.name}</span>
-              {isActive && <Check size={12} strokeWidth={3} />}
+              <Country3DFlag
+                code={item.code}
+                size={19}
+                active={isActive}
+                isHome={Boolean(item.home)}
+              />
+              <span className="lx-flag-name">{item.name}</span>
+              {item.home && <span className="lx-flag-home-tag">HOME</span>}
+              {isActive && <span className="lx-flag-led" aria-hidden="true" />}
             </button>
           );
         })}

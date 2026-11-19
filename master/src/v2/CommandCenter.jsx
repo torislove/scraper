@@ -85,6 +85,7 @@ import { extractLeadArea, CarriedBadge, qualityOf } from './utils/leadHelpers';
 import { leadSourceMeta } from './utils/leadSource';
 import InstrumentPanel from './components/InstrumentPanel';
 import CountryFlagStrip from './components/CountryFlagStrip';
+import AccountMenu from './components/AccountMenu';
 import TrashModal from './components/TrashModal';
 import { findCountry } from './data/countries';
 
@@ -293,6 +294,8 @@ export default function CommandCenter() {
   // the keyless global engines. The choice only pre-fills an empty location box,
   // so a user can still type any city and let the engine detect the country.
   const [searchCountry, setSearchCountry] = useState(() => {
+    const fromUrl = searchParams.get('country');
+    if (fromUrl) return String(fromUrl).toUpperCase();
     try { return localStorage.getItem('scraper-country') || 'IN'; } catch (e) { return 'IN'; }
   });
   // Filled by CountryFlagStrip from /api/sources?country=XX. The Master uses it
@@ -302,10 +305,10 @@ export default function CommandCenter() {
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
     try { localStorage.setItem('scraper-country', code); } catch (e) {}
-    toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
+    if (country?.name) toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
     setForm(prev => {
       if (prev.location && prev.location.trim()) return prev;
-      return { ...prev, location: code === 'IN' ? '' : country.name };
+      return { ...prev, location: code === 'IN' ? '' : (country?.name || '') };
     });
   }, []);
 
@@ -313,7 +316,7 @@ export default function CommandCenter() {
   // post-run deep extraction are resolved server-side by the category router.
   const [runMode, setRunMode] = useState('auto');
   const [autoQuery, setAutoQuery] = useState(
-    routerLocation.state?.query || ''
+    routerLocation.state?.query || searchParams.get('q') || ''
   );
   const [activeZone, setActiveZone] = useState(null);
   const [gridZones, setGridZones] = useState([]);
@@ -695,7 +698,7 @@ export default function CommandCenter() {
       microFlushTimer = setTimeout(() => {
         microFlushTimer = null;
         flushBuffers();
-      }, 50);
+      }, 24);
     };
 
     const pushLog = line => {
@@ -2466,6 +2469,7 @@ export default function CommandCenter() {
           </StatusPill>
 
           <DesktopBadge />
+          <AccountMenu variant="master" />
           <div className="v2-tools" ref={toolsRef}>
             <button
               type="button"
@@ -2555,6 +2559,8 @@ export default function CommandCenter() {
               onResolve={setScanPlan}
               onMasterSweep={handleStartMasterSweep}
               progress={progress}
+              zonesDone={runDone}
+              zonesTotal={Math.max(1, runTotal || mapZones.length || 1)}
               eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
               runs={effectiveRuns}
               onOpenFolder={openFolder}
@@ -2570,16 +2576,20 @@ export default function CommandCenter() {
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
                   Sweeping <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
                   {progress?.activeMandal ? (
-                    <span style={{ fontWeight: 500, color: '#475569' }}> · {progress.activeMandal} ({runDone}/{runTotal || '—'})</span>
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {progress.activeMandal}</span>
                   ) : null}
                 </div>
+                <span className="lx-zone-pill is-live">
+                  Zone {Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)} / {Math.max(1, runTotal || mapZones.length || 1)}
+                </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <b style={{ fontSize: 14, fontWeight: 800, color: '#4f46e5', fontVariantNumeric: 'tabular-nums' }}>
                   {formatNumber(runLeadCount)} leads · {formatNumber(runMobilesCount)} mobiles
                 </b>
                 <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun}>
-                  <Square size={11} /> Stop
+                  <span className="lx-gbc-keycap is-b">B</span>
+                  <Square size={11} /> Stop ({runDone}/{Math.max(1, runTotal || mapZones.length || 1)} Zones)
                 </button>
               </div>
             </div>

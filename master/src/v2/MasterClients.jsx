@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   AlertTriangle, ArrowLeft, Bell, BellRing, Building2, CheckCircle2, ChevronRight,
-  CircleSlash, Coins, FolderOpen, Import, LayoutDashboard, Loader2, Mail, Megaphone,
+  CircleSlash, Coins, FolderOpen, Import, KeyRound, LayoutDashboard, Loader2, LockKeyhole, Mail, Megaphone,
   Pencil, Plus, RefreshCw, Search, Send, ShieldCheck, Trash2, UserRound, Users,
   X, Zap
 } from 'lucide-react';
 import {
-  createMasterClient, deleteMasterClient, deleteMasterNotification, getClientSessions,
-  getMasterClients, getMasterNotifications, getMasterOverview, importClientSessions,
-  sendMasterNotification, updateMasterClient
+  createMasterClient, createMasterClientResetCode, deleteMasterClient, deleteMasterNotification,
+  getClientSessions, getMasterClients, getMasterNotifications, getMasterOverview, importClientSessions,
+  revokeMasterClientSessions, sendMasterNotification, setMasterClientCredentials, updateMasterClient
 } from './api';
 import './masterClients.css';
 import { BrandIcon } from './components/BrandLogo';
@@ -71,6 +71,10 @@ export default function MasterClients() {
   const [newClient, setNewClient] = useState(emptyDraft);
   const [composer, setComposer] = useState({ audience: 'all', kind: 'info', title: '', body: '' });
   const [sending, setSending] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authSaving, setAuthSaving] = useState(false);
+  const [resetResult, setResetResult] = useState(null);
 
   const selected = useMemo(
     () => clients.find(item => item.id === selectedId) || null,
@@ -114,6 +118,9 @@ export default function MasterClients() {
       status: selected.status || 'active',
       note: selected.note || ''
     });
+    setAuthEmail(selected.loginEmail || selected.email || '');
+    setAuthPassword('');
+    setResetResult(null);
   }, [selected?.id, selected?.updatedAt]);
 
   const loadSessions = useCallback(async id => {
@@ -277,6 +284,56 @@ export default function MasterClients() {
       setNotifications(prev => prev.filter(item => item.id !== id));
     } catch (error) {
       toast.error('Could not delete message.');
+    }
+  };
+
+  const provisionLogin = async () => {
+    if (!selected) return;
+    if (!authEmail.trim() || !authPassword.trim()) {
+      toast.error('Enter an email and password (min 8 chars, letters + numbers).');
+      return;
+    }
+    setAuthSaving(true);
+    try {
+      await setMasterClientCredentials(selected.id, {
+        email: authEmail.trim(),
+        password: authPassword,
+        name: selected.name
+      });
+      toast.success(`Login saved for ${selected.name}!`);
+      setAuthPassword('');
+      load({ quiet: true });
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Could not save client login.');
+    } finally {
+      setAuthSaving(false);
+    }
+  };
+
+  const generateResetCode = async () => {
+    if (!selected) return;
+    setAuthSaving(true);
+    try {
+      const res = await createMasterClientResetCode(selected.id);
+      setResetResult(res);
+      toast.success(`6-digit reset code ready for ${res.email}`);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || 'Provision client email login first.');
+    } finally {
+      setAuthSaving(false);
+    }
+  };
+
+  const revokeSessions = async () => {
+    if (!selected) return;
+    setAuthSaving(true);
+    try {
+      await revokeMasterClientSessions(selected.id);
+      toast.success(`All active sessions signed out for ${selected.name}.`);
+    } catch (err) {
+      toast.error('Could not revoke sessions.');
+    } finally {
+      setAuthSaving(false);
     }
   };
 
@@ -496,6 +553,62 @@ export default function MasterClients() {
                       </div>
                     </div>
                   )}
+
+                  <div className="v2-desk-section">
+                    <div className="v2-desk-section-head">
+                      <span><LockKeyhole size={13} /> Login &amp; Security</span>
+                      <span style={{ fontSize: 11, fontWeight: 750, color: selected.hasLogin ? '#059669' : '#64748b' }}>
+                        {selected.hasLogin ? 'Login Active' : 'No Password Set'}
+                      </span>
+                    </div>
+
+                    <div className="v2-desk-form" style={{ marginTop: 8 }}>
+                      <label>
+                        <span>Login Email</span>
+                        <input
+                          type="email"
+                          value={authEmail}
+                          onChange={e => setAuthEmail(e.target.value)}
+                          placeholder="client@company.com"
+                        />
+                      </label>
+                      <label>
+                        <span>Set / Reset Password</span>
+                        <input
+                          type="password"
+                          value={authPassword}
+                          onChange={e => setAuthPassword(e.target.value)}
+                          placeholder="Min 8 chars (letter + number)"
+                        />
+                      </label>
+
+                      <div className="v2-desk-form-actions" style={{ flexWrap: 'wrap' }}>
+                        <button type="button" className="v2-btn v2-btn-lime v2-btn-sm" onClick={provisionLogin} disabled={authSaving}>
+                          <KeyRound size={12} /> {selected.hasLogin ? 'Update Login' : 'Set Login'}
+                        </button>
+                        <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={generateResetCode} disabled={authSaving || !selected.hasLogin}>
+                          <RefreshCw size={12} /> 6-Digit Reset Code
+                        </button>
+                        <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={revokeSessions} disabled={authSaving || !selected.hasLogin}>
+                          <ShieldCheck size={12} /> Sign Out Sessions
+                        </button>
+                      </div>
+
+                      {resetResult?.code && (
+                        <div style={{
+                          padding: '8px 11px',
+                          borderRadius: 10,
+                          background: 'rgba(16, 185, 129, 0.12)',
+                          border: '1px solid rgba(16, 185, 129, 0.35)',
+                          fontSize: 12,
+                          color: '#065f46',
+                          fontWeight: 700
+                        }}>
+                          Reset code for {resetResult.email}: <b style={{ letterSpacing: '0.14em', fontSize: 14 }}>{resetResult.code}</b> (15m)
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="v2-desk-section">
                     <div className="v2-desk-section-head">

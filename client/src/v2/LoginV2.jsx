@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  AlertCircle, ArrowRight, ArrowLeft, Check, Eye, EyeOff, Loader2,
-  LockKeyhole, Mail, ShieldCheck, Sparkles
+  AlertCircle, ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Eye, EyeOff,
+  KeyRound, Loader2, LockKeyhole, Mail, ShieldCheck, Sparkles, User
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
+import Country3DFlag from './components/Country3DFlag';
 import {
-  AUTH_REQUIRED, fetchAuthConfig, loginWithGoogle, loginWithPassword
+  AUTH_REQUIRED, confirmPasswordReset, fetchAuthConfig, loginWithGoogle,
+  loginWithPassword, registerWithPassword, requestPasswordReset
 } from './auth';
 import './login.css';
 
@@ -14,29 +16,25 @@ const MARKETS = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE
 
 const COPY = {
   client: {
-    eyebrow: 'LEAD WORKSPACE',
+    eyebrow: '3D LIQUID WORKSPACE',
     title: 'Find verified business leads',
     titleAccent: 'in seconds.',
-    subtitle: 'Sign in to access your saved lists, live interactive territory maps, and instant Excel exports across 11 markets.',
-    cardTitle: 'Welcome back',
-    cardSubtitle: 'Sign in with Google or your workspace email.',
+    subtitle: 'Access your saved search folders, Google-grade auto-learning search, live interactive territory maps, and instant Excel exports across 11 markets.',
     points: [
-      ['Any industry, any city', 'Find shops, clinics, suppliers, agencies and local services effortlessly.'],
-      ['Saved lists ready anytime', 'Every search is neatly stored for 1-click Excel, CSV or phone export.'],
-      ['India first + 10 global markets', 'Complete India village coverage plus US, UK, Canada, Australia, UAE, Germany & more.']
+      ['Any industry, any city', 'Computer shops, clinics, builders, interior designers, distributors & 150+ local trades.'],
+      ['Saved lists ready anytime', 'Every search is cleanly saved for 1-click Excel (.xlsx), CSV or phone (.vcf) export.'],
+      ['India first + 10 global markets', 'Complete India town & village coverage plus US, UK, Canada, Australia, UAE, Germany & more.']
     ]
   },
   master: {
-    eyebrow: 'MASTER CONTROL',
+    eyebrow: 'SOVEREIGN MASTER CONTROL',
     title: 'Global territory',
     titleAccent: 'command center.',
-    subtitle: 'Manage client workspaces, launch state & county sweeps across all 11 markets, and oversee live intelligence.',
-    cardTitle: 'Master sign-in',
-    cardSubtitle: 'Restricted to authorized operators and administrators.',
+    subtitle: 'Manage client workspaces, provision accounts, launch full-territory sweeps across 11 markets, and supervise live discovery.',
     points: [
-      ['Unified client directory', 'Manage customer plans, lead vaults and announcements in one view.'],
-      ['Full territory sweeps', 'Launch city, county, district and state sweeps across all 11 markets.'],
-      ['Live operational control', 'Monitor discovery throughput, self-learning AI and system health.']
+      ['Unified client directory', 'Provision client logins, plans, lead vaults and announcements in one place.'],
+      ['Full territory sweeps', 'Launch city, district, county and state sweeps across all 11 locked markets.'],
+      ['Self-learning search brain', 'Inspect auto-learned synonyms, categories and live engine health.']
     ]
   }
 };
@@ -52,28 +50,51 @@ function GoogleMark({ size = 18 }) {
   );
 }
 
-export default function LoginV2({ variant = 'client' }) {
+function passwordStrength(pw) {
+  if (!pw) return { score: 0, label: '' };
+  let score = 0;
+  if (pw.length >= 8) score += 1;
+  if (/[A-Za-z]/.test(pw) && /\d/.test(pw)) score += 1;
+  if (pw.length >= 11 || /[A-Z]/.test(pw)) score += 1;
+  if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+  const labels = ['', 'Weak', 'Fair', 'Strong', 'Locked'];
+  return { score, label: labels[score] };
+}
+
+export default function LoginV2({ variant = 'client', initialMode = 'signin' }) {
   const copy = COPY[variant] || COPY.client;
+  const isMaster = variant === 'master';
   const navigate = useNavigate();
   const location = useLocation();
 
+  const params = new URLSearchParams(location.search);
+  const selectedPlan = params.get('plan') || 'starter';
+  const [mode, setMode] = useState(isMaster ? 'signin' : (initialMode || 'signin'));
+
+  const [name, setName] = useState('');
+  const [company, setCompany] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [resetCode, setResetCode] = useState('');
+  const [resetRequested, setResetRequested] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [config, setConfig] = useState({ googleEnabled: false, authRequired: AUTH_REQUIRED });
+  const [config, setConfig] = useState({ googleEnabled: false, authRequired: AUTH_REQUIRED, allowSelfSignup: true });
 
   const googleSlot = useRef(null);
   const googleInit = useRef(false);
 
   const nextPath = (() => {
-    const params = new URLSearchParams(location.search);
     const target = params.get('next') || location.state?.from || '/command';
     return typeof target === 'string' && target.startsWith('/') ? target : '/command';
   })();
+
+  useEffect(() => {
+    if (!isMaster && initialMode) setMode(initialMode);
+  }, [initialMode, isMaster]);
 
   useEffect(() => {
     let alive = true;
@@ -85,18 +106,15 @@ export default function LoginV2({ variant = 'client' }) {
 
   const finish = useCallback((session) => {
     if (!session) return;
-    if (session.user?.role === 'master' && variant !== 'master') {
-      // A master account that lands on the client host still belongs in master.
-      window.location.assign('/command');
+    if (isMaster && session.user?.role !== 'master') {
+      setError('This account does not have Master administrator access.');
       return;
     }
     navigate(nextPath, { replace: true });
-  }, [navigate, nextPath, variant]);
+  }, [navigate, nextPath, isMaster]);
 
-  /* Google Identity Services: rendered only when the server has a client ID.
-     The custom button below is the fallback while GOOGLE_CLIENT_ID is unset. */
   useEffect(() => {
-    if (!config.googleEnabled || !config.googleClientId) return;
+    if (!config.googleEnabled || !config.googleClientId || mode === 'reset') return;
     if (googleInit.current) return;
 
     const render = () => {
@@ -118,12 +136,12 @@ export default function LoginV2({ variant = 'client' }) {
         }
       });
       window.google.accounts.id.renderButton(googleSlot.current, {
-        theme: 'outline',
+        theme: isMaster ? 'filled_black' : 'outline',
         size: 'large',
         shape: 'pill',
         text: 'continue_with',
         logo_alignment: 'left',
-        width: 336
+        width: 340
       });
     };
 
@@ -146,26 +164,104 @@ export default function LoginV2({ variant = 'client' }) {
     script.addEventListener('load', render);
     document.head.appendChild(script);
     return () => script.removeEventListener('load', render);
-  }, [config.googleEnabled, config.googleClientId, finish]);
+  }, [config.googleEnabled, config.googleClientId, finish, isMaster, mode]);
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
+    setError('');
+    setNotice('');
+    if (nextMode !== 'reset') setResetRequested(false);
+  };
 
   async function handleSubmit(event) {
     event.preventDefault();
     setError('');
     setNotice('');
 
-    if (!email.trim() || !password) {
-      setError('Enter your email and password.');
+    if (mode === 'signin') {
+      if (!email.trim() || !password) {
+        setError('Enter your email and password.');
+        return;
+      }
+      setBusy(true);
+      try {
+        const session = await loginWithPassword(email.trim(), password, { remember });
+        finish(session);
+      } catch (err) {
+        setError(err.message || 'Sign-in failed.');
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
-    setBusy(true);
-    try {
-      const session = await loginWithPassword(email.trim(), password, { remember });
-      finish(session);
-    } catch (err) {
-      setError(err.message || 'Sign-in failed.');
-    } finally {
-      setBusy(false);
+    if (mode === 'signup') {
+      if (!name.trim() || !email.trim() || !password) {
+        setError('Enter your name, email, and password to create your workspace.');
+        return;
+      }
+      setBusy(true);
+      try {
+        const session = await registerWithPassword({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+          company: company.trim(),
+          plan: selectedPlan,
+          remember
+        });
+        finish(session);
+      } catch (err) {
+        setError(err.message || 'Could not create account.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (mode === 'reset') {
+      if (!resetRequested) {
+        if (!email.trim()) {
+          setError('Enter your account email first.');
+          return;
+        }
+        setBusy(true);
+        try {
+          const res = await requestPasswordReset(email.trim());
+          setResetRequested(true);
+          setNotice(
+            res.devCode
+              ? `Reset code generated (local dev code: ${res.devCode}). Enter it below with your new password.`
+              : (res.message || 'Check your email or ask your workspace administrator for your 6-digit reset code.')
+          );
+        } catch (err) {
+          setError(err.message || 'Could not request reset code.');
+        } finally {
+          setBusy(false);
+        }
+      } else {
+        if (!email.trim() || !resetCode.trim() || !password) {
+          setError('Enter your email, 6-digit code, and new password.');
+          return;
+        }
+        setBusy(true);
+        try {
+          const res = await confirmPasswordReset({
+            email: email.trim(),
+            code: resetCode.trim(),
+            newPassword: password
+          });
+          setNotice(res.message || 'Password updated! Sign in with your new password.');
+          setPassword('');
+          setResetCode('');
+          setResetRequested(false);
+          setMode('signin');
+        } catch (err) {
+          setError(err.message || 'Could not reset password.');
+        } finally {
+          setBusy(false);
+        }
+      }
     }
   }
 
@@ -173,10 +269,35 @@ export default function LoginV2({ variant = 'client' }) {
     setError('');
     setNotice(
       config.googleEnabled
-        ? 'Google Sign-In is still loading. Try again in a moment, or sign in with your email below.'
-        : 'Please sign in with your workspace email and password below.'
+        ? 'Google Sign-In is still loading. Try again in a moment or sign in with email below.'
+        : 'Sign in or create an account directly with your email and password below — zero extra setup needed.'
     );
   }
+
+  const strength = passwordStrength(password);
+  const effectiveAuthRequired = Boolean(config.authRequired || AUTH_REQUIRED);
+  const canSignup = !isMaster && config.allowSelfSignup !== false;
+
+  const headingByMode = {
+    signin: {
+      title: isMaster ? 'Master sign-in' : 'Welcome back',
+      sub: isMaster
+        ? 'Restricted to authorized administrators and operators.'
+        : 'Sign in with Google or your workspace email.'
+    },
+    signup: {
+      title: 'Create your workspace',
+      sub: selectedPlan && selectedPlan !== 'starter'
+        ? `Starting with the ${selectedPlan.toUpperCase()} workspace — ready in seconds.`
+        : 'Start finding verified business leads across 11 markets in seconds.'
+    },
+    reset: {
+      title: 'Reset your password',
+      sub: resetRequested
+        ? 'Enter your 6-digit reset code and choose a strong new password.'
+        : 'We will generate a single-use 6-digit reset code for your account.'
+    }
+  }[mode];
 
   return (
     <div className={`login-shell login-shell--${variant}`}>
@@ -184,12 +305,12 @@ export default function LoginV2({ variant = 'client' }) {
 
       <header className="login-topbar">
         <button type="button" className="login-brand" onClick={() => navigate('/')}>
-          <BrandLogo size={30} showTagline tagline={variant === 'master' ? 'Master Control' : 'Autonomous Lead Radar'} />
+          <BrandLogo size={32} theme={isMaster ? 'dark' : 'light'} />
         </button>
 
         <div className="login-topbar-right">
           <span className="login-secure-chip">
-            <ShieldCheck size={13} /> Signed session
+            <ShieldCheck size={13} /> Encrypted Session
           </span>
           <button type="button" className="login-back" onClick={() => navigate('/')}>
             <ArrowLeft size={13} /> Back to site
@@ -212,9 +333,9 @@ export default function LoginV2({ variant = 'client' }) {
           <p className="login-subtitle">{copy.subtitle}</p>
 
           <ul className="login-points">
-            {copy.points.map(([head, body], index) => (
-              <li key={head} style={{ animationDelay: `${0.08 + index * 0.07}s` }}>
-                <span className="login-point-icon"><Check size={12} strokeWidth={3} /></span>
+            {copy.points.map(([head, body]) => (
+              <li key={head}>
+                <span className="login-point-icon"><Check size={13} strokeWidth={3} /></span>
                 <span>
                   <b>{head}</b>
                   <i>{body}</i>
@@ -225,130 +346,268 @@ export default function LoginV2({ variant = 'client' }) {
 
           <div className="login-markets" aria-label="Eleven supported markets">
             {MARKETS.map(code => (
-              <span key={code} className={code === 'IN' ? 'is-home' : ''}>{code}</span>
+              <span key={code} className={`login-market-chip ${code === 'IN' ? 'is-home' : ''}`}>
+                <Country3DFlag code={code} size={18} isHome={code === 'IN'} />
+                {code}
+              </span>
             ))}
           </div>
         </section>
 
         <section className="login-card-wrap">
           <div className="login-card">
-            <div className="login-card-head">
-              <span className="login-card-badge">
-                {variant === 'master' ? <LockKeyhole size={11} /> : <Sparkles size={11} />}
-                {variant === 'master' ? 'RESTRICTED' : 'SECURE SIGN-IN'}
-              </span>
-              <h2>{copy.cardTitle}</h2>
-              <p>{copy.cardSubtitle}</p>
+            <div className="login-gbc-dots" aria-hidden="true">
+              <span className="login-gbc-dot is-kiwi" />
+              <span className="login-gbc-dot is-atomic" />
+              <span className="login-gbc-dot is-berry" />
             </div>
 
-            {!AUTH_REQUIRED && (
-              <div className="login-preview">
-                <b>Preview mode</b>
-                <span>Sign-in is not enforced yet. You can open the workspace directly.</span>
-                <button type="button" onClick={() => navigate('/command')}>
-                  Open command center <ArrowRight size={13} />
+            <div className="login-card-head">
+              <span className="login-card-badge">
+                {isMaster ? <LockKeyhole size={11} /> : <Sparkles size={11} />}
+                {isMaster ? 'RESTRICTED' : 'SECURE ACCESS'}
+              </span>
+              <h2>{headingByMode.title}</h2>
+              <p>{headingByMode.sub}</p>
+            </div>
+
+            {!isMaster && (
+              <div className="login-mode-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'signin'}
+                  className={`login-mode-tab ${mode === 'signin' ? 'is-active' : ''}`}
+                  onClick={() => switchMode('signin')}
+                >
+                  Sign In
+                </button>
+                {canSignup && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === 'signup'}
+                    className={`login-mode-tab ${mode === 'signup' ? 'is-active' : ''}`}
+                    onClick={() => switchMode('signup')}
+                  >
+                    Create Account
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'reset'}
+                  className={`login-mode-tab ${mode === 'reset' ? 'is-active' : ''}`}
+                  onClick={() => switchMode('reset')}
+                >
+                  Reset
                 </button>
               </div>
             )}
 
-            {config.googleEnabled ? (
-              <div className="login-google-slot" ref={googleSlot} />
-            ) : (
-              <button type="button" className="login-google" onClick={handleGooglePlaceholder}>
-                <GoogleMark />
-                <span>Continue with Google</span>
-                <em>SETUP</em>
-              </button>
-            )}
-
-            <div className="login-divider"><span>or use your email</span></div>
-
-            {error && (
-              <div className="login-alert is-error" role="alert">
-                <AlertCircle size={14} />
-                <span>{error}</span>
+            {!effectiveAuthRequired && (
+              <div className="login-preview">
+                <b>Instant Access Enabled</b>
+                <span>You can sign in to sync your personal account or jump straight into the workspace right now.</span>
+                <button type="button" onClick={() => navigate('/command')}>
+                  Open Workspace <ArrowRight size={13} />
+                </button>
               </div>
             )}
-            {notice && !error && (
-              <div className="login-alert is-info" role="status">
-                <ShieldCheck size={14} />
-                <span>{notice}</span>
-              </div>
+
+            {mode !== 'reset' && (
+              <>
+                {config.googleEnabled ? (
+                  <div className="login-google-slot" ref={googleSlot} />
+                ) : (
+                  <button type="button" className="login-google-btn" onClick={handleGooglePlaceholder}>
+                    <GoogleMark size={18} />
+                    <span>Continue with Google</span>
+                  </button>
+                )}
+
+                <div className="login-divider">
+                  <span>or continue with email</span>
+                </div>
+              </>
             )}
 
             <form className="login-form" onSubmit={handleSubmit} noValidate>
-              <label className="login-field">
-                <span className="login-label">Email</span>
-                <span className="login-input">
-                  <Mail size={15} />
+              {mode === 'signup' && (
+                <>
+                  <div className="login-field">
+                    <label htmlFor="auth-name">Full name</label>
+                    <div className="login-input-wrap">
+                      <span className="login-input-icon"><User size={15} /></span>
+                      <input
+                        id="auth-name"
+                        type="text"
+                        className="login-input"
+                        placeholder="e.g. Manoj Kumar"
+                        autoComplete="name"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="login-field">
+                    <label htmlFor="auth-company">Company / Team (optional)</label>
+                    <div className="login-input-wrap">
+                      <span className="login-input-icon"><Building2 size={15} /></span>
+                      <input
+                        id="auth-company"
+                        type="text"
+                        className="login-input"
+                        placeholder="Your business or agency"
+                        autoComplete="organization"
+                        value={company}
+                        onChange={e => setCompany(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="login-field">
+                <label htmlFor="auth-email">{isMaster ? 'Admin username or email' : 'Work email'}</label>
+                <div className="login-input-wrap">
+                  <span className="login-input-icon"><Mail size={15} /></span>
                   <input
-                    type="email"
-                    name="email"
-                    autoComplete="email"
-                    inputMode="email"
-                    placeholder="you@company.com"
+                    id="auth-email"
+                    type={isMaster ? 'text' : 'email'}
+                    className="login-input"
+                    placeholder={isMaster ? 'admin' : 'you@company.com'}
+                    autoComplete="username"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    disabled={busy}
                   />
-                </span>
-              </label>
-
-              <label className="login-field">
-                <span className="login-label">Password</span>
-                <span className="login-input">
-                  <LockKeyhole size={15} />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    name="password"
-                    autoComplete="current-password"
-                    placeholder="Your password"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    disabled={busy}
-                  />
-                  <button
-                    type="button"
-                    className="login-eye"
-                    onClick={() => setShowPassword(v => !v)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </span>
-              </label>
-
-              <div className="login-row">
-                <label className="login-check">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={e => setRemember(e.target.checked)}
-                  />
-                  <span>Keep me signed in</span>
-                </label>
-                <a className="login-link" href="mailto:support@scraper.co.in?subject=Password%20reset">
-                  Forgot password?
-                </a>
+                </div>
               </div>
 
+              {mode === 'reset' && resetRequested && (
+                <div className="login-field">
+                  <label htmlFor="auth-code">6-Digit Reset Code</label>
+                  <div className="login-input-wrap">
+                    <span className="login-input-icon"><KeyRound size={15} /></span>
+                    <input
+                      id="auth-code"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      className="login-input"
+                      placeholder="123456"
+                      value={resetCode}
+                      onChange={e => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(mode !== 'reset' || resetRequested) && (
+                <div className="login-field">
+                  <label htmlFor="auth-password">
+                    {mode === 'reset' ? 'New password' : 'Password'}
+                  </label>
+                  <div className="login-input-wrap">
+                    <span className="login-input-icon"><LockKeyhole size={15} /></span>
+                    <input
+                      id="auth-password"
+                      type={showPassword ? 'text' : 'password'}
+                      className="login-input"
+                      placeholder={mode === 'signin' ? 'Enter your password' : 'At least 8 characters (letters + numbers)'}
+                      autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="login-eye"
+                      onClick={() => setShowPassword(v => !v)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+
+                  {(mode === 'signup' || (mode === 'reset' && resetRequested)) && password && (
+                    <div className="login-strength">
+                      <div className="login-strength-bars">
+                        {[1, 2, 3, 4].map(n => (
+                          <span key={n} className={strength.score >= n ? `lvl-${strength.score}` : ''} />
+                        ))}
+                      </div>
+                      <small>{strength.label}</small>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {mode !== 'reset' && (
+                <div className="login-row-between">
+                  <label className="login-remember">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={e => setRemember(e.target.checked)}
+                    />
+                    <span>Keep me signed in (7 days)</span>
+                  </label>
+
+                  {mode === 'signin' && !isMaster && (
+                    <button type="button" className="login-link-btn" onClick={() => switchMode('reset')}>
+                      Forgot password?
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {error && (
+                <div className="login-alert is-error" role="alert">
+                  <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {notice && (
+                <div className="login-alert is-notice" role="status">
+                  <CheckCircle2 size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{notice}</span>
+                </div>
+              )}
+
               <button type="submit" className="login-submit" disabled={busy}>
-                {busy ? <Loader2 size={16} className="login-spin" /> : null}
-                <span>{busy ? 'Signing in…' : variant === 'master' ? 'Enter control room' : 'Sign in'}</span>
-                {!busy && <ArrowRight size={15} />}
+                {busy ? (
+                  <><Loader2 size={16} className="login-spin" /> Working…</>
+                ) : mode === 'signup' ? (
+                  <>Create Workspace <ArrowRight size={16} /></>
+                ) : mode === 'reset' ? (
+                  <>{resetRequested ? 'Confirm New Password' : 'Generate 6-Digit Code'} <ArrowRight size={16} /></>
+                ) : (
+                  <>{isMaster ? 'Enter Master Control' : 'Sign In to Workspace'} <ArrowRight size={16} /></>
+                )}
               </button>
             </form>
 
-            <p className="login-fine">
-              By continuing you agree to the{' '}
-              <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
-            </p>
+            <div className="login-card-foot">
+              {isMaster ? (
+                <span>Protected by HMAC-SHA256 signed sessions &amp; role verification.</span>
+              ) : mode === 'signin' && canSignup ? (
+                <span>
+                  New here?{' '}
+                  <button type="button" className="login-link-btn" onClick={() => switchMode('signup')}>
+                    Create a free workspace
+                  </button>
+                </span>
+              ) : (
+                <span>
+                  Already have an account?{' '}
+                  <button type="button" className="login-link-btn" onClick={() => switchMode('signin')}>
+                    Sign in
+                  </button>
+                </span>
+              )}
+            </div>
           </div>
-
-          <p className="login-footnote">
-            <ShieldCheck size={12} />
-            Secure workspace · Instant business leads across 11 markets
-          </p>
         </section>
       </main>
     </div>
