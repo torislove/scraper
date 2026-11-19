@@ -145,11 +145,11 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
         const enriched = await deepEnrichVendor(vendor.id);
         if (enriched?.vendor && mountedRef.current) {
           if (enriched.vendor.phone && !vendor.phone) {
-            setCrmMessage(`Aggressive Hunter found: ${enriched.vendor.phone}`);
+            setCrmMessage(`Verified phone found: ${enriched.vendor.phone}`);
           }
         }
       } catch (e) {
-        console.warn('Direct deep-enrich note:', e?.message);
+        console.warn('Contact lookup note:', e?.message);
       }
 
       // 2. Also run comprehensive deep extraction pipeline
@@ -347,80 +347,43 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
             </div>
           </section>
 
-          {/* 3D Tactile Action Bar (WhatsApp, Call, Email, Direct Maps, Website, Enrich) */}
+          {/* Clean Customer Action Bar (Call, Email, Google Maps, Website, Find Missing Details) */}
           <div className="v2-drawer-3d-actions">
-            {/* If Mobile: Render 💬 WhatsApp Outreach */}
-            {isMobile && parsedPhone ? (
-              <button
-                type="button"
-                className="v2-3d-action-btn v2-btn-wa"
-                onClick={() => {
-                  if (onOpenWhatsApp) onOpenWhatsApp(vendor);
-                  else window.open(whatsappUrl, '_blank');
-                }}
-                title={`Open WhatsApp outreach for ${parsedPhone.national}`}
-              >
-                <MessageSquare size={14} /> 💬 WhatsApp Outreach
-              </button>
-            ) : null}
-
-            {/* If Landline: Primary prominent 📞 Call Landline Button */}
-            {isLandline ? (
+            {primaryPhone ? (
               <a
                 href={callUrl || `tel:${primaryPhone}`}
                 className="v2-3d-action-btn v2-btn-call"
-                style={{ background: '#F0FDF4', color: '#166534', border: '1.5px solid #BBF7D0', fontWeight: 750 }}
-                title={`Call Landline ${formattedDisplayPhone}`}
+                style={{ background: '#ecfdf5', color: '#065f46', border: '1.5px solid #a7f3d0', fontWeight: 750 }}
+                title={`Call ${formattedDisplayPhone}`}
               >
-                <Phone size={14} /> 📞 Call Landline ({formattedDisplayPhone})
+                <Phone size={14} /> Call {isLandline ? 'Office' : 'Business'}
               </a>
             ) : (
-              primaryPhone ? (
-                <a
-                  href={callUrl || `tel:${primaryPhone}`}
-                  className="v2-3d-action-btn v2-btn-call"
-                  title={`Call ${formattedDisplayPhone}`}
-                >
-                  <Phone size={14} /> 📞 Call Vendor
-                </a>
-              ) : (
-                <button type="button" className="v2-3d-action-btn v2-btn-call is-disabled">
-                  <Phone size={14} /> 📞 Call
-                </button>
-              )
+              <button type="button" className="v2-3d-action-btn v2-btn-call is-disabled">
+                <Phone size={14} /> No Phone Yet
+              </button>
             )}
 
-            {/* 3. Email Button */}
             {displayEmail ? (
               <a
                 href={`mailto:${displayEmail}`}
                 className="v2-3d-action-btn v2-btn-email"
                 title={`Send email to ${displayEmail}`}
               >
-                <Mail size={14} /> ✉️ Send Email
+                <Mail size={14} /> Send Email
               </a>
-            ) : (
-              <button
-                type="button"
-                className="v2-3d-action-btn v2-btn-email is-disabled"
-                title="No email discovered yet"
-              >
-                <Mail size={14} /> ✉️ Email
-              </button>
-            )}
+            ) : null}
 
-            {/* 4. Direct Google Maps Pin */}
             <a
               href={directMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="v2-3d-action-btn v2-btn-maps"
-              title="Open exact vendor pin directly on Google Maps"
+              title="Open location on Google Maps"
             >
-              <Compass size={14} /> 🗺️ Google Maps Pin
+              <Compass size={14} /> Open on Map
             </a>
 
-            {/* 5. Official Website */}
             {displayWebsite ? (
               <a
                 href={safeUrl(displayWebsite)}
@@ -429,20 +392,19 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                 className="v2-3d-action-btn v2-btn-web"
                 title="Visit official website"
               >
-                <Globe2 size={14} /> 🌐 Website
+                <Globe2 size={14} /> Website
               </a>
             ) : null}
 
-            {/* 6. Live Deep Enrich */}
             <button
               type="button"
               className="v2-3d-action-btn v2-btn-enrich"
               onClick={runDeepExtraction}
               disabled={extracting}
-              title="Live scrape website & places for missing details"
+              title="Check for missing phone numbers, emails and opening hours"
             >
               {extracting ? <Loader2 size={14} className="v2-spin" /> : <Zap size={14} />}
-              {extracting ? 'Enriching...' : '⚡ Deep Enrich'}
+              {extracting ? 'Updating…' : 'Find Missing Details'}
             </button>
           </div>
 
@@ -453,63 +415,48 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
           )}
 
           {job && extracting && (
-            <div style={{ margin: '0 16px 12px', padding: '10px 14px', background: '#EFF6FF', border: '1.5px solid #BFDBFE', borderRadius: 10, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 650, color: '#1E40AF' }}>
-                <span>DEEP ENRICHMENT RUNNING</span>
+            <div style={{ margin: '0 16px 12px', padding: '10px 14px', background: '#ecfdf5', border: '1.5px solid #a7f3d0', borderRadius: 10, fontSize: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 650, color: '#065f46' }}>
+                <span>Updating business contact details…</span>
                 <span>{job.progressPercent || 0}%</span>
               </div>
-              <div style={{ height: 6, background: '#DBEAFE', borderRadius: 3, overflow: 'hidden' }}>
-                <div style={{ width: `${job.progressPercent || 0}%`, height: '100%', background: '#2563EB', transition: 'width 0.3s ease' }} />
+              <div style={{ height: 6, background: '#d1fae5', borderRadius: 3, overflow: 'hidden' }}>
+                <div style={{ width: `${job.progressPercent || 0}%`, height: '100%', background: '#059669', transition: 'width 0.3s ease' }} />
               </div>
             </div>
           )}
 
-          {/* Structured Pure Data Cards (Zero Nonsense, High Density) */}
+          {/* Clean Structured Business Details */}
           <div style={{ padding: '0 16px 24px' }}>
-            {/* Card 1: Contact Intel & Telecom */}
+            {/* Card 1: Contact Details */}
             <div className="v2-drawer-data-card">
               <div className="v2-drawer-card-head">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Phone size={13} style={{ color: '#4F46E5' }} /> CONTACT INTEL & TELECOM
+                  <Phone size={13} style={{ color: '#059669' }} /> CONTACT DETAILS
                 </span>
                 {allParsedPhones.some(p => p.isMobile) && (
                   <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: 6, fontWeight: 750, fontSize: 10 }}>
-                    VERIFIED MOBILE READY
+                    DIRECT MOBILE
                   </span>
                 )}
                 {allParsedPhones.some(p => p.isLandline) && (
                   <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '2px 8px', borderRadius: 6, fontWeight: 750, fontSize: 10, marginLeft: 6 }}>
-                    STD LANDLINE DETECTED
+                    OFFICE PHONE
                   </span>
                 )}
               </div>
               <div className="v2-drawer-card-body">
                 <div className="v2-data-row">
-                  <span className="v2-data-label">{isLandline ? 'Primary Landline' : 'Primary Mobile'}</span>
+                  <span className="v2-data-label">{isLandline ? 'Office Phone' : 'Direct Phone'}</span>
                   <span className="v2-data-val">
                     {primaryPhone ? (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                        <a href={callUrl || `tel:${primaryPhone}`} style={{ color: isLandline ? '#0F766E' : '#0F172A', fontWeight: 800, fontSize: 13, textDecoration: 'none' }}>
+                        <a href={callUrl || `tel:${primaryPhone}`} style={{ color: '#0F172A', fontWeight: 800, fontSize: 13.5, textDecoration: 'none' }}>
                           {formattedDisplayPhone}
                         </a>
-                        {isMobile && (
-                          <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #BBF7D0', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          >
-                            <MessageSquare size={10} /> WhatsApp
-                          </a>
-                        )}
-                        {isLandline && (
-                          <span style={{ background: '#E0F2FE', color: '#0369A1', border: '1px solid #BAE6FD', padding: '2px 8px', borderRadius: 6, fontSize: 10.5, fontWeight: 750 }}>
-                            📞 Call Only (Landline)
-                          </span>
-                        )}
                         <CopyButton value={formattedDisplayPhone} />
                       </span>
-                    ) : <span style={{ color: '#94A3B8' }}>Not found</span>}
+                    ) : <span style={{ color: '#94A3B8' }}>Not listed yet</span>}
                   </span>
                 </div>
 
@@ -554,17 +501,6 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                               )}
                             </span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              {p.isMobile && p.whatsappUrl && (
-                                <a
-                                  href={p.whatsappUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ background: '#25D366', color: '#FFFFFF', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 750, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
-                                  title="WhatsApp"
-                                >
-                                  <MessageSquare size={10} /> WA
-                                </a>
-                              )}
                               <a
                                 href={p.callUrl}
                                 style={{ background: '#F1F5F9', color: '#334155', padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}
@@ -814,113 +750,6 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
               </div>
             )}
 
-            {/* Card 6: Sales Pipeline & Telecaller CRM */}
-            <div className="v2-drawer-data-card">
-              <div className="v2-drawer-card-head">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <MessageSquare size={13} style={{ color: '#059669' }} /> SALES PIPELINE & TELECALLER CRM
-                </span>
-                <span style={{ color: '#059669', fontWeight: 750, textTransform: 'uppercase' }}>{crmStage.replace(/_/g, ' ')}</span>
-              </div>
-              <div className="v2-drawer-card-body">
-                <div className="v2-crm-stage-chips" role="group" aria-label="CRM stage" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {CRM_STAGES.map(stage => (
-                    <button
-                      type="button"
-                      key={stage.id}
-                      className={cx('v2-crm-stage-chip', `tone-${stage.tone}`, crmStage === stage.id && 'is-on')}
-                      onClick={() => setCrmStage(stage.id)}
-                      aria-pressed={crmStage === stage.id}
-                    >
-                      {stage.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: '#64748B', letterSpacing: '0.06em' }}>LOG CALL OR ADD NOTE</span>
-                  <textarea
-                    value={crmNote}
-                    onChange={event => setCrmNote(event.target.value)}
-                    placeholder="Called owner, interested in catering. Follow-up next Tuesday..."
-                    rows={2}
-                    style={{
-                      width: '100%',
-                      padding: '8px 10px',
-                      borderRadius: 8,
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: 12,
-                      fontFamily: 'inherit',
-                      resize: 'vertical'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                  <button
-                    type="button"
-                    className="v2-3d-action-btn v2-btn-wa"
-                    style={{ padding: '6px 14px', fontSize: 11 }}
-                    onClick={saveCrm}
-                    disabled={crmSaving}
-                  >
-                    {crmSaving ? <Loader2 size={12} className="v2-spin" /> : <Check size={12} />}
-                    Save CRM Status
-                  </button>
-                  {crmMessage && (
-                    <span style={{ fontSize: 11, fontWeight: 700, color: crmMessage === 'Saved' ? '#059669' : '#DC2626' }}>
-                      {crmMessage}
-                    </span>
-                  )}
-                </div>
-
-                {crmNotes.length > 0 && (
-                  <div style={{ marginTop: 12, borderTop: '1px solid #E2E8F0', paddingTop: 8 }}>
-                    <span style={{ fontSize: 10, fontWeight: 750, color: '#64748B', textTransform: 'uppercase' }}>
-                      Note History ({crmNotes.length})
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-                      {crmNotes.slice(0, 5).map((note, idx) => (
-                        <div key={idx} style={{ padding: '6px 10px', background: '#F8FAFC', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 11 }}>
-                          <p style={{ margin: 0, color: '#1E293B' }}>{note.text}</p>
-                          <small style={{ color: '#94A3B8', fontSize: 9.5 }}>{note.author || 'User'} · {relativeTime(note.date)}</small>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Card 7: Data Source & Audit Trail */}
-            <div className="v2-drawer-data-card">
-              <div className="v2-drawer-card-head">
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ShieldCheck size={13} style={{ color: '#64748B' }} /> AUDIT TRAIL & SOURCE
-                </span>
-                <span style={{ color: '#64748B', fontSize: 10 }}>SCRAPER.CO.IN VERIFIED</span>
-              </div>
-              <div className="v2-drawer-card-body">
-                <div className="v2-data-row">
-                  <span className="v2-data-label">Source Engine</span>
-                  <span className="v2-data-val" style={{ color: '#475569', fontSize: 11 }}>
-                    {vendor.source || 'Google Local Knowledge Graph'}
-                  </span>
-                </div>
-                <div className="v2-data-row">
-                  <span className="v2-data-label">Scraped Timestamp</span>
-                  <span className="v2-data-val" style={{ color: '#475569', fontSize: 11 }}>
-                    {vendor.scrapedAt ? new Date(vendor.scrapedAt).toLocaleString() : 'Recent run'}
-                  </span>
-                </div>
-                <div className="v2-data-row">
-                  <span className="v2-data-label">Lead Unique ID</span>
-                  <span className="v2-data-val" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 10.5, color: '#64748B' }}>
-                    {vendor.id}
-                  </span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </aside>

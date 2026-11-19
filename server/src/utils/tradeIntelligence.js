@@ -1,24 +1,150 @@
 /**
  * tradeIntelligence.js
  *
- * Universal Trade & Service Typo Engine, Phonetic Skeleton Matcher,
+ * Universal Trade & Service Typo Engine, Safe Common-Word Guard,
  * and Universal Family-Aware Dynamic Expansion Catalog.
  *
- * Provides Google-grade precision and rich suggestions across ANY search:
- * - Photography, Weddings, Events
- * - Home Services, Repairs, Contractors
- * - Healthcare, Doctors, Clinics, Pharmacies
- * - Food, Restaurants, Bakeries, Catering
- * - Automotive, Garages, Showrooms, Spare Parts
- * - Beauty, Salons, Spas, Makeup
- * - Retail, Showrooms, Electronics, Jewellery
- * - Real Estate, Builders, Architects
- * - Education, Coaching, Institutes
- * - Professional Services, Lawyers, CAs, Agencies
- * - Industrial, B2B, Manufacturers, Wholesalers
+ * Provides Google-grade precision and rich suggestions across EVERY industry:
+ * - IT, Computers, Laptops, Mobiles, Electronics & CCTV
+ * - Photography, Studios, Weddings & Events
+ * - Home Services, Repairs, Contractors & Solar
+ * - Healthcare, Doctors, Clinics, Hospitals & Pharmacies
+ * - Food, Restaurants, Bakeries, Sweet Shops & Catering
+ * - Automotive, Garages, Showrooms, Tyres & Spare Parts
+ * - Beauty, Salons, Spas, Gyms & Wellness
+ * - Retail, Showrooms, Supermarkets, Clothing & Jewellery
+ * - Real Estate, Builders, Architects & Interior Designers
+ * - Education, Schools, Colleges, Coaching & Training Institutes
+ * - Professional Services, Lawyers, CAs, Agencies & Printing
+ * - Industrial, B2B, Manufacturers, Wholesalers & Logistics
+ * - Hospitality, Hotels, Resorts, Travel & Agriculture
  */
 
+/**
+ * Protected English & Commercial Common Word Whitelist.
+ * Words in this set are valid real-world business nouns and modifiers and MUST
+ * NEVER be mutated by fuzzy/phonetic typo correction (e.g. "shops" must NEVER
+ * become "spas", "stores" must NEVER become another word).
+ */
+const COMMON_WORD_WHITELIST = new Set([
+  // Generic commercial nouns
+  'shop', 'shops', 'store', 'stores', 'service', 'services', 'servicing',
+  'repair', 'repairs', 'repairing', 'dealer', 'dealers', 'dealership', 'dealerships',
+  'center', 'centers', 'centre', 'centres', 'hub', 'hubs', 'point', 'points',
+  'agency', 'agencies', 'agent', 'agents', 'distributor', 'distributors',
+  'wholesaler', 'wholesalers', 'wholesale', 'retail', 'retailer', 'retailers',
+  'supplier', 'suppliers', 'supply', 'supplies', 'stockist', 'stockists',
+  'manufacturer', 'manufacturers', 'manufacturing', 'factory', 'factories', 'mill', 'mills',
+  'trader', 'traders', 'trading', 'merchant', 'merchants', 'vendor', 'vendors',
+  'provider', 'providers', 'company', 'companies', 'firm', 'firms', 'enterprise', 'enterprises',
+  'market', 'bazaar', 'mart', 'supermarket', 'supermarkets', 'mall', 'plaza', 'complex',
+  'sale', 'sales', 'outlet', 'outlets', 'showroom', 'showrooms', 'emporium', 'depot',
+  'studio', 'studios', 'lab', 'labs', 'laboratory', 'workshop', 'workshops', 'works',
+  'contractor', 'contractors', 'consultant', 'consultants', 'consultancy', 'advisor', 'advisors',
+  'specialist', 'specialists', 'expert', 'experts', 'technician', 'technicians',
+  'rental', 'rentals', 'hire', 'leasing', 'booking', 'delivery', 'installation', 'maintenance',
+  'exporter', 'exporters', 'importer', 'importers', 'broker', 'brokers', 'builder', 'builders',
+  'best', 'top', 'near', 'local', 'good', 'cheap', 'affordable', 'luxury', 'premium', 'new', 'old', 'used', 'second', 'hand',
+
+  // IT, Computers, Mobiles & Electronics
+  'computer', 'computers', 'pc', 'pcs', 'desktop', 'desktops', 'laptop', 'laptops',
+  'hardware', 'software', 'networking', 'network', 'server', 'servers', 'data', 'cloud',
+  'digital', 'electronic', 'electronics', 'electrical', 'electricals', 'gadget', 'gadgets',
+  'mobile', 'mobiles', 'cellphone', 'cellphones', 'phone', 'phones', 'smartphone', 'smartphones',
+  'iphone', 'android', 'tablet', 'tablets', 'ipad', 'macbook', 'accessories', 'peripherals',
+  'cctv', 'security', 'camera', 'cameras', 'surveillance', 'biometric', 'intercom',
+  'printer', 'printers', 'scanner', 'scanners', 'toner', 'cartridge', 'refill', 'ups', 'inverter',
+  'gaming', 'monitor', 'monitors', 'keyboard', 'mouse', 'ssd', 'ram', 'motherboard', 'gpu',
+  'wifi', 'broadband', 'internet', 'cyber', 'cafe', 'coding', 'web', 'app', 'design',
+
+  // Healthcare & Medical
+  'clinic', 'clinics', 'hospital', 'hospitals', 'doctor', 'doctors', 'physician', 'surgeon',
+  'medical', 'medicine', 'medicines', 'pharmacy', 'pharmacies', 'chemist', 'chemists',
+  'dental', 'dentist', 'dentists', 'orthodontist', 'skin', 'eye', 'ent', 'heart', 'cardio',
+  'ortho', 'pediatric', 'gynec', 'diagnostic', 'diagnostics', 'pathology', 'scan', 'xray', 'mri',
+  'blood', 'physio', 'physiotherapy', 'ayurveda', 'ayurvedic', 'homeopathy', 'fertility', 'ivf',
+  'vet', 'veterinary', 'nursing', 'ambulance', 'optical', 'optician', 'glasses', 'hearing',
+
+  // Automotive & Transport
+  'car', 'cars', 'bike', 'bikes', 'scooter', 'scooters', 'motorcycle', 'motorcycles',
+  'auto', 'automobile', 'automobiles', 'motor', 'motors', 'vehicle', 'vehicles', 'truck', 'trucks',
+  'garage', 'garages', 'mechanic', 'mechanics', 'tyre', 'tyres', 'tire', 'tires', 'wheel', 'wheels',
+  'battery', 'batteries', 'parts', 'spares', 'spare', 'wash', 'detailing', 'alignment',
+  'driving', 'taxi', 'cab', 'cabs', 'travels', 'travel', 'transport', 'logistics', 'courier', 'cargo', 'freight', 'packers', 'movers',
+
+  // Home, Construction & Real Estate
+  'home', 'house', 'office', 'kitchen', 'modular', 'interior', 'interiors', 'exterior',
+  'construction', 'building', 'civil', 'architect', 'architects', 'real', 'estate', 'property', 'properties',
+  'flat', 'flats', 'apartment', 'apartments', 'villa', 'villas', 'plot', 'plots', 'land', 'rent',
+  'plumber', 'plumbers', 'plumbing', 'electrician', 'electricians', 'carpenter', 'carpenters', 'carpentry',
+  'painter', 'painters', 'painting', 'pest', 'control', 'cleaning', 'cleaners', 'maid',
+  'ac', 'air', 'cooler', 'fridge', 'refrigerator', 'washing', 'machine', 'microwave', 'tv', 'geyser',
+  'solar', 'panel', 'panels', 'borewell', 'water', 'purifier', 'ro', 'waterproofing', 'welding', 'welder', 'fabrication', 'fabricator',
+  'steel', 'iron', 'cement', 'sand', 'bricks', 'tiles', 'marble', 'granite', 'glass', 'plywood', 'timber', 'wood', 'paint', 'paints', 'sanitary', 'pipes', 'pipe', 'lift', 'elevator',
+
+  // Food, Hospitality & Events
+  'hotel', 'hotels', 'resort', 'resorts', 'lodge', 'lodges', 'hostel', 'pg', 'homestay',
+  'restaurant', 'restaurants', 'cafes', 'bakery', 'bakeries', 'cake', 'cakes', 'pastry',
+  'food', 'foods', 'sweet', 'sweets', 'mithai', 'snack', 'snacks', 'tea', 'coffee', 'juice', 'ice', 'cream',
+  'biryani', 'pizza', 'burger', 'tiffin', 'mess', 'dhaba', 'bar', 'pub', 'lounge', 'caterer', 'caterers', 'catering',
+  'wedding', 'weddings', 'marriage', 'event', 'events', 'party', 'banquet', 'hall', 'halls', 'venue', 'venues',
+  'mandap', 'mandapam', 'convention', 'function', 'lawn', 'tent', 'flower', 'flowers', 'florist',
+  'photo', 'photos', 'photographer', 'photographers', 'photography', 'video', 'videographer', 'videography', 'candid', 'drone', 'album',
+  'decorator', 'decorators', 'decoration', 'planner', 'planners', 'dj', 'music', 'band', 'sound', 'lighting',
+
+  // Retail, Fashion, Beauty & Wellness
+  'cloth', 'clothes', 'clothing', 'garment', 'garments', 'textile', 'textiles', 'fabric', 'fabrics',
+  'dress', 'dresses', 'saree', 'sarees', 'silk', 'cotton', 'suit', 'suits', 'mens', 'womens', 'kids', 'wear',
+  'boutique', 'boutiques', 'tailor', 'tailors', 'footwear', 'shoe', 'shoes', 'bag', 'bags', 'luggage',
+  'jewel', 'jewels', 'jeweller', 'jewellers', 'jewellery', 'jewelry', 'gold', 'silver', 'diamond', 'watch', 'watches',
+  'furniture', 'sofa', 'mattress', 'curtain', 'curtains', 'carpet', 'decor', 'handicraft',
+  'book', 'books', 'stationery', 'gift', 'gifts', 'toy', 'toys', 'sports', 'cycle', 'bicycle',
+  'grocery', 'groceries', 'kirana', 'provision', 'organic', 'fruit', 'fruits', 'vegetable', 'vegetables', 'dairy', 'milk', 'meat', 'fish', 'chicken',
+  'gym', 'gyms', 'fitness', 'yoga', 'pilates', 'zumba', 'swimming', 'spa', 'spas', 'salon', 'salons', 'parlour', 'parlor', 'makeup', 'beauty', 'barber', 'hair', 'nail', 'tattoo',
+
+  // Education, Professional, Industrial & Agriculture
+  'school', 'schools', 'college', 'colleges', 'university', 'coaching', 'tuition', 'tutor', 'tutors',
+  'academy', 'institute', 'institutes', 'training', 'classes', 'class', 'preschool', 'kindergarten', 'play', 'montessori', 'dance', 'art', 'ielts', 'abroad', 'visa',
+  'lawyer', 'lawyers', 'advocate', 'advocates', 'legal', 'notary', 'chartered', 'accountant', 'accountants', 'ca', 'tax', 'gst', 'audit',
+  'insurance', 'loan', 'loans', 'finance', 'financial', 'bank', 'investment', 'marketing', 'seo', 'advertising', 'media', 'pr', 'hr', 'recruitment', 'placement', 'staffing',
+  'printing', 'print', 'press', 'flex', 'banner', 'signage', 'board', 'packaging', 'box', 'boxes', 'carton', 'label', 'labels',
+  'machinery', 'machines', 'tools', 'equipment', 'industrial', 'chemical', 'chemicals', 'plastic', 'plastics', 'rubber', 'paper', 'metal', 'cnc', 'laser', 'cutting', 'hydraulic', 'pump', 'pumps', 'generator', 'generators', 'boiler', 'valve', 'valves', 'bearing', 'bearings', 'cable', 'cables', 'wire', 'wires',
+  'agriculture', 'agricultural', 'agri', 'seed', 'seeds', 'fertilizer', 'fertilizers', 'pesticide', 'pesticides', 'tractor', 'tractors', 'nursery', 'nurseries', 'plant', 'plants', 'garden', 'farm', 'dairy', 'poultry', 'cold', 'storage', 'warehouse',
+  'pet', 'pets', 'dog', 'cat', 'aquarium', 'grooming', 'laundry', 'dry', 'cleaners', 'tailoring', 'astrologer', 'pandit', 'temple'
+]);
+
 const TRADE_TYPOS_MAP = new Map([
+  // IT, Computers, Mobiles & Electronics
+  ['computr', 'computer'],
+  ['compter', 'computer'],
+  ['comptr', 'computer'],
+  ['compuetr', 'computer'],
+  ['computrs', 'computers'],
+  ['computar', 'computer'],
+  ['laptp', 'laptop'],
+  ['lapotp', 'laptop'],
+  ['laptap', 'laptop'],
+  ['laptps', 'laptops'],
+  ['desktp', 'desktop'],
+  ['moble', 'mobile'],
+  ['mobail', 'mobile'],
+  ['moblie', 'mobile'],
+  ['mobils', 'mobiles'],
+  ['smartphne', 'smartphone'],
+  ['electroics', 'electronics'],
+  ['electrnics', 'electronics'],
+  ['elctronics', 'electronics'],
+  ['hardwre', 'hardware'],
+  ['hardwar', 'hardware'],
+  ['softwre', 'software'],
+  ['softwar', 'software'],
+  ['printr', 'printer'],
+  ['prntrs', 'printers'],
+  ['acessories', 'accessories'],
+  ['accesories', 'accessories'],
+  ['netwrking', 'networking'],
+  ['cc tv', 'cctv'],
+
   // Photography & Videography
   ['phtgaphers', 'photographers'],
   ['phtgapher', 'photographer'],
@@ -31,7 +157,6 @@ const TRADE_TYPOS_MAP = new Map([
   ['photgraphy', 'photography'],
   ['photograper', 'photographer'],
   ['photogapers', 'photographers'],
-  ['photograper', 'photographer'],
   ['photogaper', 'photographer'],
   ['photogrfy', 'photography'],
   ['photogrphy', 'photography'],
@@ -75,7 +200,6 @@ const TRADE_TYPOS_MAP = new Map([
   ['decarators', 'decorators'],
   ['decors', 'decorators'],
   ['flwer', 'flower'],
-  ['florist', 'flower decorators'],
 
   // Catering & Food
   ['caterors', 'caterers'],
@@ -91,7 +215,6 @@ const TRADE_TYPOS_MAP = new Map([
   ['bakary', 'bakery'],
   ['backery', 'bakery'],
   ['sweetshop', 'sweet shop'],
-  ['biryani', 'biryani'],
   ['biriyani', 'biryani'],
   ['biryany', 'biryani'],
 
@@ -100,7 +223,6 @@ const TRADE_TYPOS_MAP = new Map([
   ['plubmer', 'plumber'],
   ['plambur', 'plumber'],
   ['plambr', 'plumber'],
-  ['plumbers', 'plumbers'],
   ['electrition', 'electrician'],
   ['electrican', 'electrician'],
   ['electrisian', 'electrician'],
@@ -119,21 +241,19 @@ const TRADE_TYPOS_MAP = new Map([
   ['servis', 'service'],
   ['mecanic', 'mechanic'],
   ['mechnic', 'mechanic'],
-  ['ac repair', 'ac repair'],
   ['acrepair', 'ac repair'],
   ['interier', 'interior design'],
-  ['interiors', 'interior designers'],
+  ['constuction', 'construction'],
+  ['archtect', 'architect'],
+  ['slar', 'solar'],
 
   // Beauty, Salons & Fashion
   ['make up', 'makeup'],
   ['mekeup', 'makeup'],
   ['make-up', 'makeup'],
-  ['beautician', 'beautician'],
   ['beatition', 'beautician'],
-  ['beauty parlour', 'beauty parlour'],
   ['beuty parlour', 'beauty parlour'],
   ['beuty parlor', 'beauty parlour'],
-  ['parlor', 'parlour'],
   ['saloon', 'salon'],
   ['mehendi', 'mehendi artist'],
   ['mehandi', 'mehendi artist'],
@@ -145,29 +265,42 @@ const TRADE_TYPOS_MAP = new Map([
   ['jewellary', 'jewellers'],
   ['jwellery', 'jewellers'],
   ['tailer', 'tailor'],
-  ['taylor', 'tailor'],
 
   // Healthcare
   ['hospitel', 'hospital'],
   ['hosptal', 'hospital'],
+  ['hospitl', 'hospital'],
   ['clinc', 'clinic'],
+  ['clnic', 'clinic'],
   ['dentel', 'dental'],
+  ['dentst', 'dentist'],
   ['medicl', 'medical'],
   ['pharmcy', 'pharmacy'],
+  ['phrmacy', 'pharmacy'],
 
-  // Auto
+  // Auto & Logistics
   ['garag', 'garage'],
   ['garadge', 'garage'],
   ['automobil', 'automobile'],
   ['showrom', 'showroom'],
-  ['tyres', 'tyre shops'],
+  ['shwroom', 'showroom'],
+  ['trvels', 'travels'],
+  ['logistcs', 'logistics'],
 
-  // Professional
+  // Professional & Industrial
   ['lawer', 'lawyer'],
   ['adovate', 'advocate'],
   ['advokat', 'advocate'],
   ['acountant', 'accountant'],
-  ['priting', 'printing']
+  ['priting', 'printing'],
+  ['wholsaler', 'wholesaler'],
+  ['manfacturer', 'manufacturer'],
+  ['fabrcator', 'fabricator'],
+  ['deler', 'dealer'],
+  ['delers', 'dealers'],
+  ['delear', 'dealer'],
+  ['delears', 'dealers'],
+  ['shps', 'shops']
 ]);
 
 /**
@@ -204,49 +337,58 @@ function levenshtein(a, b) {
 }
 
 /**
- * Canonical targets across all 12 industries
+ * Canonical single-word targets for safe high-precision spelling correction.
+ * Only long or unmistakable trade terms are included; short common words are guarded.
  */
 const CANONICAL_TRADE_TARGETS = [
   'photographers', 'photographer', 'photography', 'videographers', 'videographer',
-  'wedding venues', 'banquet halls', 'caterers', 'catering', 'decorators', 'decoration',
-  'mandap services', 'tent house', 'bridal makeup', 'mehendi artists',
+  'computer', 'computers', 'laptop', 'laptops', 'electronics', 'hardware', 'software',
+  'caterers', 'catering', 'decorators', 'decoration', 'banquet', 'mandap',
   'plumbers', 'plumber', 'electricians', 'electrician', 'carpenters', 'carpenter',
-  'painters', 'painter', 'pest control', 'ac repair', 'appliance repair',
-  'packers and movers', 'interior designers', 'modular kitchen', 'borewell services',
-  'clinics', 'hospitals', 'dentists', 'pharmacies', 'diagnostic labs',
-  'restaurants', 'cafes', 'bakeries', 'sweet shops', 'biryani',
-  'salons', 'spas', 'makeup artists', 'boutiques', 'jewellers',
-  'car showrooms', 'bike showrooms', 'car service', 'garages', 'tyre shops',
-  'real estate agents', 'builders', 'architects', 'schools', 'coaching centres',
-  'lawyers', 'advocates', 'chartered accountants', 'printing services',
-  'manufacturers', 'wholesalers', 'distributors', 'hardware stores'
+  'painters', 'painter', 'interior', 'architects', 'builders', 'contractors',
+  'hospitals', 'clinics', 'dentists', 'pharmacies', 'diagnostics', 'physiotherapy',
+  'restaurants', 'bakeries', 'boutiques', 'jewellers', 'supermarkets', 'furniture',
+  'automobiles', 'garages', 'showrooms', 'logistics', 'transport', 'couriers',
+  'coaching', 'colleges', 'schools', 'institutes', 'universities',
+  'lawyers', 'advocates', 'accountants', 'printing', 'marketing',
+  'manufacturers', 'wholesalers', 'distributors', 'fabricators', 'suppliers'
 ];
 
 /**
- * Adaptive fuzzy trade check: returns corrected canonical trade or original token
+ * Safe adaptive fuzzy trade check:
+ * 1. NEVER mutates valid English / commercial words in COMMON_WORD_WHITELIST.
+ * 2. Applies exact curated typo fixes from TRADE_TYPOS_MAP.
+ * 3. Only runs strict Levenshtein matching for genuinely misspelled words (>= 5 chars, same starting letter).
  */
 function correctTradeTypo(token) {
   if (!token || typeof token !== 'string') return token;
   const raw = token.trim().toLowerCase();
   if (raw.length < 3) return token;
 
-  // Direct map check
+  // Guard 1: NEVER mutate valid English or commercial words!
+  if (COMMON_WORD_WHITELIST.has(raw)) {
+    return token;
+  }
+
+  // Guard 2: Direct curated typo map check
   if (TRADE_TYPOS_MAP.has(raw)) {
     return TRADE_TYPOS_MAP.get(raw);
   }
 
-  // Singular/plural check in map
+  // Singular/plural check in curated typo map
   if (raw.endsWith('s') && TRADE_TYPOS_MAP.has(raw.slice(0, -1))) {
-    return TRADE_TYPOS_MAP.get(raw.slice(0, -1)) + 's';
+    const base = TRADE_TYPOS_MAP.get(raw.slice(0, -1));
+    return base.endsWith('s') ? base : `${base}s`;
   }
 
-  // Consonant skeleton check against known keys
+  // Guard 3: Consonant skeleton check strictly against curated typos of length >= 6
   const skel = consonantSkeleton(raw);
-  if (skel.length >= 3) {
+  if (raw.length >= 6 && skel.length >= 4) {
     for (const [key, replacement] of TRADE_TYPOS_MAP.entries()) {
+      if (raw[0] !== replacement[0] && raw[0] !== key[0]) continue;
       const keySkel = consonantSkeleton(key);
       const repSkel = consonantSkeleton(replacement);
-      if (skel === keySkel || skel === repSkel || levenshtein(skel, repSkel) <= (skel.length >= 6 ? 1 : 0)) {
+      if (skel === keySkel || skel === repSkel) {
         if (levenshtein(raw, replacement) <= (raw.length >= 8 ? 3 : 2)) {
           return replacement;
         }
@@ -254,14 +396,12 @@ function correctTradeTypo(token) {
     }
   }
 
-  // Levenshtein and skeleton comparison against all canonical targets
-  for (const target of CANONICAL_TRADE_TARGETS) {
-    const maxDist = target.length >= 10 ? 3 : (target.length >= 6 ? 2 : 1);
-    if (Math.abs(raw.length - target.length) <= 3 && levenshtein(raw, target) <= maxDist) {
-      return target;
-    }
-    if (skel.length >= 4 && levenshtein(skel, consonantSkeleton(target)) <= 1) {
-      if (levenshtein(raw, target) <= 3) {
+  // Guard 4: Strict Levenshtein check against canonical targets (never short words, same first letter)
+  if (raw.length >= 5) {
+    for (const target of CANONICAL_TRADE_TARGETS) {
+      if (raw[0] !== target[0]) continue;
+      const maxDist = target.length >= 10 ? 2 : 1;
+      if (Math.abs(raw.length - target.length) <= maxDist && levenshtein(raw, target) <= maxDist) {
         return target;
       }
     }
@@ -271,7 +411,8 @@ function correctTradeTypo(token) {
 }
 
 /**
- * Normalizes all trade typos across a full query string or category fragment
+ * Normalizes genuine trade typos across a full query string or category fragment
+ * while keeping valid commercial nouns intact.
  */
 function normalizeTradePhrase(phrase) {
   if (!phrase || typeof phrase !== 'string') return phrase;
@@ -281,222 +422,326 @@ function normalizeTradePhrase(phrase) {
 }
 
 /**
- * Checks if a query is a service or trade (even with typos)
+ * Checks if a query represents any known local business, shop, service, supplier, or trade
  */
 function isKnownServiceOrTypo(text) {
   if (!text) return false;
   const normalized = normalizeTradePhrase(text).toLowerCase();
-  const serviceStemRegex = /(repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|doctor|clinic|hospital|salon|spa|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|gym|fitness|travel|transport|logistic|packers|movers|interior|architect|security|event|restaurant|cafe|dhaba|bakery|hotel|mandap|auditorium|studio|cameraman|lawyer|advocate|dentist|pharmacy|garage|boutique|jeweller|biryani)/i;
+  const serviceStemRegex = /(shop|store|dealer|showroom|computer|laptop|mobile|electronic|hardware|software|cctv|printer|repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|school|college|academy|institute|doctor|clinic|hospital|dental|dentist|pharmacy|diagnostic|salon|spa|gym|fitness|yoga|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|travel|transport|logistic|courier|packers|movers|interior|architect|builder|contractor|real estate|property|security|event|restaurant|cafe|dhaba|bakery|sweet|hotel|resort|mandap|auditorium|studio|cameraman|lawyer|advocate|accountant|ca\b|tax|gst|garage|tyre|boutique|jeweller|cloth|garment|textile|furniture|supermarket|grocery|solar|borewell|fabricat|manufactur|wholesal|distribut|supplier|agency|marketing|print|pet|vet|agri|nursery|biryani)/i;
   return serviceStemRegex.test(normalized) || serviceStemRegex.test(text.toLowerCase());
 }
 
 /**
- * Universal Rich Domain Expansions across all Indian services, trades and industries.
- * Generates natural, human-curated, professional suggestions for ANY search.
- * Never outputs robotic phrases like "Senior Photographers Consultants" or "Plumbers Firms".
+ * Universal Rich Domain Expansions across ALL 25+ global commercial industries.
+ * Returns normalized suggestion rows with consistent `type: 'category'` & `value`.
  */
 function getUniversalRichExpansions(categoryLabel, family = 'generic', location = '') {
   if (!categoryLabel) return [];
   let cleanLabel = categoryLabel.trim();
-  // Strip trailing "in <location>" if already attached
-  cleanLabel = cleanLabel.replace(/\s+in\s+.*$/i, '').trim();
+  cleanLabel = cleanLabel.replace(/\s+(?:in|near|around|at)\s+.*$/i, '').trim();
+  if (!cleanLabel) return [];
   const locSuffix = location ? ` in ${location}` : '';
   const norm = cleanLabel.toLowerCase();
 
-  const expansions = [];
-
-  // 1. Photography & Videography Studios
-  if (/photograph|studio|cameraman|videograph|photoshoot|candid/i.test(norm)) {
-    expansions.push({ label: `Photographers${locSuffix}`, subtitle: 'Verified Professional Photographers', detail: 'VERIFIED' });
-    expansions.push({ label: `Top Rated Wedding Photographers${locSuffix}`, subtitle: 'Weddings, Receptions & Matrimony Specialists', detail: 'WEDDING' });
-    expansions.push({ label: `Candid Photographers${locSuffix}`, subtitle: 'Natural Candid Celebrations & Events', detail: 'CANDID' });
-    expansions.push({ label: `Top Rated Photography Studios${locSuffix}`, subtitle: 'Portraits, Passport & Indoor Shoot Labs', detail: 'STUDIOS' });
-    expansions.push({ label: `Product & Commercial Photographers${locSuffix}`, subtitle: 'E-commerce, Catalogue & Advertising', detail: 'COMMERCIAL' });
-    expansions.push({ label: `Pre-Wedding & Drone Photographers${locSuffix}`, subtitle: 'Cinematic 4K Aerial Coverage & Outdoor Shoots', detail: 'CINEMA' });
-    return expansions;
-  }
-
-  // 2. Catering & Food Services
-  if (/cater/i.test(norm)) {
-    expansions.push({ label: `Caterers${locSuffix}`, subtitle: 'Professional Food Catering for all Occasions', detail: 'VERIFIED' });
-    expansions.push({ label: `Top Rated Wedding Caterers${locSuffix}`, subtitle: 'Grand Wedding Feasts & Reception Menus', detail: 'WEDDING' });
-    expansions.push({ label: `Pure Veg Traditional Caterers${locSuffix}`, subtitle: 'Brahmin & Pure Vegetarian Traditional Menus', detail: 'PURE VEG' });
-    expansions.push({ label: `Non-Veg & Biryani Caterers${locSuffix}`, subtitle: 'Authentic Hyderabadi & Mughlai Biryani Catering', detail: 'SPECIALITY' });
-    expansions.push({ label: `Event & Party Food Caterers${locSuffix}`, subtitle: 'Birthdays, Anniversaries & Corporate Buffets', detail: 'BUFFET' });
-    return expansions;
-  }
-
-  // 3. Venues, Marriage Halls & Mandaps
-  if (/venue|hall|mandap|kalyana|banquet|convention/i.test(norm)) {
-    expansions.push({ label: `Wedding Venues${locSuffix}`, subtitle: 'Marriage Halls, Lawns & Convention Centers', detail: 'VERIFIED' });
-    expansions.push({ label: `AC Function Halls & Convention Centres${locSuffix}`, subtitle: 'Spacious Air-Conditioned Halls with Dining', detail: 'AC HALLS' });
-    expansions.push({ label: `Kalyana Mandapams${locSuffix}`, subtitle: 'Traditional Ritual Mandapams & Choultries', detail: 'HERITAGE' });
-    expansions.push({ label: `Banquet Halls for Receptions${locSuffix}`, subtitle: 'Modern Banquets for Sangeet & Receptions', detail: 'BANQUETS' });
-    return expansions;
-  }
-
-  // 4. Decorators & Floral Design
-  if (/decor|florist|flower|stage|balloon/i.test(norm)) {
-    expansions.push({ label: `Wedding Decorators${locSuffix}`, subtitle: 'Full Venue Styling & Event Planning', detail: 'VERIFIED' });
-    expansions.push({ label: `Stage & Mandap Decorators${locSuffix}`, subtitle: 'Grand Reception Stages & Floral Backdrops', detail: 'WEDDING' });
-    expansions.push({ label: `Fresh Flower Decorators${locSuffix}`, subtitle: 'Temple & Traditional Floral Garland Decor', detail: 'FLORAL' });
-    expansions.push({ label: `Theme & Balloon Event Decorators${locSuffix}`, subtitle: 'Birthdays, Haldi & Sangeet Theme Decors', detail: 'THEME' });
-    return expansions;
-  }
-
-  // 5. Plumbing & Water Works
-  if (/plumb|pipe|tap|drain/i.test(norm)) {
-    expansions.push({ label: `Plumbers${locSuffix}`, subtitle: 'Doorstep Plumbing Repair & Installation', detail: 'VERIFIED' });
-    expansions.push({ label: `24/7 Emergency Plumber Services${locSuffix}`, subtitle: 'Immediate Leakage & Blockage Resolution', detail: 'EMERGENCY' });
-    expansions.push({ label: `Pipe Leakage & Tap Repair Plumbers${locSuffix}`, subtitle: 'Bathroom Fittings & Water Tank Work', detail: 'REPAIR' });
-    expansions.push({ label: `Licensed Plumbing Contractors${locSuffix}`, subtitle: 'New House Piping & Commercial Drainage', detail: 'CONTRACTORS' });
-    return expansions;
-  }
-
-  // 6. Electrical & Inverter Works
-  if (/electric|wiring|inverter|mcb/i.test(norm)) {
-    expansions.push({ label: `Electricians${locSuffix}`, subtitle: 'Certified Household & Commercial Electricians', detail: 'VERIFIED' });
-    expansions.push({ label: `24/7 Emergency Electrician Services${locSuffix}`, subtitle: 'Short Circuits, Tripped MCB & Power Faults', detail: 'EMERGENCY' });
-    expansions.push({ label: `House Wiring & Inverter Electricians${locSuffix}`, subtitle: 'Complete Home Electrical Wiring & Solar Setup', detail: 'WIRING' });
-    expansions.push({ label: `Licensed Electrical Contractors${locSuffix}`, subtitle: 'Industrial & Multi-Storey Electrical Work', detail: 'CONTRACTORS' });
-    return expansions;
-  }
-
-  // 7. Carpentry & Furniture
-  if (/carpent|wood|furniture/i.test(norm)) {
-    expansions.push({ label: `Carpenters${locSuffix}`, subtitle: 'Expert Woodwork & Furniture Artisans', detail: 'VERIFIED' });
-    expansions.push({ label: `Furniture Repair & Woodwork Carpenters${locSuffix}`, subtitle: 'Door Locks, Tables & Sofa Framing Repair', detail: 'REPAIR' });
-    expansions.push({ label: `Modular Kitchen & Wardrobe Carpenters${locSuffix}`, subtitle: 'Custom Plywood & Modular Storage Fittings', detail: 'INTERIOR' });
-    return expansions;
-  }
-
-  // 8. Painting & Waterproofing
-  if (/paint|waterproof/i.test(norm)) {
-    expansions.push({ label: `Painters${locSuffix}`, subtitle: 'Interior & Exterior House Painting', detail: 'VERIFIED' });
-    expansions.push({ label: `House & Wall Painting Contractors${locSuffix}`, subtitle: 'Asian Paints / Berger Certified Painters', detail: 'POPULAR' });
-    expansions.push({ label: `Waterproofing & Damp Proofing Specialists${locSuffix}`, subtitle: 'Terrace & Wall Seepage Solutions', detail: 'SPECIALISTS' });
-    return expansions;
-  }
-
-  // 9. AC & Appliance Repair
-  if (/ac repair|air condition|refrigerator|fridge|washing machine/i.test(norm)) {
-    expansions.push({ label: `AC Repair Services${locSuffix}`, subtitle: 'All Brand Air Conditioners Repair & Gas Refill', detail: 'VERIFIED' });
-    expansions.push({ label: `Doorstep AC Servicing & Installation${locSuffix}`, subtitle: 'Deep Jet Cleaning & Copper Piping Fitting', detail: 'FAST DOORSTEP' });
-    expansions.push({ label: `Home Appliance Repair Technicians${locSuffix}`, subtitle: 'Fridge, Washing Machine & Microwave Repairs', detail: 'APPLIANCES' });
-    return expansions;
-  }
-
-  // 10. Salons, Makeup & Beauty
-  if (/salon|parlour|parlor|spa|makeup|mehendi|beautician/i.test(norm)) {
-    expansions.push({ label: `Salons & Beauty Parlours${locSuffix}`, subtitle: 'Haircuts, Styling & Facials', detail: 'VERIFIED' });
-    expansions.push({ label: `Bridal Makeup Artists${locSuffix}`, subtitle: 'HD & Airbrush Bridal Makeovers', detail: 'BRIDAL' });
-    expansions.push({ label: `Professional Mehendi Artists${locSuffix}`, subtitle: 'Arabic, Bridal & Marwari Henna Art', detail: 'MEHENDI' });
-    expansions.push({ label: `Luxury Spas & Wellness Centres${locSuffix}`, subtitle: 'Ayurvedic Massage & Aroma Therapies', detail: 'WELLNESS' });
-    return expansions;
-  }
-
-  // 11. Healthcare, Clinics & Doctors
-  if (/clinic|doctor|hospital|dentist|pharmacy|diagnostic|lab/i.test(norm)) {
-    expansions.push({ label: `Clinics & Consultation Centres${locSuffix}`, subtitle: 'Experienced Senior Doctors & Physicians', detail: 'VERIFIED' });
-    expansions.push({ label: `Top Rated Multi-Speciality Hospitals${locSuffix}`, subtitle: '24/7 Emergency Care, ICU & Surgeries', detail: 'HOSPITALS' });
-    expansions.push({ label: `Dentists & Dental Care Clinics${locSuffix}`, subtitle: 'Root Canals, Braces & Teeth Cleaning', detail: 'DENTAL' });
-    expansions.push({ label: `24-Hour Diagnostic Labs & Scan Centres${locSuffix}`, subtitle: 'Blood Tests, X-Ray & MRI Scans', detail: 'LABS' });
-    return expansions;
-  }
-
-  // 12. Restaurants & Dining
-  if (/restaurant|cafe|dining|biryani|bakery|food/i.test(norm)) {
-    expansions.push({ label: `Restaurants${locSuffix}`, subtitle: 'Top Rated Dine-in & Food Spots', detail: 'VERIFIED' });
-    expansions.push({ label: `Top Rated Family Dining Restaurants${locSuffix}`, subtitle: 'AC Family Rooms & Multi-Cuisine Menus', detail: 'FAMILY' });
-    expansions.push({ label: `Authentic Biryani & Non-Veg Spots${locSuffix}`, subtitle: 'Famous Dum Biryani & Kebabs', detail: 'POPULAR' });
-    expansions.push({ label: `Pure Vegetarian Traditional Restaurants${locSuffix}`, subtitle: 'South & North Indian Pure Veg Thalis', detail: 'PURE VEG' });
-    expansions.push({ label: `Bakeries, Pastries & Cake Shops${locSuffix}`, subtitle: 'Custom Birthday Cakes & Fresh Snacks', detail: 'BAKERY' });
-    return expansions;
-  }
-
-  // 13. Automotive & Garages
-  if (/car service|garage|automobile|bike service|mechanic|tyre/i.test(norm)) {
-    expansions.push({ label: `Car Service Centres & Garages${locSuffix}`, subtitle: 'Periodic Maintenance & Engine Repairs', detail: 'VERIFIED' });
-    expansions.push({ label: `Two Wheeler Bike Service Centres${locSuffix}`, subtitle: 'Motorcycle & Scooter Repairs & Tuning', detail: 'BIKE SERVICE' });
-    expansions.push({ label: `Car Washing & Detailing Studios${locSuffix}`, subtitle: 'Ceramic Coating & Interior Deep Wash', detail: 'DETAILING' });
-    expansions.push({ label: `Automobile Spare Parts Shops${locSuffix}`, subtitle: 'Genuine OEM Spares, Batteries & Tyres', detail: 'SPARES' });
-    return expansions;
-  }
-
-  // 14. Lawyers & Legal Advisors
-  if (/lawyer|advocate|legal/i.test(norm)) {
-    expansions.push({ label: `Lawyers & Legal Advocates${locSuffix}`, subtitle: 'High Court & District Court Advocates', detail: 'VERIFIED' });
-    expansions.push({ label: `Civil & Property Dispute Lawyers${locSuffix}`, subtitle: 'Land Documentation & Registration Law', detail: 'PROPERTY LAW' });
-    expansions.push({ label: `Corporate & Business Legal Advisors${locSuffix}`, subtitle: 'Contracts, Company Law & Compliance', detail: 'CORPORATE' });
-    return expansions;
-  }
-
-  // 15. Chartered Accountants & Tax Consultants
-  if (/ca\b|chartered accountant|tax consultant|gst|accountant/i.test(norm)) {
-    expansions.push({ label: `Chartered Accountants (CA)${locSuffix}`, subtitle: 'Audits, Financial Advisory & Compliance', detail: 'VERIFIED' });
-    expansions.push({ label: `GST & Income Tax Return Consultants${locSuffix}`, subtitle: 'ITR Filing, GST Registration & Auditing', detail: 'TAX' });
-    expansions.push({ label: `Company Registration & Startup Consultants${locSuffix}`, subtitle: 'Pvt Ltd & LLP Registrations', detail: 'BUSINESS' });
-    return expansions;
-  }
-
-  // 16. Real Estate & Builders
-  if (/real estate|property|builder|architect/i.test(norm)) {
-    expansions.push({ label: `Real Estate Agents & Property Dealers${locSuffix}`, subtitle: 'Plots, Flats & Commercial Lands', detail: 'VERIFIED' });
-    expansions.push({ label: `Building Contractors & Civil Engineers${locSuffix}`, subtitle: 'Home Construction & Turnkey Projects', detail: 'BUILDERS' });
-    expansions.push({ label: `Architects & Interior Designers${locSuffix}`, subtitle: '3D Elevation & Modern Floor Plans', detail: 'DESIGN' });
-    return expansions;
-  }
-
-  // 17. Packers & Movers
-  if (/packer|mover|shifting/i.test(norm)) {
-    expansions.push({ label: `Packers and Movers${locSuffix}`, subtitle: 'Safe Door-to-Door Household Relocation', detail: 'VERIFIED' });
-    expansions.push({ label: `Inter-City Shifting & Vehicle Transport${locSuffix}`, subtitle: 'All-India Container Transportation', detail: 'LONG DISTANCE' });
-    return expansions;
-  }
-
-  // 18. Printing & Digital Labs
-  if (/print|flex|album|dtp/i.test(norm)) {
-    expansions.push({ label: `Printing Services & Digital Press${locSuffix}`, subtitle: 'Visiting Cards, Brochures & Books', detail: 'VERIFIED' });
-    expansions.push({ label: `Flex & Banner Printing Shops${locSuffix}`, subtitle: 'Large Format Hoardings & Standees', detail: 'OUTDOOR' });
-    expansions.push({ label: `Wedding Card & Invitation Printing Press${locSuffix}`, subtitle: 'Embossed Cards & Golden Foil Prints', detail: 'INVITATIONS' });
-    return expansions;
-  }
-
-  // 19. Retail & Consumer Showrooms
-  if (family === 'retail' || /store|shop|showroom|boutique/i.test(norm)) {
-    const baseRetail = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|outlets|outlet)$/i, '').trim() || cleanLabel;
-    expansions.push({ label: `Authorised ${baseRetail} Showrooms${locSuffix}`, subtitle: 'Official Brand Dealers with Warranty', detail: 'SHOWROOM' });
-    expansions.push({ label: `Top Rated ${baseRetail} Stores${locSuffix}`, subtitle: 'Best Customer Reviews & Discounts', detail: 'TOP RATED' });
-    expansions.push({ label: `Wholesale ${baseRetail} Outlets${locSuffix}`, subtitle: 'Bulk Deals & Trade Pricing', detail: 'WHOLESALE' });
-    return expansions;
-  }
-
-  // 20. Industrial & Manufacturers
-  if (family === 'industrial' || /manufactur|supplier|wholesal|factory/i.test(norm)) {
-    expansions.push({ label: `${cleanLabel} Manufacturers${locSuffix}`, subtitle: 'Direct OEM & Factory Production', detail: 'FACTORIES' });
-    expansions.push({ label: `Wholesale ${cleanLabel} Suppliers${locSuffix}`, subtitle: 'Bulk Material Distributors & Stockists', detail: 'DISTRIBUTORS' });
-    return expansions;
-  }
-
-  // 21. Natural Universal Fallback for any other custom service
-  expansions.push({ label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Top Rated ${cleanLabel}`, detail: 'VERIFIED' });
-  expansions.push({ label: `Top Rated ${cleanLabel}${locSuffix}`, subtitle: `Highest Customer Ratings in ${location || 'the Area'}`, detail: 'POPULAR' });
-  expansions.push({ label: `Local ${cleanLabel} Services${locSuffix}`, subtitle: `Direct Verified Contact Numbers & Quotes`, detail: 'LOCAL' });
-
-  return expansions.map(item => ({
+  const formatRows = (rows, resolvedFamily = family) => rows.map(item => ({
     type: 'category',
-    value: item.label,
+    value: item.baseValue || item.label.replace(/\s+in\s+.*$/i, '').trim(),
     label: item.label,
     subtitle: item.subtitle,
     detail: item.detail,
-    family: family || 'generic',
-    familyLabel: item.detail,
-    corrected: true,
+    family: resolvedFamily || 'generic',
+    familyLabel: item.familyLabel || item.detail,
+    corrected: false,
     matched: cleanLabel
   }));
+
+  // 1. IT, Computers, Laptops & Peripherals
+  if (/\b(?:computer|computers|laptop|laptops|desktop|pc|gaming pc|computer hardware|it hardware|peripherals)\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Computer Shops & Laptop Dealers', label: `Computer Shops & Laptop Dealers${locSuffix}`, subtitle: 'Desktops, Laptops, Accessories & Multi-Brand Stores', detail: 'IT & COMPUTERS' },
+      { baseValue: 'Laptop Repair & Service Centres', label: `Laptop Repair & Service Centres${locSuffix}`, subtitle: 'Chip-Level Repair, Screen Replacement & Upgrades', detail: 'REPAIR & SERVICE' },
+      { baseValue: 'Computer Hardware & Peripherals', label: `Computer Hardware & Peripherals${locSuffix}`, subtitle: 'Monitors, SSDs, RAM, Motherboards & Accessories', detail: 'HARDWARE' },
+      { baseValue: 'Gaming PC & Custom Builders', label: `Gaming PC & Custom Builders${locSuffix}`, subtitle: 'Custom Workstations, GPUs & High-Performance Rigs', detail: 'CUSTOM PC' },
+      { baseValue: 'Second Hand Laptop & PC Dealers', label: `Second Hand Laptop & PC Dealers${locSuffix}`, subtitle: 'Refurbished Business Laptops & Bulk Office PCs', detail: 'REFURBISHED' }
+    ], 'technology');
+  }
+
+  // 2. Mobile Phones & Smartphones
+  if (/\b(?:mobile|mobiles|smartphone|smartphones|iphone|cellphone|phone shop|phone repair|tablet)\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Mobile Phone Shops & Showrooms', label: `Mobile Phone Shops & Showrooms${locSuffix}`, subtitle: 'Multi-Brand Smartphones, Tablets & EMI Stores', detail: 'MOBILE STORES' },
+      { baseValue: 'Mobile Repair & Service Centres', label: `Mobile Repair & Service Centres${locSuffix}`, subtitle: 'Screen Replacement, Battery & Motherboard Repair', detail: 'REPAIR' },
+      { baseValue: 'Mobile Accessories & Wholesale', label: `Mobile Accessories & Wholesale${locSuffix}`, subtitle: 'Chargers, Cases, Tempered Glass & Audio Gear', detail: 'ACCESSORIES' },
+      { baseValue: 'Second Hand & Refurbished Mobiles', label: `Second Hand & Refurbished Mobiles${locSuffix}`, subtitle: 'Pre-Owned Verified Smartphones & Exchange', detail: 'PRE-OWNED' }
+    ], 'technology');
+  }
+
+  // 3. CCTV, Security & Surveillance
+  if (/\b(?:cctv|security camera|surveillance|biometric|intercom|access control)\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'CCTV Camera Dealers & Installation', label: `CCTV Camera Dealers & Installation${locSuffix}`, subtitle: 'HD/IP Security Cameras, DVR/NVR & Home Setup', detail: 'SECURITY' },
+      { baseValue: 'Biometric & Access Control Systems', label: `Biometric & Access Control Systems${locSuffix}`, subtitle: 'Office Attendance, Video Door Phones & Smart Locks', detail: 'COMMERCIAL' },
+      { baseValue: 'CCTV Repair & AMC Services', label: `CCTV Repair & AMC Services${locSuffix}`, subtitle: 'Annual Maintenance, Wiring & Remote View Setup', detail: 'MAINTENANCE' }
+    ], 'technology');
+  }
+
+  // 4. Printers, Networking & Software / IT Companies
+  if (/\b(?:printer|scanner|toner|cartridge|networking|software|web design|web dev|app dev|it company|it services|digital marketing|seo)\b/i.test(norm)) {
+    if (/printer|scanner|toner|cartridge/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Printer Dealers & Service Centres', label: `Printer Dealers & Service Centres${locSuffix}`, subtitle: 'Laser, Inkjet & Multifunction Printers Sales & Repair', detail: 'PRINTERS' },
+        { baseValue: 'Toner & Cartridge Refilling Shops', label: `Toner & Cartridge Refilling Shops${locSuffix}`, subtitle: 'Original Cartridges, Inks & Onsite Refilling', detail: 'SUPPLIES' }
+      ], 'technology');
+    }
+    return formatRows([
+      { baseValue: 'Software & IT Service Companies', label: `Software & IT Service Companies${locSuffix}`, subtitle: 'Custom Software, ERP, Cloud & Enterprise IT', detail: 'IT & SOFTWARE' },
+      { baseValue: 'Website & Mobile App Developers', label: `Website & Mobile App Developers${locSuffix}`, subtitle: 'Business Websites, E-Commerce & iOS/Android Apps', detail: 'WEB & APPS' },
+      { baseValue: 'Digital Marketing & SEO Agencies', label: `Digital Marketing & SEO Agencies${locSuffix}`, subtitle: 'Google Ads, Social Media & Lead Generation', detail: 'MARKETING' }
+    ], 'technology');
+  }
+
+  // 5. Electronics & Home Appliances Showrooms
+  if (/\b(?:electronics|electronic|appliances|tv showroom|inverter|battery|ups)\b/i.test(norm) && !/repair/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Electronics & Appliance Showrooms', label: `Electronics & Appliance Showrooms${locSuffix}`, subtitle: 'TVs, Refrigerators, ACs, Washing Machines & Audio', detail: 'ELECTRONICS' },
+      { baseValue: 'Inverter, UPS & Battery Dealers', label: `Inverter, UPS & Battery Dealers${locSuffix}`, subtitle: 'Home Power Backup, Batteries & Solar Inverters', detail: 'POWER BACKUP' },
+      { baseValue: 'Wholesale Electronics Dealers', label: `Wholesale Electronics Dealers${locSuffix}`, subtitle: 'Bulk Electronic Components & Trade Pricing', detail: 'WHOLESALE' }
+    ], 'technology');
+  }
+
+  // 6. Photography & Videography Studios
+  if (/photograph|studio|cameraman|videograph|photoshoot|candid/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Photographers', label: `Photographers${locSuffix}`, subtitle: 'Verified Professional Photographers & Studios', detail: 'PHOTOGRAPHY' },
+      { baseValue: 'Wedding Photographers', label: `Wedding Photographers${locSuffix}`, subtitle: 'Weddings, Receptions & Candid Event Specialists', detail: 'WEDDING' },
+      { baseValue: 'Photo Studios', label: `Photo Studios${locSuffix}`, subtitle: 'Portraits, Passport & Indoor Shoot Labs', detail: 'STUDIOS' },
+      { baseValue: 'Product & Commercial Photographers', label: `Product & Commercial Photographers${locSuffix}`, subtitle: 'E-Commerce, Catalogue & Brand Photography', detail: 'COMMERCIAL' },
+      { baseValue: 'Pre-Wedding & Drone Videographers', label: `Pre-Wedding & Drone Videographers${locSuffix}`, subtitle: 'Cinematic 4K Aerial Coverage & Film Shoots', detail: 'CINEMA' }
+    ], 'photography');
+  }
+
+  // 7. Catering & Food Services
+  if (/cater/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Caterers', label: `Caterers${locSuffix}`, subtitle: 'Professional Food Catering for All Occasions', detail: 'CATERING' },
+      { baseValue: 'Wedding Caterers', label: `Wedding Caterers${locSuffix}`, subtitle: 'Grand Wedding Feasts & Reception Buffets', detail: 'WEDDING' },
+      { baseValue: 'Pure Veg Caterers', label: `Pure Veg Caterers${locSuffix}`, subtitle: 'Traditional Pure Vegetarian & Ritual Menus', detail: 'PURE VEG' },
+      { baseValue: 'Corporate & Party Caterers', label: `Corporate & Party Caterers${locSuffix}`, subtitle: 'Office Events, Birthdays & Bulk Food Orders', detail: 'EVENTS' }
+    ], 'food');
+  }
+
+  // 8. Venues, Marriage Halls & Mandaps
+  if (/venue|hall|mandap|kalyana|banquet|convention/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Wedding Venues', label: `Wedding Venues${locSuffix}`, subtitle: 'Marriage Halls, Open Lawns & Convention Centers', detail: 'VENUES' },
+      { baseValue: 'AC Function Halls & Convention Centres', label: `AC Function Halls & Convention Centres${locSuffix}`, subtitle: 'Spacious Air-Conditioned Halls with Dining', detail: 'AC HALLS' },
+      { baseValue: 'Kalyana Mandapams', label: `Kalyana Mandapams${locSuffix}`, subtitle: 'Traditional Mandapams & Heritage Venues', detail: 'MANDAPAMS' },
+      { baseValue: 'Banquet Halls', label: `Banquet Halls${locSuffix}`, subtitle: 'Modern Banquets for Receptions & Corporate Events', detail: 'BANQUETS' }
+    ], 'wedding');
+  }
+
+  // 9. Decorators & Floral Design
+  if (/decor|florist|flower|stage|balloon/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Wedding & Event Decorators', label: `Wedding & Event Decorators${locSuffix}`, subtitle: 'Full Venue Styling, Lighting & Event Design', detail: 'DECOR' },
+      { baseValue: 'Stage & Mandap Decorators', label: `Stage & Mandap Decorators${locSuffix}`, subtitle: 'Grand Reception Stages & Floral Backdrops', detail: 'WEDDING' },
+      { baseValue: 'Fresh Flower Decorators & Florists', label: `Fresh Flower Decorators & Florists${locSuffix}`, subtitle: 'Bouquets, Garlands & Traditional Floral Decor', detail: 'FLORAL' },
+      { baseValue: 'Theme & Balloon Decorators', label: `Theme & Balloon Decorators${locSuffix}`, subtitle: 'Birthdays, Baby Showers & Corporate Themes', detail: 'EVENTS' }
+    ], 'wedding');
+  }
+
+  // 10. Plumbing & Water Works
+  if (/plumb|pipe|tap|drain|sanitary/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Plumbers', label: `Plumbers${locSuffix}`, subtitle: 'Doorstep Plumbing Repair & Installation', detail: 'PLUMBING' },
+      { baseValue: 'Emergency Plumber Services', label: `Emergency Plumber Services${locSuffix}`, subtitle: 'Immediate Pipe Leakage & Blockage Repair', detail: '24/7 REPAIR' },
+      { baseValue: 'Plumbing Contractors', label: `Plumbing Contractors${locSuffix}`, subtitle: 'New Building Piping & Commercial Drainage', detail: 'CONTRACTORS' },
+      { baseValue: 'Sanitaryware & Pipe Fittings Stores', label: `Sanitaryware & Pipe Fittings Stores${locSuffix}`, subtitle: 'Bathroom Fittings, Taps & Plumbing Supplies', detail: 'SUPPLIES' }
+    ], 'home-services');
+  }
+
+  // 11. Electrical & Solar Works
+  if (/electric|wiring|mcb|solar|rooftop|borewell|water purifier|ro service/i.test(norm)) {
+    if (/solar/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Solar Panel Dealers & Installers', label: `Solar Panel Dealers & Installers${locSuffix}`, subtitle: 'Rooftop Solar Systems, Net Metering & Subsidy Setup', detail: 'SOLAR ENERGY' },
+        { baseValue: 'Commercial Solar EPC Contractors', label: `Commercial Solar EPC Contractors${locSuffix}`, subtitle: 'Industrial Plants, Solar Pumps & Street Lights', detail: 'COMMERCIAL' }
+      ], 'home-services');
+    }
+    if (/water purifier|ro /i.test(norm)) {
+      return formatRows([
+        { baseValue: 'RO Water Purifier Dealers & Service', label: `RO Water Purifier Dealers & Service${locSuffix}`, subtitle: 'Filter Replacement, Repair & New Installation', detail: 'WATER PURIFIER' }
+      ], 'home-services');
+    }
+    return formatRows([
+      { baseValue: 'Electricians', label: `Electricians${locSuffix}`, subtitle: 'Certified Household & Commercial Electricians', detail: 'ELECTRICAL' },
+      { baseValue: 'Emergency Electrician Services', label: `Emergency Electrician Services${locSuffix}`, subtitle: 'Short Circuits, Tripped MCB & Power Faults', detail: '24/7 REPAIR' },
+      { baseValue: 'Electrical Contractors & Wiring', label: `Electrical Contractors & Wiring${locSuffix}`, subtitle: 'Complete House Wiring & Commercial Panels', detail: 'CONTRACTORS' },
+      { baseValue: 'Electrical Goods & Lighting Shops', label: `Electrical Goods & Lighting Shops${locSuffix}`, subtitle: 'Wires, Switches, Fans & LED Lights Dealers', detail: 'SUPPLIES' }
+    ], 'home-services');
+  }
+
+  // 12. Carpentry & Furniture
+  if (/carpent|wood|furniture|modular kitchen|plywood|sofa|mattress/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Furniture Showrooms & Stores', label: `Furniture Showrooms & Stores${locSuffix}`, subtitle: 'Sofas, Beds, Dining Tables & Office Furniture', detail: 'FURNITURE' },
+      { baseValue: 'Carpenters & Woodwork Services', label: `Carpenters & Woodwork Services${locSuffix}`, subtitle: 'Door Locks, Cupboards & Custom Woodwork', detail: 'CARPENTRY' },
+      { baseValue: 'Modular Kitchen & Wardrobe Designers', label: `Modular Kitchen & Wardrobe Designers${locSuffix}`, subtitle: 'Custom Plywood & Modern Kitchen Installations', detail: 'INTERIORS' }
+    ], 'home-services');
+  }
+
+  // 13. Painting & Waterproofing
+  if (/paint|waterproof/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Painting Contractors & Painters', label: `Painting Contractors & Painters${locSuffix}`, subtitle: 'Interior, Exterior & Texture House Painting', detail: 'PAINTING' },
+      { baseValue: 'Waterproofing Specialists', label: `Waterproofing Specialists${locSuffix}`, subtitle: 'Terrace, Bathroom & Wall Seepage Solutions', detail: 'WATERPROOFING' },
+      { baseValue: 'Paint Shops & Authorised Dealers', label: `Paint Shops & Authorised Dealers${locSuffix}`, subtitle: 'Wall Putty, Primers & Multi-Brand Paints', detail: 'DEALERS' }
+    ], 'home-services');
+  }
+
+  // 14. AC & Appliance Repair / HVAC
+  if (/ac repair|hvac|air condition|refrigerator|fridge|washing machine|appliance repair/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'AC Repair & HVAC Services', label: `AC Repair & HVAC Services${locSuffix}`, subtitle: 'All Brand Split/Window AC Servicing & Gas Refill', detail: 'AC & HVAC' },
+      { baseValue: 'Home Appliance Repair Centres', label: `Home Appliance Repair Centres${locSuffix}`, subtitle: 'Fridge, Washing Machine, TV & Microwave Repair', detail: 'APPLIANCES' },
+      { baseValue: 'Commercial HVAC Contractors', label: `Commercial HVAC Contractors${locSuffix}`, subtitle: 'Central Cooling, Ducting & Office AMC', detail: 'COMMERCIAL' }
+    ], 'home-services');
+  }
+
+  // 15. Salons, Makeup, Gyms & Wellness
+  if (/\b(?:salon|salons|parlour|parlor|spa|spas|makeup|mehendi|beautician|barber|gym|gyms|fitness|yoga)\b/i.test(norm)) {
+    if (/gym|fitness|yoga/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Gyms & Fitness Centres', label: `Gyms & Fitness Centres${locSuffix}`, subtitle: 'Personal Training, Cardio & Strength Equipment', detail: 'FITNESS' },
+        { baseValue: 'Yoga & Wellness Studios', label: `Yoga & Wellness Studios${locSuffix}`, subtitle: 'Yoga Classes, Meditation & Zumba Training', detail: 'WELLNESS' }
+      ], 'fitness');
+    }
+    return formatRows([
+      { baseValue: 'Salons & Beauty Parlours', label: `Salons & Beauty Parlours${locSuffix}`, subtitle: 'Haircuts, Styling, Facials & Grooming', detail: 'BEAUTY' },
+      { baseValue: 'Bridal Makeup Artists', label: `Bridal Makeup Artists${locSuffix}`, subtitle: 'HD & Airbrush Bridal Makeovers', detail: 'BRIDAL' },
+      { baseValue: 'Spas & Wellness Centres', label: `Spas & Wellness Centres${locSuffix}`, subtitle: 'Massage, Therapy & Relaxation Centres', detail: 'WELLNESS' }
+    ], 'beauty');
+  }
+
+  // 16. Healthcare, Clinics, Hospitals, Dental & Pharmacies
+  if (/clinic|doctor|hospital|dentist|dental|pharmacy|medical|chemist|diagnostic|pathology|physio|eye care|dermatolog|veterinary|vet\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Clinics & Specialist Doctors', label: `Clinics & Specialist Doctors${locSuffix}`, subtitle: 'General Physicians, Specialists & Consultations', detail: 'HEALTHCARE' },
+      { baseValue: 'Multi-Speciality Hospitals', label: `Multi-Speciality Hospitals${locSuffix}`, subtitle: '24/7 Emergency Care, Diagnostics & Surgeries', detail: 'HOSPITALS' },
+      { baseValue: 'Dentists & Dental Clinics', label: `Dentists & Dental Clinics${locSuffix}`, subtitle: 'Implants, Braces, Root Canals & Cosmetic Care', detail: 'DENTAL' },
+      { baseValue: 'Pharmacies & Medical Stores', label: `Pharmacies & Medical Stores${locSuffix}`, subtitle: '24-Hour Chemists & Prescription Delivery', detail: 'PHARMACY' },
+      { baseValue: 'Diagnostic Labs & Scan Centres', label: `Diagnostic Labs & Scan Centres${locSuffix}`, subtitle: 'Blood Tests, Pathology, X-Ray & MRI Scans', detail: 'DIAGNOSTICS' }
+    ], 'health');
+  }
+
+  // 17. Restaurants, Cafes, Bakeries & Sweet Shops
+  if (/restaurant|cafe|coffee|dining|biryani|bakery|cake|sweet shop|mithai|food|cloud kitchen/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Restaurants', label: `Restaurants${locSuffix}`, subtitle: 'Top Rated Family Dining & Multi-Cuisine Spots', detail: 'DINING' },
+      { baseValue: 'Cafes & Coffee Shops', label: `Cafes & Coffee Shops${locSuffix}`, subtitle: 'Specialty Coffee, Snacks & Work-Friendly Cafes', detail: 'CAFES' },
+      { baseValue: 'Bakeries & Cake Shops', label: `Bakeries & Cake Shops${locSuffix}`, subtitle: 'Custom Cakes, Pastries & Fresh Breads', detail: 'BAKERY' },
+      { baseValue: 'Sweet Shops & Mithai Stores', label: `Sweet Shops & Mithai Stores${locSuffix}`, subtitle: 'Traditional Sweets, Savouries & Bulk Gift Boxes', detail: 'SWEETS' }
+    ], 'food');
+  }
+
+  // 18. Automotive, Showrooms, Garages, Tyres & Spare Parts
+  if (/car|bike|garage|automobile|auto repair|mechanic|tyre|tire|spare parts|car wash|detailing|driving school/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Car Showrooms & Dealers', label: `Car Showrooms & Dealers${locSuffix}`, subtitle: 'New Cars, Pre-Owned Dealers & Test Drives', detail: 'SHOWROOMS' },
+      { baseValue: 'Car Service Centres & Garages', label: `Car Service Centres & Garages${locSuffix}`, subtitle: 'Periodic Service, Denting, Painting & Engine Repair', detail: 'GARAGES' },
+      { baseValue: 'Two Wheeler Showrooms & Service', label: `Two Wheeler Showrooms & Service${locSuffix}`, subtitle: 'Motorcycles, Scooters & EV Two-Wheelers', detail: 'TWO WHEELERS' },
+      { baseValue: 'Tyre Shops & Auto Spare Parts', label: `Tyre Shops & Auto Spare Parts${locSuffix}`, subtitle: 'Genuine Spares, Wheel Alignment & Batteries', detail: 'PARTS & TYRES' }
+    ], 'auto');
+  }
+
+  // 19. Education, Schools, Colleges & Coaching
+  if (/school|college|coaching|tuition|tutor|academy|institute|training|preschool|ielts|study abroad/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Schools & Preschools', label: `Schools & Preschools${locSuffix}`, subtitle: 'CBSE, ICSE, International Schools & Kindergartens', detail: 'SCHOOLS' },
+      { baseValue: 'Colleges & Universities', label: `Colleges & Universities${locSuffix}`, subtitle: 'Engineering, Degree, MBA & Polytechnic Colleges', detail: 'COLLEGES' },
+      { baseValue: 'Coaching & Competitive Exam Centres', label: `Coaching & Competitive Exam Centres${locSuffix}`, subtitle: 'NEET, JEE, UPSC, Banking & SSC Academies', detail: 'COACHING' },
+      { baseValue: 'Computer & Skill Training Institutes', label: `Computer & Skill Training Institutes${locSuffix}`, subtitle: 'Coding, Spoken English, Tally & Career Courses', detail: 'TRAINING' }
+    ], 'education');
+  }
+
+  // 20. Hotels, Resorts, Travel & Logistics
+  if (/hotel|resort|lodge|travel|tour|cab|taxi|packer|mover|shifting|logistic|transport|courier|cargo|warehouse/i.test(norm)) {
+    if (/hotel|resort|lodge/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Hotels & Resorts', label: `Hotels & Resorts${locSuffix}`, subtitle: 'Business Hotels, Luxury Stays & Family Resorts', detail: 'HOSPITALITY' },
+        { baseValue: 'Lodges & Serviced Apartments', label: `Lodges & Serviced Apartments${locSuffix}`, subtitle: 'Budget Rooms & Short-Stay Accommodations', detail: 'STAYS' }
+      ], 'hospitality');
+    }
+    if (/packer|mover|shifting|logistic|transport|courier|cargo|warehouse/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Packers and Movers', label: `Packers and Movers${locSuffix}`, subtitle: 'Door-to-Door Home & Office Relocation', detail: 'RELOCATION' },
+        { baseValue: 'Transport & Logistics Companies', label: `Transport & Logistics Companies${locSuffix}`, subtitle: 'Goods Carriers, Cargo & Fleet Services', detail: 'LOGISTICS' },
+        { baseValue: 'Courier & Parcel Services', label: `Courier & Parcel Services${locSuffix}`, subtitle: 'Domestic & International Express Delivery', detail: 'COURIER' }
+      ], 'logistics');
+    }
+    return formatRows([
+      { baseValue: 'Travel Agencies & Tour Operators', label: `Travel Agencies & Tour Operators${locSuffix}`, subtitle: 'Holiday Packages, Flight Bookings & Visa Assistance', detail: 'TRAVEL' },
+      { baseValue: 'Car Rentals & Cab Services', label: `Car Rentals & Cab Services${locSuffix}`, subtitle: 'Outstation Cabs, Airport Transfers & Self-Drive', detail: 'RENTALS' }
+    ], 'hospitality');
+  }
+
+  // 21. Lawyers, CAs, Tax, Finance & Real Estate
+  if (/lawyer|advocate|legal|ca\b|chartered accountant|tax consultant|gst|accountant|real estate|property|builder|architect|interior|construction|contractor/i.test(norm)) {
+    if (/lawyer|advocate|legal/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Lawyers & Advocates', label: `Lawyers & Advocates${locSuffix}`, subtitle: 'Civil, Corporate, Family & Property Legal Advisors', detail: 'LEGAL' },
+        { baseValue: 'Property & Documentation Lawyers', label: `Property & Documentation Lawyers${locSuffix}`, subtitle: 'Registration, Title Verification & Agreements', detail: 'PROPERTY LAW' }
+      ], 'professional');
+    }
+    if (/ca\b|chartered|tax|gst|accountant/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Chartered Accountants (CA)', label: `Chartered Accountants (CA)${locSuffix}`, subtitle: 'Audits, Taxation & Financial Advisory', detail: 'FINANCE' },
+        { baseValue: 'GST & Tax Consultants', label: `GST & Tax Consultants${locSuffix}`, subtitle: 'GST Filing, ITR & Company Registration', detail: 'TAX & GST' }
+      ], 'professional');
+    }
+    return formatRows([
+      { baseValue: 'Real Estate Agents & Brokers', label: `Real Estate Agents & Brokers${locSuffix}`, subtitle: 'Plots, Flats, Commercial Spaces & Rentals', detail: 'REAL ESTATE' },
+      { baseValue: 'Builders & Construction Contractors', label: `Builders & Construction Contractors${locSuffix}`, subtitle: 'Turnkey Construction & Residential Developers', detail: 'CONSTRUCTION' },
+      { baseValue: 'Architects & Interior Designers', label: `Architects & Interior Designers${locSuffix}`, subtitle: 'Floor Plans, 3D Elevation & Complete Interiors', detail: 'ARCHITECTURE' }
+    ], 'real-estate');
+  }
+
+  // 22. Printing, Packaging & Industrial Manufacturing / B2B
+  if (/print|flex|banner|signage|manufactur|supplier|wholesal|factory|machinery|steel|hardware|fabricat|packaging|chemical|plastic|cnc|laser|hydraulic/i.test(norm)) {
+    if (/print|flex|banner|signage/i.test(norm)) {
+      return formatRows([
+        { baseValue: 'Printing Press & Digital Print Shops', label: `Printing Press & Digital Print Shops${locSuffix}`, subtitle: 'Brochures, Business Cards, Offset & Custom Prints', detail: 'PRINTING' },
+        { baseValue: 'Flex, Banner & LED Signage Makers', label: `Flex, Banner & LED Signage Makers${locSuffix}`, subtitle: 'Shop Boards, Hoardings & Commercial Branding', detail: 'SIGNAGE' }
+      ], 'professional');
+    }
+    const baseInd = cleanLabel.replace(/\s+(manufacturers|manufacturer|suppliers|supplier|wholesalers|wholesaler|factories|factory)$/i, '').trim() || cleanLabel;
+    return formatRows([
+      { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified ${cleanLabel} & Direct Business Contacts`, detail: 'B2B & INDUSTRIAL' },
+      { baseValue: `${baseInd} Manufacturers`, label: `${baseInd} Manufacturers${locSuffix}`, subtitle: 'Direct Factory & OEM Production Units', detail: 'MANUFACTURERS' },
+      { baseValue: `${baseInd} Wholesale Suppliers`, label: `${baseInd} Wholesale Suppliers${locSuffix}`, subtitle: 'Bulk Distributors & Trade Stockists', detail: 'WHOLESALE' }
+    ], 'industrial');
+  }
+
+  // 23. Retail, Fashion, Jewellery, Supermarkets & General Shops
+  if (family === 'retail' || /store|shop|showroom|boutique|jewel|cloth|garment|saree|footwear|supermarket|grocery|optical|gift/i.test(norm)) {
+    const baseRetail = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|outlets|outlet)$/i, '').trim() || cleanLabel;
+    return formatRows([
+      { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Local ${cleanLabel} with Direct Phones`, detail: 'RETAIL & SHOPS' },
+      { baseValue: `${baseRetail} Dealers & Showrooms`, label: `${baseRetail} Dealers & Showrooms${locSuffix}`, subtitle: 'Authorised Brand Outlets & Multi-Brand Stores', detail: 'SHOWROOMS' },
+      { baseValue: `Wholesale ${baseRetail} Suppliers`, label: `Wholesale ${baseRetail} Suppliers${locSuffix}`, subtitle: 'Bulk Trade Pricing & Distributors', detail: 'WHOLESALE' }
+    ], 'retail');
+  }
+
+  // 24. Open-Domain Universal Preservation (Works for ANY niche business on Earth!)
+  return formatRows([
+    { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified ${cleanLabel} with Phone Numbers & Locations`, detail: 'TOP MATCH' },
+    { baseValue: `${cleanLabel} Dealers & Suppliers`, label: `${cleanLabel} Dealers & Suppliers${locSuffix}`, subtitle: `Authorised Dealers, Stockists & Commercial Suppliers`, detail: 'DEALERS' },
+    { baseValue: `${cleanLabel} Services`, label: `${cleanLabel} Services${locSuffix}`, subtitle: `Local Specialists & Direct Business Contacts`, detail: 'SERVICES' }
+  ], family || 'generic');
 }
 
 module.exports = {
+  COMMON_WORD_WHITELIST,
   TRADE_TYPOS_MAP,
   consonantSkeleton,
   levenshtein,

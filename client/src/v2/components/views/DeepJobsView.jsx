@@ -1,8 +1,6 @@
 import React from 'react';
-import {
-  Activity, Database, Globe2, Loader2, MapPin, Zap
-} from 'lucide-react';
-import { formatNumber, relativeTime, ScoreRing, StatusPill } from '../../ui';
+import { CheckCircle2, Globe2, Loader2, MapPin, Sparkles, Zap } from 'lucide-react';
+import { formatNumber, relativeTime, ScoreRing } from '../../ui';
 import { ToggleTile, VendorAvatar, EmptyState, DeepJobRow } from '../cards/MetricCard';
 import { qualityOf } from '../../utils/leadHelpers';
 
@@ -13,9 +11,7 @@ export default function DeepJobsView({
   setBatchConfig,
   queueDeepManual,
   batchStarting,
-  health,
   vendors = [],
-  activeDeepJobs = [],
   deepJob,
   deepJobs = [],
   stopDeep,
@@ -27,21 +23,24 @@ export default function DeepJobsView({
     <section className="v2-deep-view">
       <div className="v2-deep-top">
         <div>
-          <span className="v2-view-kicker">DEEP PROFILE ENGINE</span>
-          <h2>Fill the field contract. Keep the unknowns.</h2>
-          <p>Each vendor is saved independently under <code>server/data/deep_profiles/</code>. Stop and resume without losing completed profiles.</p>
+          <span className="v2-view-kicker">AUTOMATIC CONTACT FINDER</span>
+          <h2>Discover missing phone numbers, emails &amp; websites.</h2>
+          <p>
+            Automatically check your saved businesses to fill in missing phone numbers, official
+            websites, email addresses, opening hours, and full street details.
+          </p>
         </div>
-        <ScoreRing value={stats.avg} size={94} label="avg quality" />
+        <ScoreRing value={stats.avg || 0} size={94} label="profile score" />
       </div>
 
       <div className="v2-deep-grid">
         <div className="v2-panel v2-deep-config">
           <div className="v2-rail-head">
-            <span><Zap size={14} /> QUEUE A DEEP PASS</span>
-            <b>{formatNumber(deepEstimate?.count || 0)} UNEXTRACTED</b>
+            <span><Sparkles size={14} /> FIND MISSING DETAILS</span>
+            <b>{formatNumber(deepEstimate?.count || 0)} TO CHECK</b>
           </div>
           <div className="v2-deep-config-row">
-            <label htmlFor="deep-limit">Vendor limit</label>
+            <label htmlFor="deep-limit">Businesses to check</label>
             <input
               id="deep-limit"
               type="number"
@@ -50,60 +49,89 @@ export default function DeepJobsView({
               value={batchConfig.limit}
               onChange={event => setBatchConfig(prev => ({ ...prev, limit: Math.max(1, Math.min(750, Number(event.target.value) || 1)) }))}
             />
-            <span>~{deepEstimate?.label || '—'} · 2 browsers</span>
+            <span>Est. {deepEstimate?.label || 'a few minutes'}</span>
           </div>
           <div className="v2-toggle-stack">
-            <ToggleTile active={batchConfig.website} onClick={() => setBatchConfig(prev => ({ ...prev, website: !prev.website }))} label="Website" detail="Multi-page crawl" icon={Globe2} />
-            <ToggleTile active={batchConfig.google} onClick={() => setBatchConfig(prev => ({ ...prev, google: !prev.google }))} label="Google Maps" detail="Place detail DOM" icon={MapPin} />
+            <ToggleTile
+              active={batchConfig.website}
+              onClick={() => setBatchConfig(prev => ({ ...prev, website: !prev.website }))}
+              label="Check Official Websites"
+              detail="Find contact emails & social pages"
+              icon={Globe2}
+            />
+            <ToggleTile
+              active={batchConfig.google}
+              onClick={() => setBatchConfig(prev => ({ ...prev, google: !prev.google }))}
+              label="Verify Business Listings"
+              detail="Check phone numbers, ratings & opening hours"
+              icon={MapPin}
+            />
           </div>
-          <button type="button" className="v2-btn v2-btn-lime v2-btn-block" onClick={queueDeepManual} disabled={batchStarting || (deepEstimate?.count || 0) === 0}>
+          <button
+            type="button"
+            className="v2-btn v2-btn-lime v2-btn-block"
+            onClick={queueDeepManual}
+            disabled={batchStarting || (deepEstimate?.count || 0) === 0}
+          >
             {batchStarting ? <Loader2 size={15} className="v2-spin" /> : <Zap size={15} />}
-            {batchStarting ? 'QUEUEING…' : 'START DEEP BATCH'}
+            {batchStarting ? 'Starting…' : 'Find Missing Contacts'}
           </button>
-          <small className="v2-deep-config-note">Existing deep profiles are skipped unless you force a single-vendor pass from the drawer.</small>
+          <small className="v2-deep-config-note">
+            Businesses that already have complete details are automatically skipped to save time.
+          </small>
         </div>
 
         <div className="v2-panel v2-deep-health">
           <div className="v2-rail-head">
-            <span><Activity size={14} /> ENGINE HEALTH</span>
-            <StatusPill tone={health?.status === 'ok' ? 'lime' : 'amber'} pulse>{health?.status || 'unknown'}</StatusPill>
+            <span><CheckCircle2 size={14} /> YOUR LIST COMPLETENESS</span>
           </div>
           <div className="v2-deep-health-grid">
-            <div><span>TRACKED FIELDS</span><b>{health?.trackedFields || 52}</b><small>{health?.fieldGroups || 10} groups</small></div>
-            <div><span>DEEP EXTRACTED</span><b>{formatNumber(health?.deepExtracted || 0)}</b><small>{formatNumber(health?.vendors || vendors.length)} vendors</small></div>
-            <div><span>PROFILE FILES</span><b>{formatNumber(health?.profileFiles || 0)}</b><small>file-backed</small></div>
-            <div><span>ACTIVE JOBS</span><b>{formatNumber(health?.activeJobs || activeDeepJobs.length)}</b><small>resumable</small></div>
-          </div>
-          <div className="v2-deep-health-foot">
-            <span><Globe2 size={12} /> website {health?.engines?.website ? 'online' : 'offline'}</span>
-            <span><MapPin size={12} /> maps {health?.engines?.playwright ? 'online' : 'offline'}</span>
-            <span><Database size={12} /> village index {health?.geo?.villageIndexReady ? 'ready' : 'lazy'}</span>
+            <div>
+              <span>TOTAL BUSINESSES</span>
+              <b>{formatNumber(vendors.length)}</b>
+              <small>in your workspace</small>
+            </div>
+            <div>
+              <span>WITH PHONE</span>
+              <b>{formatNumber(stats.phones || 0)}</b>
+              <small>ready to call</small>
+            </div>
+            <div>
+              <span>COMPLETE PROFILES</span>
+              <b>{formatNumber(stats.deep || 0)}</b>
+              <small>full details verified</small>
+            </div>
+            <div>
+              <span>AVG COMPLETENESS</span>
+              <b>{stats.avg || 0}%</b>
+              <small>overall contact quality</small>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="v2-deep-jobs-head">
-        <span className="v2-view-kicker">JOB LEDGER</span>
-        <h3>Recent deep jobs</h3>
+        <span className="v2-view-kicker">RECENT ACTIVITY</span>
+        <h3>Contact lookup history</h3>
       </div>
       <div className="v2-deep-jobs-list">
-        {(deepJob ? [deepJob, ...deepJobs.filter(job => job.id !== deepJob.id)] : deepJobs).slice(0, 8).map(job => (
+        {(deepJob ? [deepJob, ...deepJobs.filter(job => job.id !== deepJob.id)] : deepJobs).slice(0, 6).map(job => (
           <DeepJobRow key={job.id} job={job} onStop={stopDeep} onResume={resumeDeep} active={job.id === deepJob?.id} />
         ))}
         {deepJobs.length === 0 && !deepJob && (
           <EmptyState
-            icon={Zap}
-            title="No deep jobs yet."
-            body="Queue a batch or open any vendor and run a single deep extraction."
+            icon={Sparkles}
+            title="No contact lookups run yet"
+            body="Click Find Missing Contacts above whenever you want to enrich a batch of businesses with additional phones, emails, and opening hours."
             action={queueDeepManual}
-            actionLabel="Queue deep pass"
+            actionLabel="Find Missing Contacts"
           />
         )}
       </div>
 
       <div className="v2-deep-jobs-head">
-        <span className="v2-view-kicker">LATEST PROFILES</span>
-        <h3>Recently completed</h3>
+        <span className="v2-view-kicker">RECENTLY UPDATED</span>
+        <h3>Latest enriched business profiles</h3>
       </div>
       <div className="v2-profile-grid">
         {recentProfiles.map(vendor => (
@@ -111,14 +139,15 @@ export default function DeepJobsView({
             <VendorAvatar vendor={vendor} size={38} />
             <span>
               <b>{vendor.name}</b>
-              <small>{vendor.category || 'Uncategorised'} · {relativeTime(vendor.deepExtractedAt)}</small>
+              <small>{vendor.category || 'Business'} · {relativeTime(vendor.deepExtractedAt)}</small>
             </span>
             <ScoreRing value={qualityOf(vendor) || 0} size={52} label="" />
           </button>
         ))}
-        {recentProfiles.length === 0 && <p className="v2-muted">No deep profiles yet. Run the engine to populate this ledger.</p>}
+        {recentProfiles.length === 0 && (
+          <p className="v2-muted">Updated business profiles will appear here once you run a contact lookup.</p>
+        )}
       </div>
     </section>
   );
 }
-

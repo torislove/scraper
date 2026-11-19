@@ -8,10 +8,8 @@ import { IS_DESKTOP } from './desktop';
 import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import { AUTH_REQUIRED, getSession, logout } from './v2/auth';
 import './v2/v2.css';
-import './v2/revamp.css';
-import './v2/glass3d.css';
 import './v2/whiteTheme.css';
-import './v2/retroEmboss.css';
+import './v2/designSystem.css';
 
 // scraper.co.in has exactly one workspace: the command center.
 // lazyRetry keeps a single flaky chunk download from taking down the workspace.

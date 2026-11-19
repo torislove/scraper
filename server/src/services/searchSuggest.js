@@ -389,13 +389,23 @@ function locationFromResult(item, fragment) {
   };
 }
 
+const MAJOR_CITY_KEY_SET = new Set(MAJOR_CITY_KEYS.map(c => c.key));
+
 function findLocations(fragment, limit = 6, isMaster = false) {
   const text = clean(fragment);
   if (text.length < 3) return [];
   try {
     const geo = getGeo();
-    let mapped = geo.searchLocations(text, Math.max(limit, 6), isMaster)
-      .map(item => locationFromResult(item, text));
+    let mapped = geo.searchLocations(text, Math.max(limit, 6), true)
+      .map(item => {
+        const res = locationFromResult(item, text);
+        // Major Indian metro city-districts (e.g. Chennai, Mumbai, Kolkata, Delhi)
+        // must always be treated as cities so Client searches never drop them.
+        if (res.level === 'district' && MAJOR_CITY_KEY_SET.has(norm(res.value))) {
+          return { ...res, level: 'city', detail: 'City', scope: 'city' };
+        }
+        return res;
+      });
 
     // Common Indian phonetic variants (e.g. Namburu -> Nambur, Gunturu -> Guntur)
     if (!mapped.length && text.length >= 4 && /[uai]$/i.test(text)) {
@@ -920,16 +930,25 @@ function suggest(options = {}) {
     categoryFragment,
     intent
   );
-  // Named places: return every level that shares the name (city, district,
-  // mandal, state), which is what drives the "Guntur city or Guntur district?"
-  // chooser. Prefix typing falls back to the fuzzy place search.
-  const placeVariants = locationFragment ? findPlaceVariants(locationFragment, limit, isMaster) : [];
-  let locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit, isMaster);
-  const correctedLocation = locationMatches[0]?.corrected ? locationMatches[0] : null;
-  if (correctedLocation) locationCorrectedFrom = correctedLocation.correctedFrom || locationFragment;
-  else if (!locationMatches.length && locationFragment) {
-    locationMatches = findCorrectedLocation(locationFragment, limit);
-    if (locationMatches.length) locationCorrectedFrom = locationFragment;
+  const country = String(options.country || '').toUpperCase().slice(0, 2);
+  let placeVariants = [];
+  let locationMatches = [];
+  if (locationFragment) {
+    if (country && country !== 'IN') {
+      try {
+        const { searchInternationalPlaces } = require('./internationalGeoIndex');
+        locationMatches = searchInternationalPlaces(locationFragment, { country, limit, isMaster });
+      } catch (e) {}
+    } else {
+      placeVariants = findPlaceVariants(locationFragment, limit, isMaster);
+      locationMatches = placeVariants.length ? placeVariants : findBestPlace(locationFragment, limit, isMaster);
+      const correctedLocation = locationMatches[0]?.corrected ? locationMatches[0] : null;
+      if (correctedLocation) locationCorrectedFrom = correctedLocation.correctedFrom || locationFragment;
+      else if (!locationMatches.length) {
+        locationMatches = findCorrectedLocation(locationFragment, limit);
+        if (locationMatches.length) locationCorrectedFrom = locationFragment;
+      }
+    }
   }
 
   const bestCategory = buildCategoryInfo(categoryMatches[0], categoryFragment);
@@ -952,41 +971,73 @@ function suggest(options = {}) {
     };
   }
 
-const ENGINE_VECTOR_LABEL_MAP = {
-  'google-local-finder': 'Deep Web SERP',
-  'maps': 'Geospatial Radar',
-  'justdial': 'Direct Telecom Registry',
-  'indiamart': 'B2B Supplier Network',
-  'weddingbazaar': 'Vendor Directory',
-  'weddingwire': 'Vendor Directory',
-  'mandap': 'Direct Mandap Index'
-};
-
-function formatVectorDetail(engines) {
-  if (!Array.isArray(engines) || !engines.length) return 'Geospatial Radar · Direct Telecom';
-  const mapped = engines.map(e => ENGINE_VECTOR_LABEL_MAP[e] || 'Geospatial Radar');
-  const unique = [...new Set(mapped)];
-  return unique.slice(0, 3).join(' · ');
-}
-
   const { getUniversalRichExpansions, isKnownServiceOrTypo } = require('../utils/tradeIntelligence');
   const isService = isKnownServiceOrTypo(categoryFragment) || categoryMatches.length > 0;
-  const brandRows = isService ? [] : brandIntel.suggest(categoryFragment, 3);
-  const richExpansions = bestCategory ? getUniversalRichExpansions(bestCategory.value, bestCategory.family, bestLocation?.value || '') : [];
+  const brandRows = brandIntel.suggest(categoryFragment, 3) || [];
+  const richExpansions = bestCategory
+    ? getUniversalRichExpansions(bestCategory.value, bestCategory.family, bestLocation?.value || '')
+    : (categoryFragment.length >= 3 ? getUniversalRichExpansions(titleCase(categoryFragment), 'generic', bestLocation?.value || '') : []);
 
-  const suggestions = [
+  // Self-Learning Feedback Loop: surface proven products, services, and categories learned from past runs
+  let learnedRows = [];
+  if (categoryFragment.length >= 2) {
+    try {
+      const taxonomyLearner = require('./taxonomyLearner');
+      const learned = taxonomyLearner.suggest(categoryFragment, 4) || [];
+      learnedRows = learned.map(item => ({
+        type: 'category',
+        value: item.label || item.name || item.value,
+        label: bestLocation?.value
+          ? `${item.label || item.name || item.value} in ${bestLocation.value}`
+          : (item.label || item.name || item.value),
+        subtitle: item.subtitle || 'Learned from verified searches',
+        detail: item.group === 'brand' ? 'BRAND' : item.group === 'product' ? 'PRODUCT' : 'LEARNED',
+        family: item.family || 'generic',
+        familyLabel: item.subtitle || 'Verified Category',
+        corrected: false,
+        matched: item.label || item.name || item.value
+      }));
+    } catch (e) {}
+  }
+
+  // Deduplicate category suggestions cleanly while preserving best ranking
+  const seenCatKeys = new Set();
+  const dedupeCats = (list) => list.filter(item => {
+    const key = norm(item.label || item.value);
+    if (!key || seenCatKeys.has(key)) return false;
+    seenCatKeys.add(key);
+    return true;
+  });
+
+  const mergedCategories = dedupeCats([
     ...richExpansions,
     ...categoryMatches.map(match => ({
       type: 'category',
       value: match.label,
       label: match.label,
-      subtitle: match.familyLabel,
-      detail: formatVectorDetail(match.engines),
+      subtitle: match.description || match.familyLabel || 'Verified Local Businesses',
+      detail: match.familyLabel || 'CATEGORY',
       family: match.family,
       familyLabel: match.familyLabel,
       corrected: match.corrected,
       matched: match.matched || match.label
     })),
+    ...learnedRows,
+    ...(!isService ? brandRows.map(b => ({
+      type: 'category',
+      value: b.value || b.label,
+      label: b.label || b.value,
+      subtitle: b.subtitle || 'Brand Dealers & Service',
+      detail: 'BRAND',
+      family: b.family || 'retail',
+      familyLabel: 'Brand Dealers',
+      corrected: false,
+      matched: b.label || b.value
+    })) : [])
+  ]).slice(0, Math.max(limit, 8));
+
+  const suggestions = [
+    ...mergedCategories,
     ...locationMatches.map((match, index) => ({
       type: 'location',
       value: match.value,
@@ -1120,6 +1171,7 @@ function suggestCached(options = {}) {
     clean(options.q),
     clean(options.category),
     clean(options.location),
+    String(options.country || '').toUpperCase().slice(0, 2),
     Math.max(1, Math.min(12, Number(options.limit) || 6)),
     Boolean(options.isMaster)
   ].join('\u0000');
@@ -1153,15 +1205,15 @@ function suggestCached(options = {}) {
  * network is unavailable the operator still gets the Indian results.
  */
 async function suggestForCountry(options = {}) {
-  const payload = suggest(options);
+  const payload = suggestCached(options);
   const country = String(options.country || '').toUpperCase();
   const fragment = clean(payload.fragments?.location || '');
   if (fragment.length < 3) return payload;
 
   const hasLocal = Number(payload.counts?.locations || 0) > 0;
-  // India is fully covered offline. Only reach the network when the local
-  // index is empty, which keeps Indian typing instant and keyless.
-  if ((!country || country === 'IN') && hasLocal) return payload;
+  // Both India (619k villages) and International (245 countries + states/counties/metros)
+  // are resolved instantaneously in-memory by suggestCached(). Only hit OSM Photon when empty.
+  if (hasLocal) return payload;
 
   let places = [];
   // 1. Instant in-memory check via internationalGeoIndex (<1ms response time, zero network latency)

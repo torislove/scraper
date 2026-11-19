@@ -1,204 +1,378 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowLeft, Zap, Sparkles, Building2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Globe2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import BrandLogo from '../v2/components/BrandLogo';
+
+const PLANS = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    tagline: 'For local businesses & solo sales professionals',
+    monthly: '₹1,499',
+    annual: '₹1,199',
+    billingMonthly: 'Billed monthly · Cancel anytime',
+    billingAnnual: 'Billed annually · Save 20%',
+    highlight: false,
+    cta: 'Get Started',
+    features: [
+      '2,000 verified business leads / month',
+      'Direct phone numbers, websites & addresses',
+      'Live interactive territory map',
+      'Saved search folders & automatic deduplication',
+      '1-click Excel (.xlsx), CSV & phone (.vcf) export',
+      'Full India coverage down to towns & villages'
+    ]
+  },
+  {
+    id: 'growth',
+    name: 'Growth',
+    tagline: 'Most popular for agencies & growing sales teams',
+    monthly: '₹3,999',
+    annual: '₹3,199',
+    billingMonthly: 'Billed monthly · Cancel anytime',
+    billingAnnual: 'Billed annually · Save 20%',
+    highlight: true,
+    badge: 'MOST POPULAR',
+    cta: 'Start Growth Plan',
+    features: [
+      '10,000 verified business leads / month',
+      'All 11 supported countries included (India, US, UK, UAE, CA, AU, SG, NZ, IE, ZA, DE)',
+      'Automatic missing phone & email discovery',
+      'Area-divided multi-sheet Excel reports',
+      'Merge & deduplicate multiple lead lists',
+      'Priority live discovery speed & email support'
+    ]
+  },
+  {
+    id: 'enterprise',
+    name: 'Agency & Enterprise',
+    tagline: 'For large teams, distributors & high-volume territories',
+    monthly: 'Custom',
+    annual: 'Custom',
+    billingMonthly: 'Tailored lead volume & dedicated onboarding',
+    billingAnnual: 'Annual volume pricing available',
+    highlight: false,
+    cta: 'Contact Sales',
+    features: [
+      '50,000+ verified leads / month',
+      'State, district & county-wide territory sweeps',
+      'Multi-seat workspaces & shared lead lists',
+      'Custom industry list preparation & onboarding',
+      'Dedicated account specialist'
+    ]
+  }
+];
 
 export default function PricingPage() {
   const navigate = useNavigate();
-  const [isAnnual, setIsAnnual] = useState(false);
+  const [isAnnual, setIsAnnual] = useState(true);
 
   return (
-    <div className="min-h-screen bg-[#fafafa] text-[#1a1a2e] overflow-x-hidden font-sans relative selection:bg-purple-200">
-      
-      {/* Tech UI / Clean SVG Background Animations */}
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-40">
-        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(168, 85, 247, 0.1)" strokeWidth="1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-        {/* Animated Tech Nodes */}
-        <motion.div 
-          animate={{ x: [0, 100, 0], y: [0, 50, 0] }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[20%] left-[10%] w-[500px] h-[500px] bg-purple-400/10 blur-[100px] rounded-full"
-        />
-        <motion.div 
-          animate={{ x: [0, -100, 0], y: [0, -50, 0] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="absolute bottom-[20%] right-[10%] w-[400px] h-[400px] bg-cyan-400/10 blur-[100px] rounded-full"
-        />
-      </div>
-
-      {/* Navigation */}
-      <nav className="relative z-50 flex items-center justify-between px-8 py-6 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
-        <button 
-          onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-gray-600 hover:text-purple-600 transition-colors font-medium"
+    <div
+      style={{
+        minHeight: '100vh',
+        background:
+          'radial-gradient(960px 440px at 15% -5%, rgba(16, 185, 129, 0.09), transparent 62%), radial-gradient(820px 400px at 88% 0%, rgba(37, 99, 235, 0.08), transparent 58%), #f8fafc',
+        color: '#0f172a',
+        fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif'
+      }}
+    >
+      {/* Top Bar */}
+      <header
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          background: 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(18px)',
+          borderBottom: '1px solid rgba(15, 23, 42, 0.07)'
+        }}
+      >
+        <div
+          style={{
+            width: 'min(1180px, calc(100% - 40px))',
+            margin: '0 auto',
+            height: 68,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 16
+          }}
         >
-          <ArrowLeft size={18} /> Back to OmniLead
-        </button>
-        <div className="flex gap-4">
-          <button onClick={() => navigate('/login')} className="text-gray-600 hover:text-purple-600 font-medium px-4 py-2">Login</button>
-          <button className="px-5 py-2 text-sm font-bold bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-lg shadow-purple-500/30">
-            Request Demo
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 12
+            }}
+          >
+            <BrandLogo size={32} theme="light" />
           </button>
-        </div>
-      </nav>
 
-      {/* Main Content */}
-      <main className="relative z-10 container mx-auto px-6 pt-20 pb-32 flex flex-col items-center">
-        
-        <h1 className="text-4xl md:text-5xl font-black tracking-tight text-center text-[#1a1a2e] mb-12">
-          OmniLead AI Pricing Plans
-        </h1>
-
-        {/* Toggle with Hand-drawn Arrow */}
-        <div className="relative mb-20">
-          <div className="absolute -top-8 -right-40 md:-right-48 hidden md:flex flex-col items-center">
-            <span className="text-blue-600 font-caveat text-xl rotate-[-5deg]">Get two months free</span>
-            <svg width="60" height="40" viewBox="0 0 60 40" fill="none" className="mt-1 text-blue-600">
-              <path d="M5,5 Q30,-10 50,15 T45,35" stroke="currentColor" strokeWidth="1.5" fill="none" />
-              <path d="M40,30 L45,35 L50,25" stroke="currentColor" strokeWidth="1.5" fill="none" />
-            </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 10,
+                background: '#ffffff',
+                border: '1px solid rgba(15, 23, 42, 0.12)',
+                color: '#334155',
+                fontSize: 13.5,
+                fontWeight: 650,
+                cursor: 'pointer'
+              }}
+            >
+              <ArrowLeft size={14} /> Back
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/command')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '9px 18px',
+                borderRadius: 11,
+                background: 'linear-gradient(135deg, #059669, #10b981)',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 8px 20px -6px rgba(5, 150, 105, 0.45)'
+              }}
+            >
+              Open Workspace <ArrowRight size={14} />
+            </button>
           </div>
-          
-          <div className="flex items-center bg-white border border-gray-200 p-1 rounded-xl shadow-sm">
-            <button 
+        </div>
+      </header>
+
+      {/* Main */}
+      <main style={{ width: 'min(1160px, calc(100% - 40px))', margin: '0 auto', padding: '64px 0 96px' }}>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          style={{ textAlign: 'center', maxWidth: 660, margin: '0 auto 44px' }}
+        >
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 13px',
+              borderRadius: 999,
+              background: '#ecfdf5',
+              border: '1px solid #a7f3d0',
+              color: '#059669',
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              marginBottom: 16
+            }}
+          >
+            <Sparkles size={13} /> Simple, Transparent Plans
+          </span>
+          <h1 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 850, letterSpacing: '-0.035em', margin: '0 0 14px', lineHeight: 1.08 }}>
+            Pay for verified leads, not complicated tools.
+          </h1>
+          <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
+            Every plan gives you instant local &amp; global business discovery, live interactive maps, clean saved folders, and 1-click Excel exports.
+          </p>
+
+          {/* Billing Toggle */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: '#ffffff',
+              border: '1px solid rgba(15, 23, 42, 0.12)',
+              borderRadius: 13,
+              padding: 4,
+              gap: 4,
+              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.05)'
+            }}
+          >
+            <button
+              type="button"
               onClick={() => setIsAnnual(false)}
-              className={`px-8 py-2.5 rounded-lg text-sm font-bold transition-all ${!isAnnual ? 'bg-gray-100 text-gray-900 shadow' : 'text-gray-500 hover:text-gray-700'}`}
+              style={{
+                padding: '9px 20px',
+                borderRadius: 10,
+                border: 'none',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                background: !isAnnual ? '#0f172a' : 'transparent',
+                color: !isAnnual ? '#ffffff' : '#64748b'
+              }}
             >
               Monthly
             </button>
-            <button 
+            <button
+              type="button"
               onClick={() => setIsAnnual(true)}
-              className={`px-8 py-2.5 rounded-lg text-sm font-bold transition-all ${isAnnual ? 'bg-gray-100 text-gray-900 shadow' : 'text-gray-500 hover:text-gray-700'}`}
+              style={{
+                padding: '9px 20px',
+                borderRadius: 10,
+                border: 'none',
+                fontSize: 13.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                background: isAnnual ? '#0f172a' : 'transparent',
+                color: isAnnual ? '#ffffff' : '#64748b'
+              }}
             >
-              Annually
+              Annual
+              <span style={{ padding: '2px 7px', borderRadius: 999, background: '#10b981', color: '#ffffff', fontSize: 10.5, fontWeight: 800 }}>
+                SAVE 20%
+              </span>
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Pricing Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full items-start">
-          
-          {/* Silver */}
-          <PricingCard 
-            title="Silver"
-            price={isAnnual ? "33.16" : "40.83"}
-            billingText={isAnnual ? "$398 billed upon purchase" : "$490 billed upon purchase"}
-            features={[
-              { text: "Scheduling", icon: <Check size={16} className="text-purple-500" /> },
-              { text: "Automation credits (Monthly renewing quota)", value: "4500" },
-              { text: "Simultaneous running workflows", value: "10" }
-            ]}
-          />
+        {/* Plan Grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+            gap: 22,
+            alignItems: 'stretch'
+          }}
+        >
+          {PLANS.map((plan, idx) => (
+            <motion.article
+              key={plan.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08 * idx, duration: 0.4 }}
+              style={{
+                background: '#ffffff',
+                borderRadius: 22,
+                padding: 30,
+                border: plan.highlight ? '2px solid #10b981' : '1px solid rgba(15, 23, 42, 0.1)',
+                boxShadow: plan.highlight
+                  ? '0 24px 52px -12px rgba(5, 150, 105, 0.22)'
+                  : '0 8px 24px -8px rgba(15, 23, 42, 0.07)',
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative'
+              }}
+            >
+              {plan.badge && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: -12,
+                    right: 24,
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    background: 'linear-gradient(135deg, #059669, #10b981)',
+                    color: '#ffffff',
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    letterSpacing: '0.08em'
+                  }}
+                >
+                  {plan.badge}
+                </span>
+              )}
 
-          {/* Gold (Highlighted) */}
-          <PricingCard 
-            title="Gold"
-            price={isAnnual ? "67.50" : "82.50"}
-            billingText={isAnnual ? "$810 billed upon purchase" : "$990 billed upon purchase"}
-            isPopular={true}
-            features={[
-              { text: "All the benefits of Silver, plus:", isHeading: true },
-              { text: "Automation credits (Monthly renewing quota)", value: "10000", isHighlighted: true },
-              { text: "Simultaneous running workflows", value: "Unlimited" },
-              { text: "DeepSeek Semantic Verification", icon: <Check size={16} className="text-purple-500" /> },
-            ]}
-          />
+              <h2 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 6px', letterSpacing: '-0.02em' }}>{plan.name}</h2>
+              <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 22px', minHeight: 40 }}>{plan.tagline}</p>
 
-          {/* Enterprise */}
-          <div className="bg-white rounded-2xl p-8 border border-gray-100 shadow-xl shadow-gray-200/50 relative flex flex-col h-full mt-4 md:mt-0">
-            <div className="text-center mb-6">
-              <h3 className="text-xl font-bold text-gray-700 mb-6">Enterprise</h3>
-              <p className="text-sm font-bold text-gray-900 mb-8 max-w-[200px] mx-auto">Get a plan tailored to your unique business needs.</p>
-              <button className="w-full py-3 px-4 rounded-lg font-bold text-purple-600 bg-white border-2 border-purple-200 hover:border-purple-600 transition-colors">
-                Contact us
-              </button>
-            </div>
-            
-            <div className="mt-8 space-y-4 text-sm text-gray-600 flex-1">
-              <div className="font-bold text-gray-800 mb-2">All the benefits of Gold, plus:</div>
-              <FeatureItem text="Personalized onboarding" />
-              <FeatureItem text="Team training" />
-              <FeatureItem text="Campaign setup and management" />
-              <FeatureItem text="Dedicated Account Manager" />
-              <FeatureItem text="Custom Interception Scripts" />
-            </div>
-          </div>
-
-        </div>
-      </main>
-    </div>
-  );
-}
-
-function PricingCard({ title, price, billingText, features, isPopular = false }) {
-  return (
-    <div className={`bg-white rounded-2xl border ${isPopular ? 'border-purple-400 shadow-2xl shadow-purple-500/20 md:-mt-6 z-10' : 'border-gray-100 shadow-xl shadow-gray-200/50 mt-4 md:mt-0'} relative flex flex-col h-full`}>
-      
-      {isPopular && (
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#dfb22b] text-white text-xs font-bold px-8 py-2 rounded-sm clip-banner shadow-lg">
-          Stackable
-        </div>
-      )}
-
-      <div className={`p-8 text-center border-b ${isPopular ? 'border-purple-100' : 'border-gray-100'}`}>
-        <h3 className="text-xl font-medium text-gray-600 mb-4">{title}</h3>
-        <div className="flex items-start justify-center gap-1 mb-2">
-          <span className="text-xl font-bold mt-2">$</span>
-          <span className="text-6xl font-black text-gray-900 tracking-tight">{price}</span>
-          <span className="text-xl font-bold text-gray-500 mt-auto mb-2">/mo</span>
-        </div>
-        
-        <button className={`w-full mt-6 py-3 px-4 rounded-lg font-bold transition-all ${isPopular ? 'text-purple-600 bg-white border-2 border-purple-200 hover:border-purple-600' : 'text-purple-600 bg-white border-2 border-purple-200 hover:border-purple-600'}`}>
-          Subscribe
-        </button>
-        <p className="text-xs text-gray-400 mt-4 font-medium">{billingText}</p>
-      </div>
-
-      <div className={`p-8 space-y-4 text-sm flex-1 ${isPopular ? 'bg-[#fafbfe]' : ''}`}>
-        {features.map((f, i) => (
-          <div key={i}>
-            {f.isHeading ? (
-              <div className="font-bold text-gray-800 mb-4">{f.text}</div>
-            ) : (
-              <div className="flex items-start gap-3">
-                {f.icon ? (
-                  <div className="mt-0.5 bg-purple-100 p-0.5 rounded-full">{f.icon}</div>
-                ) : f.value ? (
-                  <div className="font-bold text-purple-700 min-w-[40px]">{f.value}</div>
-                ) : (
-                  <div className="mt-0.5 bg-purple-100 p-0.5 rounded-full"><Check size={12} className="text-purple-500" /></div>
-                )}
-                
-                {f.isHighlighted ? (
-                  <div className="flex-1 bg-purple-100 text-purple-900 px-3 py-1.5 rounded text-xs font-medium border border-purple-200/50">
-                    {f.text}
-                  </div>
-                ) : (
-                  <span className="text-gray-600 flex-1">{f.text}</span>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
+                <b style={{ fontSize: 40, fontWeight: 850, letterSpacing: '-0.03em', color: '#0f172a' }}>
+                  {isAnnual ? plan.annual : plan.monthly}
+                </b>
+                {plan.monthly !== 'Custom' && (
+                  <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>/month</span>
                 )}
               </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+              <small style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 22, display: 'block' }}>
+                {isAnnual ? plan.billingAnnual : plan.billingMonthly}
+              </small>
 
-function FeatureItem({ text }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5 bg-purple-100 p-0.5 rounded-full shadow-sm">
-        <Check size={12} className="text-purple-500" strokeWidth={3} />
-      </div>
-      <span className="text-gray-600">{text}</span>
+              <button
+                type="button"
+                onClick={() => plan.id === 'enterprise' ? (window.location.href = 'mailto:support@scraper.co.in?subject=Enterprise%20Plan') : navigate('/command')}
+                style={{
+                  width: '100%',
+                  height: 46,
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: 750,
+                  cursor: 'pointer',
+                  marginBottom: 24,
+                  border: plan.highlight ? 'none' : '1.5px solid rgba(15, 23, 42, 0.16)',
+                  background: plan.highlight ? 'linear-gradient(135deg, #059669, #10b981)' : '#ffffff',
+                  color: plan.highlight ? '#ffffff' : '#0f172a',
+                  boxShadow: plan.highlight ? '0 10px 22px -6px rgba(5, 150, 105, 0.45)' : 'none'
+                }}
+              >
+                {plan.cta}
+              </button>
+
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
+                {plan.features.map(f => (
+                  <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13.5, color: '#334155', lineHeight: 1.45 }}>
+                    <span
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: '#ecfdf5',
+                        color: '#059669',
+                        display: 'grid',
+                        placeItems: 'center',
+                        flexShrink: 0,
+                        marginTop: 1
+                      }}
+                    >
+                      <Check size={12} strokeWidth={3} />
+                    </span>
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+            </motion.article>
+          ))}
+        </div>
+
+        <div
+          style={{
+            marginTop: 42,
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 28,
+            flexWrap: 'wrap',
+            color: '#64748b',
+            fontSize: 13,
+            fontWeight: 600
+          }}
+        >
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={15} color="#059669" /> Secure instant access</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe2 size={15} color="#059669" /> 11 core markets supported</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Zap size={15} color="#059669" /> Cancel or switch anytime</span>
+        </div>
+      </main>
     </div>
   );
 }

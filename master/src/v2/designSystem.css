@@ -1,0 +1,323 @@
+/* ============================================================================
+   SOVEREIGN COMMAND DESIGN SYSTEM — MASTER CONTROL CENTER
+   Distinct Obsidian Executive header + luminous precision workspace surfaces.
+   Unmistakable Master authority over global sweeps, clients, AI & engines.
+   ============================================================================ */
+
+:root {
+  color-scheme: light !important;
+  --mc-obsidian: #0b1120;
+  --mc-obsidian-2: #111827;
+  --mc-canvas: #f8fafc;
+  --mc-surface: #ffffff;
+  --mc-border: rgba(15, 23, 42, 0.09);
+  --mc-border-strong: rgba(15, 23, 42, 0.16);
+  --mc-ink: #0f172a;
+  --mc-ink-soft: #334155;
+  --mc-ink-muted: #64748b;
+  --mc-gold: #f59e0b;
+  --mc-gold-soft: #fffbeb;
+  --mc-emerald: #059669;
+  --mc-emerald-bright: #10b981;
+  --mc-emerald-soft: #ecfdf5;
+  --mc-indigo: #4f46e5;
+  --mc-indigo-soft: #eef2ff;
+  --mc-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --gb-ink: #0f172a;
+  --gb-green-deep: #059669;
+  --v2-lime: #059669;
+  --v2-cyan: #2563eb;
+}
+
+html, body {
+  background: var(--mc-canvas) !important;
+  color: var(--mc-ink) !important;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
+  -webkit-font-smoothing: antialiased !important;
+}
+
+#root,
+.v2-root,
+.v2-root.v2-command {
+  background:
+    radial-gradient(900px 380px at 12% -6%, rgba(79, 70, 229, 0.08), transparent 65%),
+    radial-gradient(800px 360px at 88% -4%, rgba(245, 158, 11, 0.07), transparent 60%),
+    var(--mc-canvas) !important;
+  color: var(--mc-ink) !important;
+  min-height: 100vh;
+}
+
+/* ── Sovereign Obsidian Top Command Header ─────────────────────────────────── */
+.v2-cmd-top {
+  height: 62px !important;
+  min-height: 62px !important;
+  padding: 0 24px !important;
+  background: linear-gradient(90deg, #0b1120 0%, #111827 55%, #0f172a 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 24px -8px rgba(11, 17, 32, 0.4) !important;
+  color: #f8fafc !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 60 !important;
+}
+
+.v2-cmd-top * {
+  color: inherit;
+}
+
+.v2-cmd-top .v2-cmd-home {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 10px !important;
+  padding: 5px 10px !important;
+}
+
+.v2-cmd-top .v2-cmd-breadcrumb {
+  color: #94a3b8 !important;
+  font-size: 12px !important;
+}
+
+.v2-cmd-top .v2-cmd-breadcrumb code {
+  background: rgba(245, 158, 11, 0.16) !important;
+  color: #fcd34d !important;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
+  border-radius: 999px !important;
+  padding: 2px 10px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.v2-cmd-top .v2-cmd-context {
+  color: #cbd5e1 !important;
+  font-size: 12px !important;
+}
+
+.v2-cmd-top .v2-btn-ghost {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 10px !important;
+}
+
+.v2-cmd-top .v2-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.v2-cmd-top .v2-tools-menu {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid var(--mc-border-strong) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.25) !important;
+}
+
+.v2-cmd-top .v2-tools-menu b {
+  color: #0f172a !important;
+}
+
+.v2-cmd-top .v2-tools-menu small {
+  color: #64748b !important;
+}
+
+.mc-sovereign-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.22), rgba(217, 119, 6, 0.12));
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fcd34d !important;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Master Tabs Rail ──────────────────────────────────────────────────────── */
+.v2-cmd-tabs {
+  background: #ffffff !important;
+  border-bottom: 1px solid var(--mc-border) !important;
+  padding: 8px 24px !important;
+  gap: 6px !important;
+  overflow-x: auto;
+}
+
+.v2-tab-pill-btn {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 7px !important;
+  padding: 8px 14px !important;
+  border-radius: 10px !important;
+  font-size: 13px !important;
+  font-weight: 650 !important;
+  color: var(--mc-ink-muted) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  transition: color 0.16s ease, background 0.16s ease !important;
+}
+
+.v2-tab-pill-btn:hover {
+  color: var(--mc-ink) !important;
+  background: #f1f5f9 !important;
+}
+
+.v2-tab-pill-btn.is-active {
+  color: var(--mc-indigo) !important;
+}
+
+.v2-tab-indicator {
+  position: absolute !important;
+  inset: 0 !important;
+  border-radius: 10px !important;
+  background: var(--mc-indigo-soft) !important;
+  border: 1px solid rgba(79, 70, 229, 0.25) !important;
+  z-index: -1 !important;
+}
+
+/* ── Master Cards, Search Console & AI Simulator ───────────────────────────── */
+.v2-console,
+.v2-cp-panel,
+.v2-cp-center,
+.v2-table-shell,
+.v2-panel,
+.v2-run-card,
+.v2-metric-card,
+.v2-master-sweep-launcher-card {
+  background: #ffffff !important;
+  border: 1px solid var(--mc-border) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.06) !important;
+}
+
+.v2-console-bar {
+  background: #f8fafc !important;
+  border: 1.5px solid var(--mc-border-strong) !important;
+  border-radius: 14px !important;
+  min-height: 54px !important;
+}
+
+.v2-console-bar:focus-within {
+  background: #ffffff !important;
+  border-color: var(--mc-indigo) !important;
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.14) !important;
+}
+
+.v2-console-go,
+.v2-btn-deploy-3d,
+.v2-btn-master-sweep {
+  background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 11px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 8px 18px -4px rgba(79, 70, 229, 0.42) !important;
+  transition: transform 0.15s var(--mc-ease), box-shadow 0.15s var(--mc-ease) !important;
+}
+
+.v2-console-go:hover:not(:disabled),
+.v2-btn-master-sweep:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 12px 24px -4px rgba(79, 70, 229, 0.5) !important;
+}
+
+.v2-console-go.is-stop {
+  background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%) !important;
+}
+
+/* AI Query & Synonym Simulator Card */
+.mc-sim-card {
+  background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%);
+  border: 1.5px solid rgba(79, 70, 229, 0.22);
+  border-radius: 18px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 28px -8px rgba(79, 70, 229, 0.12);
+}
+
+.mc-sim-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.mc-sim-input {
+  flex: 1;
+  min-width: 240px;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 11px;
+  border: 1.5px solid var(--mc-border-strong);
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mc-ink);
+  outline: none;
+}
+
+.mc-sim-input:focus {
+  border-color: var(--mc-indigo);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+}
+
+.mc-sim-select {
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1.5px solid var(--mc-border-strong);
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--mc-ink);
+}
+
+.mc-sim-result {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--mc-border);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.mc-sim-metric span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mc-ink-muted);
+}
+
+.mc-sim-metric b {
+  font-size: 15px;
+  color: var(--mc-ink);
+  font-weight: 750;
+}
+
+.mc-sim-chips {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mc-border);
+}
+
+.mc-sim-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+  font-size: 12px;
+  font-weight: 600;
+}

@@ -10,33 +10,33 @@ import {
 } from './auth';
 import './login.css';
 
-const MARKETS = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'DE'];
+const MARKETS = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
 
 const COPY = {
   client: {
-    eyebrow: 'CLIENT WORKSPACE',
-    title: 'Every lead in your area.',
-    titleAccent: 'One calm room.',
-    subtitle: 'Sign in to your saved folders, live sweeps and clean exports across eleven markets.',
+    eyebrow: 'LEAD WORKSPACE',
+    title: 'Find verified business leads',
+    titleAccent: 'in seconds.',
+    subtitle: 'Sign in to access your saved lists, live interactive territory maps, and instant Excel exports across 11 markets.',
     cardTitle: 'Welcome back',
-    cardSubtitle: 'Use Google, or the email on your workspace.',
+    cardSubtitle: 'Sign in with Google or your workspace email.',
     points: [
-      ['No API keys, ever', 'The engine runs on public, keyless sources.'],
-      ['Folders that stay put', 'What you save is what you export.'],
-      ['India first', 'State → district → mandal, then ten more markets.']
+      ['Any industry, any city', 'Find shops, clinics, suppliers, agencies and local services effortlessly.'],
+      ['Saved lists ready anytime', 'Every search is neatly stored for 1-click Excel, CSV or phone export.'],
+      ['India first + 10 global markets', 'Complete India village coverage plus US, UK, Canada, Australia, UAE, Germany & more.']
     ]
   },
   master: {
-    eyebrow: 'MASTER ACCESS',
-    title: 'The territory',
-    titleAccent: 'control room.',
-    subtitle: 'Read every client workspace, then run district, mandal and state sweeps as labelled containers.',
+    eyebrow: 'MASTER CONTROL',
+    title: 'Global territory',
+    titleAccent: 'command center.',
+    subtitle: 'Manage client workspaces, launch state & county sweeps across all 11 markets, and oversee live intelligence.',
     cardTitle: 'Master sign-in',
-    cardSubtitle: 'Restricted to the master operator and delegated admins.',
+    cardSubtitle: 'Restricted to authorized operators and administrators.',
     points: [
-      ['Read across clients', 'Every client folder, one index.'],
-      ['Sweep any territory', 'District, mandal and state in one plan.'],
-      ['Every job is a container', 'One job ID, one pod, one audit trail.']
+      ['Unified client directory', 'Manage customer plans, lead vaults and announcements in one view.'],
+      ['Full territory sweeps', 'Launch city, county, district and state sweeps across all 11 markets.'],
+      ['Live operational control', 'Monitor discovery throughput, self-learning AI and system health.']
     ]
   }
 };
@@ -173,8 +173,8 @@ export default function LoginV2({ variant = 'client' }) {
     setError('');
     setNotice(
       config.googleEnabled
-        ? 'Google is still loading. Try again in a moment, or use your email.'
-        : 'Google Sign-In activates as soon as GOOGLE_CLIENT_ID is set on the server. Use your email for now.'
+        ? 'Google Sign-In is still loading. Try again in a moment, or sign in with your email below.'
+        : 'Please sign in with your workspace email and password below.'
     );
   }
 
@@ -347,7 +347,7 @@ export default function LoginV2({ variant = 'client' }) {
 
           <p className="login-footnote">
             <ShieldCheck size={12} />
-            Keyless lead engine · no API keys stored · India first
+            Secure workspace · Instant business leads across 11 markets
           </p>
         </section>
       </main>

@@ -28,8 +28,8 @@ export default function MergeModal({ folders, onClose, onMerge, isMerging }) {
 
         <form onSubmit={handleSubmit} className="v2-dialog-form">
           <p className="v2-dialog-desc">
-            Combine <b>{folders.length} folders</b> ({formatNumber(totalRawLeads)} raw leads) into a single consolidated search vault.
-            Identical phone numbers and business names will be automatically deduplicated with merged metadata.
+            Combine <b>{folders.length} saved lists</b> ({formatNumber(totalRawLeads)} businesses) into one clean list.
+            Duplicate phone numbers and businesses are automatically removed.
           </p>
 
           <div className="v2-merge-folders-list">
@@ -37,18 +37,18 @@ export default function MergeModal({ folders, onClose, onMerge, isMerging }) {
               <div key={f.id} className="v2-merge-folder-row">
                 <FolderArchive size={14} />
                 <span className="v2-merge-folder-name">{f.customName || f.name}</span>
-                <span className="v2-merge-folder-count">{formatNumber(f.leadCount)} leads · {formatNumber(f.phoneCount)} mobiles</span>
+                <span className="v2-merge-folder-count">{formatNumber(f.leadCount)} businesses · {formatNumber(f.phoneCount)} phones</span>
               </div>
             ))}
           </div>
 
           <label className="v2-dialog-field">
-            <span>New Merged Folder Title</span>
+            <span>New Combined List Name</span>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Master Consolidated Outreach Vault"
+              placeholder="e.g. Hyderabad Hardware & Electronics Combined List"
               required
             />
           </label>

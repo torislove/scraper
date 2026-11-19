@@ -17,6 +17,12 @@ const brandIntel = require('./brandIntel');
 const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
 
 const FAMILY_DEFINITIONS = {
+  technology: {
+    label: 'IT, Computers & Electronics',
+    description: 'Computer shops, laptop dealers, mobile stores, CCTV, software and electronics',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart', 'social']
+  },
   photography: {
     label: 'Photography, Studios & Media',
     description: 'Photo studios, wedding photographers, candid shoots, drone videography and digital labs',
@@ -89,6 +95,24 @@ const FAMILY_DEFINITIONS = {
     engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
     cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
   },
+  logistics: {
+    label: 'Logistics & Transport',
+    description: 'Packers, movers, transport companies, couriers, freight and warehouses',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart']
+  },
+  hospitality: {
+    label: 'Hotels & Travel',
+    description: 'Hotels, resorts, lodges, travel agencies, tours and rentals',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+  },
+  fitness: {
+    label: 'Fitness & Sports',
+    description: 'Gyms, yoga studios, fitness clubs, swimming and sports academies',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+  },
   generic: {
     label: 'General vendors',
     description: 'Any local business, service or supplier',
@@ -100,6 +124,19 @@ const FAMILY_DEFINITIONS = {
 // Weighted stems. Higher weight wins when two families match the same text.
 // These are stems, so "plumb" matches plumber/plumbing/plumbers.
 const FAMILY_KEYWORDS = {
+  technology: [
+    ['computer shop', 14], ['computer shops', 14], ['computer store', 14], ['computer stores', 14],
+    ['computer dealer', 13], ['computer dealers', 13], ['computer hardware', 13], ['computer repair', 13],
+    ['computer service', 12], ['computer accessories', 12], ['laptop shop', 14], ['laptop store', 14],
+    ['laptop dealer', 13], ['laptop repair', 13], ['laptop service', 12], ['second hand laptop', 12],
+    ['desktop pc', 12], ['gaming pc', 12], ['custom pc', 12], ['pc repair', 12],
+    ['mobile shop', 13], ['mobile shops', 13], ['mobile store', 13], ['mobile repair', 13],
+    ['smartphone', 11], ['iphone repair', 12], ['electronics shop', 11], ['electronics store', 11],
+    ['cctv', 11], ['security camera', 11], ['biometric', 10], ['printer repair', 11],
+    ['printer dealer', 11], ['toner refill', 10], ['networking', 10], ['software company', 11],
+    ['web development', 10], ['app development', 10], ['it services', 11], ['it company', 11],
+    ['computer', 9], ['laptop', 9], ['desktop', 8], ['hardware', 6], ['electronics', 6]
+  ],
   photography: [
     ['photo studio', 10], ['photo studios', 10], ['photographer', 9], ['photographers', 9],
     ['photography', 9], ['candid photography', 10], ['candid photographer', 10],
@@ -214,6 +251,18 @@ const FAMILY_KEYWORDS = {
     ['foundry', 7], ['pump', 4], ['generator', 5], ['electrical goods', 6],
     ['bulk supplier', 8], ['oem', 6], ['contractor', 4]
   ],
+  logistics: [
+    ['logistics', 10], ['transport', 9], ['packers and movers', 11], ['courier', 10],
+    ['cargo', 9], ['freight', 9], ['warehouse', 9], ['cold storage', 10], ['trucking', 9]
+  ],
+  hospitality: [
+    ['hotel', 10], ['hotels', 10], ['resort', 10], ['resorts', 10], ['lodge', 9],
+    ['homestay', 9], ['travel agency', 10], ['tour operator', 10], ['visa consultant', 9]
+  ],
+  fitness: [
+    ['gym', 11], ['gyms', 11], ['fitness', 10], ['yoga', 10], ['pilates', 9],
+    ['crossfit', 9], ['zumba', 9], ['sports academy', 10], ['swimming', 8]
+  ],
   generic: [
     ['business', 1], ['service', 1], ['company', 1], ['vendor', 1], ['shop', 1]
   ]
@@ -221,8 +270,8 @@ const FAMILY_KEYWORDS = {
 
 // Tie-break priority: specialist families win over broad ones with equal score.
 const FAMILY_PRIORITY = [
-  'photography', 'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
-  'health', 'beauty', 'education', 'food', 'retail', 'professional', 'generic'
+  'technology', 'photography', 'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
+  'health', 'fitness', 'hospitality', 'logistics', 'beauty', 'education', 'food', 'retail', 'professional', 'generic'
 ];
 
 const CATEGORY_STOPWORDS = /^(?:find|search|search for|best|top|list of|show me|show|near me|nearest|good|cheap|affordable|local)\s+/i;
@@ -561,10 +610,19 @@ const CATEGORY_CATALOG = [
   { label: 'Gardeners', family: 'home-services', aliases: ['gardening', 'landscaping', 'garden maintenance'] },
   { label: 'Lift Repair', family: 'home-services', aliases: ['elevator repair', 'lift service'] },
 
+  // IT, Computers, Mobiles & Electronics
+  { label: 'Computer Shops', family: 'technology', aliases: ['computer shop', 'computer shops', 'computer store', 'computer stores', 'pc shop', 'desktop shop', 'computer dealer', 'computer dealers', 'computer showroom', 'computers'] },
+  { label: 'Laptop Repair & Dealers', family: 'technology', aliases: ['laptop shop', 'laptop store', 'laptop dealer', 'laptop repair', 'laptop service', 'laptops', 'second hand laptop', 'refurbished laptops', 'macbook repair'] },
+  { label: 'Computer Hardware & Accessories', family: 'technology', aliases: ['computer hardware', 'computer accessories', 'gaming pc', 'custom pc', 'computer parts', 'pc components', 'monitors', 'ssd', 'graphics card', 'it hardware'] },
+  { label: 'Mobile Shops', family: 'technology', aliases: ['mobile shop', 'mobile shops', 'mobile store', 'phone shop', 'smartphone store', 'mobile showroom'] },
+  { label: 'Mobile Repair', family: 'technology', aliases: ['mobile repair', 'phone repair', 'smartphone repair', 'iphone repair', 'mobile service center'] },
+  { label: 'Electronics Stores', family: 'technology', aliases: ['electronics', 'electronic shop', 'electronics shop', 'gadget store', 'home appliances showroom'] },
+  { label: 'Printer & Cartridge Shops', family: 'technology', aliases: ['printer shop', 'printer repair', 'printer dealer', 'toner refill', 'cartridge refill'] },
+  { label: 'Software & IT Companies', family: 'technology', aliases: ['software company', 'it company', 'it services', 'app development', 'software development', 'networking services'] },
+  { label: 'Inverter & Battery Dealers', family: 'technology', aliases: ['inverter dealer', 'battery shop', 'ups dealer', 'car battery', 'inverter battery'] },
+
   // Retail
-  { label: 'Showrooms', family: 'retail', aliases: ['showroom', 'store', 'shop'] },
-  { label: 'Mobile Shops', family: 'retail', aliases: ['mobile shop', 'mobile store', 'phone shop'] },
-  { label: 'Electronics Stores', family: 'retail', aliases: ['electronics', 'electronic shop', 'gadget store'] },
+  { label: 'Showrooms', family: 'retail', aliases: ['showroom', 'retail showroom', 'brand outlet'] },
   { label: 'Furniture Stores', family: 'retail', aliases: ['furniture', 'furniture shop', 'sofa store'] },
   { label: 'Jewellery Stores', family: 'retail', aliases: ['jewellery', 'jewelry', 'jewel shop', 'gold shop'] },
   { label: 'Clothing Boutiques', family: 'retail', aliases: ['boutique', 'clothing', 'apparel', 'garments'] },
@@ -663,8 +721,22 @@ const CATEGORY_CATALOG = [
   { label: 'Hydraulic Equipment', family: 'industrial', aliases: ['hydraulic', 'hydraulic lift', 'hydraulic fittings', 'hydraulic cylinder', 'hydraulic pump', 'hydraulic press'] },
   { label: 'Elevators & Lifts', family: 'home-services', aliases: ['elevator', 'passenger lift', 'cargo lift', 'lift repair', 'elevator service', 'lift installation'] },
 
+  // Fitness, Hospitality, Logistics, Energy & Specialty Trades
+  { label: 'Gyms & Fitness Centres', family: 'fitness', aliases: ['gym', 'gyms', 'fitness centre', 'fitness center', 'workout', 'crossfit'] },
+  { label: 'Yoga Studios', family: 'fitness', aliases: ['yoga', 'yoga classes', 'yoga studio', 'meditation centre', 'zumba'] },
+  { label: 'Hotels & Resorts', family: 'hospitality', aliases: ['hotel', 'hotels', 'resort', 'resorts', 'lodge', 'homestay', 'guest house'] },
+  { label: 'Travel Agencies', family: 'hospitality', aliases: ['travel agency', 'travel agent', 'tour operator', 'holiday packages', 'visa agent'] },
+  { label: 'Transport & Logistics', family: 'logistics', aliases: ['transport', 'logistics', 'cargo', 'freight', 'goods carrier', 'trucking', 'warehouse', 'cold storage'] },
+  { label: 'Courier Services', family: 'logistics', aliases: ['courier', 'parcel service', 'express delivery'] },
+  { label: 'HVAC Contractors', family: 'home-services', aliases: ['hvac', 'hvac contractor', 'heating and cooling', 'central ac'] },
+  { label: 'Roofing Contractors', family: 'home-services', aliases: ['roofer', 'roofers', 'roofing', 'roof repair'] },
+  { label: 'Landscapers', family: 'home-services', aliases: ['landscaper', 'landscaping', 'lawn care'] },
+  { label: 'RO Water Purifier Dealers', family: 'home-services', aliases: ['ro service', 'water purifier', 'ro repair', 'ro dealer'] },
+  { label: 'Agricultural Supplies & Nurseries', family: 'industrial', aliases: ['agriculture', 'seeds shop', 'fertilizer dealer', 'plant nursery', 'tractor dealer', 'pesticides'] },
+  { label: 'CNC & Laser Cutting', family: 'industrial', aliases: ['cnc', 'laser cutting', 'cnc machining', 'metal fabrication', 'sheet metal'] },
+
   // Generic fallback so a location-only pick still produces a valid run.
-  { label: 'Businesses', family: 'generic', aliases: ['business', 'vendors', 'services', 'shops', 'companies', 'local business'] }
+  { label: 'Businesses', family: 'generic', aliases: ['business', 'vendors', 'local business'] }
 ];
 
 function levenshtein(a, b) {
@@ -747,9 +819,11 @@ function stemWord(w) {
 
 function tokenMatchScore(queryWords, candidateWords) {
   const { consonantSkeleton } = require('../utils/tradeIntelligence');
+  const { COMMON_WORD_WHITELIST } = require('../utils/tradeIntelligence');
   let score = 0;
   for (const qw of queryWords) {
     if (qw.length < 2) continue;
+    const isProtected = COMMON_WORD_WHITELIST.has(qw);
     const qStem = stemWord(qw);
     const qSkel = consonantSkeleton(qw);
     for (const cw of candidateWords) {
@@ -761,11 +835,11 @@ function tokenMatchScore(queryWords, candidateWords) {
       else if (cw.startsWith(qw) || qw.startsWith(cw)) score += 220;
       else if (qw.length >= 4 && cw.includes(qw)) score += 160;
       else if (cw.length >= 4 && qw.includes(cw)) score += 160;
-      else if (qSkel && cSkel && qSkel.length >= 3 && (qSkel === cSkel || levenshtein(qSkel, cSkel) <= 1)) {
-        if (levenshtein(qw, cw) <= (qw.length >= 8 ? 3 : 2)) score += 260;
+      else if (!isProtected && qw.length >= 5 && qw[0] === cw[0] && qSkel && cSkel && qSkel.length >= 4 && qSkel === cSkel) {
+        if (levenshtein(qw, cw) <= (qw.length >= 8 ? 3 : 2)) score += 240;
       }
-      else if (qw.length >= 4 && cw.length >= 4 && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length <= 5 ? 1 : (qw.length >= 8 ? 3 : 2))) {
-        score += 200;
+      else if (!isProtected && qw.length >= 5 && cw.length >= 5 && qw[0] === cw[0] && allowTypo(qw, cw) && levenshtein(qw, cw) <= (qw.length >= 8 ? 2 : 1)) {
+        score += 190;
       }
     }
   }
@@ -785,11 +859,11 @@ function titleCase(value) {
  * @returns {Array<{label:string,family:string,familyLabel:string,score:number,corrected:boolean,matched:string}>}
  */
 function suggestCategories(fragment, limit = 6) {
-  const { normalizeTradePhrase, consonantSkeleton } = require('../utils/tradeIntelligence');
+  const { normalizeTradePhrase, consonantSkeleton, COMMON_WORD_WHITELIST } = require('../utils/tradeIntelligence');
   const raw = clean(fragment, 120);
   const query = normalize(raw.replace(CATEGORY_STOPWORDS, ''));
   if (!query) {
-    const defaultLabels = ['Plumbers', 'Electricians', 'Photo Studios', 'Interior Designers', 'AC Repair', 'Banquet Halls'];
+    const defaultLabels = ['Computer Shops', 'Plumbers', 'Electricians', 'Photo Studios', 'Interior Designers', 'Dentists'];
     return CATEGORY_CATALOG.filter(c => defaultLabels.includes(c.label)).slice(0, limit).map(entry => ({
       label: entry.label,
       family: entry.family,
@@ -806,6 +880,7 @@ function suggestCategories(fragment, limit = 6) {
   const querySkel = consonantSkeleton(query);
   const queryWords = query.split(' ').filter(Boolean);
   const normalizedWords = normalizedTradeQuery.split(' ').filter(Boolean);
+  const queryProtected = queryWords.length > 0 && queryWords.every(w => COMMON_WORD_WHITELIST.has(w));
   const scored = [];
   const seenLabels = new Set();
 
@@ -828,8 +903,8 @@ function suggestCategories(fragment, limit = 6) {
     else if (query.includes(label) || normalizedTradeQuery.includes(label)) {
       best = 900;
     }
-    // 4. Consonant skeleton match (e.g. "phtgaphers" -> "photographers")
-    else if (querySkel.length >= 4 && (querySkel === labelSkel || levenshtein(querySkel, labelSkel) <= 1)) {
+    // 4. Safe consonant skeleton match (only for genuine non-dictionary misspellings)
+    else if (!queryProtected && query.length >= 6 && query[0] === label[0] && querySkel.length >= 4 && querySkel === labelSkel) {
       if (levenshtein(query, label) <= (query.length >= 8 ? 3 : 2)) {
         best = 930 - levenshtein(query, label) * 20;
         matched = entry.label;
@@ -862,7 +937,7 @@ function suggestCategories(fragment, limit = 6) {
       } else if (hasWord(a, query) || hasWord(a, normalizedTradeQuery)) {
         best = Math.max(best, 850 - Math.min(50, a.length - query.length));
         matched = alias;
-      } else if (querySkel.length >= 4 && (querySkel === aSkel || levenshtein(querySkel, aSkel) <= 1)) {
+      } else if (!queryProtected && query.length >= 6 && query[0] === a[0] && querySkel.length >= 4 && querySkel === aSkel) {
         if (levenshtein(query, a) <= (query.length >= 8 ? 3 : 2)) {
           best = Math.max(best, 920 - levenshtein(query, a) * 20);
           matched = alias;
@@ -870,11 +945,11 @@ function suggestCategories(fragment, limit = 6) {
       }
     }
 
-    // 7. Direct typo matching on whole label or alias
-    if (query.length >= 4 && best < 900) {
-      if (allowTypo(query, label) || allowTypo(normalizedTradeQuery, label)) {
+    // 7. Direct typo matching on whole label or alias (disabled for protected common words)
+    if (!queryProtected && query.length >= 5 && best < 900) {
+      if (query[0] === label[0] && (allowTypo(query, label) || allowTypo(normalizedTradeQuery, label))) {
         const labelDist = Math.min(levenshtein(query, label), levenshtein(normalizedTradeQuery, label));
-        if (labelDist <= (query.length <= 5 ? 1 : (query.length >= 8 ? 3 : 2))) {
+        if (labelDist <= (query.length >= 8 ? 2 : 1)) {
           const typoScore = 920 - labelDist * 30;
           if (typoScore > best) {
             best = typoScore;
@@ -884,9 +959,9 @@ function suggestCategories(fragment, limit = 6) {
       }
       for (const alias of entry.aliases) {
         const a = normalize(alias);
-        if (allowTypo(query, a) || allowTypo(normalizedTradeQuery, a)) {
+        if (query[0] === a[0] && (allowTypo(query, a) || allowTypo(normalizedTradeQuery, a))) {
           const aliasDist = Math.min(levenshtein(query, a), levenshtein(normalizedTradeQuery, a));
-          if (aliasDist <= (query.length <= 5 ? 1 : (query.length >= 8 ? 3 : 2))) {
+          if (aliasDist <= (query.length >= 8 ? 2 : 1)) {
             const typoScore = 910 - aliasDist * 30;
             if (typoScore > best) {
               best = typoScore;

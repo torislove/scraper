@@ -1,6 +1,7 @@
 import React from 'react';
-import { AlertTriangle, CircleDot, Globe2, Phone, Search, X, Zap } from 'lucide-react';
-import { StatusPill, cx, formatNumber, relativeTime } from '../../ui';
+import { motion } from 'framer-motion';
+import { CircleDot, Zap } from 'lucide-react';
+import { StatusPill, cx, relativeTime } from '../../ui';
 
 export function vendorInitial(vendor) {
   return (vendor?.name || '?').slice(0, 1).toUpperCase();
@@ -11,8 +12,20 @@ export function hasValidLogo(vendor) {
 }
 
 export function VendorAvatar({ vendor, size = 36 }) {
+  const palette = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#0891b2', '#db2777'];
+  const code = (vendor?.name || 'A').charCodeAt(0) % palette.length;
+  const accent = palette[code];
   return (
-    <span className="v2-vendor-avatar" style={{ width: size, height: size }}>
+    <span
+      className="v2-vendor-avatar"
+      style={{
+        width: size,
+        height: size,
+        background: `linear-gradient(135deg, ${accent}18, ${accent}2c)`,
+        border: `1px solid ${accent}38`,
+        color: accent
+      }}
+    >
       {hasValidLogo(vendor)
         ? <img src={vendor.logo} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} />
         : <b>{vendorInitial(vendor)}</b>}
@@ -20,16 +33,56 @@ export function VendorAvatar({ vendor, size = 36 }) {
   );
 }
 
-export function MetricCard({ label, value, sub, tone = 'lime', icon: Icon, pulse = false }) {
+const TONE_THEME = {
+  lime: { bg: 'linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%)', iconBg: '#dcfce7', iconColor: '#059669', bar: '#10b981' },
+  cyan: { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', iconBg: '#dbeafe', iconColor: '#2563eb', bar: '#3b82f6' },
+  violet: { bg: 'linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)', iconBg: '#ede9fe', iconColor: '#7c3aed', bar: '#8b5cf6' },
+  amber: { bg: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)', iconBg: '#fef3c7', iconColor: '#d97706', bar: '#f59e0b' }
+};
+
+export function MetricCard({ label, value, sub, tone = 'lime', icon: Icon, pulse = false, percent = null }) {
+  const theme = TONE_THEME[tone] || TONE_THEME.lime;
   return (
-    <div className={cx('v2-metric-card', `tone-${tone}`, pulse && 'is-pulsing')}>
-      <span className="v2-metric-icon">{Icon && <Icon size={15} />}</span>
-      <span className="v2-metric-copy">
+    <motion.div
+      className={cx('v2-metric-card', `tone-${tone}`, pulse && 'is-pulsing')}
+      whileHover={{ y: -3, transition: { duration: 0.16 } }}
+      style={{
+        background: theme.bg,
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      <span
+        className="v2-metric-icon"
+        style={{
+          background: theme.iconBg,
+          color: theme.iconColor,
+          width: 40,
+          height: 40,
+          borderRadius: 12,
+          display: 'grid',
+          placeItems: 'center',
+          flexShrink: 0
+        }}
+      >
+        {Icon && <Icon size={18} />}
+      </span>
+      <span className="v2-metric-copy" style={{ flex: 1, minWidth: 0 }}>
         <small>{label}</small>
         <b>{value}</b>
         {sub && <em>{sub}</em>}
+        {percent != null && Number.isFinite(percent) && (
+          <div style={{ marginTop: 6, height: 4, borderRadius: 99, background: 'rgba(15, 23, 42, 0.08)', overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.max(4, Math.min(100, percent))}%` }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              style={{ height: '100%', background: theme.bar, borderRadius: 99 }}
+            />
+          </div>
+        )}
       </span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -69,10 +122,10 @@ export function EmptyState({ icon: Icon = CircleDot, title, body, action, action
 export function MapLegend() {
   return (
     <div className="v2-map-legend">
-      <span><i className="is-phone" /> Verified mobile</span>
-      <span><i className="is-landline" /> Landline phone</span>
-      <span><i className="is-web" /> Web / Social</span>
-      <span><i className="is-empty" /> Unverified</span>
+      <span><i className="is-phone" /> Mobile phone</span>
+      <span><i className="is-landline" /> Office phone</span>
+      <span><i className="is-web" /> Website listed</span>
+      <span><i className="is-empty" /> Location only</span>
     </div>
   );
 }
@@ -91,29 +144,30 @@ export function DeepJobRow({ job, onStop, onResume, active = false }) {
       <div className="v2-deep-job-head">
         <span className="v2-deep-job-mark"><Zap size={13} /></span>
         <span>
-          <b>{job.id}</b>
+          <b>Contact Lookup Batch</b>
           <small>
-            {job.updatedAt || relativeTime(job.createdAt)} · {job.total} vendors
-            {job.status === 'interrupted' ? ' · stopped by an engine restart' : ''}
+            {job.updatedAt || relativeTime(job.createdAt)} · {job.total} businesses
+            {job.status === 'interrupted' ? ' · paused' : ''}
           </small>
         </span>
-        <StatusPill tone={tone} pulse={['queued', 'running', 'stopping'].includes(job.status)}>{job.status}</StatusPill>
+        <StatusPill tone={tone} pulse={['queued', 'running', 'stopping'].includes(job.status)}>
+          {job.status === 'completed' ? 'Done' : job.status}
+        </StatusPill>
       </div>
       <div className="v2-deep-job-bar">
         <span style={{ width: `${percent}%` }} />
       </div>
       <div className="v2-deep-job-foot">
-        <small>{processed} / {job.total} processed · {enriched} enriched</small>
+        <small>{processed} of {job.total} checked · {enriched} updated with new details</small>
         {['queued', 'running'].includes(job.status) && onStop && (
           <button type="button" className="v2-btn v2-btn-xs" onClick={() => onStop(job.id)}>Stop</button>
         )}
         {canResume && !['queued', 'running', 'stopping'].includes(job.status) && onResume && (
           <button type="button" className="v2-btn v2-btn-xs v2-btn-lime" onClick={() => onResume(job.id)}>
-            Resume remaining
+            Resume
           </button>
         )}
       </div>
     </div>
   );
 }
-

@@ -1,24 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
-  Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Building2,
-  Check, CheckCircle2, CheckSquare, ChevronDown, ChevronLeft, ChevronRight,
-  CircleDot, Clock, Compass, Copy, Crosshair, Database, Download, ExternalLink,
-  FileSpreadsheet, FileText, Filter, Folder, FolderArchive, Globe2, Layers,
-  LayoutDashboard, Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play,
-  Radar as RadarIcon, RefreshCw, RotateCcw, Search, Settings, SlidersHorizontal,
-  Smartphone, Sparkles, Square, Star, Table2, Tag, Trash2, Users, Wifi,
-  WifiOff, X, Zap, Edit3, GitMerge, Plus
+  ArrowRight, BarChart3, Building2, Check, CheckCircle2, Copy, Download,
+  Edit3, FileSpreadsheet, FileText, FolderArchive, Globe2, LayoutGrid,
+  MapPin, Phone, PhoneCall, Play, RefreshCw, Search, Smartphone, Star,
+  Table2, Trash2, Users, X
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
-import { EmptyState, MapLegend, VendorAvatar } from '../cards/MetricCard';
-import { extractLeadArea, CarriedBadge, qualityOf } from '../../utils/leadHelpers';
+import { VendorAvatar } from '../cards/MetricCard';
+import { extractLeadArea, CarriedBadge } from '../../utils/leadHelpers';
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, scoreLead, highlightMatches
 } from '../../../utils/universalSearchEngine';
-import { CRM_STAGES, crmStageOf, formatInr } from '../../utils/leadStages';
-import { getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone } from '../../../utils/phoneClassify';
-import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
+import { getDisplayPhone, isMobilePhone, whatsappNumber } from '../../../utils/phoneClassify';
 import { cx, formatNumber, relativeTime } from '../../ui';
 
 export default function FolderView({
@@ -29,64 +23,49 @@ export default function FolderView({
   onDelete,
   onReScrape,
   onSelectVendor,
-  onStageChange,
   onRename
 }) {
   const session = view?.session;
   const leads = Array.isArray(session?.leads) ? session.leads : [];
-  const isMasterSweep = Boolean(session?.isMasterSweep || view?.run?.isMasterSweep || /master_/i.test(session?.id || '') || /sweep/i.test(session?.location || ''));
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedLocality, setSelectedLocality] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'map' | 'telecaller' | 'analytics'
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'map' | 'cards' | 'analytics'
   const [copied, setCopied] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
-  const [sortField, setSortField] = useState('default');
-  const [sortOrder, setSortOrder] = useState('asc');
 
   const phoneLeads = useMemo(() => leads.filter(l => Boolean(getDisplayPhone(l))), [leads]);
   const webLeads = useMemo(() => leads.filter(l => Boolean(l.website)), [leads]);
   const ratedLeads = useMemo(() => leads.filter(l => Number(l.rating) >= 4.0), [leads]);
-  const wonLeads = useMemo(() => leads.filter(l => (l.crmStage || crmStageOf(l)) === 'won'), [leads]);
-  const pipelineTotal = useMemo(() => leads.reduce((acc, l) => acc + (Number(l.dealValue) || 0), 0), [leads]);
   const percentMobiles = leads.length > 0 ? Math.round((phoneLeads.length / leads.length) * 100) : 0;
   const percentRated = leads.length > 0 ? Math.round((ratedLeads.length / leads.length) * 100) : 0;
   const percentWeb = leads.length > 0 ? Math.round((webLeads.length / leads.length) * 100) : 0;
 
-  // Extract area subfolders across all leads in this folder
   const areaSubfolders = useMemo(() => {
     const counts = {};
     leads.forEach(l => {
       const area = extractLeadArea(l, session?.location);
-      if (area) {
-        counts[area] = (counts[area] || 0) + 1;
-      }
+      if (area) counts[area] = (counts[area] || 0) + 1;
     });
     return Object.entries(counts)
       .map(([area, count]) => ({ area, count }))
       .sort((a, b) => b.count - a.count);
   }, [leads, session?.location]);
 
-  const localityStats = useMemo(() => {
-    return areaSubfolders.map(item => [item.area, item.count]).slice(0, 10);
-  }, [areaSubfolders]);
+  const localityStats = useMemo(() => areaSubfolders.map(item => [item.area, item.count]).slice(0, 10), [areaSubfolders]);
 
-  // Extract category subfolders across all leads in this folder
   const categorySubfolders = useMemo(() => {
     const counts = {};
     leads.forEach(l => {
       const cat = (l.category || '').trim();
-      if (cat) {
-        counts[cat] = (counts[cat] || 0) + 1;
-      }
+      if (cat) counts[cat] = (counts[cat] || 0) + 1;
     });
     return Object.entries(counts)
       .map(([cat, count]) => ({ cat, count }))
       .sort((a, b) => b.count - a.count);
   }, [leads]);
 
-  // Filter & Search logic
   const searchTokens = useMemo(() => tokenizeQuery(search), [search]);
 
   const filtered = useMemo(() => {
@@ -107,27 +86,17 @@ export default function FolderView({
       const tokens = searchTokens;
       const digits = normalizePhoneDigits(search);
       list = list.filter(l => matchesLead(l, tokens, search, digits));
-      if (sortField === 'default') {
-        list = [...list].sort((a, b) => scoreLead(b, tokens, search) - scoreLead(a, tokens, search));
-      }
-    }
-
-    if (sortField === 'name') {
-      list = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || '') * (sortOrder === 'asc' ? 1 : -1));
-    } else if (sortField === 'rating') {
-      list = [...list].sort((a, b) => ((Number(b.rating) || 0) - (Number(a.rating) || 0)) * (sortOrder === 'asc' ? -1 : 1));
-    } else if (sortField === 'locality') {
-      list = [...list].sort((a, b) => (a.area || a.city || '').localeCompare(b.area || b.city || '') * (sortOrder === 'asc' ? 1 : -1));
+      list = [...list].sort((a, b) => scoreLead(b, tokens, search) - scoreLead(a, tokens, search));
     }
 
     return list;
-  }, [leads, filter, selectedLocality, selectedCategory, search, searchTokens, sortField, sortOrder, session?.location]);
+  }, [leads, filter, selectedLocality, selectedCategory, search, searchTokens, session?.location]);
 
   const toggleSelectAll = () => {
     if (selectedIds.size === filtered.length && filtered.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map(l => l.id || `${l.name}-${l.phone}`)));
+      setSelectedIds(new Set(filtered.map((l, idx) => l.id || `${l.name}-${getDisplayPhone(l) || idx}`)));
     }
   };
 
@@ -138,16 +107,18 @@ export default function FolderView({
     setSelectedIds(next);
   };
 
-  const copyAllMobiles = () => {
+  const copyPhone = (phone, e) => {
+    if (e) e.stopPropagation();
+    if (!phone) return;
+    navigator.clipboard?.writeText(phone);
+    toast.success(`Copied ${phone}`);
+  };
+
+  const copyAllPhones = () => {
     const targetLeads = selectedIds.size > 0
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
+      ? leads.filter((l, idx) => selectedIds.has(l.id || `${l.name}-${getDisplayPhone(l) || idx}`))
       : phoneLeads;
-    const rawPhones = targetLeads.map(l => {
-      const p = getDisplayPhone(l);
-      if (!p) return null;
-      const mobile = whatsappNumber(p);
-      return mobile ? `+91${mobile}` : p;
-    }).filter(Boolean);
+    const rawPhones = targetLeads.map(l => getDisplayPhone(l)).filter(Boolean);
     const unique = [...new Set(rawPhones)];
     if (!unique.length) {
       toast.error('No phone numbers in selection.');
@@ -156,42 +127,15 @@ export default function FolderView({
     navigator.clipboard.writeText(unique.join(', '));
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
-    toast.success(`Copied ${unique.length} verified mobile numbers!`);
-  };
-
-  const downloadPhoneListTxt = () => {
-    const targetLeads = selectedIds.size > 0
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
-      : phoneLeads;
-    const rawPhones = targetLeads.map(l => {
-      const p = getDisplayPhone(l);
-      if (!p) return null;
-      const mobile = whatsappNumber(p);
-      return mobile ? `+91${mobile}` : p;
-    }).filter(Boolean);
-    const unique = [...new Set(rawPhones)];
-    if (!unique.length) {
-      toast.error('No phone numbers to export.');
-      return;
-    }
-    const blob = new Blob([unique.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${session?.id || 'folder'}_mobiles.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success(`Downloaded ${unique.length} mobile numbers (.txt)`);
+    toast.success(`Copied ${unique.length} phone numbers!`);
   };
 
   const downloadVcfContacts = () => {
     const targetLeads = selectedIds.size > 0
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
+      ? leads.filter((l, idx) => selectedIds.has(l.id || `${l.name}-${getDisplayPhone(l) || idx}`))
       : phoneLeads;
     if (!targetLeads.length) {
-      toast.error('No leads with phone numbers to export.');
+      toast.error('No businesses with phone numbers to save.');
       return;
     }
     const cards = targetLeads.map(l => {
@@ -207,23 +151,23 @@ export default function FolderView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${session?.id || 'folder'}_contacts.vcf`;
+    a.download = `${(session?.name || session?.id || 'saved-list').replace(/[^a-z0-9]+/gi, '_')}_contacts.vcf`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${targetLeads.length} phone contacts (.vcf) ready for Android / iPhone!`);
+    toast.success(`Saved ${targetLeads.length} phone contacts (.vcf) ready for Android & iPhone!`);
   };
 
   const exportSelectedCsv = () => {
     const rows = selectedIds.size > 0
-      ? leads.filter(l => selectedIds.has(l.id || `${l.name}-${l.phone}`))
+      ? leads.filter((l, idx) => selectedIds.has(l.id || `${l.name}-${getDisplayPhone(l) || idx}`))
       : filtered;
     if (!rows.length) {
-      toast.error('No rows to export.');
+      toast.error('No leads to export.');
       return;
     }
-    const headers = ['Business Name', 'Category', 'Phone', 'Verified Mobile', 'Area', 'City', 'District', 'Rating', 'Reviews Count', 'Website', 'CRM Stage'];
+    const headers = ['Business Name', 'Category', 'Phone', 'Mobile', 'Area', 'City', 'District', 'Rating', 'Reviews', 'Website'];
     const lines = [headers.join(',')];
     rows.forEach(r => {
       const phone = getDisplayPhone(r) || '';
@@ -238,8 +182,7 @@ export default function FolderView({
         `"${(r.district || '').replace(/"/g, '""')}"`,
         `"${r.rating || ''}"`,
         `"${r.reviewsCount || ''}"`,
-        `"${(r.website || '').replace(/"/g, '""')}"`,
-        `"${crmStageOf(r)}"`
+        `"${(r.website || '').replace(/"/g, '""')}"`
       ];
       lines.push(row.join(','));
     });
@@ -247,47 +190,29 @@ export default function FolderView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${session?.id || 'folder'}_leads.csv`;
+    a.download = `${(session?.name || session?.id || 'saved-list').replace(/[^a-z0-9]+/gi, '_')}_leads.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${rows.length} rows to CSV!`);
-  };
-
-  const handleBulkStageChange = (newStage) => {
-    if (!selectedIds.size) return;
-    const count = selectedIds.size;
-    leads.forEach(l => {
-      const id = l.id || `${l.name}-${l.phone}`;
-      if (selectedIds.has(id)) {
-        onStageChange?.(l, newStage);
-      }
-    });
-    toast.success(`Updated ${count} leads to stage "${newStage}".`);
-    setSelectedIds(new Set());
+    toast.success(`Downloaded ${rows.length} leads as CSV!`);
   };
 
   return (
-    <div className="v2-folder-modal" role="dialog" aria-modal="true" aria-label={`Folder: ${session?.name || ''}`}>
+    <div className="v2-folder-modal" role="dialog" aria-modal="true" aria-label={`Saved List: ${session?.name || ''}`}>
       <div className="v2-folder-modal-card">
-        {/* Top Header Strip */}
         <header className="v2-folder-header">
           <div className="v2-folder-header-info">
             <div className="v2-folder-header-title-row">
               <span className="v2-folder-mark-badge"><FolderArchive size={18} /></span>
-              <h2>{session?.name || `${session?.category || 'Search'} in ${session?.location || 'India'}`}</h2>
+              <h2>{session?.name || `${session?.category || 'Businesses'} in ${session?.location || 'India'}`}</h2>
             </div>
             <div className="v2-folder-header-meta">
               <span className="v2-meta-badge"><MapPin size={11} /> {session?.location || 'India'}</span>
-              <span className="v2-meta-badge"><Users size={11} /> <b>{formatNumber(leads.length)}</b> leads</span>
-              <span className="v2-meta-badge is-highlight"><Phone size={11} /> <b>{formatNumber(phoneLeads.length)}</b> verified mobiles ({percentMobiles}%)</span>
+              <span className="v2-meta-badge"><Users size={11} /> <b>{formatNumber(leads.length)}</b> businesses</span>
+              <span className="v2-meta-badge is-highlight"><Phone size={11} /> <b>{formatNumber(phoneLeads.length)}</b> with phones ({percentMobiles}%)</span>
               <span className="v2-meta-badge"><Globe2 size={11} /> <b>{formatNumber(webLeads.length)}</b> websites</span>
               <span className="v2-meta-badge"><Star size={11} /> <b>{formatNumber(ratedLeads.length)}</b> rated 4.0+</span>
-              <span className="v2-meta-id" title="Click to copy folder ID" onClick={() => { navigator.clipboard.writeText(session?.id || ''); toast.success('Copied folder ID!'); }}>
-                <code>{session?.id}</code>
-                <Copy size={9} />
-              </span>
               <span className="v2-meta-time">{relativeTime(session?.timestamp)}</span>
             </div>
           </div>
@@ -297,117 +222,101 @@ export default function FolderView({
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-sm"
               onClick={() => onRename?.(view.run || session)}
-              title="Rename folder, change campaign tags or color"
+              title="Rename list or add tags"
             >
-              <Edit3 size={12} /> Rename &amp; Tag
+              <Edit3 size={12} /> Rename
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-lime v2-btn-sm"
               onClick={() => onLoadToCockpit?.(view.run, session)}
-              title="Load this folder into active Cockpit workspace"
+              title="Open this saved list in your main workspace"
             >
-              <Play size={12} /> Load in Cockpit
+              <Play size={12} /> Open in Workspace
             </button>
             <button
               type="button"
               className="v2-icon-btn"
               onClick={onClose}
-              aria-label="Close folder"
+              aria-label="Close list"
             >
               <X size={18} />
             </button>
           </div>
         </header>
 
-        {/* Quality Scorecard Banner */}
+        {/* Clean Quality Summary Bar */}
         <div className="v2-folder-scorecard">
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">VERIFIED MOBILES</span>
+            <span className="v2-scorecard-label">TOTAL BUSINESSES</span>
+            <b className="v2-scorecard-value">
+              <Users size={13} /> {formatNumber(leads.length)}
+            </b>
+          </div>
+          <div className="v2-scorecard-item">
+            <span className="v2-scorecard-label">DIRECT PHONES</span>
             <b className="v2-scorecard-value is-lime">
               <Phone size={13} /> {formatNumber(phoneLeads.length)} <small>({percentMobiles}%)</small>
             </b>
           </div>
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">RATED 4.0+</span>
-            <b className="v2-scorecard-value">
+            <span className="v2-scorecard-label">TOP RATED (4.0+)</span>
+            <b className="v2-scorecard-value is-gold">
               <Star size={13} /> {formatNumber(ratedLeads.length)} <small>({percentRated}%)</small>
             </b>
           </div>
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">WEBSITE / SOCIAL</span>
-            <b className="v2-scorecard-value">
+            <span className="v2-scorecard-label">WEBSITES</span>
+            <b className="v2-scorecard-value is-cyan">
               <Globe2 size={13} /> {formatNumber(webLeads.length)} <small>({percentWeb}%)</small>
             </b>
           </div>
           <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">DEALS WON</span>
-            <b className="v2-scorecard-value is-gold">
-              <CheckCircle2 size={13} /> {formatNumber(wonLeads.length)}
-            </b>
-          </div>
-          <div className="v2-scorecard-item">
-            <span className="v2-scorecard-label">PIPELINE VALUE</span>
-            <b className="v2-scorecard-value is-cyan">
-              {formatInr(pipelineTotal)}
+            <span className="v2-scorecard-label">AREAS COVERED</span>
+            <b className="v2-scorecard-value">
+              <MapPin size={13} /> {formatNumber(areaSubfolders.length)}
             </b>
           </div>
         </div>
 
-        {/* Master Actions Ribbon — ALL OPTIONS at user's fingertips */}
+        {/* Download & Action Ribbon */}
         <div className="v2-folder-actions-ribbon">
           <div className="v2-ribbon-group">
-            <span className="v2-ribbon-label">OUTREACH &amp; EXPORT:</span>
+            <span className="v2-ribbon-label">DOWNLOAD &amp; COPY:</span>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={copyAllMobiles}
-              title="Copy all phone numbers comma-separated for bulk outreach"
+              onClick={copyAllPhones}
+              title="Copy all phone numbers to your clipboard"
             >
               {copied ? <Check size={11} className="v2-text-lime" /> : <Copy size={11} />}
-              {copied ? 'Copied!' : `Copy Mobiles (${selectedIds.size > 0 ? selectedIds.size : phoneLeads.length})`}
-            </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => onExport?.(view.run, 'dialer')}
-              title="Download Vicidial / Exotel telecaller dialer CSV"
-            >
-              <PhoneCall size={11} /> Dialer CSV
-            </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => onExport?.(view.run, 'vcf')}
-              title="Download vCard (.vcf) contacts file to import on Android / iPhone"
-            >
-              <Smartphone size={11} /> Contacts .VCF
-            </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => onExport?.(view.run, 'txt')}
-              title="Download plain phone numbers list (.txt)"
-            >
-              <FileText size={11} /> Mobiles .TXT
+              {copied ? 'Copied!' : `Copy Phones (${selectedIds.size > 0 ? selectedIds.size : phoneLeads.length})`}
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
               style={{ background: '#F0FDF4', color: '#166534', border: '1.5px solid #BBF7D0', fontWeight: 750 }}
               onClick={() => onExport?.(view.run, 'xlsx')}
-              title="Download Executive Multi-Sheet Excel Workbook (.xlsx) with dedicated tabs per Area"
+              title="Download multi-tab Excel workbook organized by neighborhood"
             >
-              <FileSpreadsheet size={11} /> 📊 Master Excel (.xlsx)
+              <FileSpreadsheet size={11} /> Excel (.xlsx)
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-xs"
+              onClick={() => (selectedIds.size > 0 ? exportSelectedCsv() : onExport?.(view.run, 'csv'))}
+              title="Download clean CSV spreadsheet"
+            >
+              <Download size={11} /> CSV Sheet
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
               style={{ background: '#EFF6FF', color: '#1E40AF', border: '1.5px solid #BFDBFE', fontWeight: 750 }}
               onClick={() => onExport?.(view.run, 'csv', { divided: true })}
-              title="Download Master CSV Divided into Sections by Neighborhood / Area"
+              title="Download CSV grouped by neighborhood"
             >
-              <Download size={11} /> 📑 Area-Divided CSV
+              <Download size={11} /> Area-Grouped CSV
             </button>
             {selectedLocality !== 'all' && (
               <button
@@ -417,24 +326,24 @@ export default function FolderView({
                 onClick={() => onExport?.(view.run, 'csv', { area: selectedLocality })}
                 title={`Download CSV for ${selectedLocality} only`}
               >
-                <Download size={11} /> 🎯 {selectedLocality} CSV ({filtered.length})
+                <Download size={11} /> {selectedLocality} CSV ({filtered.length})
               </button>
             )}
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => (selectedIds.size > 0 ? exportSelectedCsv() : onExport?.(view.run, 'csv'))}
-              title="Download clean CSV spreadsheet without scientific notation"
+              onClick={() => onExport?.(view.run, 'vcf')}
+              title="Save phone contacts (.vcf) directly to Android or iPhone"
             >
-              <Download size={11} /> Spreadsheet CSV
+              <Smartphone size={11} /> Phone Contacts (.vcf)
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
-              onClick={() => onExport?.(view.run, 'json')}
-              title="Download structured JSON"
+              onClick={() => onExport?.(view.run, 'txt')}
+              title="Download plain text phone numbers list"
             >
-              <FileSpreadsheet size={11} /> JSON
+              <FileText size={11} /> Phones (.txt)
             </button>
           </div>
 
@@ -443,122 +352,100 @@ export default function FolderView({
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-xs"
               onClick={() => onReScrape?.(view.run)}
-              title="Run this search again with the 5km radar swarm"
+              title="Refresh this search to check for newly listed businesses"
             >
-              <RefreshCw size={11} /> Run Again
+              <RefreshCw size={11} /> Refresh Search
             </button>
             <button
               type="button"
               className="v2-btn v2-btn-danger v2-btn-xs"
               onClick={() => onDelete?.(view.run)}
-              title="Permanently delete this folder"
+              title="Delete this saved list"
             >
               <Trash2 size={11} /> Delete
             </button>
           </div>
         </div>
 
-        {/* Filter and View Mode Toolbar */}
+        {/* Search, View Mode & Quick Filters */}
         <div className="v2-folder-toolbar">
           <div className="v2-folder-search-wrap">
             <Search size={13} className="v2-search-icon" />
             <input
               type="search"
-              placeholder="Search leads in folder (business, phone, area, service)..."
+              placeholder="Search inside this list (business name, phone, area)..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Escape') setSearch(''); }}
               className="v2-folder-search-input"
             />
             {search && (
-              <button type="button" onClick={() => setSearch('')} className="v2-search-clear" title="Clear search (Esc)">
+              <button type="button" onClick={() => setSearch('')} className="v2-search-clear" title="Clear search">
                 <X size={12} />
               </button>
             )}
           </div>
           {search.trim() && (
             <span className="v2-search-count-pill">
-              Showing <b>{filtered.length}</b> of {leads.length} leads
+              Showing <b>{filtered.length}</b> of {leads.length}
             </span>
           )}
 
-          {/* 4 View Modes */}
           <div className="v2-folder-view-toggle">
             <button
               type="button"
               className={cx('v2-vtoggle-btn', viewMode === 'table' && 'is-active')}
               onClick={() => setViewMode('table')}
-              title="Full interactive spreadsheet table"
             >
               <Table2 size={12} /> Table ({filtered.length})
             </button>
             <button
               type="button"
-              className={cx('v2-vtoggle-btn', viewMode === 'map' && 'is-active')}
-              onClick={() => setViewMode('map')}
-              title="Interactive map with lead pins"
+              className={cx('v2-vtoggle-btn', viewMode === 'cards' && 'is-active')}
+              onClick={() => setViewMode('cards')}
             >
-              <MapPin size={12} /> Map Radar
+              <LayoutGrid size={12} /> Contact Cards
             </button>
             <button
               type="button"
-              className={cx('v2-vtoggle-btn', viewMode === 'telecaller' && 'is-active')}
-              onClick={() => setViewMode('telecaller')}
-              title="Fast speed-dial & WhatsApp cards for outreach"
+              className={cx('v2-vtoggle-btn', viewMode === 'map' && 'is-active')}
+              onClick={() => setViewMode('map')}
             >
-              <PhoneCall size={12} /> Telecaller Cards ({phoneLeads.length})
+              <MapPin size={12} /> Map
             </button>
             <button
               type="button"
               className={cx('v2-vtoggle-btn', viewMode === 'analytics' && 'is-active')}
               onClick={() => setViewMode('analytics')}
-              title="Locality & conversion analytics"
             >
-              <BarChart3 size={12} /> Analytics
+              <BarChart3 size={12} /> Summary
             </button>
           </div>
 
-          {/* Quick Filters */}
           <div className="v2-folder-filter-pills">
-            <button
-              type="button"
-              className={cx('v2-fpill', filter === 'all' && 'is-active')}
-              onClick={() => setFilter('all')}
-            >
+            <button type="button" className={cx('v2-fpill', filter === 'all' && 'is-active')} onClick={() => setFilter('all')}>
               All <b>{leads.length}</b>
             </button>
-            <button
-              type="button"
-              className={cx('v2-fpill', filter === 'phone' && 'is-active')}
-              onClick={() => setFilter('phone')}
-            >
-              <Phone size={10} /> Mobiles <b>{phoneLeads.length}</b>
+            <button type="button" className={cx('v2-fpill', filter === 'phone' && 'is-active')} onClick={() => setFilter('phone')}>
+              <Phone size={10} /> Phones <b>{phoneLeads.length}</b>
             </button>
-            <button
-              type="button"
-              className={cx('v2-fpill', filter === 'website' && 'is-active')}
-              onClick={() => setFilter('website')}
-            >
+            <button type="button" className={cx('v2-fpill', filter === 'website' && 'is-active')} onClick={() => setFilter('website')}>
               <Globe2 size={10} /> Web <b>{webLeads.length}</b>
             </button>
-            <button
-              type="button"
-              className={cx('v2-fpill', filter === 'rated' && 'is-active')}
-              onClick={() => setFilter('rated')}
-            >
+            <button type="button" className={cx('v2-fpill', filter === 'rated' && 'is-active')} onClick={() => setFilter('rated')}>
               <Star size={10} /> 4.0+ <b>{ratedLeads.length}</b>
             </button>
           </div>
         </div>
 
-        {/* Area & Category Sub-Folders */}
+        {/* Neighborhood & Category Filter Chips */}
         {(areaSubfolders.length > 0 || categorySubfolders.length > 1) && (
           <div className="v2-subfolder-container">
             {areaSubfolders.length > 0 && (
               <>
                 <div className="v2-subfolder-label">
-                  <FolderArchive size={12} />
-                  <span>AREA SUB-FOLDERS IN {(session?.location || 'CITY').toUpperCase()} ({areaSubfolders.length} NEIGHBORHOODS)</span>
+                  <MapPin size={12} />
+                  <span>NEIGHBORHOODS IN {(session?.location || 'AREA').toUpperCase()} ({areaSubfolders.length})</span>
                 </div>
                 <div className="v2-subfolder-chips">
                   <button
@@ -566,7 +453,7 @@ export default function FolderView({
                     className={cx('v2-subfolder-chip', selectedLocality === 'all' && 'is-active')}
                     onClick={() => setSelectedLocality('all')}
                   >
-                    📁 All {(session?.location || 'City')} Leads ({leads.length})
+                    All Areas ({leads.length})
                   </button>
                   {areaSubfolders.map(({ area, count }) => (
                     <button
@@ -575,7 +462,7 @@ export default function FolderView({
                       className={cx('v2-subfolder-chip', selectedLocality === area && 'is-active')}
                       onClick={() => setSelectedLocality(selectedLocality === area ? 'all' : area)}
                     >
-                      📂 {area} <b style={{ opacity: 0.85 }}>({count})</b>
+                      {area} <b style={{ opacity: 0.85 }}>({count})</b>
                     </button>
                   ))}
                 </div>
@@ -594,7 +481,7 @@ export default function FolderView({
                     className={cx('v2-subfolder-chip', selectedCategory === 'all' && 'is-active')}
                     onClick={() => setSelectedCategory('all')}
                   >
-                    📁 All Categories
+                    All Categories
                   </button>
                   {categorySubfolders.map(({ cat, count }) => (
                     <button
@@ -603,7 +490,7 @@ export default function FolderView({
                       className={cx('v2-subfolder-chip', selectedCategory === cat && 'is-active')}
                       onClick={() => setSelectedCategory(selectedCategory === cat ? 'all' : cat)}
                     >
-                      🏷️ {cat} <b style={{ opacity: 0.85 }}>({count})</b>
+                      {cat} <b style={{ opacity: 0.85 }}>({count})</b>
                     </button>
                   ))}
                 </div>
@@ -615,26 +502,17 @@ export default function FolderView({
         {/* Bulk Selection Bar */}
         {selectedIds.size > 0 && (
           <div className="v2-folder-bulk-bar">
-            <span><b>{selectedIds.size}</b> leads selected</span>
+            <span><b>{selectedIds.size}</b> businesses selected</span>
             <div className="v2-bulk-actions">
-              <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={copyAllMobiles}>
-                <Copy size={11} /> Copy Mobiles ({selectedIds.size})
+              <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={copyAllPhones}>
+                <Copy size={11} /> Copy Phones ({selectedIds.size})
               </button>
               <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={exportSelectedCsv}>
                 <Download size={11} /> Export Selected CSV
               </button>
               <button type="button" className="v2-btn v2-btn-xs v2-btn-ghost" onClick={downloadVcfContacts}>
-                <Smartphone size={11} /> Export .VCF
+                <Smartphone size={11} /> Save Contacts (.vcf)
               </button>
-              <div className="v2-bulk-stage-wrap">
-                <span>Set Stage:</span>
-                <select onChange={e => { if (e.target.value) handleBulkStageChange(e.target.value); }}>
-                  <option value="">Choose Stage...</option>
-                  {CRM_STAGES.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
               <button type="button" className="v2-bulk-clear" onClick={() => setSelectedIds(new Set())}>
                 Clear
               </button>
@@ -642,7 +520,7 @@ export default function FolderView({
           </div>
         )}
 
-        {/* Content Area: Table / Map / Telecaller / Analytics */}
+        {/* Content Area */}
         <div className="v2-folder-content">
           {viewMode === 'map' && (
             <div className="v2-folder-map-wrap">
@@ -660,14 +538,11 @@ export default function FolderView({
             </div>
           )}
 
-          {viewMode === 'telecaller' && (
+          {viewMode === 'cards' && (
             <div className="v2-folder-telecaller-grid">
               {filtered.map((lead, index) => {
                 const phone = getDisplayPhone(lead);
-                const cleanDigits = whatsappNumber(phone);
-                const isMob = Boolean(cleanDigits);
-                const stage = crmStageOf(lead);
-                const leadId = lead.id || `${lead.name}-${phone}`;
+                const leadId = lead.id || `${lead.name}-${phone || index}`;
                 const isSelected = selectedIds.has(leadId);
 
                 return (
@@ -681,7 +556,7 @@ export default function FolderView({
                       />
                       <VendorAvatar vendor={lead} size={28} />
                       <div className="v2-tc-title-wrap">
-                        <b className="v2-tc-name">{lead.name || 'Unknown Business'}</b>
+                        <b className="v2-tc-name">{lead.name || 'Business'}</b>
                         <CarriedBadge lead={lead} />
                         <small className="v2-tc-cat">
                           {[lead.area, lead.city || lead.village].filter(Boolean).join(', ') || 'Local'}
@@ -695,46 +570,39 @@ export default function FolderView({
                     <div className="v2-tc-actions">
                       {phone ? (
                         <>
-                          <a href={`tel:${phone}`} className="v2-tc-btn-call" title="Click to call">
+                          <a href={`tel:${phone}`} className="v2-tc-btn-call" title="Tap to call">
                             <PhoneCall size={12} />
                             <span>{phone}</span>
                           </a>
-                          {isMob && (
-                            <a
-                              href={`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${lead.name || 'there'}, I found your business listing and wanted to connect.`)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="v2-tc-btn-wa"
-                              title="1-Click WhatsApp outreach"
-                            >
-                              <MessageSquare size={12} />
-                              <span>WhatsApp</span>
-                            </a>
-                          )}
+                          <button
+                            type="button"
+                            className="v2-btn v2-btn-ghost v2-btn-xs"
+                            onClick={(e) => copyPhone(phone, e)}
+                            title="Copy phone number"
+                          >
+                            <Copy size={11} /> Copy
+                          </button>
                         </>
                       ) : (
-                        <span className="v2-tc-nophone">No direct phone listed</span>
+                        <span className="v2-tc-nophone">No phone listed</span>
                       )}
                     </div>
 
                     <div className="v2-tc-footer">
-                      <span className="v2-tc-stage-label">Stage:</span>
-                      <select
-                        className={cx('v2-stage-select', `stage-${stage}`)}
-                        value={stage}
-                        onChange={e => onStageChange?.(lead, e.target.value)}
-                      >
-                        {CRM_STAGES.map(s => (
-                          <option key={s.id} value={s.id}>{s.label}</option>
-                        ))}
-                      </select>
+                      {lead.website ? (
+                        <a href={lead.website} target="_blank" rel="noreferrer" className="v2-site-link">
+                          <Globe2 size={11} /> Website
+                        </a>
+                      ) : (
+                        <span className="v2-muted" style={{ fontSize: 11 }}>{lead.category || session?.category || 'Business'}</span>
+                      )}
                       <button
                         type="button"
                         className="v2-tc-inspect-btn"
                         onClick={() => { onClose(); onSelectVendor?.(lead); }}
-                        title="View complete vendor profile"
+                        title="View full business details"
                       >
-                        <ArrowRight size={11} />
+                        Details <ArrowRight size={11} />
                       </button>
                     </div>
                   </div>
@@ -742,7 +610,7 @@ export default function FolderView({
               })}
               {!filtered.length && (
                 <div className="v2-folder-empty">
-                  {search ? `No leads matching "${search}".` : 'No leads found in this filter.'}
+                  {search ? `No businesses matching "${search}".` : 'No businesses found in this filter.'}
                 </div>
               )}
             </div>
@@ -752,10 +620,10 @@ export default function FolderView({
             <div className="v2-folder-analytics-view">
               <div className="v2-analytics-top-grid">
                 <div className="v2-analytics-card">
-                  <span className="v2-an-title">MOBILE VERIFICATION RATE</span>
+                  <span className="v2-an-title">PHONE AVAILABILITY</span>
                   <div className="v2-an-big-stat">
                     <b>{percentMobiles}%</b>
-                    <span>{phoneLeads.length} of {leads.length} leads have direct mobile numbers</span>
+                    <span>{phoneLeads.length} of {leads.length} businesses have a direct phone number</span>
                   </div>
                   <div className="v2-an-bar-wrap">
                     <div className="v2-an-bar-fill" style={{ width: `${percentMobiles}%` }} />
@@ -765,28 +633,28 @@ export default function FolderView({
                 <div className="v2-analytics-card">
                   <span className="v2-an-title">ONLINE PRESENCE</span>
                   <div className="v2-an-big-stat">
-                    <b>{leads.length ? Math.round((webLeads.length / leads.length) * 100) : 0}%</b>
-                    <span>{webLeads.length} leads have an official website listed</span>
+                    <b>{percentWeb}%</b>
+                    <span>{webLeads.length} businesses have an official website listed</span>
                   </div>
                   <div className="v2-an-bar-wrap">
-                    <div className="v2-an-bar-fill is-cyan" style={{ width: `${leads.length ? (webLeads.length / leads.length) * 100 : 0}%` }} />
+                    <div className="v2-an-bar-fill is-cyan" style={{ width: `${percentWeb}%` }} />
                   </div>
                 </div>
 
                 <div className="v2-analytics-card">
-                  <span className="v2-an-title">HIGH RATING CONCENTRATION</span>
+                  <span className="v2-an-title">TOP-RATED BUSINESSES</span>
                   <div className="v2-an-big-stat">
-                    <b>{leads.length ? Math.round((ratedLeads.length / leads.length) * 100) : 0}%</b>
-                    <span>{ratedLeads.length} leads rated 4.0 stars or higher</span>
+                    <b>{percentRated}%</b>
+                    <span>{ratedLeads.length} businesses rated 4.0 stars or higher</span>
                   </div>
                   <div className="v2-an-bar-wrap">
-                    <div className="v2-an-bar-fill is-amber" style={{ width: `${leads.length ? (ratedLeads.length / leads.length) * 100 : 0}%` }} />
+                    <div className="v2-an-bar-fill is-amber" style={{ width: `${percentRated}%` }} />
                   </div>
                 </div>
               </div>
 
               <div className="v2-analytics-localities-card">
-                <span className="v2-an-title">GEOGRAPHIC DISTRIBUTION (TOP LOCALITIES IN FOLDER)</span>
+                <span className="v2-an-title">TOP NEIGHBORHOODS IN THIS LIST</span>
                 <div className="v2-an-locality-list">
                   {localityStats.map(([name, count]) => {
                     const pct = Math.round((count / (leads.length || 1)) * 100);
@@ -796,11 +664,11 @@ export default function FolderView({
                         <div className="v2-an-loc-progress">
                           <span style={{ width: `${pct}%` }} />
                         </div>
-                        <span className="v2-an-loc-count"><b>{count}</b> leads ({pct}%)</span>
+                        <span className="v2-an-loc-count"><b>{count}</b> businesses ({pct}%)</span>
                       </div>
                     );
                   })}
-                  {!localityStats.length && <p className="v2-muted">No specific localities detected.</p>}
+                  {!localityStats.length && <p className="v2-muted">No specific neighborhoods grouped yet.</p>}
                 </div>
               </div>
             </div>
@@ -816,23 +684,19 @@ export default function FolderView({
                         type="checkbox"
                         checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
                         onChange={toggleSelectAll}
-                        title="Select all leads"
+                        title="Select all businesses"
                       />
                     </th>
                     <th>BUSINESS</th>
-                    <th>LOCALITY</th>
-                    <th>VERIFIED CONTACT</th>
+                    <th>AREA</th>
+                    <th>DIRECT PHONE</th>
                     <th>WEBSITE</th>
-                    <th>CRM STAGE</th>
-                    <th>ACTION</th>
+                    <th>DETAILS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map((lead, index) => {
                     const phone = getDisplayPhone(lead);
-                    const cleanDigits = whatsappNumber(phone);
-                    const isMob = Boolean(cleanDigits);
-                    const stage = crmStageOf(lead);
                     const leadId = lead.id || `${lead.name}-${phone || index}`;
                     const isSelected = selectedIds.has(leadId);
 
@@ -850,10 +714,10 @@ export default function FolderView({
                           <div className="v2-vendor-cell">
                             <VendorAvatar vendor={lead} size={28} />
                             <span>
-                              <b>{highlightMatches(lead.name || 'Unknown Business', searchTokens)}</b>
+                              <b>{highlightMatches(lead.name || 'Business', searchTokens)}</b>
                               <CarriedBadge lead={lead} />
                               <small className="v2-cp-cat">
-                                {highlightMatches(lead.category || session?.category || 'Service', searchTokens)}
+                                {highlightMatches(lead.category || session?.category || 'Business', searchTokens)}
                                 {lead.rating != null && (
                                   <em className="v2-folder-rating">
                                     ★ {Number(lead.rating).toFixed(1)} {lead.reviewsCount ? `(${lead.reviewsCount})` : ''}
@@ -875,23 +739,14 @@ export default function FolderView({
                               <a href={`tel:${phone}`} className="v2-phone-link" onClick={e => e.stopPropagation()}>
                                 <Phone size={11} /> {highlightMatches(phone, searchTokens)}
                               </a>
-                              {!isMob && (
-                                <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 5px', borderRadius: '4px', background: '#F1F5F9', color: '#475569', border: '1px solid #CBD5E1' }}>
-                                  LANDLINE
-                                </span>
-                              )}
-                              {isMob && (
-                                <a
-                                  href={`https://wa.me/91${cleanDigits}?text=${encodeURIComponent(`Hi ${lead.name || 'there'}, I found your business and wanted to connect.`)}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="v2-whatsapp-chip"
-                                  title="1-Click WhatsApp"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  WhatsApp
-                                </a>
-                              )}
+                              <button
+                                type="button"
+                                className="lx-copy-chip"
+                                onClick={e => copyPhone(phone, e)}
+                                title="Copy phone number"
+                              >
+                                <Copy size={10} /> Copy
+                              </button>
                             </div>
                           ) : (
                             <span className="v2-muted">No phone</span>
@@ -906,22 +761,11 @@ export default function FolderView({
                               className="v2-site-link"
                               title={lead.website}
                             >
-                              <Globe2 size={11} /> Website
+                              <Globe2 size={11} /> Visit Site
                             </a>
                           ) : (
                             <span className="v2-muted">—</span>
                           )}
-                        </td>
-                        <td>
-                          <select
-                            className={cx('v2-stage-select', `stage-${stage}`)}
-                            value={stage}
-                            onChange={e => onStageChange?.(lead, e.target.value)}
-                          >
-                            {CRM_STAGES.map(s => (
-                              <option key={s.id} value={s.id}>{s.label}</option>
-                            ))}
-                          </select>
                         </td>
                         <td>
                           <button
@@ -931,9 +775,9 @@ export default function FolderView({
                               onClose();
                               onSelectVendor?.(lead);
                             }}
-                            title="Inspect full vendor profile"
+                            title="View complete business profile"
                           >
-                            Inspect <ArrowRight size={11} />
+                            View <ArrowRight size={11} />
                           </button>
                         </td>
                       </tr>
@@ -943,7 +787,7 @@ export default function FolderView({
               </table>
               {!filtered.length && (
                 <div className="v2-folder-empty">
-                  {search ? `No leads matching "${search}".` : 'This folder has no saved leads yet.'}
+                  {search ? `No businesses matching "${search}".` : 'This saved list is empty.'}
                 </div>
               )}
             </div>

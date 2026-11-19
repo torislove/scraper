@@ -76,12 +76,12 @@ export default function RenameModal({ folder, onClose, onSave }) {
           </div>
 
           <label className="v2-dialog-field">
-            <span>Campaign Notes / Strategy</span>
+            <span>List Notes</span>
             <textarea
               rows={3}
               value={notes}
               onChange={e => setNotes(e.target.value)}
-              placeholder="e.g. Pitched on WhatsApp Tuesday. Target 50 calls daily."
+              placeholder="e.g. Verified suppliers in Guntur & Vijayawada for Q2 calling."
             />
           </label>
 

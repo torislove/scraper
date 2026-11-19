@@ -1,201 +1,73 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Globe2, Search, X, Check, ShieldCheck, Sparkles } from 'lucide-react';
+import React, { useEffect, useMemo } from 'react';
+import { Globe2, Check } from 'lucide-react';
 import { API_URL } from '../../apiConfig';
-import { POPULAR_COUNTRIES, flagOf, findCountry } from '../data/countries';
+import { POPULAR_COUNTRIES, findCountry } from '../data/countries';
 import Country3DFlag from './Country3DFlag';
 import './countryStrip.css';
 
 /**
- * Country flag bar for the dashboard.
- *
- * Every country the engine can search is here, with its flag and name. India is
- * pinned first as HOME. Selecting a flag shows, in plain words, how many free
- * sources are ready there and which ones are blocked — no technical terms.
+ * Clean, zero-jargon 11-country market selector.
+ * Locked strictly to the 11 supported revenue markets with India pinned as Home.
  */
-export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [coverage, setCoverage] = useState(null);
-  const [adminTable, setAdminTable] = useState({});
-  const [loading, setLoading] = useState(false);
+const LOCKED_11_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
 
-  const current = findCountry(selected) || findCountry('IN');
-  const flag = flagOf(current?.code || 'IN');
+export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) {
+  const markets = useMemo(() => {
+    const list = POPULAR_COUNTRIES.filter(c => LOCKED_11_CODES.includes(c.code));
+    return [...list].sort((a, b) => LOCKED_11_CODES.indexOf(a.code) - LOCKED_11_CODES.indexOf(b.code));
+  }, []);
+
+  const safeCode = LOCKED_11_CODES.includes(String(selected || 'IN').toUpperCase())
+    ? String(selected).toUpperCase()
+    : 'IN';
+  const current = findCountry(safeCode) || findCountry('IN');
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     fetch(`${API_URL}/sources?country=${encodeURIComponent(current?.code || 'IN')}`)
       .then(response => (response.ok ? response.json() : null))
       .then(data => {
-        if (!alive || !data) return;
-        setCoverage(data);
-        if (onMeta) onMeta(data);
-      })
-      .catch(() => { if (alive) setCoverage(null); })
-      .finally(() => { if (alive) setLoading(false); });
-    return () => { alive = false; };
-  }, [current?.code, onMeta]);
-
-  // One request for the whole table when the picker opens. The country cards then
-  // show each country's real hierarchy without a separate API call per country.
-  useEffect(() => {
-    if (!open || Object.keys(adminTable).length) return;
-    let alive = true;
-    fetch(`${API_URL}/admin-divisions`)
-      .then(response => (response.ok ? response.json() : null))
-      .then(data => {
-        if (!alive || !data || !Array.isArray(data.countries)) return;
-        const table = {};
-        for (const row of data.countries) table[row.code] = row.adminPath;
-        setAdminTable(table);
+        if (alive && data && onMeta) onMeta(data);
       })
       .catch(() => {});
     return () => { alive = false; };
-  }, [open, adminTable]);
-
-  const results = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    // The product ships with eleven markets. A search narrows that list; an
-    // empty search shows all eleven, India first.
-    const list = value
-      ? POPULAR_COUNTRIES.filter(country =>
-          country.name.toLowerCase().includes(value) || country.code.toLowerCase() === value)
-      : POPULAR_COUNTRIES;
-    // India always first, then the rest alphabetically.
-    return [...list].sort((a, b) => {
-      if (a.code === 'IN') return -1;
-      if (b.code === 'IN') return 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [query]);
-
-  const engines = coverage?.engines || [];
-  const blocked = (coverage?.sources || []).filter(source => source.access === 'blocked');
+  }, [current?.code, onMeta]);
 
   const choose = (country) => {
-    setOpen(false);
-    setQuery('');
     if (onSelect) onSelect(country.code, country);
   };
 
   return (
-    <section className="country-strip" aria-label="Search country">
-      <div className="country-strip-glow" aria-hidden="true" />
-
+    <section className="country-strip" aria-label="Choose market">
       <div className="country-strip-main">
-        <span className="country-strip-kicker"><Globe2 size={13} /> SEARCH COUNTRY</span>
+        <span className="country-strip-kicker"><Globe2 size={13} /> 11 MARKETS</span>
         <div className={`country-strip-current${current?.code === 'IN' ? ' is-home' : ''}`}>
-          <Country3DFlag code={current?.code || 'IN'} size={current?.code === 'IN' ? 42 : 36} isHome={current?.code === 'IN'} />
+          <Country3DFlag code={current?.code || 'IN'} size={34} isHome={current?.code === 'IN'} />
           <div className="country-strip-name">
             <b>{current?.name || 'India'}</b>
             <small className="country-strip-status">
               {current?.code === 'IN' && <em className="country-home">HOME</em>}
-              {loading
-                ? 'Preparing search sources…'
-                : 'All multi-vector sources active'}
-            </small>
-            <small className="country-strip-path">
-              {loading ? 'Loading hierarchy…' : (coverage?.adminPath || '')}
+              {current?.code === 'IN' ? 'Cities, towns & villages ready' : 'Cities, states & counties ready'}
             </small>
           </div>
         </div>
       </div>
 
       <div className="country-strip-pills">
-        {POPULAR_COUNTRIES.map(country => (
+        {markets.map(country => (
           <button
             type="button"
             key={country.code}
             className={`country-pill${country.code === current?.code ? ' is-active' : ''}${country.code === 'IN' ? ' is-home' : ''}`}
             onClick={() => choose(country)}
-            title={`Search in ${country.name}`}
+            title={`Find leads in ${country.name}`}
           >
-            <Country3DFlag code={country.code} size={20} active={country.code === current?.code} isHome={country.code === 'IN'} />
+            <Country3DFlag code={country.code} size={18} active={country.code === current?.code} isHome={country.code === 'IN'} />
             <span className="country-pill-text">{country.name}</span>
             {country.code === current?.code && <Check size={11} className="country-pill-check" />}
           </button>
         ))}
-        <button
-          type="button"
-          className={`country-pill country-pill-all${open ? ' is-active' : ''}`}
-          onClick={() => setOpen(value => !value)}
-          aria-expanded={open}
-          title="Search countries"
-        >
-          <Search size={12} />
-          <span className="country-pill-text">All {POPULAR_COUNTRIES.length}</span>
-        </button>
       </div>
-
-      {open && (
-        <div className="country-picker">
-          <div className="country-picker-head">
-            <div className="country-picker-search">
-              <Search size={14} />
-              <input
-                autoFocus
-                type="search"
-                value={query}
-                placeholder="Search country — India, United States, UK, Canada…"
-                onChange={event => setQuery(event.target.value)}
-              />
-              {query && (
-                <button type="button" onClick={() => setQuery('')} aria-label="Clear search">
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-            <span className="country-picker-note">
-              <ShieldCheck size={12} /> {POPULAR_COUNTRIES.length} countries · India is Home
-            </span>
-            <button type="button" className="country-picker-close" onClick={() => setOpen(false)} aria-label="Close country list">
-              <X size={14} />
-            </button>
-          </div>
-
-          <div className="country-picker-grid">
-            {!query.trim() && (
-              <button
-                type="button"
-                className={`country-feature${current?.code === 'IN' ? ' is-active' : ''}`}
-                onClick={() => choose(findCountry('IN'))}
-              >
-                <Country3DFlag code="IN" size={38} isHome />
-                <span className="country-feature-text">
-                  <b>India <em className="country-card-home">HOME</em></b>
-                  <small>Primary market · 10 engines · JustDial, WeddingBazaar, WeddingWire, Mandap plus the global stack</small>
-                  <small className="country-feature-path">State → District → Mandal / Taluka / Tehsil</small>
-                </span>
-                <span className="country-feature-cta">Search India</span>
-              </button>
-            )}
-            {results
-              .filter(country => query.trim() || country.code !== 'IN')
-              .map(country => (
-              <button
-                type="button"
-                key={country.code}
-                className={`country-card${country.code === current?.code ? ' is-active' : ''}${country.code === 'IN' ? ' is-home' : ''}`}
-                onClick={() => choose(country)}
-              >
-                <Country3DFlag code={country.code} size={24} active={country.code === current?.code} isHome={country.code === 'IN'} />
-                <span className="country-card-text">
-                  <b>{country.name}</b>
-                  <small>{country.code}{country.phone ? ` · ${country.phone}` : ''}</small>
-                  {adminTable[country.code] && (
-                    <em className="country-card-path">{adminTable[country.code]}</em>
-                  )}
-                </span>
-                {country.code === 'IN' && <em className="country-card-home">HOME</em>}
-              </button>
-            ))}
-            {!results.length && (
-              <p className="country-picker-empty">No country matches “{query}”.</p>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }

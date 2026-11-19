@@ -14,8 +14,9 @@ import { motion } from 'framer-motion';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
-import InstrumentPanel from './components/InstrumentPanel';
+import NotificationBell from './NotificationBell';
 import CountryFlagStrip from './components/CountryFlagStrip';
+import DeepJobsView from './components/views/DeepJobsView';
 import TrashModal from './components/TrashModal';
 import { findCountry } from './data/countries';
 import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
@@ -1396,7 +1397,7 @@ export default function CommandCenter() {
     setAutoQuery(`${cat} in ${loc}`);
     setFolderView(null);
     setActiveTab('cockpit');
-    toast.success(`Configured search for ${cat} in ${loc}. Click "FIND ALL LEADS" to swarm!`);
+    toast.success(`Ready to search ${cat} in ${loc}. Click "Find Businesses" to start!`);
   };
 
   const effectiveRuns = useMemo(() => {
@@ -1760,31 +1761,26 @@ export default function CommandCenter() {
 
       <header className="v2-cmd-top">
         <div className="v2-cmd-brand">
-          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Dashboard' : 'Back to landing'}>
+          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Workspace' : 'Back to home'}>
             <Logo compact />
           </button>
           <span className="v2-cmd-breadcrumb">
-            <span>COMMAND CENTER</span>
+            <span>Lead Workspace</span>
             <b>/</b>
-            <code>{run ? run.id : 'STANDBY'}</code>
+            <code>{run?.category ? `${run.category}${run.location ? ` · ${run.location}` : ''}` : 'Ready to Search'}</code>
           </span>
         </div>
 
         <div className="v2-cmd-top-status">
           <StatusPill tone={sseStatus === 'open' ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={sseStatus === 'open'}>
             {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
+            {sseStatus === 'open' ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
           <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} leads · {(() => {
-              const markets = new Set(vendors.map(v => String(v.country || 'IN').toUpperCase()));
-              if (markets.size > 1) return `${markets.size} markets`;
-              const only = [...markets][0] || searchCountry;
-              return (findCountry(only) || { name: 'India' }).name;
-            })()}
-            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">Next search: {countryMeta.adminPath}</em> : null}
+            {formatNumber(vendors.length)} businesses · {(findCountry(searchCountry) || { name: 'India' }).name}
           </span>
 
+          <NotificationBell />
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
             <button
@@ -1794,17 +1790,30 @@ export default function CommandCenter() {
               aria-expanded={toolsOpen}
               aria-haspopup="menu"
             >
-              <Settings size={13} /> Tools <ChevronDown size={12} className="v2-tools-caret" />
+              <Settings size={13} /> Menu <ChevronDown size={12} className="v2-tools-caret" />
             </button>
             {toolsOpen && (
               <div className="v2-tools-menu" role="menu">
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
-                  <Zap size={14} />
-                  <span><b>Profile engine</b><small>Fill the 52-field vendor profiles</small></span>
+                  <Sparkles size={14} />
+                  <span><b>Find Missing Contacts</b><small>Look up missing phones, emails &amp; websites</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
                   <MapPin size={14} />
-                  <span><b>Coverage map</b><small>See every lead and search zone</small></span>
+                  <span><b>Full Territory Map</b><small>Explore every discovered business on the map</small></span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setToolsOpen(false);
+                    const target = run || sessions[0];
+                    if (target?.id) exportFolder(target, 'xlsx');
+                    else toast.error('Run a search first to download Excel.');
+                  }}
+                >
+                  <FileSpreadsheet size={14} />
+                  <span><b>Download Excel (.xlsx)</b><small>Export current lead list as a spreadsheet</small></span>
                 </button>
                 <button
                   type="button"
@@ -1813,15 +1822,15 @@ export default function CommandCenter() {
                     setToolsOpen(false);
                     const target = run || sessions[0];
                     if (target?.id) exportFolder(target, 'csv');
-                    else toast.error('Run a search first, then export its folder.');
+                    else toast.error('Run a search first to export CSV.');
                   }}
                 >
                   <Download size={14} />
-                  <span><b>Export CSV</b><small>Download the current search folder</small></span>
+                  <span><b>Download CSV</b><small>Export clean CSV table of leads</small></span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Data refreshed.'); }}>
+                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Workspace updated.'); }}>
                   <RefreshCw size={14} />
-                  <span><b>Refresh data</b><small>Pull the latest leads and folders</small></span>
+                  <span><b>Refresh Leads</b><small>Sync latest businesses and lists</small></span>
                 </button>
               </div>
             )}
@@ -1935,63 +1944,82 @@ export default function CommandCenter() {
             onResolve={setScanPlan}
             progress={progress}
             eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
-            runLeadCount={runLeadCount}
-            runStartedAt={run?.startedAt || 0}
+            runs={effectiveRuns}
+            onOpenFolder={openFolder}
           />
 
           <section className="v2-cmd-stats">
-            <MetricCard label="LEADS FOUND" value={formatNumber(vendors.length)} sub={`${formatNumber(runLeadCount)} this search`} icon={Users} tone="lime" pulse={Boolean((run?.status === 'running' || scanning) && !finishingRef.current)} />
-            <MetricCard label="MOBILE NUMBERS" value={formatNumber(stats.phones)} sub={`${vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}% have a phone`} icon={Phone} tone="cyan" />
-            <MetricCard label="COMPLETE PROFILES" value={formatNumber(stats.deep)} sub={`${stats.avg}% avg profile quality`} icon={Zap} tone="violet" />
-            <MetricCard label="SAVED FOLDERS" value={formatNumber(effectiveRuns.length)} sub={`${formatNumber(estimate?.zones?.count || 0)} areas in this search`} icon={FolderArchive} tone="amber" />
+            <MetricCard
+              label="BUSINESSES FOUND"
+              value={formatNumber(vendors.length)}
+              sub={run?.status === 'running' ? `${formatNumber(runLeadCount)} live right now` : 'Ready in your workspace'}
+              icon={Users}
+              tone="lime"
+              pulse={Boolean((run?.status === 'running' || scanning) && !finishingRef.current)}
+            />
+            <MetricCard
+              label="DIRECT PHONES"
+              value={formatNumber(stats.phones)}
+              sub={`${vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}% ready to call`}
+              icon={Phone}
+              tone="cyan"
+              percent={vendors.length ? Math.round((stats.phones / vendors.length) * 100) : 0}
+            />
+            <MetricCard
+              label="COMPLETE DETAILS"
+              value={formatNumber(stats.deep)}
+              sub={`${stats.avg}% avg profile quality`}
+              icon={Sparkles}
+              tone="violet"
+              percent={stats.avg || 0}
+            />
+            <MetricCard
+              label="SAVED LISTS"
+              value={formatNumber(effectiveRuns.length)}
+              sub="Permanent downloadable folders"
+              icon={FolderArchive}
+              tone="amber"
+            />
           </section>
 
           {run?.status === 'running' && (
-            <div className="v2-live-run-strip">
-              <div className="v2-live-run-pulse" />
-              <div className="v2-live-run-info">
-                <span className="v2-live-run-badge">SWARM HARVESTING ACTIVE</span>
-                <b>{run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}</b>
-                {(effectiveActiveZone?.name || progress?.activeMandal) && (
-                  <span className="v2-live-zone-chip">
-                    📍 {effectiveActiveZone?.name || progress?.activeMandal}
-                    {Number.isFinite(Number(effectiveActiveZone?.lat)) && ` [${Number(effectiveActiveZone.lat).toFixed(3)}, ${Number(effectiveActiveZone.lng).toFixed(3)}]`}
-                  </span>
-                )}
+            <div className="lx-live-progress-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <span className="lx-live-dot" />
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: '#059669', textTransform: 'uppercase' }}>
+                    Discovering Verified Businesses
+                  </div>
+                  <div style={{ fontSize: 14.5, fontWeight: 750, color: '#0f172a' }}>
+                    {run.category || form.category || autoQuery} in {run.location || form.location || 'Selected Area'}
+                    {(effectiveActiveZone?.name || progress?.activeMandal) ? (
+                      <span style={{ fontWeight: 600, color: '#475569', fontSize: 13 }}> · Checking {effectiveActiveZone?.name || progress?.activeMandal}</span>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <div className="v2-live-run-metrics">
-                <div className="v2-live-metric-item">
-                  <Users size={13} className="v2-text-lime" />
-                  <span>LEADS:</span>
-                  <b>{formatNumber(runLeadCount)}</b>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ textAlign: 'right' }}>
+                  <b style={{ display: 'block', fontSize: 18, fontWeight: 850, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatNumber(runLeadCount)} leads
+                  </b>
+                  <small style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Streaming live into your list &amp; map</small>
                 </div>
-                <div className="v2-live-metric-item">
-                  <Clock size={13} className="v2-text-amber" />
-                  <span>EST. TIME:</span>
-                  <b>{progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : 'Calculating…')}</b>
-                </div>
-                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun} title="Safely stop swarm and save collected leads">
+                <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun} title="Stop search and keep all leads found so far">
                   <Square size={11} /> Stop
                 </button>
               </div>
             </div>
           )}
 
-          <InstrumentPanel
-            running={run?.status === 'running'}
-            leadCount={runLeadCount}
-            progress={progress}
-            compact={activeTab === 'cockpit'}
-          />
-
           {currentDeep && ['queued', 'running', 'stopping'].includes(currentDeep.status) && (
             <div className="v2-deep-banner">
               <span className="v2-deep-banner-pulse" />
-              <Zap size={13} />
-              <b>Completing business profiles</b>
-              <span>{currentDeep.completed || 0}/{currentDeep.total || 0} done · phones, emails and websites are still streaming in</span>
+              <Sparkles size={13} />
+              <b>Finding missing contact details</b>
+              <span>{currentDeep.completed || 0} of {currentDeep.total || 0} checked · phones, emails and websites updating live</span>
               <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={() => setActiveTab('deep')}>
-                View engine
+                View progress
               </button>
             </div>
           )}
@@ -2054,109 +2082,105 @@ export default function CommandCenter() {
                         <tr>
                           <th>BUSINESS</th>
                           <th>LOCATION</th>
-                          <th>CONTACT</th>
+                          <th>DIRECT CONTACT</th>
                           <th>RATING</th>
-                          <th>CRM STAGE</th>
-                          <th />
+                          <th style={{ width: 40 }} />
                         </tr>
                       </thead>
                       <tbody>
                         {pageRows.map((vendor, index) => {
                           const quality = qualityOf(vendor);
-                          const stage = crmStageOf(vendor);
                           const originLat = Array.isArray(mapCenter) ? mapCenter[0] : (mapCenter?.lat || null);
                           const originLng = Array.isArray(mapCenter) ? mapCenter[1] : (mapCenter?.lng || null);
                           const vLat = vendor.latitude ?? vendor.lat;
                           const vLng = vendor.longitude ?? vendor.lng;
                           const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
                           const leadAddress = dedupeAddress(vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, vendor.city || vendor.village || vendor.mandal, vendor.district, vendor.state].filter(Boolean).join(', ') || (vendor.city || vendor.village || 'Locality'));
+                          const activePhone = getDisplayPhone(vendor);
                           return (
                             <tr
                               key={vendor.id}
                               className="v2-lead-animated-row"
-                              style={{ animationDelay: `${Math.min(index * 35, 600)}ms` }}
+                              style={{ animationDelay: `${Math.min(index * 24, 360)}ms` }}
                               onClick={() => setSelectedVendor(vendor)}
                             >
                               <td>
                                 <div className="v2-vendor-cell">
                                   <VendorAvatar vendor={vendor} />
                                   <span>
-                                    <b>{vendor.name || 'Unknown vendor'}</b>
-                                    <small>{vendor.category || 'Vendor'}{vendor.subcategory ? ` · ${vendor.subcategory}` : ''}{quality != null ? ` · ${quality}% profile` : ''}</small>
+                                    <b>{vendor.name || 'Local Business'}</b>
+                                    <small>{vendor.category || 'Business'}{vendor.subcategory ? ` · ${vendor.subcategory}` : ''}{quality != null ? ` · ${quality}% complete` : ''}</small>
                                   </span>
-                                  {vendor.verified && <CheckCircle2 size={13} className="v2-verified-icon" />}
+                                  {vendor.verified && <CheckCircle2 size={13} color="#059669" />}
                                 </div>
                               </td>
                               <td>
                                 <div className="v2-location-cell">
                                   <div className="v2-lead-address-line" title={leadAddress}>
-                                    <MapPin size={11} className="v2-text-lime" style={{ flexShrink: 0 }} />
+                                    <MapPin size={11} color="#059669" style={{ flexShrink: 0 }} />
                                     <span className="v2-lead-address">{leadAddress}</span>
                                   </div>
                                   <div className="v2-location-sub" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                                    <span>{vendor.city || vendor.village || vendor.mandal || 'Unknown'}</span>
+                                    <span>{vendor.city || vendor.village || vendor.mandal || 'Area'}</span>
                                     <small>{dedupeAddress([vendor.district, vendor.state].filter(Boolean).join(', ')) || vendor.pincode || '—'}</small>
                                     {distKm != null && distKm <= 500 && (
-                                      <span className="v2-distance-badge" title="Distance from search origin">
-                                        📍 {distKm} km
-                                      </span>
+                                      <span className="v2-distance-badge">{distKm} km</span>
                                     )}
                                   </div>
                                 </div>
                               </td>
                               <td>
                                 <div className="v2-contact-cell">
-                                          {(() => {
-                                            const activePhone = getDisplayPhone(vendor);
-                                            const isMob = isMobilePhone(activePhone, vendor.country);
-                                            const waNum = whatsappNumber(activePhone, vendor.country);
-                                            return activePhone && !String(activePhone).includes('Requires') ? (
-                                              <div className="v2-phone-cluster">
-                                                <a href={`tel:${activePhone}`} className="v2-phone-badge" onClick={event => event.stopPropagation()}>
-                                                  <Phone size={11} /> {activePhone}
-                                                </a>
-                                        {isMob && (
-                                            <a
-                                              href={vendor.whatsappLink || `https://wa.me/${waNum}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20listing%20and%20wanted%20to%20connect.`}
-                                              target="_blank"
-                                              rel="noreferrer"
-                                              className="v2-wa-quick-btn"
-                                              title="Chat on WhatsApp"
-                                              onClick={event => event.stopPropagation()}
-                                            >
-                                              💬 WhatsApp
-                                            </a>
-                                          )}
-                                        </div>
-                                      ) : (
-                                      <span className="v2-muted">No mobile yet</span>
-                                      );
-                                  })()}
-                                      <span className="v2-contact-sub">
-                                        {vendor.website
-                                          ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> website</a>
-                                          : <em>no website</em>}
-                                        {vendor.email && <a href={`mailto:${vendor.email}`} onClick={event => event.stopPropagation()}>email</a>}
-                                      </span>
+                                  {activePhone && !String(activePhone).includes('Requires') ? (
+                                    <div className="v2-phone-cluster">
+                                      <a href={`tel:${activePhone}`} className="v2-phone-badge" onClick={event => event.stopPropagation()}>
+                                        <Phone size={11} /> {activePhone}
+                                      </a>
+                                      <button
+                                        type="button"
+                                        onClick={event => {
+                                          event.stopPropagation();
+                                          navigator.clipboard?.writeText(activePhone);
+                                          toast.success(`Copied ${activePhone}`);
+                                        }}
+                                        title="Copy phone number"
+                                        style={{
+                                          border: '1px solid rgba(15, 23, 42, 0.12)',
+                                          background: '#ffffff',
+                                          borderRadius: 7,
+                                          width: 26,
+                                          height: 26,
+                                          display: 'grid',
+                                          placeItems: 'center',
+                                          cursor: 'pointer',
+                                          color: '#475569'
+                                        }}
+                                      >
+                                        <Copy size={11} />
+                                      </button>
                                     </div>
+                                  ) : (
+                                    <span className="v2-muted">Not listed</span>
+                                  )}
+                                  <span className="v2-contact-sub">
+                                    {vendor.website
+                                      ? <a href={vendor.website} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}><Globe2 size={11} /> Website</a>
+                                      : <em>No website</em>}
+                                    {vendor.email && <a href={`mailto:${vendor.email}`} onClick={event => event.stopPropagation()}>Email</a>}
+                                  </span>
+                                </div>
                               </td>
                               <td>
-                                {vendor.rating != null ? <span className="v2-table-rating">{Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small></span> : <span className="v2-muted">—</span>}
-                              </td>
-                              <td>
-                                <select
-                                  className={cx('v2-stage-select', `stage-${stage}`)}
-                                  value={stage}
-                                  onClick={event => event.stopPropagation()}
-                                  onChange={event => updateCrmStage(vendor, event.target.value)}
-                                  disabled={crmSavingId === vendor.id}
-                                >
-                                  {CRM_STAGES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-                                </select>
+                                {vendor.rating != null ? (
+                                  <span className="v2-table-rating" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <Star size={12} fill="#f59e0b" color="#d97706" />
+                                    {Number(vendor.rating).toFixed(1)} <small>({formatNumber(vendor.reviewsCount || 0)})</small>
+                                  </span>
+                                ) : <span className="v2-muted">—</span>}
                               </td>
                               <td>
                                 <div className="v2-row-actions" onClick={event => event.stopPropagation()}>
-                                  <button type="button" onClick={() => setSelectedVendor(vendor)} title="Open full profile"><ArrowRight size={13} /></button>
+                                  <button type="button" onClick={() => setSelectedVendor(vendor)} title="View business details"><ArrowRight size={13} /></button>
                                 </div>
                               </td>
                             </tr>
@@ -2222,26 +2246,28 @@ export default function CommandCenter() {
                   />
                   <aside className="v2-map-side">
                     <div className="v2-map-side-head">
-                      <span><Layers size={13} /> COVERAGE ZONES</span>
-                      <b>{estimate?.zones?.count || mapZones.length}</b>
+                      <span><MapPin size={13} /> BUSINESSES ON MAP</span>
+                      <b>{formatNumber(filteredVendors.filter(vendor => Number.isFinite(Number(vendor.latitude))).length)}</b>
                     </div>
                     <div className="v2-zone-list">
-                      {mapZones.map(zone => {
-                        const name = zone.zoneName || zone.name || 'Zone';
-                        const isActive = scanning && activeZone?.name === name;
-                        return (
-                          <div key={`${zone.index}-${name}`} className={cx(isActive && 'is-active')}>
-                            <span>{String(zone.index || 0).padStart(2, '0')}</span>
-                            <b>{name}</b>
-                            <small>{isActive ? 'SCANNING' : zone.lat ? 'ANCHORED' : 'GEOCODE'}</small>
-                          </div>
-                        );
-                      })}
-                      {!mapZones.length && <p>No zone preview. Run an estimate first.</p>}
+                      {filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).slice(0, 30).map((vendor, idx) => (
+                        <div
+                          key={vendor.id || idx}
+                          onClick={() => setSelectedVendor(vendor)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <span>{String(idx + 1).padStart(2, '0')}</span>
+                          <b style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vendor.name || 'Local Business'}</b>
+                          <small>{getDisplayPhone(vendor) ? 'Phone' : 'Pin'}</small>
+                        </div>
+                      ))}
+                      {filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).length === 0 && (
+                        <p>Start a search to see businesses pinned across the map.</p>
+                      )}
                     </div>
                     <div className="v2-map-side-foot">
-                      <div><span>PLOTTED</span><b>{formatNumber(filteredVendors.filter(vendor => Number.isFinite(Number(vendor.latitude))).length)}</b></div>
-                      <div><span>NO COORDS</span><b>{formatNumber(filteredVendors.filter(vendor => !Number.isFinite(Number(vendor.latitude))).length)}</b></div>
+                      <div><span>PINNED</span><b>{formatNumber(filteredVendors.filter(vendor => Number.isFinite(Number(vendor.latitude))).length)}</b></div>
+                      <div><span>WITH PHONE</span><b>{formatNumber(filteredVendors.filter(vendor => Boolean(getDisplayPhone(vendor))).length)}</b></div>
                     </div>
                   </aside>
                 </div>
@@ -2252,17 +2278,17 @@ export default function CommandCenter() {
               <section className="v2-runs-view">
                 <div className="v2-runs-top">
                   <div>
-                    <span className="v2-view-kicker">SAVED SEARCH VAULTS · LOCAL LEAD ARCHIVES</span>
-                    <h2>Every search is saved in its own permanent folder.</h2>
-                    <p>Open any folder to explore leads, copy verified mobiles, export CSV/JSON, switch to Map view, or load it into your live Cockpit workspace.</p>
+                    <span className="v2-view-kicker">MY SAVED LISTS</span>
+                    <h2>Every search is automatically saved in its own folder.</h2>
+                    <p>Open any list to browse businesses, copy phone numbers, explore the map, or download clean Excel (.xlsx) and CSV sheets in one click.</p>
                   </div>
                   <div className="v2-folder-stats-pill">
                     <FolderArchive size={16} />
-                    <span><b>{formatNumber(effectiveRuns.length)}</b> Folders</span>
+                    <span><b>{formatNumber(effectiveRuns.length)}</b> Lists</span>
                     <span>•</span>
                     <span><b>{formatNumber(effectiveRuns.reduce((acc, r) => acc + (r.leadCount || 0), 0))}</b> Leads</span>
                     <span>•</span>
-                    <span><b>{formatNumber(effectiveRuns.reduce((acc, r) => acc + (r.phoneCount || 0), 0))}</b> Mobiles</span>
+                    <span><b>{formatNumber(effectiveRuns.reduce((acc, r) => acc + (r.phoneCount || 0), 0))}</b> Phones</span>
                   </div>
                 </div>
 
@@ -2392,121 +2418,25 @@ export default function CommandCenter() {
                     />
                   )}
                 </div>
-
-                <div className="v2-run-folder-tree">
-                  <div className="v2-folder-head">
-                    <FolderArchive size={15} />
-                    <span>RECENT SEARCH FOLDERS DISK INDEX</span>
-                    <b>{effectiveRuns.length} TOTAL VAULTS</b>
-                  </div>
-                  {filteredRuns.slice(0, 8).map((runCard, index) => (
-                    <div className="v2-tree-row" key={runCard.id} style={{ paddingLeft: `${14 + (index % 4) * 16}px` }}>
-                      <span>▸</span>
-                      <b>{runCard.id}</b>
-                      <span>{runCard.name || `${runCard.category} in ${runCard.location}`}</span>
-                      <small>{formatNumber(runCard.leadCount)} leads · {formatNumber(runCard.phoneCount)} mobiles · {relativeTime(runCard.timestamp)}</small>
-                    </div>
-                  ))}
-                </div>
               </section>
             )}
 
             {activeTab === 'deep' && (
-              <section className="v2-deep-view">
-                <div className="v2-deep-top">
-                  <div>
-                    <span className="v2-view-kicker">DEEP PROFILE ENGINE</span>
-                    <h2>Fill the field contract. Keep the unknowns.</h2>
-                    <p>Each vendor is saved independently under <code>server/data/deep_profiles/</code>. Stop and resume without losing completed profiles.</p>
-                  </div>
-                  <ScoreRing value={stats.avg} size={94} label="avg quality" />
-                </div>
-
-                <div className="v2-deep-grid">
-                  <div className="v2-panel v2-deep-config">
-                    <div className="v2-rail-head">
-                      <span><Zap size={14} /> QUEUE A DEEP PASS</span>
-                      <b>{formatNumber(deepEstimate?.count || 0)} UNEXTRACTED</b>
-                    </div>
-                    <div className="v2-deep-config-row">
-                      <label htmlFor="deep-limit">Vendor limit</label>
-                      <input
-                        id="deep-limit"
-                        type="number"
-                        min="1"
-                        max="750"
-                        value={batchConfig.limit}
-                        onChange={event => setBatchConfig(prev => ({ ...prev, limit: Math.max(1, Math.min(750, Number(event.target.value) || 1)) }))}
-                      />
-                      <span>~{deepEstimate?.label || '—'} · 2 browsers</span>
-                    </div>
-                    <div className="v2-toggle-stack">
-                      <ToggleTile active={batchConfig.website} onClick={() => setBatchConfig(prev => ({ ...prev, website: !prev.website }))} label="Website" detail="Multi-page crawl" icon={Globe2} />
-                      <ToggleTile active={batchConfig.google} onClick={() => setBatchConfig(prev => ({ ...prev, google: !prev.google }))} label="Google Maps" detail="Place detail DOM" icon={MapPin} />
-                    </div>
-                    <button type="button" className="v2-btn v2-btn-lime v2-btn-block" onClick={queueDeepManual} disabled={batchStarting || (deepEstimate?.count || 0) === 0}>
-                      {batchStarting ? <Loader2 size={15} className="v2-spin" /> : <Zap size={15} />}
-                      {batchStarting ? 'QUEUEING…' : 'START DEEP BATCH'}
-                    </button>
-                    <small className="v2-deep-config-note">Existing deep profiles are skipped unless you force a single-vendor pass from the drawer.</small>
-                  </div>
-
-                  <div className="v2-panel v2-deep-health">
-                    <div className="v2-rail-head">
-                      <span><Activity size={14} /> ENGINE HEALTH</span>
-                      <StatusPill tone={health?.status === 'ok' ? 'lime' : 'amber'} pulse>{health?.status || 'unknown'}</StatusPill>
-                    </div>
-                    <div className="v2-deep-health-grid">
-                      <div><span>TRACKED FIELDS</span><b>{health?.trackedFields || 52}</b><small>{health?.fieldGroups || 10} groups</small></div>
-                      <div><span>DEEP EXTRACTED</span><b>{formatNumber(health?.deepExtracted || 0)}</b><small>{formatNumber(health?.vendors || vendors.length)} vendors</small></div>
-                      <div><span>PROFILE FILES</span><b>{formatNumber(health?.profileFiles || 0)}</b><small>file-backed</small></div>
-                      <div><span>ACTIVE JOBS</span><b>{formatNumber(health?.activeJobs || activeDeepJobs.length)}</b><small>resumable</small></div>
-                    </div>
-                    <div className="v2-deep-health-foot">
-                      <span><Globe2 size={12} /> website {health?.engines?.website ? 'online' : 'offline'}</span>
-                      <span><MapPin size={12} /> maps {health?.engines?.playwright ? 'online' : 'offline'}</span>
-                      <span><Database size={12} /> village index {health?.geo?.villageIndexReady ? 'ready' : 'lazy'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="v2-deep-jobs-head">
-                  <span className="v2-view-kicker">JOB LEDGER</span>
-                  <h3>Recent deep jobs</h3>
-                </div>
-                <div className="v2-deep-jobs-list">
-                  {(deepJob ? [deepJob, ...deepJobs.filter(job => job.id !== deepJob.id)] : deepJobs).slice(0, 8).map(job => (
-                    <DeepJobRow key={job.id} job={job} onStop={stopDeep} onResume={resumeDeep} active={job.id === deepJob?.id} />
-                  ))}
-                  {deepJobs.length === 0 && !deepJob && (
-                    <EmptyState
-                      icon={Zap}
-                      title="No deep jobs yet."
-                      body="Queue a batch or open any vendor and run a single deep extraction."
-                      action={queueDeepManual}
-                      actionLabel="Queue deep pass"
-                    />
-                  )}
-                </div>
-
-                <div className="v2-deep-jobs-head">
-                  <span className="v2-view-kicker">LATEST PROFILES</span>
-                  <h3>Recently completed</h3>
-                </div>
-                <div className="v2-profile-grid">
-                  {recentProfiles.map(vendor => (
-                    <button type="button" className="v2-profile-card" key={vendor.id} onClick={() => setSelectedVendor(vendor)}>
-                      <VendorAvatar vendor={vendor} size={38} />
-                      <span>
-                        <b>{vendor.name}</b>
-                        <small>{vendor.category || 'Uncategorised'} · {relativeTime(vendor.deepExtractedAt)}</small>
-                      </span>
-                      <ScoreRing value={qualityOf(vendor) || 0} size={52} label="" />
-                    </button>
-                  ))}
-                  {recentProfiles.length === 0 && <p className="v2-muted">No deep profiles yet. Run the engine to populate this ledger.</p>}
-                </div>
-              </section>
+              <DeepJobsView
+                stats={stats}
+                deepEstimate={deepEstimate}
+                batchConfig={batchConfig}
+                setBatchConfig={setBatchConfig}
+                queueDeepManual={queueDeepManual}
+                batchStarting={batchStarting}
+                vendors={vendors}
+                deepJob={deepJob}
+                deepJobs={deepJobs}
+                stopDeep={stopDeep}
+                resumeDeep={resumeDeep}
+                recentProfiles={recentProfiles}
+                setSelectedVendor={setSelectedVendor}
+              />
             )}
           </div>
         </main>

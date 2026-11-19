@@ -51,6 +51,8 @@ const TAB_ALIASES = {
   folders: 'runs',
   runs: 'runs',
   deep: 'deep',
+  intelligence: 'intelligence',
+  ai: 'intelligence',
   engines: 'engines',
   engine: 'engines',
   terminal: 'terminal',
@@ -2192,6 +2194,36 @@ export default function CommandCenter() {
       district: 'Dubai Municipality, Abu Dhabi Municipality',
       mandal: 'Deira, Bur Dubai, Al Barsha',
       city: 'Downtown Dubai, JLT'
+    },
+    SG: {
+      state: 'Central Region, East Region, West Region',
+      district: 'Central Region, Jurong, Tampines',
+      mandal: 'Orchard, Marina Bay, Jurong East',
+      city: 'Singapore, Woodlands, Tampines'
+    },
+    NZ: {
+      state: 'Auckland, Canterbury, Wellington',
+      district: 'Auckland Region, Waikato, Otago',
+      mandal: 'Auckland, Wellington, Christchurch',
+      city: 'Auckland CBD, Hamilton, Dunedin'
+    },
+    IE: {
+      state: 'Leinster, Munster, Connacht',
+      district: 'County Dublin, County Cork, County Galway',
+      mandal: 'Dublin, Cork, Galway, Limerick',
+      city: 'Dublin City Centre, Cork, Galway'
+    },
+    ZA: {
+      state: 'Gauteng, Western Cape, KwaZulu-Natal',
+      district: 'City of Johannesburg, City of Cape Town',
+      mandal: 'Johannesburg, Cape Town, Durban, Pretoria',
+      city: 'Sandton, Cape Town CBD, Umhlanga'
+    },
+    DE: {
+      state: 'Bavaria, Berlin, Hesse, North Rhine-Westphalia',
+      district: 'Upper Bavaria, Cologne Region, Stuttgart Region',
+      mandal: 'Berlin, Munich, Hamburg, Frankfurt',
+      city: 'Mitte Berlin, Munich, Cologne, Stuttgart'
     }
   };
   const examples = COUNTRY_PLACE_EXAMPLES[searchCountry] || {};
@@ -2284,6 +2316,11 @@ export default function CommandCenter() {
       if (searchCountry === 'GB') return [51.5074, -0.1278];
       if (searchCountry === 'AU') return [-33.8688, 151.2093];
       if (searchCountry === 'AE') return [25.2048, 55.2708];
+      if (searchCountry === 'SG') return [1.3521, 103.8198];
+      if (searchCountry === 'NZ') return [-36.8485, 174.7633];
+      if (searchCountry === 'IE') return [53.3498, -6.2603];
+      if (searchCountry === 'ZA') return [-26.2041, 28.0473];
+      if (searchCountry === 'DE') return [52.5200, 13.4050];
       return [22.5937, 79.9629];
     }
     return [
@@ -2386,8 +2423,12 @@ export default function CommandCenter() {
           <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Dashboard' : 'Back to landing'}>
             <Logo compact />
           </button>
+          <span className="mc-sovereign-badge">
+            <span className="mc-dot" />
+            SOVEREIGN MASTER
+          </span>
           <span className="v2-cmd-breadcrumb">
-            <span>COMMAND CENTER</span>
+            <span>OPERATIONS</span>
             <b>/</b>
             <code>{run ? run.id : 'STANDBY'}</code>
           </span>
@@ -2399,22 +2440,25 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
           <span className="v2-cmd-context">
-            {formatNumber(vendors.length)} leads · {(() => {
-              const markets = new Set(vendors.map(v => String(v.country || 'IN').toUpperCase()));
-              if (markets.size > 1) return `${markets.size} markets`;
-              const only = [...markets][0] || searchCountry;
-              return (findCountry(only) || { name: 'India' }).name;
-            })()}
-            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">Next search: {countryMeta.adminPath}</em> : null}
+            {formatNumber(vendors.length)} leads · 11 Locked Markets
+            {countryMeta?.adminPath ? <em className="v2-cmd-hierarchy">{countryMeta.adminPath}</em> : null}
           </span>
 
           <button
             type="button"
             className="v2-btn v2-btn-ghost v2-btn-sm"
-            onClick={() => navigate('/master')}
-            title="Open Master Command Center for District, State, City-Mesh & Mandal sweeps"
+            onClick={() => navigate('/clients')}
+            title="Manage Client Accounts, Quotas, Imports & Broadcasts"
           >
-            <Compass size={13} /> Master Command Center
+            <Users size={13} /> Clients
+          </button>
+          <button
+            type="button"
+            className="v2-btn v2-btn-ghost v2-btn-sm"
+            onClick={() => navigate('/master')}
+            title="Open Full-Screen Territory Sweep Map"
+          >
+            <Compass size={13} /> Territory Sweeps
           </button>
           <DesktopBadge />
           <div className="v2-tools" ref={toolsRef}>
@@ -2431,27 +2475,23 @@ export default function CommandCenter() {
               <div className="v2-tools-menu" role="menu">
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('intelligence'); fetchTaxonomy(); }}>
                   <Brain size={14} />
-                  <span><b>Intelligence Bank</b><small>Taxonomies & Geo-Hierarchy</small></span>
+                  <span><b>AI Intelligence &amp; Simulator</b><small>Test queries across 11 markets</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('engines'); }}>
                   <Activity size={14} />
-                  <span><b>Parallel Engines</b><small>Inspect active scrapers</small></span>
+                  <span><b>Parallel Engines</b><small>Inspect active scrapers &amp; 4GB budget</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('terminal'); }}>
                   <Terminal size={14} />
                   <span><b>System Terminal</b><small>Raw engine telemetry stream</small></span>
                 </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/whatsapp'); }}>
-                  <MessageSquare size={14} />
-                  <span><b>WhatsApp Campaigns</b><small>Broadcast & automated messaging</small></span>
-                </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/clients'); }}>
                   <Users size={14} />
-                  <span><b>Client Accounts</b><small>Multi-tenant organization</small></span>
+                  <span><b>Client Accounts</b><small>Quotas, vaults &amp; broadcasts</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/learning'); }}>
                   <Sparkles size={14} />
-                  <span><b>Learning Center</b><small>Engine memory & heuristics</small></span>
+                  <span><b>Learning Center</b><small>Engine memory &amp; heuristics</small></span>
                 </button>
                 <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
                   <Zap size={14} />
@@ -2538,6 +2578,48 @@ export default function CommandCenter() {
             />
           )}
           <FolderArchive size={14} /> Saved Folders <b>{formatNumber(clientRuns.length + masterRuns.length)}</b>
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'intelligence' && 'is-active')}
+          onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}
+        >
+          {activeTab === 'intelligence' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Brain size={14} /> AI Intelligence
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'engines' && 'is-active')}
+          onClick={() => setActiveTab('engines')}
+        >
+          {activeTab === 'engines' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Activity size={14} /> Engines
+        </button>
+        <button
+          type="button"
+          className={cx('v2-tab-pill-btn', activeTab === 'terminal' && 'is-active')}
+          onClick={() => setActiveTab('terminal')}
+        >
+          {activeTab === 'terminal' && (
+            <motion.div
+              layoutId="activeTabPill"
+              className="v2-tab-indicator"
+              transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+            />
+          )}
+          <Terminal size={14} /> Terminal
         </button>
         <span className="v2-cmd-tabs-spacer" />
         <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={refresh}>
@@ -3085,15 +3167,6 @@ export default function CommandCenter() {
           vendor={selectedVendor}
           onClose={() => setSelectedVendor(null)}
           onUpdated={() => { loadVendors(); loadHealth(); }}
-          onOpenWhatsApp={(v) => {
-            const phone = getDisplayPhone(v);
-            if (!isMobilePhone(phone, v.country || searchCountry)) {
-              toast.error('This lead has no validated mobile number for WhatsApp.');
-              return;
-            }
-            setSelectedVendor(null);
-            navigate('/whatsapp', { state: { targetLead: v } });
-          }}
         />
       )}
 

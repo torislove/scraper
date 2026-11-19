@@ -118,42 +118,6 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
       return undefined;
     }
 
-    // Instant on-device semantic evaluation (<0.5ms) via Web Worker
-    parseQuerySemantic(text, country).then(localParsed => {
-      if (localParsed && localParsed.ready) {
-        startTransition(() => {
-          setResponse(prev => {
-            if (!prev || !prev.ready) {
-              return {
-                ok: true,
-                query: text,
-                ready: true,
-                category: localParsed.category,
-                location: localParsed.location,
-                parsed: localParsed,
-                suggestions: []
-              };
-            }
-            return prev;
-          });
-        });
-        const resolveKey = `${text}|1`;
-        if (resolveKey !== lastResolveKey.current) {
-          lastResolveKey.current = resolveKey;
-          startTransition(() => {
-            resolveRef.current?.({
-              ok: true,
-              query: text,
-              ready: true,
-              category: localParsed.category,
-              location: localParsed.location,
-              parsed: localParsed
-            });
-          });
-        }
-      }
-    }).catch(() => {});
-
     clearTimeout(timer.current);
     const requestId = ++requestRef.current;
 
@@ -164,7 +128,7 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
       setLoading(true);
 
       try {
-        const data = await suggestSearch({ q: text, isMaster: false, country }, { signal: controller.signal });
+        const data = await suggestSearch({ q: text, isMaster: true, country }, { signal: controller.signal });
         if (requestRef.current !== requestId) return;
 
         // Cache result for ultra-fast 0ms backspace & repeat keystrokes
@@ -178,7 +142,7 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
 
         startTransition(() => setResponse(data));
 
-        const resolveKey = `${data?.query || ''}|${data?.ready ? '1' : '0'}`;
+        const resolveKey = `${data?.query || ''}|${data?.ready ? '1' : '0'}|${country}`;
         if (resolveKey !== lastResolveKey.current) {
           lastResolveKey.current = resolveKey;
           startTransition(() => resolveRef.current?.(data));
@@ -189,7 +153,7 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 150);
+    }, 85);
 
     return () => {
       clearTimeout(timer.current);

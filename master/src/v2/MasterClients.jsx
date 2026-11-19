@@ -291,7 +291,7 @@ export default function MasterClients() {
             <BrandIcon size={26} />
             <span className="v2-desk-title">
               <b>Client Desk</b>
-              <em>Master workspace</em>
+              <em>Sovereign Master · 11 Locked Markets</em>
             </span>
           </div>
         </div>

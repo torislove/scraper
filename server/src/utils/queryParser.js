@@ -14,21 +14,32 @@ const ALL_STATES = [
   'delhi', 'jammu and kashmir', 'ladakh', 'puducherry', 'chandigarh'
 ];
 
-const IN_EXCEPTIONS = new Set([
-  'invitation', 'invitations', 'interior', 'interiors', 'insurance', 'institute', 
-  'institution', 'institutes', 'industry', 'industries', 'industrial', 'internet', 
-  'inn', 'innovative', 'innovation', 'interactive', 'international', 'indoor', 
-  'indoors', 'injector', 'injection', 'income', 'incident', 'intimate', 'intro',
-  'introduction', 'intelligent', 'intelligence', 'attire', 'attorney', 'athlete',
-  'nearby', 'nearest'
+const KNOWN_ATTACHED_PLACES = new Set([
+  'bangalore', 'bengaluru', 'mumbai', 'delhi', 'hyderabad', 'chennai', 'kolkata',
+  'pune', 'ahmedabad', 'jaipur', 'surat', 'lucknow', 'kanpur', 'nagpur', 'indore',
+  'thane', 'bhopal', 'visakhapatnam', 'vizag', 'patna', 'vadodara', 'ghaziabad',
+  'ludhiana', 'agra', 'nashik', 'faridabad', 'meerut', 'rajkot', 'varanasi',
+  'coimbatore', 'vijayawada', 'jodhpur', 'madurai', 'raipur', 'kota', 'chandigarh',
+  'guwahati', 'mysore', 'mysuru', 'tirupati', 'salem', 'warangal', 'guntur', 'tenali',
+  'mangalagiri', 'nellore', 'kurnool', 'kakinada', 'rajahmundry', 'ongole', 'eluru',
+  'noida', 'gurugram', 'gurgaon', 'secunderabad', 'amaravati', 'kochi', 'goa',
+  'london', 'dubai', 'toronto', 'sydney', 'melbourne', 'dallas', 'austin', 'chicago',
+  'houston', 'miami', 'seattle', 'boston', 'denver', 'phoenix', 'paris', 'berlin', 'munich', 'tokyo', 'singapore'
 ]);
 
 function normalizePrepositionTypos(text) {
   if (!text) return '';
-  return text.replace(/\b(in|near|at|around)([a-z]{3,})\b/gi, (full, prep, token) => {
-    const lowerFull = full.toLowerCase();
-    if (IN_EXCEPTIONS.has(lowerFull)) return full;
-    return `${prep} ${token}`;
+  // If the query already contains a proper spaced geographic preposition, never chop words!
+  if (/\s+(?:in|near|around|within|at|across)\s+/i.test(text)) {
+    return text;
+  }
+  // Only split attached prepositions when the remainder is a real known place (e.g. "plumbers intenali" -> "plumbers in tenali")
+  return text.replace(/\b(in|near|at)([a-z]{3,})\b/gi, (full, prep, token) => {
+    const lowerToken = token.toLowerCase();
+    if (KNOWN_ATTACHED_PLACES.has(lowerToken)) {
+      return `${prep} ${token}`;
+    }
+    return full;
   });
 }
 

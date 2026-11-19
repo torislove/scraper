@@ -302,6 +302,17 @@ const EXTENDED_ENTITIES = [
   { name: 'Prague', state: 'Prague', district: 'Bohemia', country: 'CZ', level: 'city', lat: 50.0755, lng: 14.4378 }
 ];
 
+const SUPPORTED_COUNTRY_CODES = new Set([
+  'IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'
+]);
+
+const GERMANY_STATES = [
+  'Baden-Württemberg', 'Bavaria', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
+  'Hesse', 'Lower Saxony', 'Mecklenburg-Vorpommern', 'North Rhine-Westphalia',
+  'Rhineland-Palatinate', 'Saarland', 'Saxony', 'Saxony-Anhalt',
+  'Schleswig-Holstein', 'Thuringia'
+];
+
 let COMPILED_CATALOG = null;
 
 function buildCompiledCatalog() {
@@ -310,12 +321,14 @@ function buildCompiledCatalog() {
   const catalog = [];
   const countryNameByCode = new Map();
   for (const c of WORLD_COUNTRIES) {
-    countryNameByCode.set(c.code, c.name);
+    if (SUPPORTED_COUNTRY_CODES.has(c.code)) {
+      countryNameByCode.set(c.code, c.name);
+    }
   }
 
-  // 1. Add all 245 Countries as search targets
+  // 1. Add the locked 11 supported countries (except IN, handled by indiaGeoIndex)
   for (const country of COUNTRIES) {
-    if (country.code === 'IN') continue; // India is handled comprehensively by indiaGeoIndex
+    if (country.code === 'IN' || !SUPPORTED_COUNTRY_CODES.has(country.code)) continue;
     const cName = country.name || countryNameByCode.get(country.code) || country.code;
     catalog.push({
       name: cName,
@@ -329,11 +342,14 @@ function buildCompiledCatalog() {
     });
   }
 
-  // 2. Add all Regions / States / Provinces from curated countries.js
+  // 2. Add all Regions / States / Provinces for the locked 11 markets
   for (const country of COUNTRIES) {
-    if (country.code === 'IN') continue;
+    if (country.code === 'IN' || !SUPPORTED_COUNTRY_CODES.has(country.code)) continue;
     const cName = country.name || countryNameByCode.get(country.code) || country.code;
-    for (const region of country.regions || []) {
+    const regions = country.code === 'DE' && (!country.regions || !country.regions.length)
+      ? GERMANY_STATES
+      : (country.regions || []);
+    for (const region of regions) {
       const display = `${region}, ${cName}`;
       catalog.push({
         name: region,
@@ -348,9 +364,9 @@ function buildCompiledCatalog() {
     }
   }
 
-  // 3. Add all entries from CITY_ALIASES
+  // 3. Add all entries from CITY_ALIASES for locked 11 markets
   for (const [aliasKey, info] of Object.entries(CITY_ALIASES)) {
-    if (info.country === 'IN') continue; // Skip India cities (covered by indiaGeoIndex)
+    if (info.country === 'IN' || !SUPPORTED_COUNTRY_CODES.has(info.country)) continue;
     const cName = countryNameByCode.get(info.country) || info.country;
     const cityName = titleCase(aliasKey);
     const display = `${cityName}${info.region ? ', ' + info.region : ''}, ${cName}`;
@@ -366,8 +382,9 @@ function buildCompiledCatalog() {
     });
   }
 
-  // 4. Add all EXTENDED_ENTITIES
+  // 4. Add all EXTENDED_ENTITIES for locked 11 markets
   for (const entity of EXTENDED_ENTITIES) {
+    if (!SUPPORTED_COUNTRY_CODES.has(entity.country)) continue;
     const cName = countryNameByCode.get(entity.country) || entity.country;
     const display = [
       entity.name,
@@ -415,6 +432,7 @@ function searchInternationalPlaces(rawQuery, options = {}) {
 
   const catalog = buildCompiledCatalog();
   const country = String(options.country || '').toUpperCase().slice(0, 2);
+  if (country && !SUPPORTED_COUNTRY_CODES.has(country)) return [];
   const isMaster = Boolean(options.isMaster);
   const limit = Math.max(1, Math.min(25, Number(options.limit) || 6));
 

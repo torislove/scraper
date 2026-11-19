@@ -53,18 +53,22 @@ const REGIONAL_TERMS = {
 
 // Extra synonym seeds per family, beyond categoryRouter's FAMILY_KEYWORDS.
 const FAMILY_SYNONYMS = {
+  technology: ['computer shop', 'laptop dealer', 'laptop repair', 'computer hardware', 'gaming pc', 'mobile shop', 'mobile repair', 'electronics store', 'cctv installation', 'printer repair', 'software company', 'it services'],
   photography: ['photographer', 'videographer', 'photo studio', 'drone shoot', 'candid photography', 'photo lab'],
   wedding: ['wedding venue', 'function hall', 'banquet hall', 'kalyana mandapam', 'wedding decorator', 'catering service', 'wedding planner', 'pelli'],
-  'home-services': ['plumber', 'electrician', 'carpenter', 'painter', 'ac repair', 'pest control', 'cleaning service', 'packers and movers', 'borewell', 'waterproofing'],
+  'home-services': ['plumber', 'electrician', 'carpenter', 'painter', 'ac repair', 'hvac', 'pest control', 'cleaning service', 'packers and movers', 'borewell', 'waterproofing', 'solar panels', 'ro water purifier'],
   retail: ['shop', 'showroom', 'store', 'dealer', 'kirana store', 'supermarket', 'boutique'],
   health: ['hospital', 'clinic', 'doctor', 'diagnostic lab', 'pharmacy', 'dental clinic', 'physiotherapy'],
   beauty: ['salon', 'spa', 'beauty parlour', 'barber shop', 'makeup artist', 'nails', 'pet grooming', 'dog grooming', 'pet salon'],
+  fitness: ['gym', 'fitness centre', 'yoga studio', 'crossfit', 'zumba', 'swimming pool', 'sports academy'],
+  hospitality: ['hotel', 'resort', 'lodge', 'homestay', 'travel agency', 'tour operator', 'car rental'],
+  logistics: ['logistics', 'transport', 'packers and movers', 'courier', 'cargo', 'freight', 'warehouse', 'cold storage'],
   food: ['restaurant', 'cafe', 'bakery', 'catering', 'fast food', 'biryani', 'sweets shop'],
   auto: ['car showroom', 'bike showroom', 'car service', 'tyre shop', 'spare parts', 'driving school'],
   'real-estate': ['real estate agent', 'property dealer', 'builder', 'apartment project', 'land surveyor'],
   education: ['school', 'college', 'coaching centre', 'tutor', 'training institute', 'play school'],
-  professional: ['advocate', 'chartered accountant', 'architect', 'consultant', 'photography studio', 'printing press'],
-  industrial: ['factory', 'manufacturer', 'supplier', 'wholesaler', 'fabricator', 'machine tools'],
+  professional: ['advocate', 'chartered accountant', 'architect', 'consultant', 'photography studio', 'printing press', 'digital marketing'],
+  industrial: ['factory', 'manufacturer', 'supplier', 'wholesaler', 'fabricator', 'machine tools', 'cnc laser cutting', 'hydraulic'],
   generic: ['business', 'vendor', 'shop', 'service provider', 'dealer']
 };
 

@@ -524,10 +524,10 @@ export default function CommandMap({
               <Tooltip direction="top" opacity={0.92}>
                 <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
                   {isActive
-                    ? `📡 ACTIVE SWARM · ${zone.name}`
+                    ? `Searching area · ${zone.name}`
                     : zone.approximate
-                      ? `📍 Region · ${zone.name} (Estimated)`
-                      : `🎯 Verified Zone · ${zone.name}`}
+                      ? `Area · ${zone.name}`
+                      : `Covered Area · ${zone.name}`}
                 </div>
               </Tooltip>
             </Circle>
@@ -582,29 +582,20 @@ export default function CommandMap({
                   <div className="v2-map-popup-actions">
                     {onSelect && (
                       <button type="button" onClick={() => onSelect(vendor)}>
-                        <ExternalLink size={12} /> Open Lead
+                        <ExternalLink size={12} /> View Details
                       </button>
                     )}
                     {vendor.phone && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onOpenWhatsApp) {
-                            onOpenWhatsApp(vendor);
-                          } else {
-                            const clean = String(vendor.phone).replace(/\D/g, '');
-                            const link = vendor.whatsappLink || `https://wa.me/${clean.length === 10 ? `91${clean}` : clean}?text=${encodeURIComponent(`Hi ${vendor.name || 'there'}, reaching out regarding your business.`)}`;
-                            window.open(link, '_blank', 'noopener,noreferrer');
-                          }
-                        }}
-                        style={{ color: '#059669', fontWeight: 750, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      <a
+                        href={`tel:${vendor.phone}`}
+                        style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
                       >
-                        WhatsApp CRM
-                      </button>
+                        <Phone size={12} /> Call
+                      </a>
                     )}
                     {vendor.mapsLink && (
                       <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
-                        <MapPin size={12} /> Maps
+                        <MapPin size={12} /> Directions
                       </a>
                     )}
                   </div>
@@ -716,16 +707,11 @@ export default function CommandMap({
       </div>
 
       {scanning && (
-        <div className="v2-map-scan" style={{ background: '#fffef8', border: '2px solid #8f8b71', color: '#232c1c', boxShadow: '0 2px 0 #8f8b71, 0 4px 0 rgba(38,48,31,0.08)' }}>
-          <span className="v2-map-scan-radar"><i style={{ background: '#6f8c2c' }} /></span>
+        <div className="v2-map-scan" style={{ background: '#ffffff', border: '1px solid #d1fae5', color: '#0f172a', boxShadow: '0 8px 24px rgba(15,23,42,0.1)' }}>
+          <span className="v2-map-scan-radar"><i style={{ background: '#059669' }} /></span>
           <span className="v2-map-scan-copy">
-            <b style={{ color: '#4f6619', letterSpacing: '0.08em' }}>LIVE SWARM SCAN</b>
-            <small style={{ color: '#414c38', fontWeight: 700 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
-            {activePoint && (
-              <span style={{ fontSize: 9, color: '#6e7863', fontFamily: 'monospace' }}>
-                [{activePoint[0].toFixed(4)}, {activePoint[1].toFixed(4)}]
-              </span>
-            )}
+            <b style={{ color: '#047857', letterSpacing: '0.06em' }}>SEARCHING AREA</b>
+            <small style={{ color: '#475569', fontWeight: 600 }}>{activeZoneLabel || 'Finding nearby businesses…'}</small>
           </span>
         </div>
       )}
@@ -734,15 +720,11 @@ export default function CommandMap({
       <div className="v2-map-overlay">
         <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.94)', color: '#0F172A', border: '1px solid #E2E8F0', fontWeight: 600 }}>
           <i className={scanning || points.length ? 'is-live' : ''} />
-          {scanning ? 'SCANNING TERRITORY' : `${formatNumber(validVendors.length)} LEADS IN ${scopeTitle.toUpperCase()}`}
-        </span>
-        <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.94)', color: '#059669', border: '1px solid #A7F3D0', fontWeight: 750 }}>
-          <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 4 }} />
-          ZERO WATERMARK · 100% AUTONOMOUS 60FPS
+          {scanning ? 'SEARCHING AREA' : `${formatNumber(validVendors.length)} BUSINESSES IN ${scopeTitle.toUpperCase()}`}
         </span>
         {validVendors.length < vendors.filter(hasCoords).length && (
           <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.92)', color: '#64748B', border: '1px solid #E2E8F0' }}>
-            TOP {MAX_MAP_PLOTTED_LEADS} PLOTTED
+            TOP {MAX_MAP_PLOTTED_LEADS} SHOWN
           </span>
         )}
       </div>

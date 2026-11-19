@@ -49,6 +49,7 @@ export default function SuggestInput({
   onChange,
   onSelect,
   kind = 'category',
+  country = 'IN',
   placeholder = '',
   id,
   autoFocus = false,
@@ -67,6 +68,7 @@ export default function SuggestInput({
   const cacheRef = useRef(new Map());
 
   const query = String(value || '').trim();
+  const normalizedCountry = String(country || 'IN').toUpperCase().slice(0, 2);
 
   useEffect(() => {
     const onDocClick = event => {
@@ -88,7 +90,7 @@ export default function SuggestInput({
     clearTimeout(timerRef.current);
     const requestId = ++requestRef.current;
 
-    const cacheKey = `${kind}:${query.toLowerCase()}`;
+    const cacheKey = `${kind}:${normalizedCountry}:${query.toLowerCase()}`;
     const cached = cacheRef.current.get(cacheKey);
     if (cached) {
       const apply = data => {
@@ -148,7 +150,9 @@ export default function SuggestInput({
       setLoading(true);
       try {
         const data = await suggestSearch(
-          kind === 'place' ? { q: query, limit: 10, isMaster: true } : { q: query, limit: 8, isMaster: true },
+          kind === 'place'
+            ? { q: query, limit: 10, isMaster: true, country: normalizedCountry }
+            : { q: query, limit: 8, isMaster: true, country: normalizedCountry },
           { signal: controller.signal }
         );
         if (requestRef.current !== requestId) return;
@@ -214,7 +218,7 @@ export default function SuggestInput({
       clearTimeout(timerRef.current);
       if (controllerRef.current) controllerRef.current.abort();
     };
-  }, [query, kind]);
+  }, [query, kind, normalizedCountry]);
 
   const groups = useMemo(() => {
     if (kind === 'category') {
