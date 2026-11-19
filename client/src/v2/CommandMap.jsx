@@ -716,13 +716,13 @@ export default function CommandMap({
       </div>
 
       {scanning && (
-        <div className="v2-map-scan" style={{ background: 'rgba(10, 16, 26, 0.94)', border: '1px solid rgba(56, 189, 248, 0.4)', color: '#f8fafc', boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)' }}>
-          <span className="v2-map-scan-radar"><i style={{ background: '#38bdf8' }} /></span>
+        <div className="v2-map-scan" style={{ background: '#fffef8', border: '2px solid #8f8b71', color: '#232c1c', boxShadow: '0 2px 0 #8f8b71, 0 4px 0 rgba(38,48,31,0.08)' }}>
+          <span className="v2-map-scan-radar"><i style={{ background: '#6f8c2c' }} /></span>
           <span className="v2-map-scan-copy">
-            <b style={{ color: '#38bdf8', letterSpacing: '0.08em' }}>LIVE SWARM SCAN</b>
-            <small style={{ color: '#66e6bd', fontWeight: 700 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
+            <b style={{ color: '#4f6619', letterSpacing: '0.08em' }}>LIVE SWARM SCAN</b>
+            <small style={{ color: '#414c38', fontWeight: 700 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
             {activePoint && (
-              <span style={{ fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}>
+              <span style={{ fontSize: 9, color: '#6e7863', fontFamily: 'monospace' }}>
                 [{activePoint[0].toFixed(4)}, {activePoint[1].toFixed(4)}]
               </span>
             )}

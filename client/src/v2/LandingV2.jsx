@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
-import { COUNTRIES } from './data/countries';
+import { POPULAR_COUNTRIES } from './data/countries';
 import { pingHealth } from './api';
 import './landingWhite.css';
 import './landingRetro.css';
@@ -19,18 +19,19 @@ import './landingRetro.css';
  * no search box. Country choice happens in the Command Center, where the engine
  * can actually run.
  *
- * Every one of the 245 countries is listed. India is first and marked Home.
+ * The eleven markets we support are listed. India is first and marked Home.
  * The featured revenue markets are shown next, then the rest alphabetically.
  */
 
-// India plus the ten featured revenue markets. Order matters: it is the order
-// the country grid uses before falling back to alphabetical.
+// India plus the ten featured revenue markets. This is the whole product list.
+// Order matters: it is the order the country grid uses.
 const FEATURED_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
+const MARKET_COUNT = FEATURED_CODES.length;
 
 const HOW_IT_WORKS = [
   {
     title: 'Pick a country',
-    body: 'India is Home. Every other country is one click away — all 245 of them, each with its own local search sources.',
+    body: 'India is Home. The other ten markets are one click away, each with its own local search sources.',
     icon: Globe2
   },
   {
@@ -46,7 +47,7 @@ const HOW_IT_WORKS = [
 ];
 
 const PROOF = [
-  { value: '245', label: 'countries searchable' },
+  { value: '11', label: 'markets searchable' },
   { value: '619,287', label: 'Indian villages indexed' },
   { value: '24', label: 'live search engines' },
   { value: '0', label: 'API keys needed' }
@@ -59,7 +60,7 @@ const FAQ = [
   },
   {
     q: 'Which countries can I search?',
-    a: 'All 245 countries are listed on this page. India is our Home market and is indexed down to the village level. The other ten featured markets have their own local directories and phone rules.'
+    a: 'Eleven markets are listed on this page. India is our Home market and is indexed down to the village level. The other ten have their own local directories and phone rules.'
   },
   {
     q: 'What do I actually get for each business?',
@@ -101,7 +102,7 @@ export default function LandingV2() {
       const index = FEATURED_CODES.indexOf(code);
       return index === -1 ? 1000 : index;
     };
-    return [...COUNTRIES].sort((a, b) => {
+    return [...POPULAR_COUNTRIES].sort((a, b) => {
       const byRank = rank(a.code) - rank(b.code);
       if (byRank !== 0) return byRank;
       return a.name.localeCompare(b.name);
@@ -152,7 +153,7 @@ export default function LandingV2() {
             <div>
               <span className="gb-hero-badge">
                 <Zap size={12} />
-                <b>India first</b> · 245 countries
+                <b>India first</b> · 11 markets
               </span>
 
               <h1 className="gb-h1">
@@ -172,12 +173,12 @@ export default function LandingV2() {
                   <ArrowRight size={16} />
                 </button>
                 <a href="#countries" className="gb-btn gb-btn-ghost">
-                  See all 245 countries
+                  See all 11 markets
                 </a>
               </div>
 
               <p className="gb-hero-note">
-                <Check size={12} /> Free · Keyless · Works in every country
+                <Check size={12} /> Free · Keyless · Works in all 11 markets
               </p>
             </div>
 
@@ -261,11 +262,11 @@ export default function LandingV2() {
           <div className="gb-wrap">
             <div className="gb-sec-head">
               <span className="gb-kicker"><Globe2 size={13} /> Countries</span>
-              <h2>All 245 countries, one list.</h2>
+              <h2>Eleven markets, one list.</h2>
               <p>
-                India is Home and is indexed down to the village level. The ten featured
-                markets have their own local directories. Every other country uses the
-                same keyless global sources.
+                India is Home and is indexed down to the village level. Each of the other
+                ten markets runs its own local directories plus the same keyless global
+                sources.
               </p>
             </div>
 
@@ -275,11 +276,11 @@ export default function LandingV2() {
                 className="gb-country-filter"
                 value={countryFilter}
                 onChange={event => setCountryFilter(event.target.value)}
-                placeholder="Find your country — India, United States, Japan…"
+                placeholder="Find your market — India, United States, Germany…"
                 aria-label="Find your country"
               />
               <span className="gb-market-count">
-                {visibleCountries.length} of {COUNTRIES.length} countries
+                {visibleCountries.length} of {MARKET_COUNT} markets
               </span>
             </div>
 
@@ -386,7 +387,7 @@ export default function LandingV2() {
       <footer className="gb-footer">
         <div className="gb-wrap gb-footer-inner">
           <span className="gb-footer-copy">
-            © {new Date().getFullYear()} LeadHarvest · Keyless lead finder
+            © {new Date().getFullYear()} Scraper.co.in · Keyless lead finder
           </span>
           <div className="gb-footer-links">
             <a href="#how">How it works</a>

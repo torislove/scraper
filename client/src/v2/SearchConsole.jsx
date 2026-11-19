@@ -11,16 +11,7 @@ import { suggestSearch } from './api';
 import { cx } from './ui';
 import { tokenizeQuery, matchesFolder } from '../utils/universalSearchEngine';
 import { parseQuerySemantic } from './utils/semanticClient';
-
-
-const EXAMPLES = [
-  'Wedding Album Printing in Guntur',
-  'Water Purifier Repair in Benz Circle Vijayawada',
-  'Car Detailing & Ceramic Coating in Hyderabad',
-  'Urgent wedding photographers near Benz Circle with phone',
-  'AC repair technicians in Tenali under 5km',
-  'Steel fabrication & iron grills in Auto Nagar'
-];
+import { examplesFor, placeholderFor, scopeHintFor } from './data/searchExamples';
 
 const TARGETS = [100, 250, 500, 1000];
 
@@ -378,21 +369,33 @@ function SearchConsole({
     return '~8–12 min (Full Sweep)';
   }, [locClassification, parsedZones]);
 
-  const placeholderText = useMemo(() => {
-    const c = String(country || 'IN').toUpperCase();
-    if (c === 'US') return 'Type anything (e.g. HVAC contractors in Dallas TX, wedding venues in Orange County, plumbers in Austin)...';
-    if (c === 'GB') return 'Type anything (e.g. luxury caterers in Westminster London, photographers in Manchester, venues in Leeds)...';
-    if (c === 'CA') return 'Type anything (e.g. corporate caterers in Mississauga ON, wedding planners in Toronto, electricians in Vancouver)...';
-    if (c === 'AU') return 'Type anything (e.g. function centres in Parramatta, wedding hire in Melbourne CBD, caterers in Sydney)...';
-    if (c === 'AE') return 'Type anything (e.g. luxury event organizers in Business Bay Dubai, caterers in Abu Dhabi, sound hire in Deira)...';
-    if (c === 'SG') return 'Type anything (e.g. corporate caterers in Downtown Core Singapore, event venues in Orchard, photographers in Tampines)...';
-    if (c === 'NZ') return 'Type anything (e.g. wedding venues in Auckland Region, event planners in Wellington, caterers in Christchurch)...';
-    if (c === 'ZA') return 'Type anything (e.g. conference venues in Sandton Johannesburg, caterers in Cape Town, sound hire in Durban)...';
-    if (c === 'IE') return 'Type anything (e.g. corporate caterers in Dublin City Centre, wedding venues in County Cork, photographers in Galway)...';
-    if (c === 'MY') return 'Type anything (e.g. event organizers in Kuala Lumpur, caterers in Petaling Jaya, decorators in Johor Bahru)...';
-    if (c === 'DE') return 'Type anything (e.g. catering in Berlin Mitte, event agents in Munich, corporate caterers in Frankfurt)...';
-    return 'Type anything (e.g. wedding photographers in Guntur, computer stores in Brodipet, manufacturers in Auto Nagar)...';
+  // One example set per market. Switching country swaps both the placeholder
+  // and the quick-pick strip, so an American never sees a Vijayawada example.
+  const market = useMemo(() => examplesFor(country), [country]);
+  const examples = market.prompts;
+  const scopeHint = useMemo(() => scopeHintFor(country), [country]);
+
+  // The placeholder rotates through the market's examples while the field is
+  // empty and unfocused. A static "Type anything" is noise; a real query the
+  // user can run with one click is a shortcut.
+  const [exampleIndex, setExampleIndex] = useState(0);
+  useEffect(() => {
+    setExampleIndex(0);
   }, [country]);
+  useEffect(() => {
+    if (draft || isFocusedRef.current) return undefined;
+    const timer = setInterval(() => {
+      setExampleIndex(index => (index + 1) % examples.length);
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [draft, examples.length]);
+
+  const placeholderText = useMemo(() => {
+    if (!draft && !isFocusedRef.current) {
+      return placeholderFor(country).replace(market.prompts[0], examples[exampleIndex]);
+    }
+    return placeholderFor(country);
+  }, [country, market, examples, exampleIndex, draft]);
 
   // Dynamic Animated Favicon State Sync
   useEffect(() => {
@@ -618,7 +621,7 @@ function SearchConsole({
             ref={inputRef}
             id="cmd-console-query"
             className="v2-console-input"
-            style={{ color: '#0F172A', WebkitTextFillColor: '#0F172A', caretColor: '#059669', background: 'transparent' }}
+            style={{ color: 'var(--gb-ink, #232c1c)', WebkitTextFillColor: 'var(--gb-ink, #232c1c)', caretColor: 'var(--gb-green-deep, #4f6619)', background: 'transparent' }}
             value={draft}
             onChange={event => handleQuery(event.target.value)}
             onFocus={() => {
@@ -910,8 +913,11 @@ function SearchConsole({
       {/* Quick Example Pills */}
       {!running && (
         <div className="v2-console-examples">
-          <span>POPULAR PROMPTS</span>
-          {EXAMPLES.map(example => (
+          <span>TRY · {market.label.toUpperCase()}</span>
+          <span className="v2-console-scope" title="You can search any of these places">
+            {scopeHint}
+          </span>
+          {examples.map(example => (
             <button
               type="button"
               key={example}

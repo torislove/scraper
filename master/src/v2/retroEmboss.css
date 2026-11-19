@@ -314,6 +314,22 @@ body {
   color: var(--gb-ink-soft) !important;
 }
 
+/* The place vocabulary a market uses (city · mandal · district · state).
+   It tells the user what they are allowed to type, in their own words. */
+.v2-console-scope {
+  font-family: var(--gb-mono, ui-monospace, "Cascadia Mono", Consolas, monospace) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  padding: 2px 7px !important;
+  border-radius: 999px !important;
+  border: 1px solid var(--gb-wall, #8f8b71) !important;
+  background: var(--gb-screen, #cfd8b4) !important;
+  color: var(--gb-ink, #232c1c) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+  white-space: nowrap !important;
+}
+
 /* ── Buttons: moulded, pressable ─────────────────────────────────────────── */
 .v2-btn,
 .v2-console-go,
@@ -847,6 +863,460 @@ textarea:focus {
 }
 
 /* ── Motion: smooth but never bouncy ─────────────────────────────────────── */
+/* ============================================================================
+   FLIGHT INSTRUMENTS — CREAM RETROFIT
+   ----------------------------------------------------------------------------
+   The telemetry HUD was drawn for a dark obsidian canvas: navy slab, white
+   digits, mint accents. On the white Game Boy shell that reads as a black box
+   bolted to a cream dashboard. These rules rebuild it from the same moulded
+   plastic as everything else: cream body, dark green ink, screen-green bars,
+   red for failures, amber for queued. Layout is untouched — only colour,
+   depth and digit alignment.
+   ========================================================================== */
+
+/* `instrument.css` is imported from the lazy-loaded CommandCenter chunk, so it
+   can land in <head> *after* this file. The `#root` wrapper outranks its plain
+   class selectors regardless of insertion order. */
+#root {
+
+/* ---------- Client: single-tier telemetry bar ---------- */
+.v2-inst-compact-hud {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-2) 100%);
+  border: 2px solid var(--gb-line-strong);
+  border-radius: var(--gb-radius-sm);
+  box-shadow: var(--gb-emboss-sm);
+  color: var(--gb-ink);
+}
+
+.v2-inst-hud-title {
+  color: var(--gb-green-deep);
+  text-shadow: 0 1px 0 #ffffff;
+}
+
+.v2-inst-hud-mode.is-fast,
+.v2-inst-hud-mode.is-deep {
+  background: var(--gb-green-soft);
+  border: 1px solid var(--gb-line);
+  color: var(--gb-green-deep);
+  box-shadow: var(--gb-emboss-xs);
+}
+
+.v2-inst-hud-mode.is-deep {
+  background: #fbf1d8;
+  border-color: #dcc79a;
+  color: #8a5f14;
+}
+
+.v2-inst-pod {
+  color: var(--gb-ink-muted);
+}
+
+.v2-pod-val b {
+  color: var(--gb-ink);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.v2-pod-val small {
+  color: var(--gb-ink-muted);
+}
+
+.text-mint { color: var(--gb-green) !important; }
+.text-cyan { color: var(--gb-blue) !important; }
+.text-violet { color: #7b5ea7 !important; }
+
+/* Alignment: reserve space for each pod so a digit growing from 9 to 10 does
+   not shove the rest of the bar sideways, and keep the status column flush. */
+.v2-inst-telemetry-row {
+  align-items: center;
+  gap: 14px;
+}
+
+.v2-inst-pod {
+  min-width: 92px;
+}
+
+.v2-inst-eta-pod {
+  min-width: 80px;
+  justify-content: flex-end;
+}
+
+.v2-inst-row-status {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-mini-track {
+  background: var(--gb-shell-4);
+  box-shadow: inset 0 1px 2px rgba(56, 66, 40, 0.28);
+}
+
+.v2-mini-bar {
+  background: linear-gradient(90deg, var(--gb-green), var(--gb-green-deep));
+}
+
+.v2-inst-divider {
+  background: var(--gb-line);
+}
+
+.v2-inst-eta-pod b {
+  color: var(--gb-green-deep);
+}
+
+.v2-inst-inspect-btn {
+  color: var(--gb-ink-soft);
+  background: var(--gb-shell);
+  border: 1px solid var(--gb-line-strong);
+  box-shadow: var(--gb-emboss-xs);
+}
+
+.v2-inst-inspect-btn:hover,
+.v2-inst-inspect-btn.is-active {
+  background: var(--gb-green-soft);
+  color: var(--gb-green-deep);
+  border-color: var(--gb-green);
+}
+
+.v2-inst-expanded-drawer {
+  background: var(--gb-shell-3);
+  border-top: 2px solid var(--gb-line-strong);
+  box-shadow: inset 0 2px 4px rgba(56, 66, 40, 0.14);
+}
+
+.v2-inst-drawer-head {
+  color: var(--gb-ink-muted);
+}
+
+.v2-inst-board {
+  background: var(--gb-screen);
+  border: 2px solid var(--gb-line-strong);
+  box-shadow: var(--gb-screen-inset);
+  scrollbar-color: var(--gb-line-strong) transparent;
+}
+
+.v2-inst-row {
+  border-bottom: 1px solid rgba(107, 104, 80, 0.22);
+}
+
+.v2-inst-row-name {
+  color: var(--gb-ink);
+}
+
+.v2-inst-row-engine {
+  color: var(--gb-ink-muted);
+}
+
+.v2-inst-row-status.is-completed { color: var(--gb-green-deep); }
+.v2-inst-row-status.is-running { color: #2f6a80; }
+.v2-inst-row-status.is-queued { color: #8a5f14; }
+.v2-inst-row-status.is-deferred { color: var(--gb-ink-faint); }
+.v2-inst-row-status.is-failed { color: var(--gb-red-deep); }
+
+.v2-inst-dot { background: var(--gb-line-strong); }
+.v2-inst-dot.is-completed { background: var(--gb-green); box-shadow: none; }
+.v2-inst-dot.is-running { background: #2f6a80; box-shadow: 0 0 0 2px rgba(47, 106, 128, 0.18); }
+.v2-inst-dot.is-queued { background: var(--gb-amber); }
+.v2-inst-dot.is-deferred { background: var(--gb-ink-faint); }
+.v2-inst-dot.is-failed { background: var(--gb-red); }
+
+.v2-inst-pass {
+  background: var(--gb-shell-2);
+  border: 1px solid var(--gb-line);
+  color: var(--gb-ink-muted);
+}
+
+/* ---------- Master: card-grid flight deck ---------- */
+.v2-instruments {
+  border: 2px solid var(--gb-line-strong);
+  border-radius: var(--gb-radius);
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-2) 100%);
+  box-shadow: var(--gb-emboss);
+  color: var(--gb-ink);
+}
+
+.v2-inst-title {
+  color: var(--gb-green-deep);
+  text-shadow: 0 1px 0 #ffffff;
+}
+
+.v2-inst-mode {
+  background: var(--gb-green-soft);
+  border: 1px solid var(--gb-line);
+  color: var(--gb-green-deep);
+  box-shadow: var(--gb-emboss-xs);
+}
+
+.v2-inst-eta {
+  color: var(--gb-ink-muted);
+}
+
+.v2-inst-eta b {
+  color: var(--gb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-inst-card {
+  border: 2px solid var(--gb-line);
+  border-radius: var(--gb-radius-sm);
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-3) 100%);
+  box-shadow: var(--gb-emboss-sm);
+}
+
+.v2-inst-card-head {
+  color: var(--gb-ink-soft);
+}
+
+.v2-inst-gauge-value {
+  fill: var(--gb-ink);
+}
+
+.v2-inst-gauge-unit {
+  fill: var(--gb-ink-muted);
+}
+
+.v2-inst-pass-block {
+  background: var(--gb-shell-2);
+  border: 1px solid var(--gb-line);
+  box-shadow: var(--gb-inset);
+}
+
+.v2-inst-pass-block b {
+  color: var(--gb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-inst-pass-block span {
+  color: var(--gb-ink-muted);
+}
+
+.v2-inst-pass-block.is-deferred b { color: #8a5f14; }
+
+.v2-inst-progress-track,
+.v2-inst-bar {
+  background: var(--gb-shell-4);
+  box-shadow: inset 0 1px 2px rgba(56, 66, 40, 0.28);
+}
+
+.v2-inst-progress-track > span,
+.v2-inst-bar > span {
+  background: linear-gradient(90deg, var(--gb-green), var(--gb-green-deep));
+}
+
+.v2-inst-bar.is-http > span {
+  background: linear-gradient(90deg, var(--gb-blue), #2f6a80);
+}
+
+.v2-inst-progress-label,
+.v2-inst-split-row,
+.v2-inst-split-foot,
+.v2-inst-board-count,
+.v2-inst-empty {
+  color: var(--gb-ink-muted);
+}
+
+.v2-inst-split-row b,
+.v2-inst-split-foot b {
+  color: var(--gb-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-inst-board::-webkit-scrollbar-thumb {
+  background: var(--gb-line-strong);
+}
+
+.v2-inst-pass.is-named {
+  color: #2f6a80;
+  border-color: #9dbcc7;
+  background: #e4eff2;
+}
+
+.v2-inst-pass.is-grid {
+  color: #8a5f14;
+  border-color: #dcc79a;
+  background: #fbf1d8;
+}
+
+.v2-inst-row-status.is-completed { color: var(--gb-green-deep); }
+.v2-inst-row-status.is-running { color: #2f6a80; }
+.v2-inst-row-status.is-deferred { color: var(--gb-ink-faint); }
+.v2-inst-row-status.is-failed { color: var(--gb-red-deep); }
+
+/* ---------- Live sweep surfaces that were still dark ----------
+   These bars sit between the console and the table. They were painted as
+   navy glass with mint text, which is why the dashboard looked like a black
+   box strapped to a cream machine. Same treatment as the instruments. */
+.v2-live-run-strip {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-3) 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-live-run-badge {
+  background: var(--gb-green-soft) !important;
+  border: 1px solid var(--gb-line) !important;
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-live-run-info {
+  color: var(--gb-ink-soft);
+}
+
+.v2-live-run-info b {
+  color: var(--gb-ink) !important;
+}
+
+.v2-live-zone-chip {
+  background: #e4eff2 !important;
+  border: 1px solid #9dbcc7 !important;
+  color: #2f6a80 !important;
+}
+
+.v2-live-metric-item {
+  color: var(--gb-ink-muted) !important;
+}
+
+.v2-live-metric-item b {
+  color: var(--gb-ink) !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-live-swarm-cockpit-hud {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-2) 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+}
+
+.v2-live-hud-pulse {
+  background: var(--gb-green-soft) !important;
+  border: 1px solid var(--gb-line) !important;
+}
+
+.v2-live-hud-pulse i {
+  background: var(--gb-green) !important;
+  box-shadow: none !important;
+}
+
+.v2-live-hud-badge {
+  background: var(--gb-green-soft) !important;
+  border: 1px solid var(--gb-line) !important;
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-live-hud-title {
+  color: var(--gb-ink) !important;
+}
+
+.v2-live-hud-coords {
+  background: var(--gb-shell-2) !important;
+  border: 1px solid var(--gb-line) !important;
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-live-hud-zone-pill {
+  background: var(--gb-shell-3) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  color: var(--gb-ink) !important;
+}
+
+.v2-live-hud-status {
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-scanning-leads-state {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-3) 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss) !important;
+}
+
+.v2-scanning-leads-title {
+  color: var(--gb-ink) !important;
+}
+
+.v2-scanning-leads-desc {
+  color: var(--gb-ink-muted) !important;
+}
+
+.v2-lead-skeleton-row {
+  background: linear-gradient(90deg, var(--gb-shell-3) 25%, var(--gb-shell-4) 50%, var(--gb-shell-3) 75%) !important;
+  background-size: 200% 100% !important;
+  border: 1px solid var(--gb-line) !important;
+}
+
+.v2-scan-target-badge {
+  background: var(--gb-shell) !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-xs) !important;
+}
+
+.v2-scan-badge-text {
+  color: var(--gb-ink) !important;
+  text-shadow: none !important;
+}
+
+/* The console's own "SEARCHING n AREAS · FINDING LEADS" bar. It sits inside
+   the cream console, so its translucent cyan wash and cyan type read as a
+   dark slab. Re-dress it in the same moulded shell as the rest of the deck. */
+.v2-swarm-live-hud {
+  background: linear-gradient(180deg, var(--gb-shell) 0%, var(--gb-shell-3) 100%) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+}
+
+.v2-swarm-live-title {
+  color: var(--gb-green-deep) !important;
+  text-shadow: 0 1px 0 #ffffff !important;
+}
+
+.v2-swarm-live-meta {
+  color: var(--gb-ink-muted) !important;
+}
+
+.v2-swarm-pulse-ring {
+  background: var(--gb-green) !important;
+  animation: gb-swarm-pulse 1.6s infinite !important;
+}
+
+.v2-swarm-eta-chip {
+  background: #f7f0d8 !important;
+  border: 1px solid var(--gb-line-strong) !important;
+  color: #7a5a12 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.v2-swarm-eta-chip b {
+  color: #6b4c0c !important;
+}
+
+.v2-swarm-eta-chip .v2-text-amber {
+  color: #9a6b0f !important;
+}
+
+.v2-swarm-throughput-chip {
+  background: var(--gb-green-soft) !important;
+  border: 1px solid var(--gb-line) !important;
+  color: var(--gb-green-deep) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
+}
+
+.v2-swarm-throughput-chip .v2-text-lime {
+  color: var(--gb-green-deep) !important;
+}
+
+.v2-map-controls-floating {
+  background: rgba(255, 254, 248, 0.94) !important;
+  border: 2px solid var(--gb-line-strong) !important;
+  box-shadow: var(--gb-emboss-sm) !important;
+}
+
+} /* #root */
+
+@keyframes gb-swarm-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(79, 102, 25, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(79, 102, 25, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 102, 25, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

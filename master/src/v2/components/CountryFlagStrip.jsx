@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Globe2, Search, X, Check, ShieldCheck, Sparkles } from 'lucide-react';
 import { API_URL } from '../../apiConfig';
-import { COUNTRIES, POPULAR_COUNTRIES, flagOf, findCountry } from '../data/countries';
+import { POPULAR_COUNTRIES, flagOf, findCountry } from '../data/countries';
 import Country3DFlag from './Country3DFlag';
 import './countryStrip.css';
 
@@ -37,8 +37,8 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
     return () => { alive = false; };
   }, [current?.code, onMeta]);
 
-  // One request for the whole table when the picker opens. The 245 cards then
-  // show each country's real hierarchy without 245 separate API calls.
+  // One request for the whole table when the picker opens. The country cards then
+  // show each country's real hierarchy without a separate API call per country.
   useEffect(() => {
     if (!open || Object.keys(adminTable).length) return;
     let alive = true;
@@ -56,13 +56,12 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
 
   const results = useMemo(() => {
     const value = query.trim().toLowerCase();
-    // The picker lists every country the backend can search (245), not just the
-    // featured markets. A search narrows the full list; an empty search shows
-    // all of them, India first.
+    // The product ships with eleven markets. A search narrows that list; an
+    // empty search shows all eleven, India first.
     const list = value
-      ? COUNTRIES.filter(country =>
+      ? POPULAR_COUNTRIES.filter(country =>
           country.name.toLowerCase().includes(value) || country.code.toLowerCase() === value)
-      : COUNTRIES;
+      : POPULAR_COUNTRIES;
     // India always first, then the rest alphabetically.
     return [...list].sort((a, b) => {
       if (a.code === 'IN') return -1;
@@ -125,7 +124,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
           title="Search countries"
         >
           <Search size={12} />
-          <span className="country-pill-text">All {COUNTRIES.length}</span>
+          <span className="country-pill-text">All {POPULAR_COUNTRIES.length}</span>
         </button>
       </div>
 
@@ -148,7 +147,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
               )}
             </div>
             <span className="country-picker-note">
-              <ShieldCheck size={12} /> {COUNTRIES.length} countries · India is Home
+              <ShieldCheck size={12} /> {POPULAR_COUNTRIES.length} countries · India is Home
             </span>
             <button type="button" className="country-picker-close" onClick={() => setOpen(false)} aria-label="Close country list">
               <X size={14} />

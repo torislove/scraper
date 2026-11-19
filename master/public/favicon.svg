@@ -1,51 +1,59 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <defs>
-    <!-- Luxury 3D Emerald Gradient -->
-    <linearGradient id="scFavEmerald" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10B981" />
-      <stop offset="60%" stop-color="#059669" />
-      <stop offset="100%" stop-color="#047857" />
+    <!-- Pin body: emerald glass, lit from the upper left -->
+    <linearGradient id="pinBody" x1="20%" y1="2%" x2="80%" y2="98%">
+      <stop offset="0%" stop-color="#63F0B8" />
+      <stop offset="40%" stop-color="#19C58C" />
+      <stop offset="100%" stop-color="#0B8A6B" />
     </linearGradient>
 
-    <!-- 3D Glass Surface Highlight -->
-    <linearGradient id="scFavHl" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.45" />
+    <!-- Specular sheen -->
+    <linearGradient id="pinSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.70" />
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
     </linearGradient>
 
-    <!-- Elevation Shadow -->
-    <filter id="scFavShd" x="-15%" y="-15%" width="130%" height="130%" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="2.5" stdDeviation="3" flood-color="#059669" flood-opacity="0.35" />
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#047857" flood-opacity="0.25" />
+    <!-- Depth under the letter -->
+    <radialGradient id="pinVignette" cx="62%" cy="40%" r="70%">
+      <stop offset="58%" stop-color="#023B2C" stop-opacity="0" />
+      <stop offset="100%" stop-color="#023B2C" stop-opacity="0.24" />
+    </radialGradient>
+
+    <filter id="pinShadow" x="-28%" y="-22%" width="156%" height="156%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2.8" stdDeviation="3.2" flood-color="#04624C" flood-opacity="0.40" />
+      <feDropShadow dx="0" dy="1" stdDeviation="1.1" flood-color="#023B2C" flood-opacity="0.32" />
     </filter>
+
+    <clipPath id="pinClip">
+      <path d="M32 4.4C19.5 4.4 9.3 14.6 9.3 27.1C9.3 39 20.3 49.4 32 60.6C43.7 49.4 54.7 39 54.7 27.1C54.7 14.6 44.5 4.4 32 4.4Z" />
+    </clipPath>
   </defs>
 
-  <!-- 3D Beveled Emerald Squircle Base -->
-  <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#scFavEmerald)" filter="url(#scFavShd)" />
-  <rect x="3" y="3" width="58" height="58" rx="16" fill="none" stroke="#047857" stroke-width="1.5" />
-  <rect x="4.5" y="4.5" width="55" height="55" rx="14.5" fill="none" stroke="url(#scFavHl)" stroke-width="1.5" />
-
-  <!-- High-Velocity "S" Monogram in Optic White -->
+  <!-- Map pin -->
   <path
-    d="M43 20 C43 14.8 38.5 13 32 13 C21.5 13 16.5 18 16.5 24.5 C16.5 33 35.5 30.5 35.5 37.5 C35.5 43.5 30 46.5 23 46.5 C16.5 46.5 12.5 42.5 12.5 37.5"
+    d="M32 4.4C19.5 4.4 9.3 14.6 9.3 27.1C9.3 39 20.3 49.4 32 60.6C43.7 49.4 54.7 39 54.7 27.1C54.7 14.6 44.5 4.4 32 4.4Z"
+    fill="url(#pinBody)"
+    stroke="#04503E"
+    stroke-width="1.3"
+    filter="url(#pinShadow)"
+  />
+
+  <g clip-path="url(#pinClip)">
+    <!-- Curved sheen across the top-left shoulder -->
+    <ellipse cx="22.5" cy="12.5" rx="14" ry="8" fill="url(#pinSheen)" opacity="0.62" />
+    <!-- Mint rim light on the upper edge -->
+    <path d="M12.4 27.5C12.6 19.4 17.6 12.8 25.4 10.2" fill="none" stroke="#B8FBE0" stroke-width="1.7" stroke-linecap="round" opacity="0.42" />
+    <!-- Depth toward the lower right -->
+    <rect x="0" y="0" width="64" height="64" fill="url(#pinVignette)" />
+  </g>
+
+  <!-- Bold S -->
+  <path
+    d="M40.4 20.7C38.8 17.8 35.7 16.2 32.1 16.2C27.1 16.2 23.4 19.1 23.4 23C23.4 26.9 26.6 28.3 31.3 29.1C36.1 29.9 39.3 31.4 39.3 35.3C39.3 39.2 35.4 42.1 30.6 42.1C26.6 42.1 23.4 40.4 21.5 37.6"
     fill="none"
     stroke="#FFFFFF"
-    stroke-width="6.5"
+    stroke-width="5.6"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
-
-  <!-- Forward Velocity Cyan Vector Spark -->
-  <path
-    d="M37 36 L44 43.5 L37 51"
-    fill="none"
-    stroke="#67E8F9"
-    stroke-width="4.5"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-
-  <!-- Live Radar Beacon Jewel with Concentric Optical Highlight -->
-  <circle cx="45" cy="18" r="4.8" fill="#F59E0B" stroke="#FFFFFF" stroke-width="2" />
-  <circle cx="45" cy="18" r="2.2" fill="#FFFFFF" />
 </svg>

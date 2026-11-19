@@ -1482,8 +1482,13 @@ export const COUNTRIES = [
   }
 ];
 
-export const POPULAR_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'MY', 'DE'];
+// The eleven markets the product ships with. India is Home; the other ten are
+// the featured revenue markets with their own local directories and phone
+// rules. The backend can still search every ISO country, but the UI offers
+// exactly these eleven.
+export const POPULAR_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'DE'];
 export const MONETIZATION_CODES = POPULAR_CODES;
+export const FEATURED_CODES = POPULAR_CODES;
 
 export const POPULAR_COUNTRIES = POPULAR_CODES
   .map(code => COUNTRIES.find(country => country.code === code))

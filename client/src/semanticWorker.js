@@ -7,7 +7,7 @@
  */
 
 // ============================================================================
-// 1. GLOBAL COUNTRY INTELLIGENCE DATABASE (245 Countries + Key Metros)
+// 1. GLOBAL COUNTRY INTELLIGENCE DATABASE (11 markets surfaced; backend keeps 245 records)
 // ============================================================================
 const COUNTRIES_DATA = [
   {
