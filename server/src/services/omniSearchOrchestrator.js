@@ -363,6 +363,14 @@ async function runOmniSearchOrchestrator(
   const emitDispatchEvent = deps.emitDispatchEvent || (() => {});
   const emitProgressEvent = deps.emitProgressEvent || (() => {});
 
+  // Streaming update hook. The cooperative cross-engine pass and the SERP
+  // dork pass call onProgress(lead, phase) to push a refreshed row into the
+  // live table. It was referenced but never defined, so the first successful
+  // match threw "onProgress is not defined" and the entire pass aborted.
+  const onProgress = (vendor, type = 'updated') => {
+    try { emitVendorEvent(vendor, type); } catch (e) { /* streaming is best-effort */ }
+  };
+
   const sessionAbortSignal = { aborted: false };
   if (sessionId) {
     sessionAbortSignals.set(sessionId, sessionAbortSignal);
@@ -1209,7 +1217,16 @@ async function runOmniSearchOrchestrator(
     let waitTicks = 0;
     let allZonesCompleteAt = null;
     let lastLiveSavedCount = -1;
-    const maxScrapeWindowMs = etaModel.safetyWindowMs(totalZones, etaSlots, etaPerZone);
+    // The safety window is a wedge detector, not a schedule. A fixed wall-clock
+    // cap used to finalise healthy sweeps early: an 86-zone Vijayawada run was
+    // closed at 71 zones, which flipped the console's Stop button back to
+    // "Find Leads" while 15 zones were still queued. The loop now watches for a
+    // stall. As long as zones keep completing it keeps going; only a run that
+    // makes no progress for STALL_MS (or blows a very high ceiling) stops.
+    const maxScrapeWindowMs = Math.max(45 * 60_000, etaModel.safetyWindowMs(totalZones, etaSlots, etaPerZone) * 10);
+    const stallLimitMs = Math.max(8 * 60_000, Number(etaPerZone || 0) * 6000);
+    let lastZoneAdvanceAt = Date.now();
+    let lastSeenCompletedZones = -1;
     while (true) {
       if (isAborted()) break;
 
@@ -1226,6 +1243,16 @@ async function runOmniSearchOrchestrator(
       const baseFinished = plan?.resumed ? (plan.initialCompletedCount || 0) : 0;
       const finishedZones = baseFinished + targetKeys.filter(key => ['completed', 'deferred', 'error', 'failed'].includes(targetMap[key])).length;
       completedZones = Math.min(totalZones, finishedZones);
+
+      // Stall detector: progress, not the clock, decides whether a sweep lives.
+      if (completedZones > lastSeenCompletedZones) {
+        lastSeenCompletedZones = completedZones;
+        lastZoneAdvanceAt = Date.now();
+      }
+      if (Date.now() - lastZoneAdvanceAt > stallLimitMs) {
+        addLog(`[Orchestrator] No zone completed for ${Math.round(stallLimitMs / 60000)} min (${finishedZones}/${totalZones}). Treating the pool as wedged and finalizing.`);
+        break;
+      }
 
       let etaStr = 'Calculating...';
       const elapsed = Date.now() - startTime;
@@ -1359,7 +1386,7 @@ async function runOmniSearchOrchestrator(
       }
 
       if (Date.now() - startTime > maxScrapeWindowMs) {
-        addLog(`[Orchestrator] Scrape window reached timeout with ${finishedZones}/${totalZones} zones complete. Finalizing.`);
+        addLog(`[Orchestrator] Run ceiling reached with ${finishedZones}/${totalZones} zones complete. Finalizing.`);
         break;
       }
 
@@ -2004,11 +2031,11 @@ async function runOmniSearchOrchestrator(
           title: plan?.title || baseLocation,
           boundary: plan?.boundary || null,
           totalZones,
-          completedZones: finalStatus === 'completed' ? totalZones : completedZones,
+          completedZones: Math.min(totalZones, completedZones || 0),
           deferredZones: deferredZones.map(z => z.zoneName),
           activeZones: activeZones.map(z => z.zoneName),
-          completedZoneIndices: finalStatus === 'completed' ? activeZones.map((_, i) => i) : (activeSessions[sessionId]?.completedZoneIndices || []),
-          completedZoneNames: finalStatus === 'completed' ? activeZones.map(z => z.zoneName || z.name) : (activeSessions[sessionId]?.completedZoneNames || []),
+          completedZoneIndices: finalStatus === 'completed' && completedZones >= totalZones ? activeZones.map((_, i) => i) : (activeSessions[sessionId]?.completedZoneIndices || []),
+          completedZoneNames: finalStatus === 'completed' && completedZones >= totalZones ? activeZones.map(z => z.zoneName || z.name) : (activeSessions[sessionId]?.completedZoneNames || []),
           zones: zones.map(z => ({
             name: z.zoneName || z.name,
             ...z,
@@ -2055,7 +2082,10 @@ async function runOmniSearchOrchestrator(
       addLog(`[Orchestrator] Taxonomy learning skipped: ${learnErr.message}`);
     }
 
-    // Emit 100% complete event
+    // Emit 100% complete event. The counts are the ones the run actually
+    // reached, and `finished` is the server's authoritative "this session is
+    // over" flag: the console uses it to release the Stop button instead of
+    // guessing from a zone ratio that a skipped zone can never satisfy.
     try {
       emitProgressEvent({
         sessionId,
@@ -2063,15 +2093,17 @@ async function runOmniSearchOrchestrator(
         completedDistricts: 1,
         activeDistrict: baseLocation,
         totalMandals: totalZones,
-        completedMandals: totalZones,
+        completedMandals: completedZones,
         activeMandal: 'Complete',
         totalMandalsAcrossAll: totalZones,
-        overallCompletedMandals: totalZones,
+        overallCompletedMandals: completedZones,
         eta: '0s',
         etaText: '0s',
         totalLeads: sessionLeads.length,
         phoneCount: sessionLeads.filter(l => l.phone).length,
-        sessionActive: false
+        sessionActive: false,
+        finished: true,
+        status: finalStatus
       });
     } catch (e) {}
 

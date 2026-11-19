@@ -3151,19 +3151,18 @@ export default function CommandCenter() {
     };
   }, []);
 
-  const finishRun = useCallback(async status => {
+  const finishRun = useCallback(async (status, options = {}) => {
     const current = runRef.current;
     if (!current || current.status !== 'running' || finishingRef.current) return;
 
-    // Safety guard: if completing naturally, ensure that if progress is reporting zones,
-    // all zones have completed or the run was explicitly aborted/stopped.
-    if (status === 'complete' && progressRef.current) {
-      const comp = Number(progressRef.current.overallCompletedMandals ?? progressRef.current.completedMandals ?? 0);
-      const tot = Number(progressRef.current.totalMandalsAcrossAll ?? progressRef.current.totalMandals ?? 0);
-      if (tot > 0 && comp < tot) {
-        // Prevent premature finish while zones are still being crawled!
-        return;
-      }
+    // Safety guard: a natural "complete" is only allowed when the server has
+    // either said the session is finished or told us the zone total AND every
+    // zone is done. A bare `sessionActive: false` arrives between phases, and
+    // finishing on it flipped the Stop button back to "Find Leads" mid-sweep.
+    if (status === 'complete' && !options.serverConfirmed) {
+      const comp = Number(progressRef.current?.overallCompletedMandals ?? progressRef.current?.completedMandals ?? 0);
+      const tot = Number(progressRef.current?.totalMandalsAcrossAll ?? progressRef.current?.totalMandals ?? 0);
+      if (!(tot > 0) || comp < tot) return;
     }
 
     finishingRef.current = true;
@@ -3201,9 +3200,23 @@ export default function CommandCenter() {
       if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
         const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
         const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
-        const isAllZonesDone = tot > 0 ? (comp >= tot) : true;
-        if (isAllZonesDone || progress.aborted || (Date.now() - (run.startedAt || 0) > 20000)) {
-          finishRun(progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete');
+        const isAllZonesDone = tot > 0 && comp >= tot;
+        // The server's terminal flag is authoritative. Without it a run that
+        // ends with skipped zones (a stalled engine, an empty village) could
+        // never satisfy `comp >= tot`, and the Stop button would stay armed
+        // forever after the sweep had actually finished.
+        const serverSaysFinished = progress.finished === true || progress.status === 'completed';
+        // A "sessionActive: false" event also arrives between phases. Only treat
+        // it as the end of the run when the server says it is finished, every
+        // zone is done, the run was aborted, the server reported an error, or
+        // the stream has been silent so long that it cannot still be working.
+        const lastEventAt = Number(lastEventRef.current) || 0;
+        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 90_000;
+        if (isAllZonesDone || serverSaysFinished || progress.aborted || progress.error || streamIsStale) {
+          finishRun(
+            progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete',
+            { serverConfirmed: serverSaysFinished }
+          );
         }
       }
     }
@@ -3226,6 +3239,10 @@ export default function CommandCenter() {
           const tot = Number(matching.totalCount || 0);
           if (!tot || comp >= tot) {
             finishRun('complete');
+          } else {
+            // The job record is authoritative about termination. A run can end
+            // with skipped zones, so the ratio may never reach 100%.
+            finishRun('complete', { serverConfirmed: true });
           }
         } else if (matching?.status === 'failed') {
           setMascotAlert({ id: Date.now(), text: 'That run hit an engine error. Check the engine board and try again.' });
@@ -4309,12 +4326,21 @@ export default function CommandCenter() {
             onDeploy={startRun}
             onStop={stopRun}
             busy={launching}
-            running={Boolean(
-              !(run?.status === 'stopped' || run?.status === 'complete' || run?.status === 'aborted') && (
-                run?.status === 'running' ||
-                (activeSessionIdRef.current && (scanning || progress?.sessionActive))
-              ) && !finishingRef.current
-            )}
+            running={(() => {
+              if (!run || finishingRef.current) return false;
+              if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
+              if (run.status === 'running') return true;
+              const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
+              const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
+              // Zones still outstanding means the sweep is alive, even if the
+              // last progress frame reported sessionActive:false between phases.
+              // Without this the Stop button flipped back to "Find Leads" while
+              // two thirds of the zones were still being crawled.
+              return Boolean(
+                (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
+                (total > 0 && done < total)
+              );
+            })()}
             compact={activeTab === 'cockpit'}
             onResolve={setScanPlan}
             progress={progress}
