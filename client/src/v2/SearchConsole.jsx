@@ -189,7 +189,7 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 150);
+    }, 90);
 
     return () => {
       clearTimeout(timer.current);

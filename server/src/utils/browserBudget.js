@@ -28,8 +28,8 @@ function envInt(name, fallback) {
   return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : fallback;
 }
 
-const TOTAL_SLOTS = Math.max(4, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', 12)));
-const ENRICH_RESERVE = Math.max(2, Math.min(TOTAL_SLOTS, envInt('SCRAPER_ENRICH_RESERVE', 6)));
+const TOTAL_SLOTS = Math.max(1, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', 3)));
+const ENRICH_RESERVE = Math.max(1, Math.min(TOTAL_SLOTS, envInt('SCRAPER_ENRICH_RESERVE', 1)));
 // Enrichment must run concurrently with discovery so leads receive verified mobile numbers in real time.
 const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD === '1';
 
@@ -50,9 +50,9 @@ function freeRamPct() {
 function discoveryLimit() {
   let critical = false;
   try {
-    critical = os.freemem() < 1.5 * 1024 * 1024 * 1024 || freeRamPct() < 8;
+    critical = os.freemem() < 600 * 1024 * 1024 || freeRamPct() < 10;
   } catch (e) {}
-  const ramCap = critical ? 2 : TOTAL_SLOTS;
+  const ramCap = critical ? 1 : TOTAL_SLOTS;
   return Math.max(1, Math.min(ramCap, TOTAL_SLOTS - enrichmentActive));
 }
 

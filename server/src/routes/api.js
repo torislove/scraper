@@ -38,11 +38,11 @@ router.get('/suggest', async (req, res) => {
   try {
     const q = req.query.q || '';
     if (!q) return res.json([]);
-    const response = await require('axios').get(`https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-    });
-    // Response format: [ "query", ["sugg1", "sugg2"] ]
-    res.json(response.data[1] || []);
+    const country = req.query.country || '';
+    const { suggestForCountry } = require('../services/searchSuggest');
+    const result = await suggestForCountry({ q, country });
+    const suggestions = (result?.suggestions || []).map(s => s.label || s.value || s);
+    res.json(suggestions.length ? suggestions : [q]);
   } catch (error) {
     res.json([]);
   }

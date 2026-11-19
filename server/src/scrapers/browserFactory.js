@@ -48,15 +48,16 @@ async function launchStealthBrowser(useProxy = true, executablePath = null, isHe
   const launchArgs = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
     '--disable-http2',
     '--disable-blink-features=AutomationControlled',
     '--disable-infobars',
-    `--user-agent=${userAgent}`,
-    // Force Hardware Acceleration & Graphics Card
-    '--enable-gpu',
-    '--ignore-gpu-blocklist',
-    '--enable-webgl',
-    '--enable-accelerated-2d-canvas'
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--no-first-run',
+    '--js-flags=--max-old-space-size=256',
+    `--user-agent=${userAgent}`
   ];
 
   // Isolated profile for background scraping

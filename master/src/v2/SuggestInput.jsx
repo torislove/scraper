@@ -208,7 +208,7 @@ export default function SuggestInput({
       } finally {
         if (requestRef.current === requestId) setLoading(false);
       }
-    }, 150);
+    }, 90);
 
     return () => {
       clearTimeout(timerRef.current);

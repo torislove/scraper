@@ -8,8 +8,6 @@ import {
   SlidersHorizontal, Smartphone, Sparkles, Square, Star, Table2, Tag,
   Trash2, Users, Wifi, WifiOff, X, Zap
 } from 'lucide-react';
-import ParallelEnginesStatus from '../ParallelEnginesStatus';
-import ConcentricZoneRadar from '../ConcentricZoneRadar';
 import FilterBar from '../cards/FilterBar';
 import CommandMap from '../../CommandMap';
 import CockpitFolderRow from './CockpitFolderRow';
@@ -312,7 +310,7 @@ export default function CockpitView({
             <div className="v2-live-hud-main">
               <span className="v2-live-hud-pulse"><i /></span>
               <div className="v2-live-hud-info">
-                <span className="v2-live-hud-badge">ACTIVE SWARM SECTOR</span>
+                <span className="v2-live-hud-badge">FINDING LEADS</span>
                 <b className="v2-live-hud-title">
                   📍 {activeZone?.name || activeZone?.zoneName || progress?.activeMandal || 'Active Territory'}
                 </b>
@@ -324,29 +322,12 @@ export default function CockpitView({
               </div>
             </div>
             <div className="v2-live-hud-meta">
-              <span className="v2-live-hud-zone-pill">
-                ZONE {activeZone?.index || (progress?.completedMandals != null ? progress.completedMandals + 1 : 1)} / {progress?.totalMandalsAcrossAll || progress?.totalMandals || mapZones.length || '—'}
-              </span>
-              <span className="v2-live-hud-status">⚡ SWEEPING 5-ENGINE PARALLEL</span>
+              <span className="v2-live-hud-status">⚡ LIVE HARVESTING</span>
             </div>
           </div>
         )}
 
-        {scanning && (
-          <div style={{ marginBottom: 12 }}>
-            <ParallelEnginesStatus
-              scanning={scanning}
-              totalHarvested={vendors.length}
-            />
-            <ConcentricZoneRadar
-              zones={mapZones}
-              activeZone={activeZone}
-              completedCount={mapZones.filter(z => z.completed).length}
-              totalCount={mapZones.length || 7}
-              scanning={scanning}
-            />
-          </div>
-        )}
+
 
         <div className="v2-cp-table">
           <table className="v2-lead-table">

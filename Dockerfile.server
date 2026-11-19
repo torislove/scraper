@@ -59,7 +59,9 @@ USER node
 ENV PORT=5002
 ENV NODE_ENV=production
 ENV SCRAPER_ALLOW_REMOTE=1
-ENV PLAYWRIGHT_CONCURRENCY=4
+ENV SCRAPER_BROWSER_SLOTS=3
+ENV PLAYWRIGHT_CONCURRENCY=3
+ENV NODE_OPTIONS="--max-old-space-size=2560"
 
 EXPOSE 5002
 
@@ -68,4 +70,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:5002/api/health || exit 1
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "index.js"]
+CMD ["node", "--max-old-space-size=2560", "index.js"]

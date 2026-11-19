@@ -408,6 +408,16 @@ function findLocations(fragment, limit = 6, isMaster = false) {
         }
       }
     }
+    if (!mapped.length) {
+      try {
+        const { searchInternationalPlaces } = require('./internationalGeoIndex');
+        const intl = searchInternationalPlaces(text, { limit: Math.max(limit, 6), isMaster });
+        if (intl && intl.length) {
+          mapped = intl;
+        }
+      } catch (e) {}
+    }
+
     const seen = new Set();
     return mapped.filter(item => {
       const key = `${norm(item.value)}|${norm(item.state)}`;
@@ -1154,14 +1164,27 @@ async function suggestForCountry(options = {}) {
   if ((!country || country === 'IN') && hasLocal) return payload;
 
   let places = [];
+  // 1. Instant in-memory check via internationalGeoIndex (<1ms response time, zero network latency)
   try {
-    const globalPlaceIndex = require('./globalPlaceIndex');
-    places = await globalPlaceIndex.searchPlaces(fragment, {
+    const { searchInternationalPlaces } = require('./internationalGeoIndex');
+    places = searchInternationalPlaces(fragment, {
       country,
-      limit: Math.max(1, Math.min(12, Number(options.limit) || 6))
+      limit: Math.max(1, Math.min(12, Number(options.limit) || 6)),
+      isMaster: Boolean(options.isMaster)
     });
-  } catch (error) {
-    return payload;
+  } catch (error) {}
+
+  // 2. Fallback to keyless OSM Photon only if in-memory international catalog has no match
+  if (!places.length) {
+    try {
+      const globalPlaceIndex = require('./globalPlaceIndex');
+      places = await globalPlaceIndex.searchPlaces(fragment, {
+        country,
+        limit: Math.max(1, Math.min(12, Number(options.limit) || 6))
+      });
+    } catch (error) {
+      return payload;
+    }
   }
   if (!places.length) return payload;
 

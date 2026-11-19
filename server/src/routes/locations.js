@@ -219,6 +219,15 @@ router.get('/suggest', async (req, res) => {
 
     if (country && country !== 'IN') {
       try {
+        const { searchInternationalPlaces } = require('../services/internationalGeoIndex');
+        const places = searchInternationalPlaces(q, {
+          country,
+          limit,
+          isMaster: req.query.isMaster === 'true' || req.headers['x-workspace-scope'] === 'master'
+        });
+        if (places && places.length) return res.json(places);
+      } catch (error) {}
+      try {
         const { searchPlaces } = require('../services/globalPlaceIndex');
         const places = await searchPlaces(q, { country, limit });
         if (places.length) return res.json(places);

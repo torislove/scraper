@@ -11,10 +11,20 @@ services:
       - PORT=5002
       - NODE_ENV=production
       - SCRAPER_ALLOW_REMOTE=1
-      - PLAYWRIGHT_CONCURRENCY=4
+      - SCRAPER_BROWSER_SLOTS=3
+      - PLAYWRIGHT_CONCURRENCY=3
+      - NODE_OPTIONS=--max-old-space-size=2560
       - AUTH_REQUIRED=1
       - SESSION_SECRET=${SESSION_SECRET:-scraper-super-secure-session-secret-change-me}
       - MASTER_KEY=${MASTER_KEY:-master-admin-secret-key-change-me}
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4096M
+        reservations:
+          cpus: '1.5'
+          memory: 1536M
     volumes:
       # Persistent storage for vaults, lead database, and users
       - scraper_data:/app/server/data
