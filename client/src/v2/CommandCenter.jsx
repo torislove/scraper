@@ -2949,7 +2949,10 @@ export default function CommandCenter() {
             }
           });
           if (!hasChanges) return prev;
-          const fullOrder = [...freshIds, ...existingIds.filter(id => !freshIds.includes(id))];
+          // A vendor can arrive twice in one flush (the same business surfaced
+          // by two zone jobs). Pushing its id twice duplicated the row and made
+          // React complain about duplicate keys, so the order is a Set.
+          const fullOrder = Array.from(new Set([...freshIds, ...existingIds]));
           return fullOrder.map(id => map.get(id)).filter(Boolean);
         });
       }
