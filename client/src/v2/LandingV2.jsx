@@ -83,10 +83,27 @@ export default function LandingV2() {
 
   useEffect(() => {
     let cancelled = false;
-    pingHealth()
-      .then(ok => { if (!cancelled) setOnline(Boolean(ok)); })
-      .catch(() => { if (!cancelled) setOnline(false); });
-    return () => { cancelled = true; };
+    let timer = null;
+    let attempt = 0;
+
+    // The landing is often opened while a sweep is saturating the machine. One
+    // short ping used to paint "Offline" and never recover. Retry quickly at
+    // first, then settle into a slow keep-alive poll, so the pill heals itself
+    // as soon as the backend answers.
+    const check = async () => {
+      const ok = await pingHealth();
+      if (cancelled) return;
+      setOnline(Boolean(ok));
+      attempt += 1;
+      const delay = ok ? 20000 : Math.min(2000 * attempt, 15000);
+      timer = setTimeout(check, delay);
+    };
+    check();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   const openCommand = (countryCode) => {

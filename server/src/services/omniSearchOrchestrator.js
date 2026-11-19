@@ -1227,6 +1227,11 @@ async function runOmniSearchOrchestrator(
     const stallLimitMs = Math.max(8 * 60_000, Number(etaPerZone || 0) * 6000);
     let lastZoneAdvanceAt = Date.now();
     let lastSeenCompletedZones = -1;
+    // Timestamps of the last few completed zones. The overall average lags a
+    // run that slows down (Google cooldown, fewer live slots), which is how a
+    // 86-zone sweep promised 10 minutes and took 18.8. A recent window makes
+    // the ETA react within a handful of zones.
+    const completionTimes = [];
     while (true) {
       if (isAborted()) break;
 
@@ -1246,8 +1251,12 @@ async function runOmniSearchOrchestrator(
 
       // Stall detector: progress, not the clock, decides whether a sweep lives.
       if (completedZones > lastSeenCompletedZones) {
+        const now = Date.now();
+        const advanced = completedZones - Math.max(0, lastSeenCompletedZones);
+        for (let i = 0; i < advanced; i++) completionTimes.push(now);
+        while (completionTimes.length > 12) completionTimes.shift();
         lastSeenCompletedZones = completedZones;
-        lastZoneAdvanceAt = Date.now();
+        lastZoneAdvanceAt = now;
       }
       if (Date.now() - lastZoneAdvanceAt > stallLimitMs) {
         addLog(`[Orchestrator] No zone completed for ${Math.round(stallLimitMs / 60000)} min (${finishedZones}/${totalZones}). Treating the pool as wedged and finalizing.`);
@@ -1261,7 +1270,20 @@ async function runOmniSearchOrchestrator(
         // After a few real completions the run's own wall-clock average beats
         // any model. It already includes the live concurrency.
         const avgTimePerZone = elapsed / completedZones;
-        etaStr = formatEta(remainingZones * avgTimePerZone);
+        // Blend a recent window with the overall average and never promise a
+        // shorter finish than the overall average implies. A sweep that is
+        // slowing down therefore raises its ETA instead of holding a stale,
+        // optimistic number until the last minute.
+        let perZone = avgTimePerZone;
+        if (completionTimes.length >= 4) {
+          const span = completionTimes[completionTimes.length - 1] - completionTimes[0];
+          const gaps = completionTimes.length - 1;
+          if (span > 0 && gaps > 0) {
+            const recentPerZone = span / gaps;
+            perZone = Math.max(avgTimePerZone, recentPerZone * 0.6 + avgTimePerZone * 0.4);
+          }
+        }
+        etaStr = formatEta(remainingZones * perZone);
       } else {
         // Too early to measure: fall back to the shared model instead of the
         // old flat 6 s per zone, which overstated a fast run by ~4×.

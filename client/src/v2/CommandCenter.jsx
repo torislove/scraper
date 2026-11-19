@@ -4348,6 +4348,8 @@ export default function CommandCenter() {
             onResolve={setScanPlan}
             progress={progress}
             eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
+            runLeadCount={runLeadCount}
+            runStartedAt={run?.startedAt || 0}
           />
 
           <section className="v2-cmd-stats">

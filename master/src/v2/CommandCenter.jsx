@@ -2571,6 +2571,8 @@ export default function CommandCenter() {
             eta={progress?.eta || progress?.etaText || (estimate?.timing?.totalLabel ? `~${estimate.timing.totalLabel}` : '')}
             runs={effectiveRuns}
             onOpenFolder={openFolder}
+            runLeadCount={runLeadCount}
+            runStartedAt={run?.startedAt || 0}
           />
 
           <section className="v2-cmd-stats">

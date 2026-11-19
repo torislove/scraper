@@ -293,7 +293,9 @@ function SearchConsole({
   progress = null,
   eta = '',
   runs = [],
-  onOpenFolder
+  onOpenFolder,
+  runLeadCount = 0,
+  runStartedAt = 0
 }) {
   const [draft, setDraft] = useState(value);
   const deferredDraft = React.useDeferredValue(draft);
@@ -417,6 +419,26 @@ function SearchConsole({
     }, 1000);
     return () => clearInterval(timer);
   }, [running, parsedZones]);
+
+  // A measured throughput, not a marketing number. The old chip claimed
+  // "~18–24 leads/sec"; the measured Vijayawada run harvested 94 leads in
+  // 18.8 minutes, i.e. ~0.08 per second. Show the real rate once there is
+  // enough signal, and just the lead count until then.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return undefined;
+    const timer = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  const measuredRate = useMemo(() => {
+    const raw = runStartedAt;
+    const startedMs = typeof raw === 'number' ? raw : Date.parse(raw || '');
+    if (!Number.isFinite(startedMs) || !startedMs) return null;
+    const elapsedMin = (nowTick - startedMs) / 60000;
+    if (elapsedMin < 0.25 || runLeadCount < 3) return null;
+    return runLeadCount / elapsedMin;
+  }, [nowTick, runStartedAt, runLeadCount]);
 
   const groups = useMemo(() => {
     const list = response?.suggestions || [];
@@ -904,7 +926,11 @@ function SearchConsole({
             </div>
             <div className="v2-swarm-throughput-chip">
               <Zap size={12} className="v2-text-lime" />
-              <b>~18–24 leads/sec</b>
+              <b>
+                {measuredRate
+                  ? `${measuredRate >= 10 ? Math.round(measuredRate) : measuredRate.toFixed(1)} leads/min`
+                  : `${runLeadCount} leads`}
+              </b>
             </div>
           </div>
         </div>

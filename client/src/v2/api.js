@@ -65,7 +65,9 @@ export const apiBase = API_URL;
 
 export async function pingHealth() {
   try {
-    const { data } = await client.get('/health', { timeout: 2500 });
+    // The landing is often opened while a sweep is saturating the machine, so
+    // 2.5 s was too tight and reported a healthy backend as Offline.
+    const { data } = await client.get('/health', { timeout: 6000 });
     return data?.ok === true;
   } catch (e) {
     return false;
