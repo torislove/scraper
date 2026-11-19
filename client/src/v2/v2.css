@@ -4347,6 +4347,11 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   min-width: 0;
 }
 
+.v2-run-actions .v2-run-btn-protected {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .v2-run-btn-tool {
   display: inline-flex;
   align-items: center;

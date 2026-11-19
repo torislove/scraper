@@ -412,7 +412,7 @@ function RunCard({
             <span>CSV</span>
           </button>
           <span
-            className="v2-run-btn-tool"
+            className="v2-run-btn-tool v2-run-btn-protected"
             style={{ opacity: 0.65, cursor: 'not-allowed', display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, padding: '3px 7px' }}
             title="Protected: Folder deletion is restricted to Master Admin"
           >
