@@ -1,28 +1,16 @@
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: scraper-server-hpa
-  namespace: scraper-prod
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: scraper-server
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
+# Horizontal autoscaling for the stateless web pods only.
+#
+# There is deliberately NO HPA for scraper-server. The server is a single-writer
+# monolith today: run state is in-process, leads live in a JSON file guarded by
+# .store.lock, and SSE streams are held in memory. Scaling it to 2+ replicas
+# would corrupt leads and split streams across pods.
+#
+# One server pod still serves many users and many concurrent scrapes, because its
+# in-process queue runs several browser and HTTP slots at once.
+#
+# Enable a server HPA only after Phase 2 of docs/DEPLOYMENT-PLAN.md lands
+# (Postgres + Redis + one Kubernetes Job per scrape), at which point the server
+# becomes stateless and can scale like the web pods.
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler

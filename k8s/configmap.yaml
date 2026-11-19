@@ -7,7 +7,14 @@ data:
   PORT: "5002"
   NODE_ENV: "production"
   SCRAPER_ALLOW_REMOTE: "1"
+  # Four browser slots is what a 4 GiB / 4 vCPU pod can actually hold. The
+  # server is one pod (see server-deployment.yaml), so these slots are the real
+  # concurrency ceiling: many users and many scrapes share them fairly.
+  SCRAPER_BROWSER_SLOTS: "4"
+  SCRAPER_ENRICH_RESERVE: "1"
   PLAYWRIGHT_CONCURRENCY: "4"
+  # Leave room for four Chromium instances inside the 4 GiB limit.
+  NODE_OPTIONS: "--max-old-space-size=2048"
   AUTH_REQUIRED: "1"
   SESSION_TTL_SECONDS: "604800"
   MAX_PARALLEL_JOBS: "25"

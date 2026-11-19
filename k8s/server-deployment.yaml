@@ -6,7 +6,25 @@ metadata:
   labels:
     app: scraper-server
 spec:
-  replicas: 2
+  # ONE replica, on purpose.
+  #
+  # Every run's state lives in this process (activeSessions, sessionAbortSignals),
+  # leads are written to data/scraped_vendors.json through a single-writer
+  # .store.lock, and SSE streams are held in memory. A second pod would either
+  # fail to mount this ReadWriteOnce volume or fight the first one for the lock
+  # and lose leads.
+  #
+  # One pod is not one scrape: the in-process queue runs ~6 browser slots and
+  # ~8 HTTP slots at once, so many users can scrape concurrently on this pod.
+  #
+  # Scale past one replica only after Phase 2 of docs/DEPLOYMENT-PLAN.md
+  # (Postgres + Redis + one Kubernetes Job per scrape). Until then, raise
+  # PLAYWRIGHT_CONCURRENCY / the CPU limit instead of replicas.
+  replicas: 1
+  # Recreate, never RollingUpdate: a rolling update briefly runs two pods, and
+  # two pods means two writers on the same JSON store.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: scraper-server
@@ -15,6 +33,9 @@ spec:
       labels:
         app: scraper-server
     spec:
+      # Give an in-flight scrape a moment to flush leads and the queue to disk
+      # before the pod is killed.
+      terminationGracePeriodSeconds: 60
       containers:
         - name: server
           image: ghcr.io/scraper-coin/scraper-server:latest
@@ -29,11 +50,13 @@ spec:
                 name: scraper-secrets
           resources:
             requests:
-              cpu: "500m"
-              memory: "1Gi"
+              cpu: "1000m"
+              memory: "2Gi"
             limits:
-              cpu: "2000m"
-              memory: "3Gi"
+              # 4 vCPU / 4 GiB matches SCRAPER_BROWSER_SLOTS=4 in the ConfigMap.
+              # Raising one without the other causes either OOM kills or idle CPU.
+              cpu: "4000m"
+              memory: "4Gi"
           volumeMounts:
             # Crucial: Chromium requires shared memory (/dev/shm) to prevent crashes on high-concurrency tabs
             - name: dshm
