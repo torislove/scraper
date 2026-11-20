@@ -1,4 +1,8 @@
-# Horizontal autoscaling for the stateless web pods only.
+# Horizontal autoscaling for the stateless web + User-RAM Web Worker pods.
+# Because discovery zone execution and deduplication offload directly onto client
+# hardware RAM via Web Workers (/api/scrape/zone-plan & /api/scrape/client-ingest),
+# the stateless frontend pods handle traffic elasticity while scraper-server
+# stays cloud-light.
 #
 # There is deliberately NO HPA for scraper-server. The server is a single-writer
 # monolith today: run state is in-process, leads live in a JSON file guarded by

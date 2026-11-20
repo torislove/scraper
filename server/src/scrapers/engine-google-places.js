@@ -792,28 +792,21 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
         })()}?hl=en&gl=${countryGl}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
-    // Wait for load with rapid timeout
-    // Measured: 'domcontentloaded' returns ~1.3 s earlier but the feed then
-    // takes ~2.5 s longer to appear, for a net loss of ~1.2 s per zone. Media
-    // and fonts are already aborted by optimizePageForSpeed, so 'load' is
-    // genuinely cheap here and the feed is ready sooner.
-    await page.goto(searchUrl, { waitUntil: 'load', timeout: 20000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
-    markZone('goto(load)');
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
+    markZone('goto(domcontentloaded)');
 
     const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
     try {
       if (await consentBtn.count() > 0) {
-        await consentBtn.first().click({ timeout: 5000 }).catch(()=>{});
-        // The feed wait below is the real readiness signal; the old fixed
-        // 1000 ms sleep after the click was pure dead time.
+        await consentBtn.first().click({ timeout: 3000 }).catch(()=>{});
         markZone('consent');
       }
     } catch(e) {}
 
     try {
       await Promise.race([
-        page.waitForSelector('div[role="feed"]', { timeout: 10000 }),
-        page.waitForSelector('[data-item-id="address"]', { timeout: 10000 })
+        page.waitForSelector('div[role="feed"]', { timeout: 6000 }),
+        page.waitForSelector('[data-item-id="address"]', { timeout: 6000 })
       ]);
     } catch (e) {
       addLog("[Cyber Core] Waiting for listing feed timed out, extracting visible nodes...");
@@ -1347,13 +1340,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             }
           });
 
-          // Wait until the feed actually grows or timeout
+          // Wait until the feed actually grows or fast timeout
           await page.waitForFunction((before) => {
             const feed = document.querySelector('div[role="feed"]');
             if (!feed) return false;
             return feed.querySelectorAll('div.Nv2PK').length > before.cards
               || feed.scrollHeight > before.height + 10;
-          }, beforeScroll, { timeout: 800, polling: 100 }).catch(() => {});
+          }, beforeScroll, { timeout: 420, polling: 60 }).catch(() => {});
 
           const added = mergeCards(await collectVisibleCards());
 
@@ -1370,15 +1363,15 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
           if (added === 0) {
             staleTicks++;
-            // Recovery Nudge: Prevent premature halt during network jitter or DOM virtualization
-            if (staleTicks <= 3) {
+            // Recovery Nudge: snappy bounce to trigger virtualized feed pagination
+            if (staleTicks <= 2) {
               await page.evaluate(() => {
                 const feed = document.querySelector('div[role="feed"]');
                 if (feed) {
                   feed.scrollTop = Math.max(0, feed.scrollTop - 350);
                 }
               }).catch(() => {});
-              await page.waitForTimeout(200);
+              await page.waitForTimeout(90);
               await page.evaluate(() => {
                 const feed = document.querySelector('div[role="feed"]');
                 if (feed) {
@@ -1387,7 +1380,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 }
               }).catch(() => {});
               await page.keyboard.press('PageDown').catch(() => {});
-            } else if (staleTicks >= 6) {
+            } else if (staleTicks >= 3) {
               break;
             }
           } else {

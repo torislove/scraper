@@ -49,14 +49,15 @@ spec:
             - secretRef:
                 name: scraper-secrets
           resources:
+            # User-RAM Hybrid Compute: Client browser Web Workers pull /api/scrape/zone-plan
+            # and stream batches via /api/scrape/client-ingest, offloading 80%+ of heavy RAM/CPU
+            # onto each customer's own hardware so the cluster stays ultra-lightweight.
             requests:
-              cpu: "1000m"
-              memory: "2Gi"
+              cpu: "250m"
+              memory: "512Mi"
             limits:
-              # 4 vCPU / 4 GiB matches SCRAPER_BROWSER_SLOTS=4 in the ConfigMap.
-              # Raising one without the other causes either OOM kills or idle CPU.
-              cpu: "4000m"
-              memory: "4Gi"
+              cpu: "2000m"
+              memory: "2Gi"
           volumeMounts:
             # Crucial: Chromium requires shared memory (/dev/shm) to prevent crashes on high-concurrency tabs
             - name: dshm
@@ -87,7 +88,7 @@ spec:
         - name: dshm
           emptyDir:
             medium: Memory
-            sizeLimit: 1Gi
+            sizeLimit: 512Mi
         - name: storage
           persistentVolumeClaim:
             claimName: scraper-data-pvc

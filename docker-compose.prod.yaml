@@ -10,9 +10,11 @@ services:
     environment:
       - PORT=5002
       - NODE_ENV=production
+      - COMPUTE_MODE=user_ram_hybrid
+      - USER_RAM_OFFLOAD_ENABLED=1
       - SCRAPER_ALLOW_REMOTE=1
-      - SCRAPER_BROWSER_SLOTS=3
-      - PLAYWRIGHT_CONCURRENCY=3
+      - SCRAPER_BROWSER_SLOTS=auto
+      - PLAYWRIGHT_CONCURRENCY=auto
       - NODE_OPTIONS=--max-old-space-size=2560
       - AUTH_REQUIRED=1
       - SESSION_SECRET=${SESSION_SECRET:-scraper-super-secure-session-secret-change-me}
@@ -23,8 +25,8 @@ services:
           cpus: '4.0'
           memory: 4096M
         reservations:
-          cpus: '1.5'
-          memory: 1536M
+          cpus: '0.5'
+          memory: 384M
     volumes:
       # Persistent storage for vaults, lead database, and users
       - scraper_data:/app/server/data

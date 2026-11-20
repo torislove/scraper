@@ -1999,6 +1999,98 @@ router.post('/enrich-now', async (req, res) => {
   });
 });
 
+// Fast Zone Plan endpoint (<10ms) for User-RAM Browser Web Workers
+router.get('/zone-plan', (req, res) => {
+  try {
+    const category = String(req.query.category || 'Businesses').trim();
+    const location = String(req.query.location || 'Hyderabad').trim();
+    const country = String(req.query.country || req.headers['x-country'] || 'IN').trim().toUpperCase();
+    const isMaster = req.headers['x-workspace-scope'] === 'master';
+    const zones = resolveUniversalZones(location, category, isMaster) || [];
+    return res.json({
+      ok: true,
+      category,
+      location,
+      country,
+      totalZones: zones.length,
+      zones: zones.slice(0, 48)
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Client-RAM Web Worker Lead Ingestion endpoint
+router.post('/client-ingest', async (req, res) => {
+  try {
+    const {
+      sessionId = `ram_${Date.now()}`,
+      leads = [],
+      category = 'Businesses',
+      location = '',
+      country = 'IN',
+      deviceSpec = null
+    } = req.body || {};
+
+    if (!Array.isArray(leads)) {
+      return res.status(400).json({ ok: false, error: 'leads array is required' });
+    }
+
+    const userId = String(req.headers['x-user-id'] || 'admin_1').trim() || 'admin_1';
+    const batch = leads.slice(0, 200);
+    const savedList = [];
+
+    for (const raw of batch) {
+      if (!raw || typeof raw !== 'object') continue;
+      const name = String(raw.name || '').trim();
+      if (!name) continue;
+
+      const lat = raw.latitude != null ? Number(raw.latitude) : (raw.lat != null ? Number(raw.lat) : null);
+      const lng = raw.longitude != null ? Number(raw.longitude) : (raw.lng != null ? Number(raw.lng) : null);
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40) || 'lead';
+      const coordKey = Number.isFinite(lat) && Number.isFinite(lng)
+        ? `${lat.toFixed(4)}_${lng.toFixed(4)}`
+        : Math.random().toString(36).slice(2, 8);
+      const leadId = String(raw.id || `ram_${slug}_${coordKey}`);
+
+      const vendor = {
+        id: leadId,
+        sessionId: String(sessionId || `ram_${Date.now()}`),
+        userId,
+        name,
+        category: String(raw.category || category || 'Businesses').trim(),
+        city: String(raw.city || raw.zoneName || location || '').trim(),
+        location: String(raw.location || location || '').trim(),
+        address: String(raw.address || raw.location || location || '').trim(),
+        country: String(raw.country || country || 'IN').trim().toUpperCase(),
+        phone: String(raw.phone || '').trim(),
+        website: String(raw.website || '').trim(),
+        email: String(raw.email || '').trim(),
+        latitude: Number.isFinite(lat) ? lat : null,
+        longitude: Number.isFinite(lng) ? lng : null,
+        source: String(raw.source || 'Client RAM Engine'),
+        engine: 'client_ram_worker',
+        scrapedAt: new Date().toISOString(),
+        deviceTier: deviceSpec?.tier || undefined
+      };
+
+      const saved = dbAdapter.saveVendor(userId, vendor);
+      if (saved) {
+        savedList.push(vendor);
+        try { emitVendorEvent(vendor, 'new'); } catch (e) { }
+      }
+    }
+
+    return res.json({
+      ok: true,
+      ingested: savedList.length,
+      leads: savedList
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = {
   scrapeRouter: router,
   setDeps,

@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import {
   AlertTriangle, ArrowRight, Briefcase, Building2, Check, CheckCircle2, Cpu,
-  Download, FileSpreadsheet, Globe2, Heart, HeartPulse, Home, LogIn, Mail,
+  Download, FileSpreadsheet, Globe2, Heart, HeartPulse, Home, Layers, LogIn, Mail,
   MapPin, Monitor, Phone, Plus, Radar, Rocket, Search, ShieldCheck, Sparkles,
   Star, Utensils, Wrench, Zap
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
 import { POPULAR_COUNTRIES } from './data/countries';
+import { COUNTRY_COUNTY_SHOWCASE } from './data/searchExamples';
+import {
+  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+} from './utils/deviceRamEngine';
 import { pingHealth } from './api';
 import './landingExecutive.css';
 
@@ -32,12 +36,12 @@ const COUNTRY_DESCRIPTIONS = {
 
 const DEMO_SCENARIOS = [
   {
-    id: 'guntur-computers',
-    pill: 'Computer Shops · Guntur',
-    query: 'Computer Shops in Guntur',
+    id: 'hyderabad-it',
+    pill: 'Software & IT · Hyderabad',
+    query: 'Software companies in HITEC City Hyderabad',
     country: 'IN',
-    areaLabel: 'Guntur, Andhra Pradesh · 142 businesses pinned',
-    count: '142 leads',
+    areaLabel: 'Hyderabad, Telangana · 1,194 businesses pinned',
+    count: '1,194 leads',
     pins: [
       { top: '24%', left: '22%' },
       { top: '54%', left: '44%' },
@@ -46,9 +50,9 @@ const DEMO_SCENARIOS = [
       { top: '42%', left: '28%' }
     ],
     leads: [
-      { name: 'Apex Computers & Laptop Hub', area: 'Brodipet, Guntur', rating: '4.8', reviews: 184, phone: '+91 98480 •••12' },
-      { name: 'Sri Lakshmi IT & Peripherals', area: 'Arundelpet, Guntur', rating: '4.7', reviews: 96, phone: '+91 94401 •••89' },
-      { name: 'TechZone Hardware & Repair', area: 'Lakshmipuram, Guntur', rating: '4.9', reviews: 210, phone: '+91 90005 •••44' }
+      { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad', rating: '4.9', reviews: 318, phone: '+91 98490 •••12' },
+      { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad', rating: '4.8', reviews: 214, phone: '+91 94401 •••89' },
+      { name: 'Jubilee Enterprise Tech', area: 'Banjara Hills, Hyderabad', rating: '4.9', reviews: 276, phone: '+91 90005 •••44' }
     ]
   },
   {
@@ -73,10 +77,10 @@ const DEMO_SCENARIOS = [
   },
   {
     id: 'dallas-hvac',
-    pill: 'HVAC Contractors · Dallas',
-    query: 'HVAC Contractors in Dallas',
+    pill: 'HVAC · Orange & Dallas Counties',
+    query: 'HVAC Contractors in Harris County TX',
     country: 'US',
-    areaLabel: 'Dallas, Texas · 264 businesses pinned',
+    areaLabel: 'Harris & Dallas Counties, US · 264 businesses pinned',
     count: '264 leads',
     pins: [
       { top: '38%', left: '24%' },
@@ -87,16 +91,16 @@ const DEMO_SCENARIOS = [
     ],
     leads: [
       { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX', rating: '4.9', reviews: 420, phone: '+1 (214) •••-0192' },
-      { name: 'Metroplex Climate Solutions', area: 'North Dallas, TX', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418' },
-      { name: 'Bluebonnet Mechanical HVAC', area: 'Irving, Dallas County', rating: '4.7', reviews: 180, phone: '+1 (972) •••-8820' }
+      { name: 'Metroplex Climate Solutions', area: 'Harris County, TX', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418' },
+      { name: 'Coastal Cooling Mechanical', area: 'Orange County, CA', rating: '4.7', reviews: 180, phone: '+1 (949) •••-8820' }
     ]
   },
   {
     id: 'london-dentists',
-    pill: 'Dental Clinics · London',
-    query: 'Dental Clinics in London',
+    pill: 'Dental Clinics · Westminster UK',
+    query: 'Dental Clinics in Westminster London',
     country: 'GB',
-    areaLabel: 'Greater London, UK · 215 businesses pinned',
+    areaLabel: 'Westminster & Greater London, UK · 215 businesses pinned',
     count: '215 leads',
     pins: [
       { top: '46%', left: '26%' },
@@ -114,15 +118,15 @@ const DEMO_SCENARIOS = [
 ];
 
 const STORY_ZONES = [
-  { name: 'Brodipet', count: '68 leads' },
-  { name: 'Arundelpet', count: '74 leads' },
-  { name: 'Kothapet', count: '52 leads' },
-  { name: 'Lakshmipuram', count: '61 leads' },
-  { name: 'Pattabhipuram', count: '44 leads' },
-  { name: 'Nallapadu', count: '39 leads' },
-  { name: 'Koritepadu', count: '48 leads' },
-  { name: 'Gorantla', count: '55 leads' },
-  { name: 'Mangalagiri', count: '93 leads' }
+  { name: 'HITEC City', count: '94 leads' },
+  { name: 'Madhapur', count: '88 leads' },
+  { name: 'Banjara Hills', count: '76 leads' },
+  { name: 'Jubilee Hills', count: '69 leads' },
+  { name: 'Gachibowli', count: '84 leads' },
+  { name: 'Kukatpally', count: '91 leads' },
+  { name: 'Ameerpet', count: '79 leads' },
+  { name: 'Begumpet', count: '64 leads' },
+  { name: 'Secunderabad', count: '97 leads' }
 ];
 
 const JOURNEY_STEPS = [
@@ -260,18 +264,22 @@ const LEAD_ANATOMY = [
 const PROOF_STATS = [
   { value: '11', label: 'Core Countries Locked & Tuned' },
   { value: '619,287', label: 'Indian Towns & Villages Covered' },
-  { value: '0', label: 'API Keys or Extra Scrapers Needed' },
-  { value: '1-Click', label: 'Excel, CSV & Phone Export' }
+  { value: '3', label: 'Built-In Engines You Simply Pay For' },
+  { value: 'Your RAM', label: 'Hardware-Accelerated · 0 Cloud Queues' }
 ];
 
 const FAQ = [
   {
     q: 'Why can’t I just copy businesses from Google Maps manually?',
-    a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Scraper.co.in automatically divides the city into every neighborhood zone, sweeps all of them simultaneously, and exports a clean spreadsheet in minutes.'
+    a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Our Client Workspace automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps them in parallel using your device RAM, and exports a clean Excel spreadsheet in minutes.'
   },
   {
-    q: 'Do I need to buy separate scrapers, proxies, or API keys?',
-    a: 'No! Everything is built right in and works automatically. When you click Find Leads, our built-in local map, business directory, and website verification engines run together behind the scenes with zero extra subscriptions, extensions, or technical setup.'
+    q: 'Why do I just pay for the 3 built-in engines without extra cloud server fees?',
+    a: 'All heavy discovery processing, geospatial matching, and duplicate cleanup run directly using your own computer RAM and CPU Web Workers! Because you are not waiting in shared cloud server queues, your leads stream faster on your hardware and you simply pay for access to our 3 Built-In Engines.'
+  },
+  {
+    q: 'What if I want leads from an entire District, State, or every website across the internet?',
+    a: 'Use our Client Workspace for any single city, town, mandal, or county right from your browser. When your business needs complete territory lists covering entire districts, full states, or nationwide rollouts gathered across every public website, map, and directory on the internet, reach our Master Territory Intelligence Desk below.'
   },
   {
     q: 'How does this help startups and marketing agencies?',
@@ -430,7 +438,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
         </AnimatePresence>
 
         <div className="lx-showcase-foot">
-          <span>Verified phones, addresses &amp; GPS pins · No scrapers needed</span>
+          <span>Verified phones, addresses &amp; GPS pins · 3 Built-In Engines on Your RAM</span>
           <strong>Instant Excel &amp; Map →</strong>
         </div>
       </motion.div>
@@ -444,6 +452,8 @@ export default function LandingV2() {
   const [activeDemo, setActiveDemo] = useState(0);
   const [weeklySearches, setWeeklySearches] = useState(12);
   const [activePulseZone, setActivePulseZone] = useState(0);
+  const [selectedMarketCode, setSelectedMarketCode] = useState('IN');
+  const hardware = useMemo(() => detectDeviceHardware(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -541,7 +551,7 @@ export default function LandingV2() {
               <div className="lx-hero-badges">
                 <span className="lx-eyebrow">
                   <Sparkles size={13} />
-                  No Scrapers · No API Keys · All Engines Auto
+                  3 Built-In Engines · Runs on Your Hardware RAM · 0 API Keys
                 </span>
                 <span className="lx-india-pill">
                   <Country3DFlag code="IN" size={18} isHome />
@@ -550,17 +560,27 @@ export default function LandingV2() {
               </div>
 
               <h1 className="lx-h1">
-                Stop fighting Google Maps limits. Get{' '}
-                <span className="lx-h1-accent">every verified lead</span>{' '}
+                Just pay for our 3 engines. Your RAM powers{' '}
+                <span className="lx-h1-accent">blazing-fast leads</span>{' '}
                 in seconds.
               </h1>
 
               <p className="lx-lead-copy">
-                You don&apos;t need to buy separate scrapers, proxies, or technical tools. Just pick
-                one of 11 country flags, type what you&apos;re looking for, and watch our built-in
-                engines automatically find every local business, phone number, and website into a
-                clean Excel sheet.
+                Zero external tools or slow shared server queues. Pick one of 11 country flags,
+                type what you need in any city, mandal, or county, and watch our 3 built-in engines
+                use your computer&apos;s own RAM ({hardware.ramGb} GB · {hardware.parallelZones}x parallel zones) to gather
+                every verified phone, address, and website directly across the web into a clean Excel file.
               </p>
+
+              <div className="lx-hero-mode-split">
+                <div>
+                  <b>Self-Serve Client Workspace</b>
+                  <span>Any city, town, mandal or county · Instant Excel export powered by your RAM</span>
+                </div>
+                <a href="#master-concierge" className="lx-hero-master-link">
+                  Need entire District, State or every website on the internet? Ask Master Intelligence →
+                </a>
+              </div>
 
               <div className="lx-hero-actions">
                 <motion.button
@@ -568,7 +588,7 @@ export default function LandingV2() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   className="lx-btn lx-btn-primary lx-btn-lg"
-                  onClick={() => openWorkspace('IN')}
+                  onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}
                 >
                   Open Lead Workspace <ArrowRight size={17} />
                 </motion.button>
@@ -582,9 +602,9 @@ export default function LandingV2() {
               </div>
 
               <div className="lx-trust-row">
-                <span className="lx-trust-pill"><Check size={14} /> Beats 120-Result Map Cap</span>
-                <span className="lx-trust-pill"><Check size={14} /> Auto-Learning Smart Search</span>
-                <span className="lx-trust-pill"><Check size={14} /> Live Map + Excel Export</span>
+                <span className="lx-trust-pill"><Check size={14} /> Runs on Your Hardware RAM (4 GB+ Ready)</span>
+                <span className="lx-trust-pill"><Check size={14} /> Hyderabad &amp; 619k Indian Towns/Mandals</span>
+                <span className="lx-trust-pill"><Check size={14} /> Only 3 Built-In Engines Included</span>
               </div>
             </motion.div>
 
@@ -694,13 +714,13 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* ANIMATED STORY 2: NO SCRAPERS TO BUY — ALL ENGINES AUTOMATIC */}
+        {/* ANIMATED STORY 2: ONLY 3 BUILT-IN ENGINES + YOUR DEVICE RAM SPEED */}
         <section className="lx-section" id="engines">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Cpu size={13} /> Zero Extra Tools Required</span>
-              <h2>You don&apos;t need to buy any scrapers. Every engine runs automatically.</h2>
-              <p>No browser extensions to break, no proxy bills, and no technical jargon. Type what you want — the entire pipeline connects itself live.</p>
+              <span className="lx-kicker"><Cpu size={13} /> Pay Only for Our 3 Built-In Engines</span>
+              <h2>3 specialized discovery engines run together — accelerated by your own RAM.</h2>
+              <p>Zero browser extensions to configure, zero shared cloud waiting queues, and no server compute markup. Your device hardware powers maximum speed while our 3 engines deliver verified contacts.</p>
             </div>
 
             <motion.div
@@ -712,13 +732,9 @@ export default function LandingV2() {
             >
               <div className="lx-engine-flow">
                 <div className="lx-engine-inputs">
-                  {[
-                    { title: 'Local Map & Pin Discovery', desc: 'Finds every shop across neighborhoods, streets & pincodes automatically.' },
-                    { title: 'Business Directory Matching', desc: 'Cross-checks categories, customer ratings, reviews & operating details.' },
-                    { title: 'Official Website & Contact Finder', desc: 'Visits listed websites to surface missing phones and official emails.' }
-                  ].map((item, idx) => (
+                  {THREE_BUILTIN_ENGINES.map((eng, idx) => (
                     <motion.div
-                      key={item.title}
+                      key={eng.id}
                       className="lx-engine-node"
                       animate={{ x: [0, 4, 0] }}
                       transition={{ duration: 2.6, repeat: Infinity, delay: idx * 0.35 }}
@@ -727,8 +743,8 @@ export default function LandingV2() {
                         <Zap size={17} />
                       </span>
                       <div>
-                        <b style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{item.title}</b>
-                        <small style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45, display: 'block' }}>{item.desc}</small>
+                        <b style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{eng.number}: {eng.name}</b>
+                        <small style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45, display: 'block' }}>{eng.shortDesc}</small>
                       </div>
                     </motion.div>
                   ))}
@@ -740,23 +756,43 @@ export default function LandingV2() {
                   transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
                 >
                   <Sparkles size={26} color="#34d399" />
-                  <b style={{ fontSize: 15, fontWeight: 850, letterSpacing: '0.02em' }}>AUTO-PILOT ENGINE</b>
-                  <span style={{ fontSize: 12.5, color: '#cbd5e1', maxWidth: 200, lineHeight: 1.5 }}>
-                    Cleanly merges all sources, deletes duplicates &amp; streams leads live
+                  <b style={{ fontSize: 15, fontWeight: 850, letterSpacing: '0.02em' }}>YOUR RAM · {hardware.parallelZones}X SWARM</b>
+                  <span style={{ fontSize: 12.5, color: '#cbd5e1', maxWidth: 215, lineHeight: 1.5 }}>
+                    Detected on your device: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU Cores → {hardware.expectedSpeed}
                   </span>
                 </motion.div>
 
                 <div className="lx-engine-output">
-                  <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.07em', color: '#047857' }}>WHAT YOU ACTUALLY DO</span>
-                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0f172a' }}>Click 1 button. Start calling prospects.</h3>
+                  <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.07em', color: '#047857' }}>WHAT YOU PAY FOR</span>
+                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0f172a' }}>Just 3 Engines. Zero server markups.</h3>
                   <p style={{ margin: 0, fontSize: 13.5, color: '#334155', lineHeight: 1.55 }}>
-                    No coding, no scraper scripts, no Google API billing, and zero spreadsheets to clean by hand.
+                    Your browser&apos;s own Web Worker RAM handles zone discovery, phone formatting, and duplicate removal — keeping software fast and pricing flat.
                   </p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                    <span className="lx-trust-pill"><Check size={13} /> Verified Mobiles</span>
-                    <span className="lx-trust-pill"><Check size={13} /> Zero Duplicates</span>
-                    <span className="lx-trust-pill"><Check size={13} /> Ready Excel (.xlsx)</span>
+                    <span className="lx-trust-pill"><Check size={13} /> 3 Built-In Engines</span>
+                    <span className="lx-trust-pill"><Check size={13} /> Offline 3D Maps</span>
+                    <span className="lx-trust-pill"><Check size={13} /> Clean Excel (.xlsx)</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="lx-ram-banner">
+                <div className="lx-ram-banner-head">
+                  <div>
+                    <b style={{ fontSize: 15, color: '#0f172a' }}>Hardware Requirements for User-RAM Acceleration</b>
+                    <div style={{ fontSize: 12.5, color: '#475569' }}>Works smoothly on any modern Windows, Mac, or Linux computer with Chrome — speed automatically scales with your hardware:</div>
+                  </div>
+                  <span className="lx-precision-pill is-service">💻 Your PC: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.tierLabel}</span>
+                </div>
+                <div className="lx-req-grid">
+                  {DEVICE_REQUIREMENTS.map(req => (
+                    <div key={req.tier} className={`lx-req-card ${req.tier === hardware.tier ? 'is-matched' : ''}`}>
+                      <span className="lx-req-badge">{req.badge}{req.tier === hardware.tier ? ' · DETECTED' : ''}</span>
+                      <b>{req.ram} · {req.cpu}</b>
+                      <small style={{ color: '#047857', fontWeight: 800 }}>{req.parallelZones} Parallel Zones · {req.speed}</small>
+                      <p>{req.note}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </motion.div>
@@ -1001,12 +1037,13 @@ export default function LandingV2() {
             <div className="lx-country-grid">
               {lockedMarkets.map((country, idx) => {
                 const isHome = country.code === 'IN';
+                const isSelected = selectedMarketCode === country.code;
                 return (
                   <motion.button
                     key={country.code}
                     type="button"
-                    className={`lx-country-btn ${isHome ? 'is-home' : ''}`}
-                    onClick={() => openWorkspace(country.code)}
+                    className={`lx-country-btn ${isHome ? 'is-home' : ''} ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => setSelectedMarketCode(country.code)}
                     initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.15 }}
@@ -1022,6 +1059,90 @@ export default function LandingV2() {
                 );
               })}
             </div>
+
+            {(() => {
+              const activeCountry = COUNTRY_COUNTY_SHOWCASE.find(c => c.code === selectedMarketCode) || COUNTRY_COUNTY_SHOWCASE[0];
+              return (
+                <motion.div
+                  key={activeCountry.code}
+                  className="lx-market-explorer"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="lx-market-explorer-head">
+                    <div>
+                      <span className="lx-precision-pill is-place" style={{ marginBottom: 6 }}>
+                        {activeCountry.name} · {activeCountry.adminPath}
+                      </span>
+                      <h3>Try a real {activeCountry.name} search by city, mandal, or county:</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="lx-btn lx-btn-primary"
+                      onClick={() => openWorkspace(activeCountry.code, activeCountry.examples[0])}
+                    >
+                      Open {activeCountry.name} Workspace <ArrowRight size={14} />
+                    </button>
+                  </div>
+                  <div className="lx-example-chips-row">
+                    {activeCountry.examples.map(ex => (
+                      <button
+                        key={ex}
+                        type="button"
+                        className="lx-example-chip"
+                        onClick={() => openWorkspace(activeCountry.code, ex)}
+                      >
+                        <Sparkles size={12} color="#7c3aed" />
+                        <span>{ex}</span>
+                        <ArrowRight size={12} />
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              );
+            })()}
+          </div>
+        </section>
+
+        {/* MASTER TERRITORY INTELLIGENCE CONCIERGE (WHOLE DISTRICT, STATE & ALL-INTERNET SOURCES) */}
+        <section className="lx-section" id="master-concierge">
+          <div className="lx-wrap">
+            <motion.div
+              className="lx-master-concierge"
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div>
+                <span className="lx-kicker"><Globe2 size={13} /> Master Territory Intelligence Service</span>
+                <h2>Need an entire District, County, State, or every business listed across the internet?</h2>
+                <p>
+                  Our Client Workspace gives you instant self-serve leads for any city, town, mandal, or county on your own computer RAM.
+                  When your organization wants complete datasets covering an entire District, State, or Nationwide territory — automatically gathered
+                  from every public website, business directory, map, and online registry across the internet — our Master Team prepares and delivers the complete verified list for you.
+                </p>
+              </div>
+              <div className="lx-contact-slots">
+                {/* TODO: Replace "Adding Soon" with live mobile number when ready */}
+                <div className="lx-contact-slot">
+                  <Phone size={18} color="#059669" />
+                  <div>
+                    <small>DIRECT MOBILE &amp; WHATSAPP DESK</small>
+                    <b>Adding Soon</b>
+                  </div>
+                </div>
+                {/* TODO: Replace "Adding Soon" with live support email when ready */}
+                <div className="lx-contact-slot">
+                  <Mail size={18} color="#7c3aed" />
+                  <div>
+                    <small>PRIORITY SUPPORT EMAIL</small>
+                    <b>Adding Soon</b>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </section>
 

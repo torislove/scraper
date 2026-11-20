@@ -1,263 +1,261 @@
 /**
- * Search examples for the command-center console.
- *
- * One entry per market we ship (11). Each entry carries:
- *   - label:    the market name shown in the strip heading
- *   - units:    what this country actually calls its places, biggest-last:
- *               India = city / mandal / district / state,
- *               US = city / county / state / ZIP.
- *               The console prints these so a user knows they can type any of
- *               them, not just a city.
- *   - cities:   real, recognisable cities a user would type
- *   - services: trades and business types that actually exist in that market
- *   - prompts:  six ready-to-run queries, mixing service + place + local unit
- *
- * The prompts are written the way a person speaks, not the way a database
- * stores things: "wedding photographers in Guntur", not
- * "category=photographers; location=Guntur". They are examples, not filters —
- * typing any of them must run exactly as shown.
+ * Real-world search examples and City / Mandal / County showcase metadata for
+ * all 11 supported countries. Every example uses everyday business wording:
+ * "<service> in <city / mandal / county>".
  */
 
 export const SEARCH_EXAMPLES = {
   IN: {
     label: 'India',
-    units: ['city', 'mandal', 'district', 'state'],
+    adminPath: 'States → Districts → Mandals & Cities',
+    units: ['city', 'mandal', 'district', 'neighborhood'],
     cities: [
-      'Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata',
-      'Pune', 'Ahmedabad', 'Jaipur', 'Lucknow', 'Vijayawada', 'Guntur',
-      'Amaravati', 'Visakhapatnam', 'Kochi', 'Tenali'
+      'Hyderabad', 'HITEC City Hyderabad', 'Guntur', 'Tenali Mandal',
+      'Vijayawada', 'Mumbai', 'Bengaluru', 'Chennai', 'Pune'
     ],
     services: [
-      'wedding photographers', 'interior designers', 'AC repair',
-      'packers and movers', 'car detailing', 'caterers', 'dental clinics',
-      'plumbers', 'steel fabrication', 'event planners'
+      'software companies', 'computer shops', 'dental clinics', 'interior designers',
+      'wedding photographers', 'solar dealers', 'caterers', 'pharmacies'
     ],
     prompts: [
-      'Wedding photographers in Guntur with phone',
-      'Interior designers in Mumbai',
-      'AC repair in Krishna district',
-      'Caterers in Amaravati',
-      'Dental clinics in Delhi',
-      'Car detailing in Hyderabad',
-      'Packers and movers in Vijayawada',
-      'Plumbers in Tenali mandal'
+      'Software companies in HITEC City Hyderabad',
+      'Computer shops in Guntur',
+      'Photo studios in Tenali Mandal',
+      'Dental clinics in Banjara Hills Hyderabad',
+      'Interior designers in Bengaluru',
+      'Mobile repair in Vijayawada'
     ]
   },
 
   US: {
     label: 'United States',
-    units: ['city', 'county', 'state', 'ZIP'],
+    adminPath: 'States → Counties → Cities & Suburbs',
+    units: ['county', 'city', 'state', 'zip code'],
     cities: [
-      'New York', 'Los Angeles', 'Chicago', 'Houston', 'Dallas', 'Austin',
-      'Miami', 'Seattle', 'Denver', 'Atlanta', 'Boston', 'Phoenix'
-    ],
-    counties: [
-      'Orange County CA', 'Los Angeles County', 'Cook County IL',
-      'Harris County TX', 'King County WA', 'Miami-Dade County'
+      'Orange County CA', 'Harris County TX', 'Cook County IL', 'Miami-Dade County FL',
+      'King County WA', 'Dallas TX', 'Austin TX', 'Los Angeles CA'
     ],
     services: [
-      'HVAC contractors', 'plumbers', 'roofers', 'wedding venues',
-      'electricians', 'landscapers', 'dentists', 'auto repair'
+      'HVAC contractors', 'dental clinics', 'med spas', 'plumbers',
+      'roofing companies', 'wedding venues', 'auto repair shops', 'accountants'
     ],
     prompts: [
-      'HVAC contractors in Dallas TX with phone',
-      'Wedding venues in Orange County',
-      'Plumbers in Harris County TX',
-      'Roofers in Cook County IL',
-      'Electricians in Seattle',
-      'Dentists in Miami-Dade County',
-      'Landscapers in Austin under 10 miles'
+      'HVAC contractors in Harris County TX',
+      'Dental clinics in Orange County CA',
+      'Plumbers in Cook County IL',
+      'Med spas in Miami-Dade County FL',
+      'Roofing companies in King County WA',
+      'Auto repair shops in Dallas TX'
     ]
   },
 
   GB: {
     label: 'United Kingdom',
-    units: ['town', 'county', 'region', 'postcode'],
+    adminPath: 'Nations → Counties & Boroughs → Towns',
+    units: ['county', 'borough', 'town', 'postcode'],
     cities: [
-      'London', 'Manchester', 'Birmingham', 'Leeds', 'Glasgow', 'Liverpool',
-      'Bristol', 'Edinburgh', 'Sheffield', 'Nottingham'
+      'Westminster London', 'Greater Manchester', 'Surrey County', 'West Yorkshire',
+      'Camden London', 'Birmingham', 'Leeds', 'Kent County'
     ],
     services: [
-      'caterers', 'wedding venues', 'photographers', 'plumbers',
-      'electricians', 'accountants', 'florists', 'builders'
+      'luxury caterers', 'photographers', 'electricians', 'plumbers',
+      'dental practices', 'accountants', 'wedding venues', 'estate agents'
     ],
     prompts: [
       'Luxury caterers in Westminster London',
-      'Wedding venues in Leeds with capacity for 200',
-      'Photographers in Manchester',
-      'Plumbers in Bristol with phone',
-      'Electricians in Sheffield',
-      'Accountants in Birmingham for small business'
+      'Photographers in Greater Manchester',
+      'Electricians in Surrey County',
+      'Wedding venues in West Yorkshire',
+      'Dental practices in Camden London',
+      'Accountants in Kent County'
     ]
   },
 
   CA: {
     label: 'Canada',
-    units: ['city', 'region', 'province', 'postal code'],
+    adminPath: 'Provinces → Regional Counties / Census Divisions → Cities',
+    units: ['city', 'county', 'province', 'postal code'],
     cities: [
-      'Toronto', 'Vancouver', 'Montreal', 'Calgary', 'Ottawa', 'Edmonton',
-      'Mississauga', 'Winnipeg', 'Halifax', 'Victoria'
+      'Peel Region ON', 'York Region ON', 'Toronto ON', 'Mississauga ON',
+      'Metro Vancouver BC', 'Calgary AB', 'Montreal QC', 'Ottawa ON'
     ],
     services: [
-      'corporate caterers', 'wedding planners', 'electricians', 'HVAC',
-      'plumbers', 'movers', 'photographers', 'dentists'
+      'corporate caterers', 'wedding planners', 'electricians', 'dental offices',
+      'auto detailing', 'renovation contractors', 'accountants', 'florists'
     ],
     prompts: [
-      'Corporate caterers in Mississauga ON',
-      'Wedding planners in Toronto',
-      'Electricians in Vancouver with phone',
-      'HVAC repair in Calgary',
-      'Movers in Ottawa',
-      'Dentists in Halifax accepting new patients'
+      'Corporate caterers in Peel Region ON',
+      'Dental offices in York Region ON',
+      'Wedding planners in Toronto ON',
+      'Electricians in Metro Vancouver BC',
+      'Renovation contractors in Calgary AB',
+      'Accountants in Ottawa ON'
     ]
   },
 
   AU: {
     label: 'Australia',
-    units: ['suburb', 'city', 'state', 'postcode'],
+    adminPath: 'States → Shires / Councils → Suburbs',
+    units: ['suburb', 'council', 'city', 'state'],
     cities: [
-      'Sydney', 'Melbourne', 'Brisbane', 'Perth', 'Adelaide', 'Gold Coast',
-      'Canberra', 'Newcastle', 'Parramatta', 'Hobart'
+      'Parramatta NSW', 'Sydney CBD NSW', 'Melbourne CBD VIC', 'Gold Coast QLD',
+      'Brisbane QLD', 'Perth WA', 'Adelaide SA', 'Byron Shire NSW'
     ],
     services: [
-      'function centres', 'wedding hire', 'caterers', 'electricians',
-      'plumbers', 'landscapers', 'photographers', 'removalists'
+      'function centres', 'caterers', 'plumbers', 'solar installers',
+      'dental clinics', 'mechanics', 'landscapers', 'wedding hire'
     ],
     prompts: [
-      'Function centres in Parramatta',
-      'Wedding hire in Melbourne CBD',
-      'Caterers in Sydney with phone',
-      'Electricians in Brisbane',
-      'Landscapers in Perth',
-      'Removalists in Adelaide'
+      'Function centres in Parramatta NSW',
+      'Solar installers in Gold Coast QLD',
+      'Dental clinics in Melbourne CBD VIC',
+      'Plumbers in Sydney CBD NSW',
+      'Landscapers in Byron Shire NSW',
+      'Caterers in Brisbane QLD'
     ]
   },
 
   AE: {
     label: 'United Arab Emirates',
-    units: ['area', 'city', 'emirate'],
+    adminPath: 'Emirates → Municipalities → Business Districts',
+    units: ['district', 'municipality', 'emirate'],
     cities: [
-      'Dubai', 'Abu Dhabi', 'Sharjah', 'Ajman', 'Al Ain', 'Ras Al Khaimah'
+      'Business Bay Dubai', 'Deira Dubai', 'Al Quoz Dubai', 'Abu Dhabi City',
+      'Al Ain Abu Dhabi', 'Sharjah Industrial', 'Ajman', 'Ras Al Khaimah'
     ],
     services: [
-      'event organizers', 'caterers', 'sound hire', 'photographers',
-      'car detailing', 'AC repair', 'interior designers', 'cleaning services'
+      'event organizers', 'luxury caterers', 'interior fit-out companies', 'corporate gifting',
+      'dental clinics', 'real estate brokerages', 'car rental', 'sound hire'
     ],
     prompts: [
-      'Luxury event organizers in Business Bay Dubai',
-      'Caterers in Abu Dhabi with phone',
+      'Event organizers in Business Bay Dubai',
+      'Interior fit-out companies in Al Quoz Dubai',
+      'Caterers in Abu Dhabi City',
       'Sound hire in Deira Dubai',
-      'Photographers in Sharjah',
-      'Car detailing in Al Quoz Dubai',
-      'AC repair in Ajman'
+      'Real estate brokerages in Sharjah Industrial',
+      'Car rental in Al Ain Abu Dhabi'
     ]
   },
 
   SG: {
     label: 'Singapore',
-    units: ['area', 'district', 'town'],
+    adminPath: 'Regions → Planning Areas → Neighbourhoods',
+    units: ['planning area', 'district', 'estate'],
     cities: [
-      'Downtown Core', 'Orchard', 'Tampines', 'Jurong', 'Woodlands',
-      'Bedok', 'Novena', 'Changi'
+      'Downtown Core Singapore', 'Orchard Singapore', 'Tampines', 'Jurong East',
+      'Woodlands', 'Bedok', 'Novena', 'Paya Lebar'
     ],
     services: [
-      'corporate caterers', 'event venues', 'photographers', 'tuition centres',
-      'gyms', 'renovation contractors', 'florists', 'cleaning services'
+      'corporate caterers', 'event venues', 'interior designers', 'tuition centres',
+      'photographers', 'gyms', 'renovation contractors', 'florists'
     ],
     prompts: [
       'Corporate caterers in Downtown Core Singapore',
-      'Event venues in Orchard',
+      'Event venues in Orchard Singapore',
       'Photographers in Tampines',
       'Tuition centres in Jurong East',
       'Renovation contractors in Woodlands',
-      'Florists in Bedok'
+      'Interior designers in Paya Lebar'
     ]
   },
 
   NZ: {
     label: 'New Zealand',
-    units: ['suburb', 'city', 'region'],
+    adminPath: 'Regions → District Councils → Towns & Suburbs',
+    units: ['region', 'district', 'suburb', 'town'],
     cities: [
-      'Auckland', 'Wellington', 'Christchurch', 'Hamilton', 'Tauranga',
-      'Dunedin', 'Napier', 'Queenstown'
+      'Auckland Region', 'Wellington', 'Christchurch', 'Waikato District',
+      'Tauranga', 'Queenstown', 'Dunedin', 'Hamilton'
     ],
     services: [
       'wedding venues', 'event planners', 'caterers', 'electricians',
       'plumbers', 'builders', 'photographers', 'landscapers'
     ],
     prompts: [
-      'Wedding venues in Auckland',
+      'Wedding venues in Auckland Region',
       'Event planners in Wellington',
       'Caterers in Christchurch',
-      'Electricians in Hamilton',
+      'Electricians in Waikato District',
       'Builders in Tauranga',
       'Photographers in Queenstown'
     ]
   },
 
+  IE: {
+    label: 'Ireland',
+    adminPath: 'Provinces → Counties → Towns & Villages',
+    units: ['county', 'town', 'city', 'eircode'],
+    cities: [
+      'County Cork', 'Dublin City Centre', 'County Galway', 'County Limerick',
+      'County Kildare', 'County Meath', 'Waterford', 'Kilkenny'
+    ],
+    services: [
+      'wedding venues', 'corporate caterers', 'photographers', 'electricians',
+      'plumbers', 'accountants', 'florists', 'builders'
+    ],
+    prompts: [
+      'Wedding venues in County Cork',
+      'Corporate caterers in Dublin City Centre',
+      'Photographers in County Galway',
+      'Electricians in County Limerick',
+      'Accountants in County Kildare',
+      'Builders in County Meath'
+    ]
+  },
+
   ZA: {
     label: 'South Africa',
-    units: ['suburb', 'city', 'province'],
+    adminPath: 'Provinces → District Municipalities → Suburbs',
+    units: ['municipality', 'suburb', 'city', 'province'],
     cities: [
-      'Johannesburg', 'Cape Town', 'Durban', 'Pretoria', 'Port Elizabeth',
-      'Bloemfontein', 'Sandton', 'Stellenbosch'
+      'Sandton Johannesburg', 'Cape Town', 'Durban', 'Pretoria',
+      'Stellenbosch Municipality', 'Port Elizabeth', 'Bloemfontein', 'Midrand'
     ],
     services: [
       'conference venues', 'caterers', 'sound hire', 'photographers',
-      'security companies', 'plumbers', 'electricians', 'event planners'
+      'security companies', 'solar installers', 'electricians', 'event planners'
     ],
     prompts: [
       'Conference venues in Sandton Johannesburg',
       'Caterers in Cape Town',
+      'Solar installers in Stellenbosch Municipality',
       'Sound hire in Durban',
       'Photographers in Pretoria',
-      'Security companies in Port Elizabeth',
-      'Plumbers in Bloemfontein'
-    ]
-  },
-
-  IE: {
-    label: 'Ireland',
-    units: ['town', 'county', 'province'],
-    cities: [
-      'Dublin', 'Cork', 'Galway', 'Limerick', 'Waterford', 'Kilkenny',
-      'Sligo', 'Drogheda'
-    ],
-    services: [
-      'corporate caterers', 'wedding venues', 'photographers', 'electricians',
-      'plumbers', 'accountants', 'florists', 'builders'
-    ],
-    prompts: [
-      'Corporate caterers in Dublin City Centre',
-      'Wedding venues in County Cork',
-      'Photographers in Galway',
-      'Electricians in Limerick',
-      'Accountants in Waterford',
-      'Florists in Kilkenny'
+      'Security companies in Midrand'
     ]
   },
 
   DE: {
     label: 'Germany',
-    units: ['city', 'district', 'state', 'postcode'],
+    adminPath: 'States (Bundesländer) → Landkreise (Counties) → Cities',
+    units: ['city', 'landkreis', 'bezirk', 'postcode'],
     cities: [
-      'Berlin', 'Munich', 'Hamburg', 'Frankfurt', 'Cologne', 'Stuttgart',
-      'Düsseldorf', 'Leipzig', 'Dresden'
+      'Berlin Mitte', 'Munich', 'Frankfurt', 'Hamburg',
+      'Landkreis München', 'Cologne', 'Stuttgart', 'Düsseldorf'
     ],
     services: [
-      'catering', 'event agents', 'corporate caterers', 'photographers',
-      'electricians', 'plumbers', 'cleaning companies', 'florists'
+      'catering', 'event agents', 'corporate caterers', 'dental practices',
+      'electricians', 'cleaning companies', 'photographers', 'solar installers'
     ],
     prompts: [
       'Catering in Berlin Mitte',
       'Event agents in Munich',
+      'Solar installers in Landkreis München',
       'Corporate caterers in Frankfurt',
       'Photographers in Hamburg',
-      'Electricians in Cologne',
       'Cleaning companies in Stuttgart'
     ]
   }
 };
+
+export const COUNTRY_COUNTY_SHOWCASE = Object.entries(SEARCH_EXAMPLES).map(([code, data]) => ({
+  code,
+  name: data.label,
+  adminPath: data.adminPath,
+  units: data.units,
+  examples: data.prompts.slice(0, 4),
+  areas: data.cities.slice(0, 5)
+}));
 
 /** The examples for a market, falling back to India. */
 export function examplesFor(countryCode) {
@@ -267,13 +265,12 @@ export function examplesFor(countryCode) {
 
 /**
  * The placeholder. It names the market's own place vocabulary so a user in
- * Texas is told they can type a county, and a user in Andhra is told they can
- * type a mandal.
+ * Texas is told they can type a county, and a user in Andhra/Telangana is told
+ * they can type a mandal.
  */
 export function placeholderFor(countryCode) {
   const market = examplesFor(countryCode);
-  const units = market.units.join(' · ');
-  return `Search any service and place — ${units} — e.g. "${market.prompts[0]}"`;
+  return `Type service in place — e.g. ${market.prompts[0]}`;
 }
 
 /** Short vocabulary line for the examples strip. */

@@ -85,6 +85,7 @@ const deepProfileRoutes = require('./src/routes/deepProfile');
 const searchRoutes = require('./src/routes/search');
 const openApiV2Routes = require('./src/routes/openApiV2');
 const diagnosticsRoutes = require('./src/routes/diagnostics');
+const mapTilesRoutes = require('./src/routes/mapTiles');
 const { sanitizeLogForUi } = require('./src/utils/engineErrors');
 
 const app = express();
@@ -323,6 +324,7 @@ app.use('/api/sessions', sessionRoutes);
 app.use('/api/deep-profile', deepProfileRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/map-tiles', mapTilesRoutes);
 app.use('/api/v2', openApiV2Routes);
 
 // Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)
@@ -449,6 +451,7 @@ app.use('/api/api/location', locationsRoutes);
 app.use('/api/api/vendors', vendorsRoutes);
 app.use('/api/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/api/sessions', sessionRoutes);
+app.use('/api/api/map-tiles', mapTilesRoutes);
 
 // Static PDF Downloads
 app.use('/downloads', express.static(paths.DOWNLOADS_DIR, { index: false, dotfiles: 'deny', fallthrough: true }));

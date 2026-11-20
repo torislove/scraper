@@ -6,15 +6,15 @@ metadata:
 data:
   PORT: "5002"
   NODE_ENV: "production"
+  COMPUTE_MODE: "user_ram_hybrid"
+  USER_RAM_OFFLOAD_ENABLED: "1"
   SCRAPER_ALLOW_REMOTE: "1"
-  # Four browser slots is what a 4 GiB / 4 vCPU pod can actually hold. The
-  # server is one pod (see server-deployment.yaml), so these slots are the real
-  # concurrency ceiling: many users and many scrapes share them fairly.
-  SCRAPER_BROWSER_SLOTS: "4"
+  # Auto-scales concurrency by host/pod memory when running coordinator or local worker,
+  # while client browser Web Workers offload discovery & dedupe onto user RAM.
+  SCRAPER_BROWSER_SLOTS: "auto"
   SCRAPER_ENRICH_RESERVE: "1"
-  PLAYWRIGHT_CONCURRENCY: "4"
-  # Leave room for four Chromium instances inside the 4 GiB limit.
-  NODE_OPTIONS: "--max-old-space-size=2048"
+  PLAYWRIGHT_CONCURRENCY: "auto"
+  NODE_OPTIONS: "--max-old-space-size=1536"
   AUTH_REQUIRED: "1"
   SESSION_TTL_SECONDS: "604800"
   MAX_PARALLEL_JOBS: "25"

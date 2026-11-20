@@ -49,6 +49,10 @@ import FolderView from './components/FolderView/FolderView';
 import LeadsTableView from './components/views/LeadsTableView';
 import AccountMenu from './components/AccountMenu';
 import SystemCheckPill from './components/SystemCheckPill';
+import { API_URL } from '../apiConfig';
+import { getUserId } from '../utils/sessionManager';
+import { getToken } from './auth';
+import { startBrowserRamAssist, detectDeviceHardware } from './utils/deviceRamEngine';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
@@ -261,10 +265,14 @@ export default function CommandCenter() {
   const lastEventRef = useRef(Date.now());
   const finishingRef = useRef(false);
   const deepJobRef = useRef(null);
+  const ramAssistStopRef = useRef(null);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      try { ramAssistStopRef.current?.(); } catch (e) {}
+    };
   }, []);
 
   const progressRef = useRef(null);
@@ -874,7 +882,11 @@ export default function CommandCenter() {
       : ['auto'];
 
     setLaunching(true);
+    try { ramAssistStopRef.current?.(); } catch (e) {}
+    ramAssistStopRef.current = null;
     const sessionId = `cmd_${Date.now().toString(36)}`;
+    let resolvedCategory = runCategory || runQuery;
+    let resolvedLocation = runLocation || '';
     activeSessionIdRef.current = sessionId;
     if (overrides.query) setAutoQuery(overrides.query);
     runVendorIdsRef.current = new Set();
@@ -920,6 +932,8 @@ export default function CommandCenter() {
           sessionId
         });
         const plan = response?.plan || {};
+        if (plan.category) resolvedCategory = plan.category;
+        if (plan.location) resolvedLocation = plan.location;
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
           setGridZones(plan.zones);
           const first = plan.zones[0];
@@ -979,6 +993,8 @@ export default function CommandCenter() {
           sessionId
         });
         const plan = response?.plan || {};
+        if (plan.category) resolvedCategory = plan.category;
+        if (plan.location) resolvedLocation = plan.location;
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
           setGridZones(plan.zones);
           const first = plan.zones[0];
@@ -1022,6 +1038,40 @@ export default function CommandCenter() {
 
       lastEventRef.current = Date.now();
       setScanning(true);
+
+      // Start Client-RAM Browser Web Worker assist using the user's own RAM & cores
+      try {
+        const hw = detectDeviceHardware();
+        const uid = getUserId();
+        const token = getToken();
+        const headers = {
+          ...(uid ? { 'x-user-id': uid } : {}),
+          'x-workspace-scope': 'client',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        };
+        setLogs(prev => [
+          ...prev,
+          `[RAM ENGINE] ${hw.ramGb} GB RAM · ${hw.cpuCores} Cores · ${hw.parallelZones}x parallel Web Worker active`
+        ]);
+        ramAssistStopRef.current = startBrowserRamAssist({
+          sessionId,
+          category: resolvedCategory,
+          location: resolvedLocation,
+          country: searchCountry,
+          apiBase: API_URL,
+          headers,
+          onLeads: (freshBatch) => {
+            if (!mountedRef.current || !Array.isArray(freshBatch) || !freshBatch.length) return;
+            lastEventRef.current = Date.now();
+            setVendors(prev => {
+              const knownIds = new Set(prev.map(v => v.id));
+              const add = freshBatch.filter(v => v && !knownIds.has(v.id));
+              return add.length ? [...add, ...prev] : prev;
+            });
+          }
+        });
+      } catch (e) {}
+
       toast.success(auto ? 'Search started. Live leads will appear in seconds.' : 'Search started. We chose the sources automatically.');
       setActiveTab('cockpit');
     } catch (error) {
@@ -1038,6 +1088,8 @@ export default function CommandCenter() {
 
   const stopRun = async () => {
     setStopping(true);
+    try { ramAssistStopRef.current?.(); } catch (e) {}
+    ramAssistStopRef.current = null;
     try {
       const sid = run?.sessionId || run?.id || activeSessionIdRef.current;
       activeSessionIdRef.current = '';

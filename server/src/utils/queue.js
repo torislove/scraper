@@ -144,11 +144,11 @@ function getDynamicConcurrency() {
     // HTTP concurrency stays deliberately modest. A dozen parallel directory
     // requests is how a single IP starts seeing 429s; eight is enough to keep
     // the run fast and polite at the same time.
-    let maxHttp = 8;
+    let maxHttp = 12;
     const maxPlaywright = browserBudget.discoveryLimit();
 
     if (freeRamPct < 20) {
-      maxHttp = 4;
+      maxHttp = 5;
     }
 
     return {

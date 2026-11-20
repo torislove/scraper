@@ -1,13 +1,59 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, Check, Clock, Compass, Cpu, FolderOpen, Loader2, MapPin,
+  ArrowRight, Check, Clock, Compass, Cpu, FolderOpen, Layers, Loader2, MapPin,
   Search, SlidersHorizontal, Sparkles, Square, X, Zap
 } from 'lucide-react';
 import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
 import { examplesFor, placeholderFor } from './data/searchExamples';
+import {
+  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+} from './utils/deviceRamEngine';
+
+function useTypewriterPlaceholder(examples, active) {
+  const [text, setText] = useState('');
+  const listKey = useMemo(() => (examples || []).join('|'), [examples]);
+
+  useEffect(() => {
+    const items = Array.isArray(examples) && examples.length ? examples : ['Software companies in HITEC City Hyderabad'];
+    if (!active) {
+      setText(`Type service in place — e.g. ${items[0]}`);
+      return undefined;
+    }
+    let idx = 0;
+    let char = 0;
+    let deleting = false;
+    let holdTicks = 0;
+    const timer = setInterval(() => {
+      const target = items[idx % items.length] || '';
+      if (holdTicks > 0) {
+        holdTicks -= 1;
+        return;
+      }
+      if (!deleting) {
+        char += 1;
+        setText(`Type service in place — e.g. ${target.slice(0, char)}|`);
+        if (char >= target.length) {
+          deleting = true;
+          holdTicks = 26;
+        }
+      } else {
+        char -= 2;
+        if (char <= 0) {
+          char = 0;
+          deleting = false;
+          idx = (idx + 1) % items.length;
+        }
+        setText(`Type service in place — e.g. ${target.slice(0, Math.max(0, char))}|`);
+      }
+    }, 55);
+    return () => clearInterval(timer);
+  }, [listKey, active]);
+
+  return text;
+}
 
 const PROPRIETARY_VECTORS = [
   { id: 'geospatial_mesh', name: 'GPS Radar Mesh', badge: 'GPS RADAR' },
@@ -424,6 +470,15 @@ function SearchConsole({
     });
   };
 
+  const hardware = useMemo(() => detectDeviceHardware(), []);
+  const [ramCardOpen, setRamCardOpen] = useState(false);
+  const animatedPlaceholder = useTypewriterPlaceholder(examples, !draft);
+  const displayService = parsedCategory || category || 'Any Business / Service';
+  const displayPlace = parsedLocation || location || 'City, Mandal, County or State';
+  const precisionBadge = locClassification?.zoneCount
+    ? `${locClassification.zoneCount} ${locClassification.type || 'Zone'} Pockets`
+    : `${totalZones || 'Auto'} Zones`;
+
   const canSearch = draft.trim().length >= 2;
   let runningIdx = 0;
 
@@ -446,7 +501,7 @@ function SearchConsole({
               setTimeout(() => { focusedRef.current = false; }, 180);
             }}
             onKeyDown={onKeyDown}
-            placeholder={placeholderFor(country) || `Search any business & city, district or state — e.g. ${examples[0]}`}
+            placeholder={animatedPlaceholder || placeholderFor(country) || `Type service in place — e.g. ${examples[0]}`}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -588,6 +643,99 @@ function SearchConsole({
                 <span><kbd>Tab</kbd> complete</span>
                 <span><kbd>Enter</kbd> launch</span>
                 <span><kbd>Esc</kbd> close</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Animated Helper Strip: Live Service/Place/Precision, 3 Built-In Engines & Hardware RAM Guide */}
+      <div className="lx-search-helper-strip">
+        <div className="lx-search-helper-row">
+          <div className="lx-precision-badges">
+            <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
+            <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
+            <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
+            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> 3 Engines Auto: Map &amp; Pin · Business Directory · Website Contact Finder</span>
+          </div>
+
+          <button
+            type="button"
+            className="lx-ram-pill"
+            onClick={() => setRamCardOpen(prev => !prev)}
+            title="View device RAM acceleration & system requirements"
+          >
+            <Cpu size={13} />
+            <span>
+              Your Hardware: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Zones
+            </span>
+          </button>
+        </div>
+
+        <div className="lx-example-chips-row">
+          <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', letterSpacing: '0.04em' }}>TRY IN {String(country || 'IN').toUpperCase()}:</span>
+          {examples.slice(0, 4).map(example => (
+            <button
+              key={example}
+              type="button"
+              className="lx-example-chip"
+              onClick={() => {
+                setDraft(example);
+                lastExternalRef.current = example;
+                onChange?.(example);
+                commitAndDeploy(example);
+              }}
+            >
+              <Sparkles size={11} color="#7c3aed" />
+              <span>{example}</span>
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence>
+          {ramCardOpen && (
+            <motion.div
+              className="lx-ram-modal-card"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.14 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+                <b style={{ fontSize: 13 }}>💻 Master Hardware Swarm · Local RAM &amp; CPU System Requirements</b>
+                <button
+                  type="button"
+                  onClick={() => setRamCardOpen(false)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, marginBottom: 10 }}>
+                {DEVICE_REQUIREMENTS.map(req => (
+                  <div
+                    key={req.tier}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 12,
+                      border: req.tier === hardware.tier ? '1.5px solid #10b981' : '1px solid rgba(15,23,42,0.1)',
+                      background: req.tier === hardware.tier ? '#ecfdf5' : '#ffffff'
+                    }}
+                  >
+                    <div style={{ fontSize: 10, fontWeight: 850, color: '#6d28d9' }}>{req.badge} {req.tier === hardware.tier ? '· YOUR PC' : ''}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>{req.ram} · {req.cpu}</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#047857' }}>{req.parallelZones} Parallel Zones · {req.speed}</div>
+                    <div style={{ fontSize: 11, color: '#475569' }}>{req.note}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                {THREE_BUILTIN_ENGINES.map(eng => (
+                  <div key={eng.id} style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', padding: '7px 10px', borderRadius: 10, border: '1px solid rgba(15,23,42,0.08)' }}>
+                    <b style={{ color: '#0f172a' }}>{eng.number}: {eng.name}</b>
+                    <div style={{ color: '#64748b', marginTop: 2 }}>{eng.shortDesc}</div>
+                  </div>
+                ))}
               </div>
             </motion.div>
           )}

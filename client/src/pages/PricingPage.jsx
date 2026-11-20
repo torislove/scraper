@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Globe2, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Cpu, Globe2, Mail, Phone, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import BrandLogo from '../v2/components/BrandLogo';
+import {
+  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+} from '../v2/utils/deviceRamEngine';
 
 const PLANS = [
   {
@@ -80,6 +83,7 @@ const PLANS = [
 export default function PricingPage() {
   const navigate = useNavigate();
   const [isAnnual, setIsAnnual] = useState(true);
+  const hardware = detectDeviceHardware();
 
   return (
     <div
@@ -166,13 +170,13 @@ export default function PricingPage() {
               fontSize: 12, fontWeight: 850, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16
             }}
           >
-            <Sparkles size={13} /> Simple, Transparent Plans
+            <Sparkles size={13} /> Pay Only for Our 3 Built-In Engines
           </span>
           <h1 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 850, letterSpacing: '-0.035em', margin: '0 0 14px', lineHeight: 1.08 }}>
-            Pay for verified leads, not complicated tools.
+            Pay only for our 3 engines — powered by your device RAM.
           </h1>
           <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
-            Every plan includes instant 11-country discovery, Google-grade smart search, live maps, clean folders, and 1-click Excel export.
+            Your computer&apos;s own RAM runs the discovery engines directly at hardware speed with zero shared cloud queues — so you simply pay for our 3 Built-In Discovery Engines, live offline maps, and 1-click Excel export.
           </p>
 
           {/* Tactile 3D Liquid Glass Billing Toggle */}
@@ -214,6 +218,56 @@ export default function PricingPage() {
             </button>
           </div>
         </motion.div>
+
+        {/* 3 Built-In Discovery Engines + User-RAM Hardware Speed Guide */}
+        <section
+          style={{
+            marginBottom: 34,
+            padding: '20px 22px',
+            borderRadius: 20,
+            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.84))',
+            border: '1.5px solid #ffffff',
+            boxShadow: 'inset 0 2px 0 #ffffff, 0 14px 34px -14px rgba(15, 23, 42, 0.12)'
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 850 }}>
+              <Cpu size={16} color="#7c3aed" />
+              <span>What You Get: All 3 Built-In Discovery Engines Running on Your RAM</span>
+            </div>
+            <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 12, fontWeight: 800 }}>
+              💻 Your Device Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Zones ({hardware.expectedSpeed})
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
+            {THREE_BUILTIN_ENGINES.map(eng => (
+              <div key={eng.id} style={{ padding: '12px 14px', borderRadius: 14, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)' }}>
+                <div style={{ fontSize: 11, fontWeight: 850, color: '#7c3aed', textTransform: 'uppercase' }}>{eng.number}</div>
+                <b style={{ display: 'block', fontSize: 14, marginTop: 2 }}>{eng.name}</b>
+                <small style={{ color: '#475569', fontSize: 12.5, lineHeight: 1.45, display: 'block', marginTop: 4 }}>{eng.shortDesc}</small>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
+            {DEVICE_REQUIREMENTS.map(req => (
+              <div
+                key={req.tier}
+                style={{
+                  padding: '9px 12px',
+                  borderRadius: 12,
+                  background: req.tier === hardware.tier ? '#ecfdf5' : '#f8fafc',
+                  border: req.tier === hardware.tier ? '1.5px solid #10b981' : '1px solid rgba(15, 23, 42, 0.08)',
+                  fontSize: 12
+                }}
+              >
+                <b style={{ color: '#0f172a' }}>{req.badge}: {req.ram} · {req.cpu}</b>
+                <div style={{ color: '#047857', fontWeight: 700 }}>{req.parallelZones} Parallel Zones · {req.speed}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(305px, 1fr))', gap: 22, alignItems: 'stretch' }}>
           {PLANS.map((plan, idx) => (
@@ -303,10 +357,41 @@ export default function PricingPage() {
         </div>
 
         <div style={{ marginTop: 44, display: 'flex', justifyContent: 'center', gap: 28, flexWrap: 'wrap', color: '#64748b', fontSize: 13, fontWeight: 650 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={15} color="#059669" /> Secure encrypted accounts</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={15} color="#059669" /> Runs in your RAM · Secure accounts</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe2 size={15} color="#7c3aed" /> All 11 locked markets included</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Zap size={15} color="#0284c7" /> Upgrade or switch anytime</span>
         </div>
+
+        {/* Master District / State Complete Internet Coverage Contact Bar */}
+        <section
+          style={{
+            marginTop: 28,
+            padding: '18px 22px',
+            borderRadius: 18,
+            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 243, 255, 0.85))',
+            border: '1.5px solid #ffffff',
+            boxShadow: '0 14px 32px -14px rgba(124, 58, 237, 0.18)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 16
+          }}
+        >
+          <div style={{ maxWidth: 580 }}>
+            <b style={{ display: 'block', fontSize: 15, color: '#0f172a' }}>Need an entire District, County, State, or Nationwide list across every public website?</b>
+            <span style={{ fontSize: 13, color: '#475569' }}>Ask our Master Territory Intelligence Desk — we gather and verify the entire region from every public directory, map, and website across the internet.</span>
+          </div>
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            {/* TODO: Replace "Adding Soon" with live mobile & email */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', fontSize: 12.5, fontWeight: 750 }}>
+              <Phone size={14} color="#059669" /> Mobile: Adding Soon
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', fontSize: 12.5, fontWeight: 750 }}>
+              <Mail size={14} color="#7c3aed" /> Email: Adding Soon
+            </span>
+          </div>
+        </section>
       </main>
     </div>
   );

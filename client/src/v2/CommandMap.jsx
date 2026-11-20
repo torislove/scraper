@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, Polyline, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -23,16 +23,16 @@ try {
   });
 } catch (e) { }
 
-// 100% Free, Zero-Watermark, High-Resolution Autonomous Basemaps (No API Keys Ever Required)
-const TILE_VOYAGER = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_VOYAGER_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const TILE_STREETS = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-const TILE_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const TILE_LIGHT_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const TILE_LIGHT_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
-const TILE_OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const TILE_DARK_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+// 100% Same-Origin Disk-Cached & Procedural Offline-Capable Basemaps (Zero API Keys Required)
+const TILE_VOYAGER = '/api/map-tiles/voyager/{z}/{x}/{y}.png';
+const TILE_VOYAGER_ATTRIBUTION = '&copy; CARTO &copy; OpenStreetMap &copy; Local Offline Vector';
+const TILE_STREETS = '/api/map-tiles/streets/{z}/{x}/{y}.png';
+const TILE_SATELLITE = '/api/map-tiles/satellite/{z}/{x}/{y}.png';
+const TILE_LIGHT_CANVAS = '/api/map-tiles/light/{z}/{x}/{y}.png';
+const TILE_OSM = '/api/map-tiles/osm/{z}/{x}/{y}.png';
+const TILE_DARK_CANVAS = '/api/map-tiles/dark/{z}/{x}/{y}.png';
+const TILE_OFFLINE = '/api/map-tiles/offline/{z}/{x}/{y}.svg';
+const TILE_ATTRIBUTION = '&copy; OpenStreetMap &copy; Esri &copy; Local Offline Cache';
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
 const MAX_MAP_PLOTTED_LEADS = 300;
@@ -247,7 +247,7 @@ export default function CommandMap({
   const [is3DMode, setIs3DMode] = useState(false);
   const [tileMode, setTileMode] = useState('voyager'); // Crisp vibrant 3D natural basemap by default
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
-  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'light'];
+  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'offline'];
   const handleTileError = useMemo(() => () => {
     const now = Date.now();
     const tracker = tileErrorTrackerRef.current;
@@ -334,10 +334,10 @@ export default function CommandMap({
     // If coverage zones are anchored, only plot vendors belonging to this geographic region (within ~150km)
     const targetFiltered = (coverage.length > 0 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]))
       ? withCoords.filter(v => {
-          const dLat = Math.abs(v.latitude - safeCenter[0]);
-          const dLng = Math.abs(v.longitude - safeCenter[1]);
-          return dLat < 1.8 && dLng < 1.8;
-        })
+        const dLat = Math.abs(v.latitude - safeCenter[0]);
+        const dLng = Math.abs(v.longitude - safeCenter[1]);
+        return dLat < 1.8 && dLng < 1.8;
+      })
       : withCoords;
 
     if (targetFiltered.length <= MAX_MAP_PLOTTED_LEADS) return targetFiltered;
@@ -382,7 +382,7 @@ export default function CommandMap({
   };
 
   const computedHeight = typeof height === 'number' ? `${height}px` : (height && height !== '100%' ? height : '100%');
-  const computedMinHeight = compact ? 180 : (height === '100%' ? 180 : 340);
+  const computedMinHeight = compact ? 260 : 480;
 
   return (
     <div
@@ -450,37 +450,36 @@ export default function CommandMap({
         attributionControl={false}
         zoomControl={false}
       >
-        {/* Layer 0: CartoDB Voyager — Crisp Vibrant Natural 3D (Default, Free, Zero Watermark) */}
+        {/* Layer 0: Same-Origin Cached Voyager HD (with instant offline SVG fallback) */}
         {tileMode === 'voyager' && (
           <TileLayer
             url={TILE_VOYAGER}
             attribution={TILE_VOYAGER_ATTRIBUTION}
             maxNativeZoom={19}
             maxZoom={20}
-            subdomains={['a', 'b', 'c', 'd']}
             eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
-        {/* Layer 1: Pristine Executive White (Esri Canvas Light Gray + Crisp Labels) */}
+        {/* Layer 1: 100% Zero-Network Procedural Vector Blueprint Showcase */}
+        {tileMode === 'offline' && (
+          <TileLayer
+            url={TILE_OFFLINE}
+            attribution={TILE_ATTRIBUTION}
+            maxNativeZoom={19}
+            maxZoom={20}
+          />
+        )}
+
+        {/* Layer 2: Executive Light Gray */}
         {tileMode === 'light' && (
-          <>
-            <TileLayer
-              url={TILE_LIGHT_CANVAS}
-              attribution={TILE_ATTRIBUTION}
-              maxNativeZoom={16}
-              maxZoom={19}
-              eventHandlers={{ tileerror: handleTileError }}
-            />
-            <TileLayer
-              url={TILE_LIGHT_LABELS}
-              attribution={TILE_ATTRIBUTION}
-              maxNativeZoom={16}
-              maxZoom={19}
-              opacity={0.92}
-              eventHandlers={{ tileerror: handleTileError }}
-            />
-          </>
+          <TileLayer
+            url={TILE_LIGHT_CANVAS}
+            attribution={TILE_ATTRIBUTION}
+            maxNativeZoom={16}
+            maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
+          />
         )}
 
         {/* Layer 2: OpenStreetMap Standard (Full-Color Classic Roads) */}
@@ -535,6 +534,20 @@ export default function CommandMap({
         />
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
+
+        {/* Hub-and-Spoke Vector Network (Active in Offline 3D Showcase or Live Sweep) */}
+        {(tileMode === 'offline' || scanning) && coverage.map((zone, idx) => (
+          <Polyline
+            key={`spoke-${zone.index || idx}`}
+            positions={[safeCenter, [zone.lat, zone.lng]]}
+            pathOptions={{
+              color: tileMode === 'offline' ? '#06b6d4' : '#7c3aed',
+              weight: tileMode === 'offline' ? 1.5 : 1.1,
+              opacity: tileMode === 'offline' ? 0.52 : 0.25,
+              dashArray: '4 6'
+            }}
+          />
+        ))}
 
         {/* Territory Regions & 3D GBC Coverage Radar Cells */}
         {coverage.map((zone, index) => {
@@ -616,54 +629,54 @@ export default function CommandMap({
                 }}
               >
                 <Popup className="v2-map-popup">
-                <div className="v2-map-popup-card">
-                  <div className="v2-map-popup-head">
-                    <span className="v2-map-popup-avatar">
-                      {(vendor.logo && !/ui-avatars/i.test(vendor.logo))
-                        ? <img src={vendor.logo} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
-                        : <b>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
-                    </span>
-                    <span>
-                      <b>{vendor.name || 'Unknown vendor'}</b>
-                      <small>{vendor.category || 'Business Lead'}</small>
-                    </span>
-                  </div>
-                  <div className="v2-map-popup-meta">
-                    <span><MapPin size={12} /> {vendor.city || vendor.district || vendor.state || 'Location known'}</span>
-                    {vendor.rating != null && (
-                      <span><Star size={12} fill="#fbbf24" stroke="#fbbf24" /> {Number(vendor.rating).toFixed(1)} {vendor.reviewsCount ? `(${formatNumber(vendor.reviewsCount)})` : ''}</span>
-                    )}
-                    {(vendor.phone || (Array.isArray(vendor.phones) && vendor.phones[0])) && (
-                      <span style={{ color: '#059669', fontWeight: 750 }}>
-                        <Phone size={12} /> {vendor.phone || (typeof vendor.phones[0] === 'string' ? vendor.phones[0] : vendor.phones[0].e164)}
+                  <div className="v2-map-popup-card">
+                    <div className="v2-map-popup-head">
+                      <span className="v2-map-popup-avatar">
+                        {(vendor.logo && !/ui-avatars/i.test(vendor.logo))
+                          ? <img src={vendor.logo} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
+                          : <b>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
                       </span>
-                    )}
+                      <span>
+                        <b>{vendor.name || 'Unknown vendor'}</b>
+                        <small>{vendor.category || 'Business Lead'}</small>
+                      </span>
+                    </div>
+                    <div className="v2-map-popup-meta">
+                      <span><MapPin size={12} /> {vendor.city || vendor.district || vendor.state || 'Location known'}</span>
+                      {vendor.rating != null && (
+                        <span><Star size={12} fill="#fbbf24" stroke="#fbbf24" /> {Number(vendor.rating).toFixed(1)} {vendor.reviewsCount ? `(${formatNumber(vendor.reviewsCount)})` : ''}</span>
+                      )}
+                      {(vendor.phone || (Array.isArray(vendor.phones) && vendor.phones[0])) && (
+                        <span style={{ color: '#059669', fontWeight: 750 }}>
+                          <Phone size={12} /> {vendor.phone || (typeof vendor.phones[0] === 'string' ? vendor.phones[0] : vendor.phones[0].e164)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="v2-map-popup-actions">
+                      {onSelect && (
+                        <button type="button" onClick={() => onSelect(vendor)}>
+                          <ExternalLink size={12} /> View Details
+                        </button>
+                      )}
+                      {vendor.phone && (
+                        <a
+                          href={`tel:${vendor.phone}`}
+                          style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
+                        >
+                          <Phone size={12} /> Call
+                        </a>
+                      )}
+                      {vendor.mapsLink && (
+                        <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
+                          <MapPin size={12} /> Directions
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className="v2-map-popup-actions">
-                    {onSelect && (
-                      <button type="button" onClick={() => onSelect(vendor)}>
-                        <ExternalLink size={12} /> View Details
-                      </button>
-                    )}
-                    {vendor.phone && (
-                      <a
-                        href={`tel:${vendor.phone}`}
-                        style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
-                      >
-                        <Phone size={12} /> Call
-                      </a>
-                    )}
-                    {vendor.mapsLink && (
-                      <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
-                        <MapPin size={12} /> Directions
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MarkerClusterGroup>
 
         {activePoint && scanning && (
@@ -755,15 +768,40 @@ export default function CommandMap({
         <button
           type="button"
           onClick={() => setTileMode(prev => {
-            if (prev === 'voyager') return 'streets';
+            if (prev === 'voyager') return 'offline';
+            if (prev === 'offline') return 'streets';
             if (prev === 'streets') return 'satellite';
-            if (prev === 'satellite') return 'light';
             return 'voyager';
           })}
-          title={`Map Style: ${tileMode.toUpperCase()} (Click to switch)`}
-          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0284c7', cursor: 'pointer' }}
+          title={`Map Style: ${tileMode.toUpperCase()} (Click to cycle Voyager / Offline Vector / Streets / Satellite)`}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tileMode === 'offline' ? 'linear-gradient(135deg, #06b6d4, #0e7490)' : '#ffffff', border: tileMode === 'offline' ? '1px solid #0891b2' : '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: tileMode === 'offline' ? '#ffffff' : '#0284c7', cursor: 'pointer' }}
         >
           <Layers size={14} />
+        </button>
+      </div>
+
+      {/* 1-Click Offline & HD Showcase Bar */}
+      <div className="lx-map-mode-bar">
+        <button
+          type="button"
+          className={cx('lx-map-mode-pill', tileMode === 'voyager' && 'is-active')}
+          onClick={() => setTileMode('voyager')}
+        >
+          🗺️ Voyager HD
+        </button>
+        <button
+          type="button"
+          className={cx('lx-map-mode-pill', tileMode === 'offline' && 'is-active is-offline')}
+          onClick={() => setTileMode('offline')}
+        >
+          ⚡ Offline Showcase
+        </button>
+        <button
+          type="button"
+          className={cx('lx-map-mode-pill', tileMode === 'satellite' && 'is-active')}
+          onClick={() => setTileMode('satellite')}
+        >
+          🛰️ Satellite
         </button>
       </div>
 

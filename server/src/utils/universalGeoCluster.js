@@ -1062,6 +1062,8 @@ function buildCategorySubVectorZones(category, cityLabel, limit = 32) {
       lng: base ? base.lng : null,
       engines: ['local_finder', 'maps'],
       coverageKind: 'vector',
+      precisionLevel: 'category_vector',
+      radiusKm: 2.8,
       isVectorQuery: true,
       isSingle: false
     });
@@ -1180,6 +1182,7 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
         radiusKm: 2.2,
         engines: ['maps'],
         coverageKind: 'grid',
+        precisionLevel: 'sector_grid',
         isVectorQuery: true,
         isSingle: false,
         isApproximate: false
@@ -1200,15 +1203,16 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
 function buildCityCoverage(cityName, category, localityNames, locationLabel, maxZones = Infinity) {
   const prefix = category ? `${category} in ` : '';
   const named = (localityNames || []).map((name, idx) => {
-    let coord = ZONE_COORDINATES[String(name).toLowerCase().trim()] || null;
-    if (!coord) {
-      const list = localityNames || [];
-      const angle = (idx * 2 * Math.PI) / Math.max(1, list.length);
+    let coord = ZONE_COORDINATES[String(name).toLowerCase().trim()]
+      || zoneCoordinates(name, cityName, idx, (localityNames || []).length);
+    if (!coord || !Number.isFinite(coord.lat) || !Number.isFinite(coord.lng)) {
       const base = ZONE_COORDINATES[String(cityName || '').toLowerCase().trim()];
       if (base) {
+        const angle = (idx + 1) * 2.3999632;
+        const r = 0.0085 * Math.sqrt(idx + 1);
         coord = {
-          lat: Number((base.lat + 0.02 * Math.cos(angle)).toFixed(5)),
-          lng: Number((base.lng + 0.02 * Math.sin(angle)).toFixed(5))
+          lat: Number((base.lat + r * Math.cos(angle)).toFixed(5)),
+          lng: Number((base.lng + r * Math.sin(angle)).toFixed(5))
         };
       }
     }
@@ -1217,9 +1221,10 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
       queryText: `${prefix}${name}, ${locationLabel}`,
       lat: coord ? coord.lat : null,
       lng: coord ? coord.lng : null,
-      radiusKm: 2.0,
+      radiusKm: 1.8,
       engines: ['maps'],
       coverageKind: 'locality',
+      precisionLevel: 'city_ward',
       isVectorQuery: true,
       isSingle: false
     };
@@ -1455,8 +1460,10 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
         state: entry.state,
         lat: sCoords ? sCoords.lat : null,
         lng: sCoords ? sCoords.lng : null,
+        radiusKm: 2.0,
         engines: ['local_finder', 'maps'],
         coverageKind: 'locality',
+        precisionLevel: 'city_ward',
         isVectorQuery: true,
         isSingle: false
       };
@@ -1490,6 +1497,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       state: sName,
       lat: centerCoords?.lat || null,
       lng: centerCoords?.lng || null,
+      radiusKm: 1.6,
+      precisionLevel: 'mandal_village',
       isVectorQuery: true,
       isSingle: false
     });
@@ -1498,12 +1507,13 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
     const siblings = Array.isArray(villageEntry.siblings) ? villageEntry.siblings : [];
     const chosenSiblings = siblings.slice(0, 4);
     chosenSiblings.forEach((sibling, sIdx) => {
-      let sCoords = null;
-      if (centerCoords?.lat && centerCoords?.lng) {
-        const angle = (sIdx * 2 * Math.PI) / (chosenSiblings.length || 1);
+      let sCoords = zoneCoordinates(sibling, mName, sIdx + 1, chosenSiblings.length + 1);
+      if ((!sCoords || !sCoords.lat) && centerCoords?.lat && centerCoords?.lng) {
+        const angle = (sIdx + 1) * 2.3999632;
+        const r = 0.0075 * Math.sqrt(sIdx + 1);
         sCoords = {
-          lat: Number((centerCoords.lat + 0.012 * Math.cos(angle)).toFixed(5)),
-          lng: Number((centerCoords.lng + 0.012 * Math.sin(angle)).toFixed(5))
+          lat: Number((centerCoords.lat + r * Math.cos(angle)).toFixed(5)),
+          lng: Number((centerCoords.lng + r * Math.sin(angle)).toFixed(5))
         };
       }
       zones.push({
@@ -1513,6 +1523,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
         state: sName,
         lat: sCoords?.lat || null,
         lng: sCoords?.lng || null,
+        radiusKm: 1.6,
+        precisionLevel: 'mandal_village',
         isVectorQuery: true,
         isSingle: false
       });
@@ -1526,6 +1538,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       state: sName,
       lat: centerCoords?.lat || null,
       lng: centerCoords?.lng || null,
+      radiusKm: 2.2,
+      precisionLevel: 'mandal_hub',
       isVectorQuery: true,
       isSingle: false
     });
@@ -1550,6 +1564,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       state: entry.state,
       lat: centerCoords?.lat || null,
       lng: centerCoords?.lng || null,
+      radiusKm: 2.2,
+      precisionLevel: 'mandal_hub',
       scope: 'mandal',
       isVectorQuery: true,
       isSingle: false
@@ -1561,12 +1577,16 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
     const villages = Array.isArray(entry.villages) ? entry.villages : [];
     const selectedVillages = villages;
     selectedVillages.forEach((village, idx) => {
-      let vCoords = null;
-      if (centerCoords?.lat && centerCoords?.lng) {
-        const angle = (idx * 2 * Math.PI) / (selectedVillages.length || 1);
+      let vCoords = zoneCoordinates(village, townName, idx + 1, selectedVillages.length + 1);
+      if (
+        (!vCoords || !vCoords.lat || (centerCoords && Math.abs(vCoords.lat - centerCoords.lat) < 0.0002 && Math.abs(vCoords.lng - centerCoords.lng) < 0.0002))
+        && centerCoords?.lat && centerCoords?.lng
+      ) {
+        const angle = (idx + 1) * 2.3999632;
+        const r = 0.0075 * Math.sqrt(idx + 1);
         vCoords = {
-          lat: Number((centerCoords.lat + 0.014 * Math.cos(angle)).toFixed(5)),
-          lng: Number((centerCoords.lng + 0.014 * Math.sin(angle)).toFixed(5))
+          lat: Number((centerCoords.lat + r * Math.cos(angle)).toFixed(5)),
+          lng: Number((centerCoords.lng + r * Math.sin(angle)).toFixed(5))
         };
       }
       zones.push({
@@ -1576,6 +1596,8 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
         state: entry.state,
         lat: vCoords?.lat || null,
         lng: vCoords?.lng || null,
+        radiusKm: 1.8,
+        precisionLevel: 'mandal_village',
         scope: 'mandal',
         isVectorQuery: true,
         isSingle: false
@@ -1701,8 +1723,10 @@ function resolveUniversalZones(location, category = '', isMaster = false) {
       queryText: sector.query,
       lat: sCoords?.lat || null,
       lng: sCoords?.lng || null,
+      radiusKm: 2.0,
       engines: ['local_finder', 'maps'],
       coverageKind: 'locality',
+      precisionLevel: 'city_ward',
       isVectorQuery: true,
       isSingle: false
     };

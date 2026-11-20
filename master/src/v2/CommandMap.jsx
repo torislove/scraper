@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Tooltip, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -23,16 +23,16 @@ try {
   });
 } catch (e) { }
 
-// 100% Free, Zero-Watermark, High-Resolution Autonomous Basemaps (No API Keys Ever Required)
-const TILE_VOYAGER = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_VOYAGER_ATTRIBUTION = '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
-const TILE_STREETS = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
-const TILE_SATELLITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const TILE_LIGHT_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const TILE_LIGHT_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
-const TILE_OSM = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const TILE_DARK_CANVAS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+// 100% Keyless, Disk-Cached + Offline Procedural Vector Map Engine (No API Keys Ever Required)
+const TILE_VOYAGER = '/api/map-tiles/voyager/{z}/{x}/{y}.png';
+const TILE_VOYAGER_ATTRIBUTION = '&copy; Local Cached Map &copy; OpenStreetMap';
+const TILE_STREETS = '/api/map-tiles/streets/{z}/{x}/{y}.png';
+const TILE_SATELLITE = '/api/map-tiles/satellite/{z}/{x}/{y}.png';
+const TILE_LIGHT_CANVAS = '/api/map-tiles/light/{z}/{x}/{y}.png';
+const TILE_OSM = '/api/map-tiles/osm/{z}/{x}/{y}.png';
+const TILE_DARK_CANVAS = '/api/map-tiles/dark/{z}/{x}/{y}.png';
+const TILE_OFFLINE = '/api/map-tiles/offline/{z}/{x}/{y}.svg';
+const TILE_ATTRIBUTION = '&copy; Local Offline Vector Engine';
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
 const MAX_MAP_PLOTTED_LEADS = 300;
@@ -247,7 +247,7 @@ export default function CommandMap({
   const [is3DMode, setIs3DMode] = useState(false);
   const [tileMode, setTileMode] = useState('voyager');
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
-  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'light'];
+  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'offline'];
   const handleTileError = useMemo(() => () => {
     const now = Date.now();
     const tracker = tileErrorTrackerRef.current;
@@ -382,7 +382,7 @@ export default function CommandMap({
   };
 
   const computedHeight = typeof height === 'number' ? `${height}px` : (height && height !== '100%' ? height : '100%');
-  const computedMinHeight = compact ? 180 : (height === '100%' ? 180 : 340);
+  const computedMinHeight = compact ? 260 : 480;
 
   return (
     <div
@@ -450,37 +450,36 @@ export default function CommandMap({
         attributionControl={false}
         zoomControl={false}
       >
-        {/* Layer 0: CartoDB Voyager — Crisp Vibrant Natural 3D (Default, Free, Zero Watermark) */}
+        {/* Layer 0: Cached Voyager — Crisp Vibrant Natural 3D (Default, Keyless) */}
         {tileMode === 'voyager' && (
           <TileLayer
             url={TILE_VOYAGER}
             attribution={TILE_VOYAGER_ATTRIBUTION}
             maxNativeZoom={19}
             maxZoom={20}
-            subdomains={['a', 'b', 'c', 'd']}
             eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
-        {/* Layer 1: Pristine Executive White (Esri Canvas Light Gray + Crisp Labels) */}
+        {/* Layer 0B: 100% Offline Procedural Vector Showcase Engine (0ms SVG grid) */}
+        {tileMode === 'offline' && (
+          <TileLayer
+            url={TILE_OFFLINE}
+            attribution={TILE_ATTRIBUTION}
+            maxNativeZoom={19}
+            maxZoom={20}
+          />
+        )}
+
+        {/* Layer 1: Pristine Executive White */}
         {tileMode === 'light' && (
-          <>
-            <TileLayer
-              url={TILE_LIGHT_CANVAS}
-              attribution={TILE_ATTRIBUTION}
-              maxNativeZoom={16}
-              maxZoom={19}
-              eventHandlers={{ tileerror: handleTileError }}
-            />
-            <TileLayer
-              url={TILE_LIGHT_LABELS}
-              attribution={TILE_ATTRIBUTION}
-              maxNativeZoom={16}
-              maxZoom={19}
-              opacity={0.92}
-              eventHandlers={{ tileerror: handleTileError }}
-            />
-          </>
+          <TileLayer
+            url={TILE_LIGHT_CANVAS}
+            attribution={TILE_ATTRIBUTION}
+            maxNativeZoom={16}
+            maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
+          />
         )}
 
         {/* Layer 2: OpenStreetMap Standard (Full-Color Classic Roads) */}
@@ -535,6 +534,20 @@ export default function CommandMap({
         />
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
+
+        {/* Offline / Live Showcase Hub-and-Spoke Vector Network */}
+        {(tileMode === 'offline' || scanning) && coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
+          <Polyline
+            key={`spoke-${zone.index || idx}-${zone.name}`}
+            positions={[safeCenter, [zone.lat, zone.lng]]}
+            pathOptions={{
+              color: tileMode === 'offline' ? '#7c3aed' : '#06b6d4',
+              weight: tileMode === 'offline' ? 1.8 : 1.35,
+              opacity: tileMode === 'offline' ? 0.45 : 0.3,
+              dashArray: '5 7'
+            }}
+          />
+        ))}
 
         {/* Territory Regions & 3D GBC Coverage Radar Cells */}
         {coverage.map((zone, index) => {
@@ -755,7 +768,8 @@ export default function CommandMap({
         <button
           type="button"
           onClick={() => setTileMode(prev => {
-            if (prev === 'voyager') return 'streets';
+            if (prev === 'voyager') return 'offline';
+            if (prev === 'offline') return 'streets';
             if (prev === 'streets') return 'satellite';
             if (prev === 'satellite') return 'light';
             return 'voyager';
@@ -765,6 +779,24 @@ export default function CommandMap({
         >
           <Layers size={14} />
         </button>
+      </div>
+
+      {/* 1-Click Offline Showcase / HD Map Mode Switcher Bar */}
+      <div className="lx-map-mode-bar">
+        {[
+          { id: 'voyager', label: 'Voyager HD' },
+          { id: 'offline', label: '⚡ Offline 3D Showcase' },
+          { id: 'satellite', label: 'Satellite' }
+        ].map(mode => (
+          <button
+            key={mode.id}
+            type="button"
+            className={cx('lx-map-mode-pill', tileMode === mode.id && 'is-active')}
+            onClick={() => setTileMode(mode.id)}
+          >
+            {mode.label}
+          </button>
+        ))}
       </div>
 
       {scanning && (

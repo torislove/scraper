@@ -24,12 +24,27 @@
 const os = require('os');
 
 function envInt(name, fallback) {
-  const raw = Number(process.env[name]);
+  const rawStr = String(process.env[name] || '').trim().toLowerCase();
+  if (!rawStr || rawStr === 'auto') return fallback;
+  const raw = Number(rawStr);
   return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : fallback;
 }
 
-const TOTAL_SLOTS = Math.max(1, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', 3)));
-const ENRICH_RESERVE = Math.max(1, Math.min(TOTAL_SLOTS, envInt('SCRAPER_ENRICH_RESERVE', 1)));
+const autoDefaultSlots = (() => {
+  try {
+    const totalGb = os.totalmem() / (1024 * 1024 * 1024);
+    const cores = os.cpus()?.length || 4;
+    if (totalGb >= 15.5) return Math.min(10, Math.max(8, cores));
+    if (totalGb >= 12) return Math.min(8, Math.max(6, cores));
+    if (totalGb >= 7) return 5;
+    return 3;
+  } catch (e) {
+    return 5;
+  }
+})();
+
+const TOTAL_SLOTS = Math.max(1, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', autoDefaultSlots)));
+const ENRICH_RESERVE = Math.max(1, Math.min(2, envInt('SCRAPER_ENRICH_RESERVE', 1)));
 // Enrichment must run concurrently with discovery so leads receive verified mobile numbers in real time.
 const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD === '1';
 
