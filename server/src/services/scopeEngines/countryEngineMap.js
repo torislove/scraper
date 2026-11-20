@@ -159,7 +159,21 @@ const COUNTRY_ENGINE_MAP = {
     'trustpilot'
   ],
 
-  // 11. India (Home Market)
+  // 11. Germany (Deutschland)
+  DE: [
+    'google-places',
+    'google-local-finder',
+    'openstreetmap',
+    'cylex',
+    'bing-places',
+    'tripadvisor',
+    'web-discovery',
+    'wikidata-businesses',
+    'social-dork-intl',
+    'trustpilot'
+  ],
+
+  // India (Home Market — 11 assigned engines)
   IN: [
     'google-places',
     'google-local-finder',
@@ -169,13 +183,16 @@ const COUNTRY_ENGINE_MAP = {
     'weddingwire',
     'indiamart',
     'web-discovery',
-    'social'
+    'social',
+    'bing-places',
+    'mandap'
   ]
 };
 
 // Aliases
 COUNTRY_ENGINE_MAP.UK = COUNTRY_ENGINE_MAP.GB;
 COUNTRY_ENGINE_MAP.USA = COUNTRY_ENGINE_MAP.US;
+COUNTRY_ENGINE_MAP.GERMANY = COUNTRY_ENGINE_MAP.DE;
 
 /**
  * Returns list of appropriate directory engines for a given country code

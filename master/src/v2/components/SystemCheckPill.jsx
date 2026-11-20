@@ -31,6 +31,12 @@ export default function SystemCheckPill({ variant = 'master' }) {
   };
 
   useEffect(() => {
+    const onOnline = () => runSelfTest();
+    window.addEventListener('leadharvest:server_online', onOnline);
+    return () => window.removeEventListener('leadharvest:server_online', onOnline);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     if (!report) runSelfTest();
     const onDocClick = (e) => {

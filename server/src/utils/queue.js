@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const browserBudget = require('./browserBudget');
 const requestGuard = require('./requestGuard');
+const { runWithContext } = require('../services/runContext');
 
 const JOBS_FILE = path.join(require('../config/paths').DATA_DIR, 'jobs.json');
 
@@ -53,7 +54,19 @@ function loadQueue() {
   if (fs.existsSync(JOBS_FILE)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf-8'));
-      inMemoryQueue = Array.isArray(parsed) ? parsed : [];
+      const rawQueue = Array.isArray(parsed) ? parsed : [];
+      const now = Date.now();
+      const MAX_JOB_AGE_MS = 30 * 60 * 1000; // 30 minutes
+      // Purge stale jobs from abandoned or previous sessions so they don't zombie-run on startup
+      inMemoryQueue = rawQueue.filter(job => {
+        const ts = job?.createdAt || job?.meta?.createdAt || job?.enqueuedAt || 0;
+        if (!ts) return false;
+        return (now - ts) < MAX_JOB_AGE_MS;
+      });
+      if (rawQueue.length !== inMemoryQueue.length) {
+        globalDeps.logger(`[Queue] Purged ${rawQueue.length - inMemoryQueue.length} stale job(s) (>30m old) from disk.`);
+        _flushQueueToDisk();
+      }
       if (inMemoryQueue.length) {
         globalDeps.logger(`[Queue] Resumed ${inMemoryQueue.length} job(s) from disk.`);
       }
@@ -141,13 +154,15 @@ function getDynamicConcurrency() {
     const freeMem = os.freemem();
     const freeRamPct = Math.round((freeMem / totalMem) * 100);
 
-    // HTTP concurrency stays deliberately modest. A dozen parallel directory
-    // requests is how a single IP starts seeing 429s; eight is enough to keep
-    // the run fast and polite at the same time.
-    let maxHttp = 12;
+    const totalGb = totalMem / (1024 * 1024 * 1024);
+    let maxHttp = (totalGb >= 15 && freeMem >= 900 * 1024 * 1024)
+      ? 18
+      : (totalGb >= 8 && freeMem >= 650 * 1024 * 1024)
+        ? 14
+        : 10;
     const maxPlaywright = browserBudget.discoveryLimit();
 
-    if (freeRamPct < 20) {
+    if (freeMem < 400 * 1024 * 1024) {
       maxHttp = 5;
     }
 
@@ -386,7 +401,15 @@ async function processJob(job, instanceId) {
     });
 
     await Promise.race([
-      fn(...args),
+      runWithContext(
+        {
+          userId: meta?.userId,
+          sessionId: meta?.sessionId,
+          isMaster: meta?.isMaster,
+          country: meta?.country
+        },
+        () => fn(...args)
+      ),
       timeoutPromise
     ]);
     globalDeps.logger(`[Instance-${instanceId}] Job ${taskName} completed successfully.`);

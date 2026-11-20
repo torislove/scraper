@@ -562,8 +562,8 @@ function syncPhoneFlags(lead) {
     lead.phoneType = 'mobile';
     lead.whatsappAvailable = true;
     // A validated mobile may carry a WhatsApp deep link. Keep an existing
-    // prefilled link; otherwise derive the plain one.
-    if (!lead.whatsappLink) lead.whatsappLink = `https://wa.me/91${parsed.national}`;
+    // prefilled link; otherwise derive the plain one with the right country prefix.
+    if (!lead.whatsappLink) lead.whatsappLink = `https://wa.me/${parsed.digits || ('91' + parsed.national)}`;
   } else if (parsed.isLandline) {
     lead.phoneType = 'landline';
     lead.whatsappAvailable = false;

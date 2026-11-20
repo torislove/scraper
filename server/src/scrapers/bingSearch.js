@@ -32,6 +32,8 @@
  */
 
 const { getBrowser } = require('./browserFactory');
+const fetchRouter = require('../services/fetchRouter');
+const cheerio = require('cheerio');
 
 const SEARCH_BOX = 'textarea#sb_form_q, input#sb_form_q, input[name="q"]';
 const RESULT_SELECTOR = 'li.b_algo';
@@ -126,6 +128,54 @@ function readRows(page) {
     });
     return out;
   });
+}
+
+async function runSearchViaRelay(query, { maxPages, timeoutMs, log, abortSignal }) {
+  const rows = [];
+  const seen = new Set();
+  let pages = 0;
+
+  for (let p = 1; p <= maxPages; p++) {
+    if (abortSignal.aborted) break;
+    const first = (p - 1) * 10 + 1;
+    const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&form=QBLH&first=${first}`;
+
+    const fetched = await fetchRouter.tryFetchHtml(url, { timeoutMs });
+    if (!fetched.ok) {
+      log(`[BingSearch] Relay page ${p} failed: ${fetched.error}`);
+      break;
+    }
+
+    if (looksBlocked(fetched.html)) {
+      return { rows: [], blocked: true, pages };
+    }
+
+    const $ = cheerio.load(fetched.html);
+    let found = 0;
+
+    $('li.b_algo').each((_i, el) => {
+      const link = $(el).find('h2 a').first();
+      if (!link.length) return;
+      const href = link.attr('href') || '';
+      const target = unwrapBingUrl(href);
+      if (!target || seen.has(target)) return;
+      seen.add(target);
+      const snippetEl = $(el).find('.b_caption p').first().length
+        ? $(el).find('.b_caption p').first()
+        : $(el).find('.b_algoSlug').first();
+      rows.push({
+        title: link.text().trim(),
+        url: target,
+        snippet: snippetEl.length ? snippetEl.text().trim() : ''
+      });
+      found += 1;
+    });
+
+    pages += 1;
+    if (!found) break;
+  }
+
+  return { rows, blocked: false, pages };
 }
 
 async function runSearch(query, { maxPages, timeoutMs, log, abortSignal }) {
@@ -249,14 +299,28 @@ async function searchBingHtml(query, options = {}) {
     if (hit) return { ...hit, cached: true };
   }
 
-  let result = await withSlot(() => runSearch(query, { maxPages, timeoutMs, log, abortSignal }));
+  // Transport choice: the user's browser first when it is connected, because
+  // a residential IP gets real results where this server's IP gets a cached
+  // page. Server Playwright stays as the fallback when it is allowed.
+  const attempt = async () => {
+    const capability = fetchRouter.resolveCapability();
+    if (capability.canFetch) {
+      const relayed = await runSearchViaRelay(query, { maxPages, timeoutMs, log, abortSignal });
+      if (relayed.rows.length || relayed.blocked) return relayed;
+      if (!capability.canUseServer) return relayed;
+      log('[BingSearch] Relay returned no rows; falling back to the server browser.');
+    }
+    return runSearch(query, { maxPages, timeoutMs, log, abortSignal });
+  };
+
+  let result = await withSlot(attempt);
 
   // One polite retry: Bing throttles bursty clients, and a short pause is
   // usually enough. A second block is reported as-is.
   if (result.blocked) {
     log('[BingSearch] Throttled; pausing once before a single retry.');
     await sleep(RETRY_PAUSE_MS);
-    result = await withSlot(() => runSearch(query, { maxPages, timeoutMs, log, abortSignal }));
+    result = await withSlot(attempt);
   }
 
   writeCache(key, result);

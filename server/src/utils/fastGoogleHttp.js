@@ -9,6 +9,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const https = require('https');
+const { fetchTextSmart } = require('../services/fetchRouter');
 
 const httpsAgent = new https.Agent({ keepAlive: true, rejectUnauthorized: false });
 
@@ -76,9 +77,13 @@ const USER_AGENTS = [
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
 ];
 
-async function fetchGoogleLocalHttp(query, pageIndex = 0, categoryFallback = 'Business') {
+async function fetchGoogleLocalHttp(query, pageIndex = 0, categoryFallback = 'Business', countryOverride = null) {
   const startIndex = pageIndex * 20;
-  const cacheKey = httpCacheKey(query, pageIndex);
+  const country = countryOverride
+    ? { code: String(countryOverride).toUpperCase() }
+    : require('../services/localBrain/countries').detectCountry(query);
+  const gl = (country?.code || 'IN').toLowerCase();
+  const cacheKey = `${httpCacheKey(query, pageIndex)}|${gl}`;
   const cached = readHttpCache(cacheKey);
   if (cached) {
     return {
@@ -87,34 +92,40 @@ async function fetchGoogleLocalHttp(query, pageIndex = 0, categoryFallback = 'Bu
       cached: true
     };
   }
-  // Country bias comes from the query itself, so a search for "plumbers in
-  // Austin" is answered with US results and a search in Tenali with Indian
-  // results. Unknown places fall back to India, the home market.
-  const country = require('../services/localBrain/countries').detectCountry(query);
-  const gl = (country?.code || 'IN').toLowerCase();
   const acceptLanguage = gl === 'in' ? 'en-IN,en-US;q=0.9,en;q=0.8' : 'en-US,en;q=0.9';
   const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=lcl&start=${startIndex}&hl=en&gl=${gl}`;
   const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 
   try {
-    const res = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': ua,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': acceptLanguage,
-        'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        'sec-ch-ua-mobile': ua.includes('Mobile') ? '?1' : '?0',
-        'sec-ch-ua-platform': ua.includes('Windows') ? '"Windows"' : ua.includes('Mac') ? '"macOS"' : '"Android"'
-      },
-      httpsAgent,
-      timeout: 6000
-    });
+    const reqHeaders = {
+      'User-Agent': ua,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': acceptLanguage,
+      'sec-ch-ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      'sec-ch-ua-mobile': ua.includes('Mobile') ? '?1' : '?0',
+      'sec-ch-ua-platform': ua.includes('Windows') ? '"Windows"' : ua.includes('Mac') ? '"macOS"' : '"Android"'
+    };
 
-    if (!res.data || res.data.includes('/sorry') || res.data.includes('google.com/sorry')) {
+    let html = '';
+    const relayed = await fetchTextSmart(searchUrl, { headers: reqHeaders, timeoutMs: 6000 });
+    if (relayed.ok) {
+      html = relayed.text || '';
+    } else if (relayed.fallbackToServer) {
+      const res = await axios.get(searchUrl, {
+        headers: reqHeaders,
+        httpsAgent,
+        timeout: 6000
+      });
+      html = typeof res.data === 'string' ? res.data : '';
+    } else {
+      return { leads: [], fallbackToBrowser: true, reason: relayed.code || 'relay_unavailable' };
+    }
+
+    if (!html || html.includes('/sorry') || html.includes('google.com/sorry')) {
       return { leads: [], fallbackToBrowser: true, reason: 'captcha' };
     }
 
-    const $ = cheerio.load(res.data);
+    const $ = cheerio.load(html);
     const cardElements = $('div.VkpGBb, div.rl_item, div[jscontroller="e6hkjf"]');
 
     if (cardElements.length === 0) {

@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 /**
  * liveStreams.js
@@ -8,29 +8,30 @@
  * The previous implementation kept a plain array of `res` objects and removed
  * a client only from `req.on('close')`. That is not enough:
  *
- *   • a half-open socket (laptop sleep, Wi-Fi switch, killed tab, crashed
+ *   â€¢ a half-open socket (laptop sleep, Wi-Fi switch, killed tab, crashed
  *     browser process) can stop delivering data without ever emitting `close`;
- *   • `res.write()` on such a socket does not throw, it just buffers, so the
+ *   â€¢ `res.write()` on such a socket does not throw, it just buffers, so the
  *     array kept growing and those ghost rows counted against the 25-stream
  *     cap;
- *   • once the cap was reached the endpoint answered `503`, which the browser
+ *   â€¢ once the cap was reached the endpoint answered `503`, which the browser
  *     reports as a generic EventSource error. The dashboard then retried
- *     forever — the "Reconnecting… Attempt #473" banner — even though the
+ *     forever â€” the "Reconnectingâ€¦ Attempt #473" banner â€” even though the
  *     engine was perfectly healthy.
  *
  * This module fixes the class of bug rather than the symptom:
- *   – every socket is tracked with lifecycle events on both req and res;
- *   – dead / ended / erroring sockets are pruned on every heartbeat;
- *   – a slow consumer is dropped once its write buffer passes a ceiling;
- *   – the caps evict the *oldest* stream instead of rejecting the newest, so a
+ *   â€“ every socket is tracked with lifecycle events on both req and res;
+ *   â€“ dead / ended / erroring sockets are pruned on every heartbeat;
+ *   â€“ a slow consumer is dropped once its write buffer passes a ceiling;
+ *   â€“ the caps evict the *oldest* stream instead of rejecting the newest, so a
  *     live dashboard can always reattach;
- *   – a named `heartbeat` event is emitted every 15 s so the browser can prove
+ *   â€“ a named `heartbeat` event is emitted every 15 s so the browser can prove
  *     the pipe is alive (SSE comments are invisible to JavaScript, which is why
  *     a frozen stream used to look "LIVE" forever);
- *   – `retry: 5000` tells the browser how to space its own reconnects.
+ *   â€“ `retry: 5000` tells the browser how to space its own reconnects.
  */
 
 const HEARTBEAT_MS = 2500;
+function LiveStreams_accepts(client, audience) { return LiveStreamHub.viewerAccepts(client, audience); }
 const MAX_LOG_STREAMS = 40;
 const MAX_SESSION_STREAMS = 80;
 const MAX_VIEWERS_PER_SESSION = 10;
@@ -172,7 +173,7 @@ class LiveStreamHub {
   /* public API                                                          */
   /* ------------------------------------------------------------------ */
 
-  attachLog(req, res, initialLogs = []) {
+  attachLog(req, res, initialLogs = [], viewer = {}) {
     this._prune();
     while (this.logClients.size >= MAX_LOG_STREAMS) {
       const before = this.logClients.size;
@@ -181,10 +182,14 @@ class LiveStreamHub {
     }
 
     const client = this._makeClient(req, res, 'log');
+    const scope = String(viewer?.scope || 'all').toLowerCase();
+    client.scope = ['master', 'client'].includes(scope) ? scope : 'all';
+    client.userId = String(viewer?.userId || '').trim();
     this.logClients.set(client.id, client);
 
     // First frame is the console backlog, exactly as before.
-    const backlog = JSON.stringify(Array.isArray(initialLogs) ? initialLogs : []);
+    // Scoped viewers get no shared backlog: it mixes every workspace's lines.
+    const backlog = JSON.stringify(client.scope === 'all' && Array.isArray(initialLogs) ? initialLogs : []);
     this._write(client, `event: init\ndata: ${backlog}\n\n`);
     return client;
   }
@@ -229,22 +234,45 @@ class LiveStreamHub {
     return client;
   }
 
+  /**
+   * Audience routing. `audience` is `{ isMaster, userId }` for an event that
+   * belongs to one run, or null/undefined for system frames that everyone
+   * sees. Master viewers receive only master-owned runs; client viewers
+   * receive only their own user's runs. Viewers that did not declare a scope
+   * ('all') keep the legacy behaviour. This is routing, not an auth boundary.
+   */
+  static viewerAccepts(client, audience) {
+    if (!audience) return true;
+    if (!client || client.scope === 'all') return true;
+    if (client.scope === 'master') return audience.isMaster === true;
+    const uid = client.userId || 'anonymous';
+    const owner = String(audience.userId || 'anonymous');
+    if (audience.isMaster === true) return false;
+    if (uid === 'anonymous') return owner === 'anonymous' || owner === '';
+    return owner === uid;
+  }
+
+  _writeAudience(frame, audience) {
+    for (const client of this.logClients.values()) {
+      if (LiveStreamHub.viewerAccepts(client, audience)) this._write(client, frame);
+    }
+  }
+
   /** Pre-formatted frame to every global log stream (used for batching). */
-  broadcastRaw(frame) {
+  broadcastRaw(frame, audience = null) {
     if (!frame) return;
-    for (const client of this.logClients.values()) this._write(client, frame);
+    this._writeAudience(frame, audience);
   }
 
   /** Raw console line for the global log stream (`onmessage`). */
-  broadcastLogLine(line) {
+  broadcastLogLine(line, audience = null) {
     if (!line) return;
     const safe = String(line).replace(/\n/g, '\\n');
-    const frame = `data: ${safe}\n\n`;
-    for (const client of this.logClients.values()) this._write(client, frame);
+    this._writeAudience(`data: ${safe}\n\n`, audience);
   }
 
   /** Named event for the global log stream. */
-  broadcastEvent(eventName, payload) {
+  broadcastEvent(eventName, payload, audience = null) {
     let data;
     try {
       data = JSON.stringify(payload).replace(/\n/g, '\\n');
@@ -252,17 +280,39 @@ class LiveStreamHub {
       return;
     }
     const frame = `event: ${eventName}\ndata: ${data}\n\n`;
-    for (const client of this.logClients.values()) this._write(client, frame);
+    this._writeAudience(frame, audience);
+    const sid = payload && (payload.sessionId || (Array.isArray(payload) && payload[0] && payload[0].sessionId));
+    if (sid) this._writeSession(sid, frame);
+  }
+
+  _writeSession(sessionId, frame) {
+    const viewers = this.sessionClients.get(sessionId);
+    if (!viewers) return;
+    for (const client of viewers.values()) this._write(client, frame);
+  }
+
+  /** Raw console line tagged with its run, also delivered to session viewers. */
+  broadcastSessionLine(sessionId, line) {
+    if (!sessionId || !line) return;
+    const safe = String(line).replace(/\n/g, '\\n');
+    this._writeSession(sessionId, `data: ${safe}\n\n`);
   }
 
   /**
-   * Batched vendor rows: one frame for the global stream and one per session
-   * that actually owns at least one row in this batch.
+   * Batched vendor rows: one frame per global viewer that is allowed to see
+   * each row, and one per session that actually owns at least one row.
+   * `audienceOf(vendor)` returns `{ isMaster, userId }` or null.
    */
-  broadcastVendorBatch(entries, belongsToSession) {
+  broadcastVendorBatch(entries, belongsToSession, audienceOf = null) {
     if (!Array.isArray(entries) || !entries.length) return;
-    const globalFrame = entries.map(entry => `event: vendor\ndata: ${entry.data}\n\n`).join('');
-    for (const client of this.logClients.values()) this._write(client, globalFrame);
+    const audiences = entries.map(entry => (typeof audienceOf === 'function' ? audienceOf(entry.vendor) : null));
+    for (const client of this.logClients.values()) {
+      let frame = '';
+      for (let i = 0; i < entries.length; i += 1) {
+        if (LiveStreams_accepts(client, audiences[i])) frame += `event: vendor\ndata: ${entries[i].data}\n\n`;
+      }
+      if (frame) this._write(client, frame);
+    }
 
     if (typeof belongsToSession !== 'function') return;
     for (const [sessionId, viewers] of this.sessionClients.entries()) {
@@ -274,7 +324,6 @@ class LiveStreamHub {
       for (const client of viewers.values()) this._write(client, frame);
     }
   }
-
   health() {
     let sessionStreams = 0;
     for (const viewers of this.sessionClients.values()) sessionStreams += viewers.size;

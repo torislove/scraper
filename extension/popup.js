@@ -1,26 +1,113 @@
+/**
+ * popup.js — real state, never a fake green light.
+ */
+
 (function initPopup() {
-  const ramGb = Number(navigator.deviceMemory) > 0 ? Number(navigator.deviceMemory) : 8;
-  const cores = Number(navigator.hardwareConcurrency) > 0 ? Number(navigator.hardwareConcurrency) : 6;
-  const hwEl = document.getElementById('hw-spec');
-  const countEl = document.getElementById('relay-count');
-  const btn = document.getElementById('open-cmd');
+  const els = {
+    led: document.getElementById('led'),
+    statusPill: document.getElementById('status-pill'),
+    status: document.getElementById('ext-status'),
+    version: document.getElementById('version'),
+    hw: document.getElementById('hw-spec'),
+    count: document.getElementById('relay-count'),
+    siteCount: document.getElementById('site-count'),
+    siteNote: document.getElementById('site-note'),
+    open: document.getElementById('open-cmd'),
+    pair: document.getElementById('pair-btn'),
+    wildcard: document.getElementById('wildcard-btn'),
+    error: document.getElementById('last-error')
+  };
 
-  if (hwEl) hwEl.textContent = `${ramGb} GB · ${cores} Cores`;
+  function setTone(tone) {
+    els.led.className = `led is-${tone}`;
+    els.statusPill.className = `pill is-${tone}`;
+  }
 
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-    chrome.storage.local.get(['relayedCount'], (data) => {
-      if (countEl) countEl.textContent = String(Number(data?.relayedCount) || 0);
+  function send(type, extra = {}) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type, ...extra }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ ok: false, error: chrome.runtime.lastError.message });
+          return;
+        }
+        resolve(response || { ok: false, error: 'empty_response' });
+      });
     });
   }
 
-  if (btn) {
-    btn.addEventListener('click', () => {
-      const targetUrl = 'https://scraper.co.in/command';
-      if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
-        chrome.tabs.create({ url: targetUrl });
-      } else {
-        window.open(targetUrl, '_blank', 'noopener');
-      }
-    });
+  function render(state) {
+    if (!state || state.ok === false) {
+      setTone('off');
+      els.status.textContent = 'NOT RESPONDING';
+      els.error.hidden = false;
+      els.error.textContent = state?.error || 'Background worker did not answer. Reopen Chrome.';
+      return;
+    }
+
+    els.version.textContent = state.version || '1.1.0';
+    const ram = state.ramGb ? `${state.ramGb} GB` : 'Unknown';
+    const cores = state.cpuCores ? `${state.cpuCores} cores` : '';
+    els.hw.textContent = cores ? `${ram} · ${cores}` : ram;
+    els.count.textContent = String(state.relayedCount || 0);
+
+    const sites = state.sites || {};
+    if (sites.ok) {
+      els.siteCount.textContent = `All ${sites.requiredCount} sites ready.`;
+    } else {
+      els.siteCount.textContent = `${sites.grantedCount || 0} of ${sites.requiredCount || 0} sites allowed.`;
+    }
+
+    if (state.paused) {
+      setTone('warn');
+      els.status.textContent = 'PAUSED';
+    } else if (!state.paired) {
+      setTone('warn');
+      els.status.textContent = 'NOT PAIRED';
+      els.pair.hidden = false;
+    } else if (!sites.ok) {
+      setTone('warn');
+      els.status.textContent = 'SITE ACCESS NEEDED';
+    } else {
+      setTone('live');
+      els.status.textContent = 'CONNECTED';
+    }
+
+    // The wildcard upgrade is only offered once the basics work.
+    els.wildcard.hidden = Boolean(sites.wildcard) || !state.paired;
+
+    if (state.lastError) {
+      els.error.hidden = false;
+      els.error.textContent = `Last error: ${state.lastError}`;
+    } else {
+      els.error.hidden = true;
+    }
   }
+
+  async function refresh() {
+    const state = await send('SCRAPER_EXT_STATE');
+    render(state);
+  }
+
+  els.open?.addEventListener('click', () => {
+    const target = 'https://scraper.co.in/command';
+    if (chrome.tabs?.create) chrome.tabs.create({ url: target });
+    else window.open(target, '_blank', 'noopener');
+  });
+
+  els.pair?.addEventListener('click', async () => {
+    els.pair.disabled = true;
+    await send('SCRAPER_EXT_HEARTBEAT');
+    els.pair.disabled = false;
+    await refresh();
+  });
+
+  els.wildcard?.addEventListener('click', async () => {
+    els.wildcard.disabled = true;
+    await send('SCRAPER_EXT_REQUEST_SITES');
+    els.wildcard.disabled = false;
+    await refresh();
+  });
+
+  refresh();
+  setInterval(refresh, 4000);
 })();

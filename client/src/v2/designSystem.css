@@ -2631,3 +2631,376 @@ h1, h2, h3, h4, .v2-cmd-home, .lx-pane-title h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Live Leads Entrance & Real-Time Mobile Phone Reveal Animations ─────────── */
+@keyframes lxRowEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+    background-color: rgba(16, 185, 129, 0.16);
+  }
+  45% {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: rgba(16, 185, 129, 0.10);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    background-color: transparent;
+  }
+}
+
+@keyframes lxPhonePop {
+  0% {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55);
+  }
+  45% {
+    transform: scale(1.04);
+    box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.18);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes lxPulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.72); }
+}
+
+.lx-clean-table tbody tr.lx-row-enter {
+  animation: lxRowEnter 1.2s var(--lx-ease, cubic-bezier(0.22, 1, 0.36, 1)) both;
+  will-change: transform, opacity;
+}
+
+.lx-phone-pill.lx-phone-pop {
+  animation: lxPhonePop 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lx-phone-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-size: 9.5px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+.lx-phone-tag.is-mob {
+  background: #059669;
+  color: #ffffff;
+}
+
+.lx-phone-tag.is-land {
+  background: #0891b2;
+  color: #ffffff;
+}
+
+.lx-wa-mini {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid #6ee7b7;
+  background: linear-gradient(180deg, #ecfdf5, #d1fae5);
+  color: #047857;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 #ffffff, 0 1.5px 0 rgba(5, 150, 105, 0.14);
+}
+
+.lx-wa-mini:hover {
+  background: #10b981;
+  border-color: #059669;
+  color: #ffffff;
+}
+
+.lx-phone-scanning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  border: 1px dashed rgba(14, 116, 144, 0.3);
+  background: rgba(236, 254, 255, 0.65);
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.lx-dot-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #06b6d4;
+  animation: lxPulseDot 1.1s ease-in-out infinite;
+}
+
+.lx-zone-pill.is-done {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   RETRO DIGITAL WATCH LCD TIMER (Casio G-Shock / F-91W Chrono Telemetry)
+   ═════════════════════════════════════════════════════════════════════════════ */
+.retro-watch-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1e293b, #0f172a);
+  border: 2px solid #334155;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.15), 0 4px 12px rgba(0, 0, 0, 0.35);
+  color: #94a3b8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+  user-select: none;
+  min-width: 290px;
+  flex: 1 1 320px;
+  max-width: 480px;
+}
+
+.retro-watch-frame.is-live {
+  border-color: #059669;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 0 14px rgba(16, 185, 129, 0.25);
+}
+
+.retro-watch-bezel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #cbd5e1;
+  text-transform: uppercase;
+  padding: 0 2px;
+}
+
+.retro-brand {
+  color: #38bdf8;
+  font-weight: 900;
+}
+
+.retro-water-resist {
+  color: #e2e8f0;
+  opacity: 0.75;
+}
+
+.retro-indicator-lights {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.retro-led-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+  transition: all 0.3s ease;
+}
+
+.retro-led-dot.is-active {
+  background: #10b981;
+  box-shadow: 0 0 8px #34d399;
+}
+
+.retro-mode-tag {
+  font-size: 7.5px;
+  font-weight: 900;
+  color: #f59e0b;
+}
+
+/* Authentic LCD Panel */
+.retro-lcd-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #091a13;
+  border: 1.5px solid #143527;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 6px rgba(16, 185, 129, 0.1);
+  color: #34d399;
+}
+
+.retro-lcd-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9.5px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-weight: 700;
+  color: #6ee7b7;
+  border-bottom: 1px dashed rgba(52, 211, 153, 0.2);
+  padding-bottom: 3px;
+}
+
+.retro-tele-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.retro-zone-tag {
+  color: #fef08a;
+}
+
+.retro-engines-tag {
+  color: #38bdf8;
+}
+
+.retro-leads-tag {
+  color: #a7f3d0;
+}
+
+/* Main Digital Display */
+.retro-lcd-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.retro-time-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.retro-time-block.is-eta {
+  flex: 1.2;
+}
+
+.retro-time-block.is-elapsed {
+  flex: 0.9;
+  text-align: right;
+  align-items: flex-end;
+}
+
+.retro-time-lbl {
+  font-size: 7.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #6ee7b7;
+  opacity: 0.8;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+}
+
+.retro-lcd-digits {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: "JetBrains Mono", Consolas, "Courier New", monospace;
+  font-size: 19px;
+  font-weight: 900;
+  color: #34d399;
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+}
+
+.retro-prefix {
+  font-size: 11px;
+  font-weight: 800;
+  color: #a7f3d0;
+  opacity: 0.85;
+}
+
+.retro-val {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.retro-colon {
+  display: inline-block;
+  transition: opacity 0.15s ease;
+  margin: 0 1px;
+}
+
+.retro-colon.is-hidden {
+  opacity: 0.15;
+}
+
+.retro-sub-digits {
+  font-size: 14px;
+  color: #93c5fd;
+  text-shadow: 0 0 6px rgba(147, 197, 253, 0.5);
+}
+
+.retro-time-divider {
+  width: 1px;
+  height: 24px;
+  background: rgba(52, 211, 153, 0.25);
+}
+
+/* Zone Hop Transition Row */
+.retro-lcd-zone-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 9.5px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border-left: 2px solid #f59e0b;
+}
+
+.retro-hop-lbl {
+  font-size: 8px;
+  font-weight: 800;
+  color: #f59e0b;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.retro-hop-transition {
+  color: #f8fafc;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Micro Telemetry Footer */
+.retro-lcd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 8px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-weight: 800;
+  color: #6ee7b7;
+  opacity: 0.9;
+  padding-top: 2px;
+  border-top: 1px dashed rgba(52, 211, 153, 0.15);
+}
+
+.retro-foot-badge {
+  background: rgba(20, 83, 45, 0.4);
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.retro-sync-status {
+  margin-left: auto;
+  color: #38bdf8;
+  letter-spacing: 0.04em;
+}

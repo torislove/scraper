@@ -12,7 +12,7 @@ import Country3DFlag from './components/Country3DFlag';
 import { POPULAR_COUNTRIES } from './data/countries';
 import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL, EXTENSION_STORE_URL
 } from './utils/deviceRamEngine';
 import { pingHealth } from './api';
 import './landingExecutive.css';
@@ -947,16 +947,28 @@ export default function LandingV2() {
                     </p>
                   </div>
                   <div className="lx-ext-cta-group">
-                    <a
-                      href={EXTENSION_DOWNLOAD_URL}
-                      download="scraper-co-in-ram-turbo-extension.zip"
-                      className="lx-btn lx-btn-primary"
-                    >
-                      <Download size={15} /> Download RAM Extension (.zip)
-                    </a>
+                    {EXTENSION_STORE_URL ? (
+                      <a
+                        href={EXTENSION_STORE_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="lx-btn lx-btn-primary"
+                      >
+                        <Download size={15} /> Add to Chrome
+                      </a>
+                    ) : (
+                      <span className="lx-btn lx-btn-primary is-muted" aria-disabled="true">
+                        <ShieldCheck size={15} /> Chrome Web Store · in review
+                      </span>
+                    )}
                     <button type="button" className="lx-btn lx-btn-ghost" onClick={() => openWorkspace('IN')}>
                       Open Command Center <ArrowRight size={14} />
                     </button>
+                    {!EXTENSION_STORE_URL && import.meta.env.DEV && (
+                      <a href={EXTENSION_DOWNLOAD_URL} download className="lx-ext-dev-link">
+                        developer build
+                      </a>
+                    )}
                   </div>
                 </div>
 
@@ -976,10 +988,12 @@ export default function LandingV2() {
                     </small>
                   </div>
                   <div className="lx-ext-pillar">
-                    <span className="lx-ext-badge is-safe">03 · 30-SECOND PRIVATE SETUP</span>
+                    <span className="lx-ext-badge is-safe">03 · ONE-CLICK PRIVATE SETUP</span>
                     <b>Runs Only When You Click Search</b>
                     <small>
-                      1. Download &amp; unzip · 2. Open chrome://extensions (Developer Mode ON) → Load unpacked · 3. Search any business in 11 countries and download clean Excel. Never touches personal tabs.
+                      Add it from the Chrome Web Store, reload the page, and it connects itself.
+                      It never reads your other tabs, history or passwords — only the page the
+                      server asks for. Works in all 11 countries.
                     </small>
                   </div>
                 </div>
@@ -1362,6 +1376,131 @@ export default function LandingV2() {
                   </div>
                 </div>
               </motion.article>
+
+              {/* 11-COUNTRY ADMINISTRATIVE TERMINOLOGY REFERENCE */}
+              <motion.div
+                className="lx-terminology-card"
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                style={{
+                  gridColumn: '1 / -1',
+                  marginTop: 24,
+                  padding: '24px 28px',
+                  borderRadius: 18,
+                  background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
+                  border: '1.5px solid #e2e8f0',
+                  boxShadow: '0 10px 28px -10px rgba(15, 23, 42, 0.08)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+                  <div>
+                    <span className="lx-kicker" style={{ marginBottom: 4 }}><Globe2 size={13} /> 11-Market Geographic Alignment</span>
+                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+                      Administrative Terminology Across All 11 Supported Countries
+                    </h3>
+                    <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
+                      Client Edition sweeps local Mandals, Neighborhoods &amp; Suburbs. Master Edition delivers entire Districts, Counties &amp; States.
+                    </p>
+                  </div>
+                  <span className="lx-precision-pill is-service">
+                    11 NATIONS · 100% SATELLITE RADAR
+                  </span>
+                </div>
+
+                <div className="lx-terminology-table-wrap" style={{ overflowX: 'auto' }}>
+                  <table className="lx-terminology-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', color: '#334155', fontWeight: 800, textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.04em' }}>
+                        <th style={{ padding: '10px 14px', borderRadius: '8px 0 0 0' }}>Country &amp; Flag</th>
+                        <th style={{ padding: '10px 14px' }}>Top-Level (State / Province)</th>
+                        <th style={{ padding: '10px 14px' }}>Regional (District / County)</th>
+                        <th style={{ padding: '10px 14px' }}>Local Zone (Mandal / Town / Suburb)</th>
+                        <th style={{ padding: '10px 14px', borderRadius: '0 8px 0 0' }}>Assigned Engines</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0', background: 'rgba(236, 253, 245, 0.4)' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#047857' }}>🇮🇳 India (Home)</td>
+                        <td style={{ padding: '11px 14px' }}>State / Union Territory (36)</td>
+                        <td style={{ padding: '11px 14px' }}>District (760+)</td>
+                        <td style={{ padding: '11px 14px' }}>Revenue Mandal / Taluka / 619k Villages</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 700, color: '#059669' }}>11 Engines (Full Depth)</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇺🇸 United States</td>
+                        <td style={{ padding: '11px 14px' }}>State (50 States)</td>
+                        <td style={{ padding: '11px 14px' }}>County / Parish</td>
+                        <td style={{ padding: '11px 14px' }}>City / Township / ZIP Code / Neighborhood</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines (High Yield)</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇬🇧 United Kingdom</td>
+                        <td style={{ padding: '11px 14px' }}>Country / Region (England, Scotland…)</td>
+                        <td style={{ padding: '11px 14px' }}>County / Greater Borough</td>
+                        <td style={{ padding: '11px 14px' }}>City / Town / Postcode District / Ward</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇨🇦 Canada</td>
+                        <td style={{ padding: '11px 14px' }}>Province / Territory</td>
+                        <td style={{ padding: '11px 14px' }}>Census Division / County / Regional Municipality</td>
+                        <td style={{ padding: '11px 14px' }}>Municipality / City / FSA Postal Zone</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇦🇺 Australia</td>
+                        <td style={{ padding: '11px 14px' }}>State / Territory (NSW, VIC, QLD…)</td>
+                        <td style={{ padding: '11px 14px' }}>Local Government Area (LGA) / Shire</td>
+                        <td style={{ padding: '11px 14px' }}>Suburb / Town / Postcode Area</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇩🇪 Germany</td>
+                        <td style={{ padding: '11px 14px' }}>Bundesland (Federal State)</td>
+                        <td style={{ padding: '11px 14px' }}>Landkreis / Kreisfreie Stadt</td>
+                        <td style={{ padding: '11px 14px' }}>Gemeinde / Stadt / Stadtteil / Ortsteil</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇦🇪 UAE</td>
+                        <td style={{ padding: '11px 14px' }}>Emirate (Dubai, Abu Dhabi…)</td>
+                        <td style={{ padding: '11px 14px' }}>Municipality / Sector</td>
+                        <td style={{ padding: '11px 14px' }}>Community / Commercial District</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>11 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇸🇬 Singapore</td>
+                        <td style={{ padding: '11px 14px' }}>National Island</td>
+                        <td style={{ padding: '11px 14px' }}>Region (Central, East, West…)</td>
+                        <td style={{ padding: '11px 14px' }}>Planning Area / Subzone / Postal Sector</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>11 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇳🇿 New Zealand</td>
+                        <td style={{ padding: '11px 14px' }}>Region (Auckland, Canterbury…)</td>
+                        <td style={{ padding: '11px 14px' }}>Territorial Authority (City / District)</td>
+                        <td style={{ padding: '11px 14px' }}>Ward / Suburb / Local Postcode Area</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇮🇪 Ireland</td>
+                        <td style={{ padding: '11px 14px' }}>Province (Leinster, Munster…)</td>
+                        <td style={{ padding: '11px 14px' }}>County / City Council</td>
+                        <td style={{ padding: '11px 14px' }}>Municipal District / Electoral Area / Eircode</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇿🇦 South Africa</td>
+                        <td style={{ padding: '11px 14px' }}>Province (Gauteng, Western Cape…)</td>
+                        <td style={{ padding: '11px 14px' }}>District / Metropolitan Municipality</td>
+                        <td style={{ padding: '11px 14px' }}>Local Municipality / Ward / Suburb</td>
+                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
             </div>
           </div>
         </section>

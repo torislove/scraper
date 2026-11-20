@@ -48,14 +48,20 @@ async function warmZoneContextPool(browser, count = ZONE_CONTEXT_POOL_SIZE) {
   if (!browser) return 0;
   const started = Date.now();
   let made = 0;
-  const target = Math.min(count, ZONE_CONTEXT_POOL_SIZE);
-  for (let i = 0; i < target; i++) {
-    if (zoneContextPool.length >= ZONE_CONTEXT_POOL_SIZE) break;
-    try {
-      zoneContextPool.push(await makeZoneContext(browser));
-      made++;
-    } catch (e) {
-      break;
+  const target = Math.min(count, ZONE_CONTEXT_POOL_SIZE) - zoneContextPool.length;
+  if (target <= 0) return 0;
+  // Warm in small parallel batches of 3 to overlap cold Chromium context setup without CPU thrashing
+  const batchSize = 3;
+  for (let i = 0; i < target; i += batchSize) {
+    const n = Math.min(batchSize, target - i);
+    const settled = await Promise.allSettled(
+      Array.from({ length: n }, () => makeZoneContext(browser))
+    );
+    for (const res of settled) {
+      if (res.status === 'fulfilled' && res.value && zoneContextPool.length < ZONE_CONTEXT_POOL_SIZE) {
+        zoneContextPool.push(res.value);
+        made++;
+      }
     }
   }
   if (process.env.SCRAPER_TRACE_ZONE === '1') {
@@ -957,7 +963,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             strategy
           };
 
-          dbAdapter.saveVendor('admin_1', newLead);
+          const sessionOwner = dbAdapter.getSessionOwner(sessionId) || 'admin_1';
+          dbAdapter.saveVendor(sessionOwner, newLead);
           try { emitVendorEvent(newLead, 'inserted'); } catch (e) {}
           scrapedResults.push(newLead);
           addLog(`[Contact Extracted] 📞 ${newLead.name}: ${newLead.phone || 'No direct phone'}${newLead.whatsappAvailable ? ' (WhatsApp Verified)' : ''}`);
@@ -965,6 +972,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const existing = dbAdapter.findMatch({ mapsLink, name, phone, city: vendorCity });
           if (existing) {
             let updated = false;
+            const sessionOwner = dbAdapter.getSessionOwner(sessionId) || existing.userId || 'admin_1';
             if (phone && (!existing.phone || existing.phone.includes('Requires') || existing.phone === 'no phone')) {
               existing.phone = phone;
               existing.phones = [...new Set([...(existing.phones || []), phone])];
@@ -984,10 +992,11 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               existing.website = website;
               updated = true;
             }
-            if (updated) {
-              dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
+            if (updated || !(Array.isArray(existing.sessionIds) && existing.sessionIds.includes(sessionId))) {
+              existing.sessionId = sessionId;
+              dbAdapter.saveVendor(sessionOwner, existing);
               try { emitVendorEvent(existing, 'updated'); } catch (e) {}
-              addLog(`[Contact Enriched] 📞 ${existing.name}: updated with ${existing.phone}`);
+              if (updated) addLog(`[Contact Enriched] 📞 ${existing.name}: updated with ${existing.phone}`);
             }
             scrapedResults.push(existing);
           }
@@ -1006,6 +1015,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         // place link, so the run keeps every card Google actually rendered.
         const accumulatedCards = new Map();
         const processedCardKeys = new Set();
+        const liveSavedMap = new Map();
+        const sessionOwner = dbAdapter.getSessionOwner(sessionId) || 'admin_1';
 
         const processLiveCard = (rawItem) => {
           if (!rawItem || !rawItem.name || isAborted()) return null;
@@ -1078,6 +1089,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               if (isNaN(parsedRating)) parsedRating = null;
             }
 
+            const liveScore = phone ? 85 : (websiteUrl ? 65 : 45);
             const place = {
               id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
               name,
@@ -1085,6 +1097,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               phone: phone || '',
               phones: exposedNumbers.map(n => n.displayPhone || n.e164),
               phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
+              callUrl: callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : ''),
               rating: parsedRating,
               reviewsCount,
               mapsLink,
@@ -1108,6 +1121,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               whatsappAvailable,
               isMobile: Boolean(primaryNumber && primaryNumber.isMobile),
               isLandline: Boolean(primaryNumber && primaryNumber.isLandline),
+              qualityScore: liveScore,
+              tier: determineTier(liveScore),
               category,
               city: vendorCity,
               zoneName: location,
@@ -1117,18 +1132,26 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               mandal: resolvedMandal || (countryCode === 'IN' ? vendorCity : ''),
               district: district || '',
               state: stateName || (countryCode === 'IN' ? 'India' : ''),
+              country: countryCode,
               source: 'Google Maps',
               sourceEngine: 'google-places',
               verified: Boolean(phone),
               scrapedAt: new Date().toISOString(),
               sessionId,
+              userId: sessionOwner,
               strategy
             };
 
             const isKnown = dbAdapter.isDuplicate({ mapsLink, name, phone, city: vendorCity });
             if (!isKnown) {
-              dbAdapter.saveVendor('admin_1', place);
+              dbAdapter.saveVendor(sessionOwner, place);
               scrapedResults.push(place);
+              liveSavedMap.set(key, {
+                vendor: place,
+                hadPhone: Boolean(phone),
+                hadWebsite: Boolean(websiteUrl),
+                hadAddress: Boolean(address)
+              });
               try { emitVendorEvent(place, 'inserted'); } catch (e) {}
               try {
                 const { streamingEnricher } = require('../services/phoneBackfillService');
@@ -1137,11 +1160,32 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             } else {
               let existing = dbAdapter.findMatch(place);
               if (existing) {
+                const hadSession = Array.isArray(existing.sessionIds) && existing.sessionIds.includes(sessionId);
+                let fieldImproved = false;
                 existing.sessionId = sessionId;
                 existing.scrapedAt = new Date().toISOString();
-                if (!existing.phone && place.phone) existing.phone = place.phone;
-                dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
-                try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                if (!existing.phone && place.phone) {
+                  existing.phone = place.phone;
+                  fieldImproved = true;
+                }
+                if (!existing.website && place.website) {
+                  existing.website = place.website;
+                  fieldImproved = true;
+                }
+                if ((!existing.address || existing.address.length < 10) && place.address) {
+                  existing.address = place.address;
+                  fieldImproved = true;
+                }
+                dbAdapter.saveVendor(sessionOwner, existing);
+                liveSavedMap.set(key, {
+                  vendor: existing,
+                  hadPhone: Boolean(existing.phone),
+                  hadWebsite: Boolean(existing.website),
+                  hadAddress: Boolean(existing.address)
+                });
+                if (!hadSession || fieldImproved) {
+                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) {}
+                }
                 if (!existing.phone || !existing.website) {
                   try {
                     const { streamingEnricher } = require('../services/phoneBackfillService');
@@ -1346,7 +1390,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             if (!feed) return false;
             return feed.querySelectorAll('div.Nv2PK').length > before.cards
               || feed.scrollHeight > before.height + 10;
-          }, beforeScroll, { timeout: 420, polling: 60 }).catch(() => {});
+          }, beforeScroll, { timeout: 340, polling: 50 }).catch(() => {});
 
           const added = mergeCards(await collectVisibleCards());
 
@@ -1371,7 +1415,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   feed.scrollTop = Math.max(0, feed.scrollTop - 350);
                 }
               }).catch(() => {});
-              await page.waitForTimeout(90);
+              await page.waitForTimeout(70);
               await page.evaluate(() => {
                 const feed = document.querySelector('div[role="feed"]');
                 if (feed) {
@@ -1400,6 +1444,42 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           
           try {
             const rawItem = extractedCards[i];
+            const cardKey = (rawItem.mapsLink || '').split('&')[0]
+              || `name:${String(rawItem.name || '').trim().toLowerCase()}`;
+            if (processedCardKeys.has(cardKey)) {
+              const liveState = liveSavedMap.get(cardKey);
+              if (!liveState || !liveState.vendor) continue;
+              // Only emit an update if a later scroll frame revealed new contact fields.
+              const liveVendor = liveState.vendor;
+              let enrichedLate = false;
+              if (!liveState.hadPhone && rawItem.phone) {
+                const parsedLate = normalizePhone(rawItem.phone, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
+                if (parsedLate) {
+                  liveVendor.phone = parsedLate.displayPhone || parsedLate.e164;
+                  liveVendor.phones = [...new Set([...(liveVendor.phones || []), liveVendor.phone])];
+                  liveVendor.phoneType = parsedLate.isMobile ? 'mobile' : 'landline';
+                  liveVendor.callUrl = parsedLate.callUrl || `tel:${parsedLate.digits}`;
+                  if (parsedLate.isMobile) {
+                    liveVendor.whatsappAvailable = true;
+                    liveVendor.whatsappLink = `https://wa.me/${parsedLate.digits}?text=Hi%20${encodeURIComponent(liveVendor.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
+                  }
+                  enrichedLate = true;
+                }
+              }
+              if (!liveState.hadWebsite && rawItem.websiteUrl && !liveVendor.website) {
+                liveVendor.website = rawItem.websiteUrl;
+                enrichedLate = true;
+              }
+              if (!liveState.hadAddress && rawItem.address && (!liveVendor.address || liveVendor.address.length < 10)) {
+                liveVendor.address = rawItem.address;
+                enrichedLate = true;
+              }
+              if (enrichedLate) {
+                dbAdapter.saveVendor(sessionOwner, liveVendor);
+                try { emitVendorEvent(liveVendor, 'updated'); } catch (e) {}
+              }
+              continue;
+            }
           const name = rawItem.name;
           const mapsLink = rawItem.mapsLink;
           let phone = rawItem.phone || '';
@@ -1636,7 +1716,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 } catch(e) { }
               }
               
-              dbAdapter.saveVendor('admin_1', place);
+              dbAdapter.saveVendor(sessionOwner, place);
               scrapedResults.push(place);
               try { emitVendorEvent(place, 'inserted'); } catch (e) {}
               try {
@@ -1648,6 +1728,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             } else {
               let existing = dbAdapter.findMatch(place);
               if (existing) {
+                const hadSession = Array.isArray(existing.sessionIds) && existing.sessionIds.includes(sessionId);
                 let updated = false;
 
                 if (!existing.pincode && place.address) {
@@ -1668,11 +1749,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 
                 existing.sessionId = sessionId;
                 existing.scrapedAt = new Date().toISOString();
-                updated = true;
 
-                if (updated) {
-                  dbAdapter.saveVendor(existing.userId || 'admin_1', existing);
-                  try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                if (updated || !hadSession) {
+                  dbAdapter.saveVendor(sessionOwner, existing);
+                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) {}
                   if (!existing.phone || existing.phone.includes('Requires') || !existing.website) {
                     try {
                       const { streamingEnricher } = require('../services/phoneBackfillService');

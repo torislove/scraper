@@ -1,4 +1,5 @@
 import React from 'react';
+import { getDisplayPhone, isMobilePhone } from '../../utils/phoneClassify';
 
 /**
  * Check whether a raw locality label is clean human-readable neighborhood text
@@ -254,5 +255,82 @@ export function buildFolderTree(leads, { boundary = null, isOutOfBound = false, 
     isOutOfBound,
     groups: nodes
   };
+}
+
+/** Merge two versions of the same vendor without downgrading phones or losing CRM state. */
+export function mergeSingleVendor(existing, incoming, countryHint = 'IN') {
+  if (!existing) return incoming;
+  const existingPhone = getDisplayPhone(existing);
+  const incomingPhone = getDisplayPhone(incoming);
+  const isIncomingMob = isMobilePhone(incomingPhone, incoming.country || countryHint);
+  const isExistingMob = isMobilePhone(existingPhone, existing.country || countryHint);
+
+  let mergedPhone = existing.phone;
+  if (isIncomingMob) mergedPhone = incomingPhone;
+  else if (isExistingMob) mergedPhone = existingPhone;
+  else if (incomingPhone) mergedPhone = incomingPhone;
+
+  const mergedPhones = Array.from(new Set([
+    ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
+    ...(Array.isArray(incoming.phones) ? incoming.phones : (incoming.phone ? [incoming.phone] : []))
+  ])).filter(Boolean);
+
+  const mergedSessionIds = Array.from(new Set([
+    ...(Array.isArray(existing.sessionIds) ? existing.sessionIds : (existing.sessionId ? [existing.sessionId] : [])),
+    ...(Array.isArray(incoming.sessionIds) ? incoming.sessionIds : (incoming.sessionId ? [incoming.sessionId] : []))
+  ])).filter(Boolean);
+
+  return {
+    ...existing,
+    ...incoming,
+    phone: mergedPhone,
+    phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
+    sessionId: incoming.sessionId || existing.sessionId,
+    lastSessionId: incoming.lastSessionId || incoming.sessionId || existing.lastSessionId,
+    sessionIds: mergedSessionIds,
+    website: incoming.website || existing.website,
+    email: incoming.email || existing.email,
+    emails: (Array.isArray(incoming.emails) && incoming.emails.length) ? incoming.emails : existing.emails,
+    address: (incoming.address && incoming.address.length > (existing.address || '').length)
+      ? incoming.address
+      : (existing.address || incoming.address),
+    rating: incoming.rating ?? existing.rating,
+    reviewsCount: incoming.reviewsCount ?? existing.reviewsCount,
+    crmStage: existing.crmStage || incoming.crmStage || 'new',
+    crmStatus: existing.crmStatus || incoming.crmStatus || 'new',
+    crmNotes: existing.crmNotes || incoming.crmNotes,
+    crmTasks: existing.crmTasks || incoming.crmTasks
+  };
+}
+
+/** Non-destructive vendor list merge used by live refreshes so in-flight leads never vanish. */
+export function mergeVendorLists(prev = [], incoming = [], { countryHint = 'IN' } = {}) {
+  const map = new Map();
+  const order = [];
+  for (const v of prev) {
+    if (!v || !v.id) continue;
+    map.set(v.id, v);
+    order.push(v.id);
+  }
+  const prependIds = [];
+  for (const v of incoming) {
+    if (!v || !v.id) continue;
+    const existing = map.get(v.id);
+    if (existing) {
+      map.set(v.id, mergeSingleVendor(existing, v, countryHint));
+    } else {
+      map.set(v.id, v);
+      prependIds.push(v.id);
+    }
+  }
+  const seen = new Set();
+  const out = [];
+  for (const id of [...prependIds, ...order]) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const row = map.get(id);
+    if (row) out.push(row);
+  }
+  return out;
 }
 

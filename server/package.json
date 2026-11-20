@@ -4,7 +4,9 @@
   "description": "High-speed multi-threaded intelligence and lead harvest engine",
   "main": "index.js",
   "scripts": {
+    "prestart": "node ../scripts/free-port.js 5002",
     "start": "node --max-old-space-size=4096 index.js",
+    "predev": "node ../scripts/free-port.js 5002",
     "dev": "node --max-old-space-size=4096 index.js",
     "build": "node -e \"console.log('Server is ready (no build step needed)')\"",
     "bild": "npm run build",

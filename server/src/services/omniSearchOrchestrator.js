@@ -1,4 +1,4 @@
-/**
+﻿/**
  * omniSearchOrchestrator.js
  *
  * Universal Omni Search Orchestrator for Scraper.co.in.
@@ -110,7 +110,7 @@ const SCOPE_REACH_KM = {
 
 /**
  * Hard outer bound for a whole sweep, measured from the geocoded sweep anchor.
- * Every row — live snapshot, reconciled late row, final folder — must pass this
+ * Every row â€” live snapshot, reconciled late row, final folder â€” must pass this
  * before it can be written. Without it a browser engine that pads the requested
  * locality onto every address (e.g. "Gopal Nagar A, Tenali") could smuggle a
  * Jaipur business into a Tenali folder and text evidence would "match" it.
@@ -372,6 +372,13 @@ async function runOmniSearchOrchestrator(
     try { emitVendorEvent(vendor, type); } catch (e) { /* streaming is best-effort */ }
   };
 
+  if (sessionId && userId && userId !== 'anonymous' && userId !== 'admin_1') {
+    try { dbAdapter.registerSessionOwner(sessionId, userId); } catch (e) {}
+  }
+  if (sessionId && typeof dbAdapter.registerSessionScope === 'function' && !dbAdapter.getSessionScope(sessionId)) {
+    try { dbAdapter.registerSessionScope(sessionId, { userId, isMaster }); } catch (e) {}
+  }
+
   const sessionAbortSignal = { aborted: false };
   if (sessionId) {
     sessionAbortSignals.set(sessionId, sessionAbortSignal);
@@ -451,7 +458,7 @@ async function runOmniSearchOrchestrator(
   }
   const droppedEngines = requestedActive.filter(engine => !activeEngines.includes(engine));
   if (droppedEngines.length) {
-    addLog(`[Orchestrator] ${countryProfile.name}: skipped ${droppedEngines.length} engine(s) not available there — ${droppedEngines.join(', ')}.`);
+    addLog(`[Orchestrator] ${countryProfile.name}: skipped ${droppedEngines.length} engine(s) not available there â€” ${droppedEngines.join(', ')}.`);
   }
   const regionLabel = countryCode === 'IN'
     ? 'India'
@@ -469,7 +476,7 @@ async function runOmniSearchOrchestrator(
     ? brandIntel.bestSearchPhrase(classification.intent, category)
     : category;
   if (productIntent && searchPhrase && searchPhrase.toLowerCase() !== category.toLowerCase()) {
-    addLog(`[Orchestrator] Intent: ${classification.intent.intentKind} · searching dealer phrase "${searchPhrase}" (folder keeps "${category}")`);
+    addLog(`[Orchestrator] Intent: ${classification.intent.intentKind} Â· searching dealer phrase "${searchPhrase}" (folder keeps "${category}")`);
   }
 
   addLog(`[Orchestrator] Starting Universal Omni Search session: ${sessionId} (User: ${userId})`);
@@ -500,11 +507,12 @@ async function runOmniSearchOrchestrator(
 
   // Start Real-Time Streaming Detail & Phone Enricher concurrently with swarm
   try {
+    const browserBudget = require('../utils/browserBudget');
     streamingEnricher.start({
       sessionId,
       emit: (vendor, type) => { try { emitVendorEvent(vendor, type); } catch (e) {} },
       log: addLog,
-      concurrency: 4
+      concurrency: Math.min(4, Math.max(2, browserBudget.getStatus().enrichReserve || 3))
     }).catch(() => {});
   } catch (enricherErr) {
     addLog(`[Orchestrator] Realtime enricher init: ${enricherErr.message}`);
@@ -608,7 +616,7 @@ async function runOmniSearchOrchestrator(
     // A master sweep supplies a frozen plan, so its exact zone policy is honoured
     // instead of re-resolving from the location string.
     //
-    // Outside India the gazetteer knows nothing, so a real 5×5 coordinate lattice
+    // Outside India the gazetteer knows nothing, so a real 5Ã—5 coordinate lattice
     // is built from the geocoded bounding box. Without it a US run only had the
     // eight generic sector phrases (six after dedupe) and never dispatched a
     // worker swarm.
@@ -691,7 +699,7 @@ async function runOmniSearchOrchestrator(
 
     // Cross-check the anchor against the zones that have a real gazetteer
     // coordinate. If the anchor drifts far from their centroid, the anchor is
-    // wrong — rebuild the approximate cells around the real cluster instead of
+    // wrong â€” rebuild the approximate cells around the real cluster instead of
     // scattering a district's villages into another state.
     try {
       const precise = zones.filter(z => !z.isApproximate && Number.isFinite(Number(z.lat)) && Number.isFinite(Number(z.lng)));
@@ -714,8 +722,8 @@ async function runOmniSearchOrchestrator(
       }
     } catch (anchorError) {}
 
-    // One guard is used by every write path — live snapshot, reconciliation and
-    // the final folder — so a row can never enter through the side door after
+    // One guard is used by every write path â€” live snapshot, reconciliation and
+    // the final folder â€” so a row can never enter through the side door after
     // the containment pass has already judged it out of bounds.
     allowSweepLead = (lead) => isInsideSweepArea(lead, planCenter, sweepScope, {
       boundary: plan?.boundary,
@@ -825,12 +833,12 @@ async function runOmniSearchOrchestrator(
     const deferredZones = [];
     const deferredKeys = new Set();
     addLog(
-      `[Orchestrator] Coverage mode: ${coverageMode.toUpperCase()} — ${activeZones.length} active zones `
+      `[Orchestrator] Coverage mode: ${coverageMode.toUpperCase()} â€” ${activeZones.length} active zones `
       + `(${namedZones.length} named, ${activeZones.length - namedZones.length} grid)`
       + '.'
     );
 
-    // Phase 6 — repeat-search scheduling. A zone that already yielded three or
+    // Phase 6 â€” repeat-search scheduling. A zone that already yielded three or
     // more validated mobiles for this category in the last 24 hours is still
     // covered, but it queues behind fresh ground. Coverage never shrinks.
     let repeatCoveredZones = new Set();
@@ -838,7 +846,7 @@ async function runOmniSearchOrchestrator(
       try {
         repeatCoveredZones = findRepeatCoveredZones({ category, location: baseLocation });
         if (repeatCoveredZones.size) {
-          addLog(`[Repeat Search] ${repeatCoveredZones.size} zone(s) already covered with 3+ verified mobiles in the last 24h — queued last, coverage kept.`);
+          addLog(`[Repeat Search] ${repeatCoveredZones.size} zone(s) already covered with 3+ verified mobiles in the last 24h â€” queued last, coverage kept.`);
         }
       } catch (repeatError) {
         addLog(`[Repeat Search] Notice: ${repeatError.message}`);
@@ -846,7 +854,7 @@ async function runOmniSearchOrchestrator(
     }
 
     try {
-      emitDispatchEvent(zones.map(z => z.zoneName));
+      emitDispatchEvent(zones.map(z => z.zoneName), sessionId);
     } catch (e) {}
 
     // Run boundary for text-query ("vector") zones.
@@ -893,6 +901,7 @@ async function runOmniSearchOrchestrator(
           };
         });
         emitGridEvent([{
+          sessionId,
           lat: anchorCoord.lat,
           lng: anchorCoord.lng,
           distanceFromCenter: 0,
@@ -904,7 +913,7 @@ async function runOmniSearchOrchestrator(
           boundingbox: anchorCoord.boundingbox,
           zones: zonePoints
         }, ...zonePoints]);
-        addLog(`[Orchestrator] 🛰️ Coverage grid emitted: ${zonePoints.length} zones anchored around ${anchorCoord.lat.toFixed(4)}, ${anchorCoord.lng.toFixed(4)}.`);
+        addLog(`[Orchestrator] ðŸ›°ï¸ Coverage grid emitted: ${zonePoints.length} zones anchored around ${anchorCoord.lat.toFixed(4)}, ${anchorCoord.lng.toFixed(4)}.`);
       } catch (e) {}
     }
 
@@ -917,14 +926,18 @@ async function runOmniSearchOrchestrator(
     const cellStates = {};
 
     // Honest ETA: measured browser-seconds per zone divided by the slots the
-    // budget is actually allowing right now (not a fixed 5, not zones × 6 s).
+    // budget is actually allowing right now (not a fixed 5, not zones Ã— 6 s).
     const etaPerZone = etaModel.secondsPerZoneFor(activeEngines);
     const etaSlots = etaModel.liveBrowserSlots(getConcurrencyMetrics());
+
+    const initialEtaMs = etaModel.modelEtaMs(Math.max(0, totalZones - completedZones), etaSlots, etaPerZone);
+    const initialEtaStr = formatEta(initialEtaMs);
 
     activeSessions[sessionId] = {
       ...(activeSessions[sessionId] || {}),
       sessionId,
       userId,
+      isMaster: Boolean(isMaster),
       category,
       location: baseLocation,
       family: classification.family,
@@ -941,7 +954,11 @@ async function runOmniSearchOrchestrator(
       totalMandalsAcrossAll: totalZones,
       overallTotalMandals: totalZones,
       overallCompletedMandals: completedZones,
-      eta: formatEta(etaModel.modelEtaMs(Math.max(0, totalZones - completedZones), etaSlots, etaPerZone)),
+      eta: initialEtaStr,
+      etaText: initialEtaStr,
+      etaMs: initialEtaMs,
+      pendingJobs: Math.max(0, totalZones - completedZones),
+      runningJobs: 0,
       sessionActive: true,
       aborted: false,
       finished: false,
@@ -998,8 +1015,14 @@ async function runOmniSearchOrchestrator(
         activeZone: firstActivePayload,
         totalMandalsAcrossAll: totalZones,
         overallCompletedMandals: 0,
-        eta: formatEta(etaModel.modelEtaMs(totalZones, etaSlots, etaPerZone)),
-        etaText: formatEta(etaModel.modelEtaMs(totalZones, etaSlots, etaPerZone)),
+        eta: initialEtaStr,
+        etaText: initialEtaStr,
+        etaMs: initialEtaMs,
+        pendingJobs: Math.max(0, totalZones - completedZones),
+        runningJobs: 0,
+        queuedZones: Math.max(0, totalZones - completedZones),
+        doneZones: completedZones,
+        runningZones: 0,
         sessionActive: true
       });
       if (firstActivePayload && Number.isFinite(firstLat) && Number.isFinite(firstLng)) {
@@ -1022,20 +1045,28 @@ async function runOmniSearchOrchestrator(
     // plan and the orchestrator can never disagree about what is enabled.
     const hasEngine = makeHasEngine(activeEngines);
 
-    // 2a. TIER 0 TURBO-BURST: Instant Sub-Second Leads (<1.2s)
-    // Runs direct keyless HTTP engines (JustDial Mobile JSON + OSM Overpass POI) immediately
-    // without queuing delays, streaming 30–120 rich leads into SSE right at second 0!
-    if (hasEngine('justdial') || hasEngine('openstreetmap') || hasEngine('web-discovery')) {
-      // Health and politeness must be recorded on this path too. These engines
-      // are invoked directly here (not through the queued task wrappers), and
-      // the board used to keep showing an old "empty" badge for an engine that
-      // was in fact returning rows on every sweep.
+    // 2a. TIER 0 TURBO-BURST: Instant Sub-Second Leads (<1.5s)
+    // Runs direct keyless HTTP engines (JustDial Mobile JSON + Google Local HTTP + OSM + Web Discovery)
+    // immediately without queuing delays, delivering verified mobile leads right at second 0!
+    const cleanBaseCity = baseLocation
+      .replace(/\s*\([^)]*SWEEP\)/gi, '')
+      .replace(/\s+\b(District|Dist|Mandal|Tehsil|Taluk|Block)\b/gi, '')
+      .trim();
+    const tier0JustDialBase = countryCode === 'IN' && hasEngine('justdial') && Boolean(cleanBaseCity);
+
+    if (
+      hasEngine('justdial')
+      || hasEngine('openstreetmap')
+      || hasEngine('web-discovery')
+      || hasEngine('local_finder')
+      || hasEngine('maps')
+    ) {
       const runBurst = async (engineKey, label, fn) => {
         const t0 = Date.now();
         try {
           const result = await fn();
           const count = result && typeof result === 'object'
-            ? Number(result.totalScraped ?? result.newInserted ?? 0)
+            ? Number(result.totalScraped ?? result.newInserted ?? result.count ?? 0)
             : 0;
           engineHealth.recordRun(engineKey, {
             ok: true,
@@ -1053,54 +1084,144 @@ async function runOmniSearchOrchestrator(
         }
       };
 
-      (async () => {
-        try {
-          addLog(`[Turbo-Burst] ⚡ Launching Tier-0 direct HTTP burst for instant first leads...`);
-          const cleanBaseCity = baseLocation
-            .replace(/\s*\([^)]*SWEEP\)/gi, '')
-            .replace(/\s+\b(District|Dist|Mandal|Tehsil|Taluk|Block)\b/gi, '')
-            .trim();
+      const { runWithContext } = require('./runContext');
+      runWithContext(
+        { userId, sessionId, isMaster, country: countryCode },
+        () => (async () => {
+          try {
+            addLog(`[Turbo-Burst] âš¡ Launching Tier-0 direct HTTP burst for instant first leads...`);
+            const burstTasks = [];
 
-          const burstTasks = [];
-          if (hasEngine('openstreetmap')) {
-            const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../scrapers/engine-openstreetmap');
-            if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent });
-            burstTasks.push(runBurst('openstreetmap', 'OpenStreetMap', () => scrapeOpenStreetMap(
-              category,
-              cleanBaseCity,
-              sessionId,
-              baseGeo?.lat || null,
-              baseGeo?.lng || null,
-              Math.max(6, radiusKm + 5),
-              countryCode
-            )));
+            if (tier0JustDialBase) {
+              const { scrapeJustDial, setDeps: setJdDeps } = require('../scrapers/engine-justdial');
+              if (typeof setJdDeps === 'function') {
+                setJdDeps({ logger: addLog, emitVendorEvent, abortSignal: sessionAbortSignal });
+              }
+              burstTasks.push(runBurst('justdial', 'JustDial Mobile API', () => scrapeJustDial(
+                category,
+                cleanBaseCity,
+                'omni',
+                sessionId
+              )));
+            }
+
+            if ((hasEngine('local_finder') || hasEngine('maps')) && cleanBaseCity && !serpBreaker.isBlocked()) {
+              const { fetchGoogleLocalHttp } = require('../utils/fastGoogleHttp');
+              burstTasks.push(runBurst('google-local-finder', 'Google Local HTTP', async () => {
+                const httpRes = await fetchGoogleLocalHttp(`${searchPhrase} in ${cleanBaseCity}`, 0, category, countryCode);
+                if (!httpRes || httpRes.fallbackToBrowser || !Array.isArray(httpRes.leads) || !httpRes.leads.length) {
+                  return { count: 0 };
+                }
+                let inserted = 0;
+                const owner = dbAdapter.getSessionOwner(sessionId) || userId || 'admin_1';
+                for (const item of httpRes.leads) {
+                  if (isAborted() || !item || !item.name) continue;
+                  if (!isVendorRelevant({ name: item.name, address: item.address, category: item.category || category }, category)) continue;
+                  if (!isMaster && cleanBaseCity) {
+                    const containment = isListingRelevantToQuery(
+                      item.name, item.address, '', regionLabel, cleanBaseCity, cleanBaseCity,
+                      null, baseGeo?.boundingbox || null, cleanBaseCity, false, 'city'
+                    );
+                    if (!containment.relevant) continue;
+                  }
+                  const parsed = item.phone
+                    ? parsePhone(item.phone, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN', context: 'phone tel' })
+                    : null;
+                  const displayPhone = parsed ? (parsed.displayPhone || parsed.e164) : '';
+                  const isMob = Boolean(parsed && parsed.isMobile);
+                  const score = displayPhone ? (isMob ? 88 : 78) : (item.website ? 65 : 48);
+                  const candidate = {
+                    id: `glh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+                    name: item.name,
+                    category,
+                    address: item.address || '',
+                    city: cleanBaseCity,
+                    state: regionLabel,
+                    country: countryCode,
+                    phone: displayPhone,
+                    phones: displayPhone ? [displayPhone] : [],
+                    phoneType: parsed ? (isMob ? 'mobile' : 'landline') : '',
+                    callUrl: parsed ? (parsed.callUrl || `tel:${parsed.digits}`) : '',
+                    whatsappAvailable: isMob,
+                    whatsappLink: isMob && parsed?.digits
+                      ? `https://wa.me/${parsed.digits}?text=Hi%20${encodeURIComponent(item.name)}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
+                      : '',
+                    rating: item.rating ?? null,
+                    reviewsCount: item.reviewsCount ?? null,
+                    website: item.website || '',
+                    mapsLink: item.mapsLink || '',
+                    qualityScore: score,
+                    tier: determineTier(score),
+                    source: 'Google Local Finder',
+                    sourceEngine: 'google-local-finder',
+                    verified: Boolean(displayPhone),
+                    scrapedAt: new Date().toISOString(),
+                    sessionId,
+                    userId: owner
+                  };
+                  const existing = dbAdapter.findMatch(candidate);
+                  if (!existing) {
+                    dbAdapter.saveVendor(owner, candidate);
+                    try { emitVendorEvent(candidate, 'inserted'); } catch (e) {}
+                    if (!isMob) {
+                      try { streamingEnricher.enqueue(candidate); } catch (e) {}
+                    }
+                    inserted++;
+                  } else if (!existing.phone && candidate.phone) {
+                    existing.phone = candidate.phone;
+                    existing.phones = [...new Set([...(existing.phones || []), candidate.phone])];
+                    existing.sessionId = sessionId;
+                    dbAdapter.saveVendor(owner, existing);
+                    try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                  }
+                }
+                if (inserted > 0) {
+                  addLog(`[Turbo-Burst] âš¡ Google Local HTTP streamed ${inserted} instant lead(s) at second 0.`);
+                }
+                return { count: inserted, totalScraped: inserted, newInserted: inserted };
+              }));
+            }
+
+            if (hasEngine('openstreetmap')) {
+              const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../scrapers/engine-openstreetmap');
+              if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent });
+              burstTasks.push(runBurst('openstreetmap', 'OpenStreetMap', () => scrapeOpenStreetMap(
+                category,
+                cleanBaseCity,
+                sessionId,
+                baseGeo?.lat || null,
+                baseGeo?.lng || null,
+                Math.max(6, radiusKm + 5),
+                countryCode
+              )));
+            }
+            if (hasEngine('web-discovery')) {
+              const { scrapeWebDiscovery, setDeps: setWdDeps } = require('../scrapers/engine-web-discovery');
+              if (typeof setWdDeps === 'function') setWdDeps({ logger: addLog, emitVendorEvent, abortSignal: sessionAbortSignal });
+              burstTasks.push(runBurst('web-discovery', 'Web Discovery', () => scrapeWebDiscovery(
+                category,
+                cleanBaseCity,
+                sessionId,
+                { countryCode, limit: 8 }
+              )));
+            }
+            if (hasEngine('wikidata')) {
+              const { scrapeWikidata, setDeps: setWkDeps } = require('../scrapers/engine-wikidata-businesses');
+              if (typeof setWkDeps === 'function') setWkDeps({ logger: addLog, emitVendorEvent, abortSignal: sessionAbortSignal });
+              burstTasks.push(runBurst('wikidata', 'Wikidata', () => scrapeWikidata(category, cleanBaseCity, sessionId, countryCode)));
+            }
+            if (hasEngine('trustpilot')) {
+              const { scrapeTrustpilot, setDeps: setTpDeps } = require('../scrapers/engine-trustpilot');
+              if (typeof setTpDeps === 'function') setTpDeps({ logger: addLog, emitVendorEvent, abortSignal: sessionAbortSignal });
+              burstTasks.push(runBurst('trustpilot', 'Trustpilot', () => scrapeTrustpilot(category, cleanBaseCity, sessionId, { countryCode })));
+            }
+            await Promise.allSettled(burstTasks);
+            addLog(`[Turbo-Burst] ðŸš€ Tier-0 direct HTTP burst complete: first leads delivered to Command Center.`);
+          } catch (err) {
+            addLog(`[Turbo-Burst] Notice: ${err.message}`);
           }
-          if (hasEngine('web-discovery')) {
-            const { scrapeWebDiscovery, setDeps: setWdDeps } = require('../scrapers/engine-web-discovery');
-            if (typeof setWdDeps === 'function') setWdDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
-            burstTasks.push(runBurst('web-discovery', 'Web Discovery', () => scrapeWebDiscovery(
-              category,
-              cleanBaseCity,
-              sessionId,
-              { countryCode, limit: 8 }
-            )));
-          }
-          if (hasEngine('wikidata')) {
-            const { scrapeWikidata, setDeps: setWkDeps } = require('../scrapers/engine-wikidata-businesses');
-            if (typeof setWkDeps === 'function') setWkDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
-            burstTasks.push(runBurst('wikidata', 'Wikidata', () => scrapeWikidata(category, cleanBaseCity, sessionId, countryCode)));
-          }
-          if (hasEngine('trustpilot')) {
-            const { scrapeTrustpilot, setDeps: setTpDeps } = require('../scrapers/engine-trustpilot');
-            if (typeof setTpDeps === 'function') setTpDeps({ logger: addLog, emitVendorEvent, abortSignal: globalAbortSignal });
-            burstTasks.push(runBurst('trustpilot', 'Trustpilot', () => scrapeTrustpilot(category, cleanBaseCity, sessionId, { countryCode })));
-          }
-          await Promise.allSettled(burstTasks);
-          addLog(`[Turbo-Burst] 🚀 Tier-0 direct HTTP burst complete: first leads delivered to Command Center.`);
-        } catch (err) {
-          addLog(`[Turbo-Burst] Notice: ${err.message}`);
-        }
-      })();
+        })()
+      );
     }
 
     // Pre-warm the zone context pool while the directory engines are queued.
@@ -1145,6 +1266,13 @@ async function runOmniSearchOrchestrator(
     for (const job of enginePlan.jobs) {
       const taskName = job.task;
       const args = job.args;
+      if (
+        tier0JustDialBase
+        && taskName === 'scrapeJustDial'
+        && String(args?.[1] || '').toLowerCase().trim() === String(baseLocation || '').toLowerCase().trim()
+      ) {
+        continue;
+      }
       try {
         await addScrapeJob(taskName, args, 12, {
           lat: baseGeo?.lat || null,
@@ -1155,6 +1283,8 @@ async function runOmniSearchOrchestrator(
           state: regionLabel,
           country: countryCode,
           sessionId,
+          userId,
+          isMaster,
           active: true,
           cityScope: true
         });
@@ -1307,16 +1437,22 @@ async function runOmniSearchOrchestrator(
       }
 
       let etaStr = 'Calculating...';
+      let etaMs = 0;
       const elapsed = Date.now() - startTime;
       const remainingZones = Math.max(0, totalZones - completedZones);
+      // Zones that are running right now are partly done, so count them as half
+      // done. Without this the ETA stayed frozen at the static model until the
+      // first wave of zones finished.
+      const effectiveDone = Math.min(totalZones, completedZones + 0.5 * runningForSession.length);
+      const effectiveRemaining = Math.max(0, totalZones - effectiveDone);
+      const modelPerZoneWallMs = (Number(etaPerZone) * 1000) / Math.max(1, etaSlots);
       if (completedZones >= 3) {
         // After a few real completions the run's own wall-clock average beats
         // any model. It already includes the live concurrency.
         const avgTimePerZone = elapsed / completedZones;
         // Blend a recent window with the overall average and never promise a
-        // shorter finish than the overall average implies. A sweep that is
-        // slowing down therefore raises its ETA instead of holding a stale,
-        // optimistic number until the last minute.
+        // shorter finish than the overall average implies, so a slowing sweep
+        // raises its ETA instead of holding a stale, optimistic number.
         let perZone = avgTimePerZone;
         if (completionTimes.length >= 4) {
           const span = completionTimes[completionTimes.length - 1] - completionTimes[0];
@@ -1326,13 +1462,19 @@ async function runOmniSearchOrchestrator(
             perZone = Math.max(avgTimePerZone, recentPerZone * 0.6 + avgTimePerZone * 0.4);
           }
         }
-        etaStr = formatEta(remainingZones * perZone);
+        etaMs = effectiveRemaining * perZone;
+      } else if (completedZones >= 1) {
+        // One or two completions: average the measured pace with the model.
+        const perZone = ((elapsed / completedZones) + modelPerZoneWallMs) / 2;
+        etaMs = effectiveRemaining * perZone;
       } else {
-        // Too early to measure: fall back to the shared model instead of the
-        // old flat 6 s per zone, which overstated a fast run by ~4×.
-        etaStr = formatEta(etaModel.modelEtaMs(remainingZones, etaSlots, etaPerZone));
+        // Nothing finished yet: count the static model down from the start,
+        // but never claim fewer than 15% of it remains.
+        const modelTotalMs = etaModel.modelEtaMs(totalZones, etaSlots, etaPerZone);
+        etaMs = Math.max(modelTotalMs * 0.15, modelTotalMs - elapsed);
       }
-
+      etaMs = Math.max(0, Math.round(etaMs));
+      etaStr = formatEta(etaMs);
       const activeRunningJob = runningForSession[0];
       const nextZone = activeZones.find(zone => targetMap[zoneKey(zone)] !== 'completed');
       const activeZoneName = activeRunningJob?.meta?.locationName || nextZone?.zoneName || 'Finalizing';
@@ -1407,7 +1549,7 @@ async function runOmniSearchOrchestrator(
               if (adaptiveSplitsUsed >= MAX_ADAPTIVE_SPLITS) break;
               const subLat = Number((azLat + off.dLat).toFixed(5));
               const subLng = Number((azLng + off.dLng).toFixed(5));
-              const subName = `${az.zoneName || az.name} · ${off.tag}`;
+              const subName = `${az.zoneName || az.name} Â· ${off.tag}`;
               const subKey = String(subName).toLowerCase().trim();
               const subQuery = `${searchPhrase} near ${subLat},${subLng}`;
               const subZone = {
@@ -1440,7 +1582,7 @@ async function runOmniSearchOrchestrator(
               activeSessions[sessionId].totalMandalsAcrossAll = totalZones;
               activeSessions[sessionId].overallTotalMandals = totalZones;
             }
-            addLog(`[Adaptive Radar] ⚡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
+            addLog(`[Adaptive Radar] âš¡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
           }
         }
       } catch (adaptiveErr) { /* best-effort adaptive split */ }
@@ -1457,6 +1599,9 @@ async function runOmniSearchOrchestrator(
         liveSession.activeMandal = activeZoneName;
         liveSession.eta = etaStr;
         liveSession.etaText = etaStr;
+        liveSession.etaMs = etaMs;
+        liveSession.pendingJobs = pendingForSession.length;
+        liveSession.runningJobs = runningForSession.length;
       }
 
       try {
@@ -1501,6 +1646,12 @@ async function runOmniSearchOrchestrator(
           splitZonesCount: adaptiveSplitsUsed,
           eta: etaStr,
           etaText: etaStr,
+          etaMs,
+          pendingJobs: pendingForSession.length,
+          runningJobs: runningForSession.length,
+          queuedZones: Math.max(0, totalZones - completedZones - runningForSession.length),
+          doneZones: completedZones,
+          runningZones: runningForSession.length,
           sessionActive: true
         });
 
@@ -1548,7 +1699,10 @@ async function runOmniSearchOrchestrator(
               lng: rzGeo?.lng || null,
               zoneName: rzLabel,
               locationName: rzLabel,
+              country: countryCode,
               sessionId,
+              userId,
+              isMaster,
               active: true
             });
           }
@@ -1783,7 +1937,7 @@ async function runOmniSearchOrchestrator(
           if (!lead.latitude || !lead.longitude) return true;
           if (boundary) {
             if (isInsideDistrictBoundary(lead, boundary)) return true;
-            addLog(`[Containment] Dropped "${lead.name}" · outside ${boundary.district} district boundary`);
+            addLog(`[Containment] Dropped "${lead.name}" Â· outside ${boundary.district} district boundary`);
             quarantineLead(lead, `outside ${boundary.district} district boundary`);
             return false;
           }
@@ -1798,7 +1952,7 @@ async function runOmniSearchOrchestrator(
             return true; // Preserves verified SABs serving the target city
           }
 
-          addLog(`[Containment] Dropped "${lead.name}" · ${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
+          addLog(`[Containment] Dropped "${lead.name}" Â· ${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
           quarantineLead(lead, `${km.toFixed(1)}km from ${baseLocation} (max ${maxKm.toFixed(1)}km)`);
           return false;
         });
@@ -1825,6 +1979,7 @@ async function runOmniSearchOrchestrator(
           overallCompletedMandals: totalZones,
           eta: 'Finishing contacts...',
           etaText: 'Finishing contacts...',
+          etaMs: 0,
           sessionActive: true
         });
       } catch (pe) {}
@@ -1879,13 +2034,13 @@ async function runOmniSearchOrchestrator(
       }
 
       if (crossResolvedCount > 0) {
-        addLog(`[Cooperative Engine] 🤝 Cross-engine entity matching recovered ${crossResolvedCount} missing contact(s).`);
+        addLog(`[Cooperative Engine] ðŸ¤ Cross-engine entity matching recovered ${crossResolvedCount} missing contact(s).`);
       }
 
       // 2. High-Yield Stealth Fallback SERP Dorking for remaining high-priority leads with missing mobile
       const stillNeedingPhone = sessionLeads.filter(l => l && (!l.phone || l.phone.length < 8)).slice(0, 15);
       if (stillNeedingPhone.length > 0) {
-        addLog(`[SERP Intelligence] 🔍 Dorking verified contacts for ${stillNeedingPhone.length} directory leads...`);
+        addLog(`[SERP Intelligence] ðŸ” Dorking verified contacts for ${stillNeedingPhone.length} directory leads...`);
         const dorkPromises = stillNeedingPhone.map(async (targetLead) => {
           try {
             const cCode = (targetLead.country && targetLead.country.length === 2) ? targetLead.country.toUpperCase() : 'IN';
@@ -1911,7 +2066,7 @@ async function runOmniSearchOrchestrator(
         });
         await Promise.allSettled(dorkPromises);
         if (dorkedCount > 0) {
-          addLog(`[SERP Intelligence] 📞 Extracted ${dorkedCount} verified contact(s) via stealth search dorking.`);
+          addLog(`[SERP Intelligence] ðŸ“ž Extracted ${dorkedCount} verified contact(s) via stealth search dorking.`);
         }
       }
     } catch (coopErr) {
@@ -1924,16 +2079,17 @@ async function runOmniSearchOrchestrator(
     try {
       const stillNeedingMobile = sessionLeads.filter(l => l && !hasValidMobile(l.phone, countryForLead(l)));
       if (stillNeedingMobile.length > 0) {
-        addLog(`[Contact Scout] 🎯 Launching targeted place detail pass for ${stillNeedingMobile.length} lead(s) lacking mobile numbers...`);
+        addLog(`[Contact Scout] ðŸŽ¯ Launching targeted place detail pass for ${stillNeedingMobile.length} lead(s) lacking mobile numbers...`);
+        const scoutSlots = Math.min(8, Math.max(4, require('../utils/browserBudget').getStatus().totalSlots || 6));
         phoneBackfill = await backfillPhones(stillNeedingMobile, {
           sessionId,
           onProgress,
           addLog,
-          concurrency: 6,
-          budgetMs: 120000
+          concurrency: scoutSlots,
+          budgetMs: 60000
         });
         if (phoneBackfill && phoneBackfill.mobilesFound > 0) {
-          addLog(`[Contact Scout] 📱 Discovered ${phoneBackfill.mobilesFound} mobile(s) and ${phoneBackfill.landlinesFound || 0} direct line(s) from place detail scouts.`);
+          addLog(`[Contact Scout] ðŸ“± Discovered ${phoneBackfill.mobilesFound} mobile(s) and ${phoneBackfill.landlinesFound || 0} direct line(s) from place detail scouts.`);
         }
       }
     } catch (bfErr) {
@@ -1955,7 +2111,7 @@ async function runOmniSearchOrchestrator(
         .sort((a, b) => b[1].leads - a[1].leads)
         .slice(0, 5)
         .map(([name, stats]) => `${name} (${stats.leads})`)
-        .join(' · ');
+        .join(' Â· ');
       if (topZones) addLog(`[Zone Yield] Top zones: ${topZones}`);
     } catch (e) {}
 
@@ -2140,7 +2296,7 @@ async function runOmniSearchOrchestrator(
       addLog(`[Contact Filter] Notice: ${contactFilterError.message}`);
     }
 
-    // Phase 6 — repeat-search carry-forward. Rows the machine already found for
+    // Phase 6 â€” repeat-search carry-forward. Rows the machine already found for
     // this exact category and city are cloned into the folder with provenance.
     // They are never upserted into the live store, so no credit is charged and
     // their original session IDs stay untouched.
@@ -2237,7 +2393,7 @@ async function runOmniSearchOrchestrator(
           } : undefined
         }
       });
-      addLog(`[Orchestrator] 📁 Search folder saved: ${saved.file || `${sessionId}.json`} (${saved.leadCount} leads, ${saved.phoneCount} phones)`);
+      addLog(`[Orchestrator] ðŸ“ Search folder saved: ${saved.file || `${sessionId}.json`} (${saved.leadCount} leads, ${saved.phoneCount} phones)`);
     } catch (saveErr) {
       addLog(`[Orchestrator] Note: Could not auto-persist vault to disk: ${saveErr.message}`);
     }
@@ -2252,7 +2408,7 @@ async function runOmniSearchOrchestrator(
         phoneCount: learnedLeads.filter(v => v.phone).length,
         vendors: learnedLeads
       });
-      addLog(`[Orchestrator] 🧠 Autonomous Intelligence learned: "${category}" (${learnedLeads.length} fresh leads, ${learnedLeads.filter(v => v.phone).length} verified +91 mobiles).`);
+      addLog(`[Orchestrator] ðŸ§  Autonomous Intelligence learned: "${category}" (${learnedLeads.length} fresh leads, ${learnedLeads.filter(v => v.phone).length} verified +91 mobiles).`);
     } catch (learnErr) {
       addLog(`[Orchestrator] Taxonomy learning skipped: ${learnErr.message}`);
     }
@@ -2274,6 +2430,7 @@ async function runOmniSearchOrchestrator(
         overallCompletedMandals: completedZones,
         eta: '0s',
         etaText: '0s',
+        etaMs: 0,
         totalLeads: sessionLeads.length,
         phoneCount: sessionLeads.filter(l => l.phone).length,
         sessionActive: false,

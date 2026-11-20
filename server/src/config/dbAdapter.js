@@ -1,4 +1,4 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 
 const { DATA_DIR: dataDir } = require('./paths');
@@ -140,10 +140,53 @@ function admitLeads(list) {
   }
 
   if (dropped) {
-    console.warn(`[credits] run out — ${dropped} new lead(s) not stored. Balance: ${credits.status().left}`);
+    console.warn(`[credits] run out â€” ${dropped} new lead(s) not stored. Balance: ${credits.status().left}`);
   }
 
   return admitted;
+}
+
+// Track active sessionId -> requesting userId so scrapers that pass 'admin_1'
+// still attribute leads to the Client or Master user who started the search.
+const SESSION_OWNER_MAX = 500;
+const sessionOwners = new Map();
+
+function registerSessionOwner(sessionId, userId) {
+  if (!sessionId || !userId || userId === 'admin_1' || userId === 'anonymous') return;
+  if (sessionOwners.has(sessionId)) sessionOwners.delete(sessionId);
+  sessionOwners.set(sessionId, String(userId));
+  while (sessionOwners.size > SESSION_OWNER_MAX) {
+    const oldest = sessionOwners.keys().next().value;
+    sessionOwners.delete(oldest);
+  }
+}
+
+function getSessionOwner(sessionId) {
+  if (!sessionId) return '';
+  return sessionOwners.get(sessionId) || '';
+}
+
+// Audience registry: who may SEE a run's live events. Unlike sessionOwners this
+// also records anonymous users and Master runs, because the live stream must
+// route every event to exactly the workspace that started it.
+const sessionScopes = new Map();
+
+function registerSessionScope(sessionId, scope = {}) {
+  if (!sessionId) return;
+  const entry = {
+    userId: String(scope.userId || 'anonymous'),
+    isMaster: scope.isMaster === true
+  };
+  if (sessionScopes.has(sessionId)) sessionScopes.delete(sessionId);
+  sessionScopes.set(sessionId, entry);
+  while (sessionScopes.size > SESSION_OWNER_MAX) {
+    sessionScopes.delete(sessionScopes.keys().next().value);
+  }
+}
+
+function getSessionScope(sessionId) {
+  if (!sessionId) return null;
+  return sessionScopes.get(sessionId) || null;
 }
 
 /**
@@ -153,7 +196,22 @@ function admitLeads(list) {
  */
 function saveVendor(userId, vendor) {
   if (!vendor || !vendor.id) return false;
-  vendor.userId = userId || vendor.userId || 'admin_1';
+  let contextUser = '';
+  try { contextUser = require('../services/runContext').currentUserId(); } catch (e) {}
+  const explicitUser = (userId && userId !== 'admin_1' && userId !== 'anonymous') ? userId : '';
+  const sessionOwner = getSessionOwner(vendor.lastSessionId || vendor.sessionId)
+    || getSessionOwner(vendor.sessionId)
+    || (contextUser && contextUser !== 'anonymous' && contextUser !== 'admin_1' ? contextUser : '');
+  const existingUser = (vendor.userId && vendor.userId !== 'admin_1' && vendor.userId !== 'anonymous') ? vendor.userId : '';
+  const effectiveOwner = explicitUser || sessionOwner || existingUser || userId || vendor.userId || 'admin_1';
+  vendor.userId = effectiveOwner;
+  vendor.userIds = Array.from(new Set([
+    ...(Array.isArray(vendor.userIds) ? vendor.userIds : []),
+    effectiveOwner,
+    explicitUser,
+    sessionOwner,
+    vendor.clientId
+  ].filter(u => u && u !== 'anonymous'))).slice(0, 60);
   // One parse decides every phone flag. See syncPhoneFlags().
   try { require('../utils/phoneUtils').syncPhoneFlags(vendor); } catch (e) {}
 
@@ -162,7 +220,7 @@ function saveVendor(userId, vendor) {
   const isNew = !vendorStore.isKnown(vendor);
   if (isNew && credits.ENFORCED && !knownLeads().has(vendor.id)) {
     if (credits.spend(1).charged < 1) {
-      console.warn('[credits] out of credits — lead not stored:', vendor.id);
+      console.warn('[credits] out of credits â€” lead not stored:', vendor.id);
       return false;
     }
     knownLeads().add(vendor.id);
@@ -341,6 +399,10 @@ module.exports = {
   deleteVendor,
   dropFromSession: vendorStore.dropFromSession,
   updateVendorsBatch,
+  registerSessionOwner,
+  getSessionOwner,
+  registerSessionScope,
+  getSessionScope,
   getEmployees,
   saveEmployees,
   getPublicUsers,

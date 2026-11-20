@@ -10,6 +10,7 @@ import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { ExternalLink, MapPin, Phone, Star, Plus, Minus, Compass, Layers, CheckCircle2, Zap } from 'lucide-react';
 import { cx, formatNumber } from './ui';
+import { API_URL } from '../apiConfig';
 
 const INDIA_CENTER = [22.5937, 79.9629];
 
@@ -24,15 +25,15 @@ try {
 } catch (e) { }
 
 // 100% Keyless, Disk-Cached + Offline Procedural Vector Map Engine (No API Keys Ever Required)
-const TILE_VOYAGER = '/api/map-tiles/voyager/{z}/{x}/{y}.png';
+const TILE_VOYAGER = `${API_URL}/map-tiles/voyager/{z}/{x}/{y}.png`;
 const TILE_VOYAGER_ATTRIBUTION = '&copy; Local Cached Map &copy; OpenStreetMap';
-const TILE_STREETS = '/api/map-tiles/streets/{z}/{x}/{y}.png';
-const TILE_SATELLITE = '/api/map-tiles/satellite/{z}/{x}/{y}.png';
-const TILE_SATELLITE_LABELS = '/api/map-tiles/labels/{z}/{x}/{y}.png';
-const TILE_LIGHT_CANVAS = '/api/map-tiles/light/{z}/{x}/{y}.png';
-const TILE_OSM = '/api/map-tiles/osm/{z}/{x}/{y}.png';
-const TILE_DARK_CANVAS = '/api/map-tiles/dark/{z}/{x}/{y}.png';
-const TILE_OFFLINE = '/api/map-tiles/offline/{z}/{x}/{y}.svg';
+const TILE_STREETS = `${API_URL}/map-tiles/streets/{z}/{x}/{y}.png`;
+const TILE_SATELLITE = `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`;
+const TILE_SATELLITE_LABELS = `${API_URL}/map-tiles/labels/{z}/{x}/{y}.png`;
+const TILE_LIGHT_CANVAS = `${API_URL}/map-tiles/light/{z}/{x}/{y}.png`;
+const TILE_OSM = `${API_URL}/map-tiles/osm/{z}/{x}/{y}.png`;
+const TILE_DARK_CANVAS = `${API_URL}/map-tiles/dark/{z}/{x}/{y}.png`;
+const TILE_OFFLINE = `${API_URL}/map-tiles/offline/{z}/{x}/{y}.svg`;
 const TILE_ATTRIBUTION = '&copy; Esri Satellite &copy; OpenStreetMap &copy; Local Cache';
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
@@ -114,6 +115,8 @@ function clusterIcon(cluster) {
 function SmartMapController({ center, zoom, activePoint, scanning }) {
   const map = useMap();
   const lastCenterRef = useRef(null);
+  const lastActiveRef = useRef(null);
+  const lastFlyTimeRef = useRef(0);
 
   // Multi-stage mount & continuous layout observer to guarantee Leaflet NEVER collapses to 0
   useEffect(() => {
@@ -175,9 +178,20 @@ function SmartMapController({ center, zoom, activePoint, scanning }) {
     }
   }, [center, zoom, map]);
 
-  // Live scan radar focus (smooth, non-interrupting camera track)
+  // Governed live scan radar focus (smooth, non-interrupting camera track with 700ms throttle)
   useEffect(() => {
     if (!scanning || !activePoint || !map) return;
+    const [lat, lng] = activePoint;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const now = Date.now();
+    if (now - lastFlyTimeRef.current < 700) return;
+    if (lastActiveRef.current) {
+      const [lastLat, lastLng] = lastActiveRef.current;
+      const dist = Math.hypot(lat - lastLat, lng - lastLng);
+      if (dist < 0.008) return;
+    }
+    lastActiveRef.current = [lat, lng];
+    lastFlyTimeRef.current = now;
     try {
       const currentZoom = map.getZoom() || 12;
       const targetZoom = Math.max(currentZoom, 13);
@@ -259,14 +273,15 @@ export default function CommandMap({
   fitKey = 'default',
   scopeTitle = 'Current Search',
   hoveredLeadId = null,
-  cellStates = {}
+  cellStates = {},
+  jumpTrail = null
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
   const [tileMode, setTileMode] = useState('satellite');
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
   const TILE_FAILOVER_ORDER = ['satellite'];
-  const handleTileError = useMemo(() => () => {}, []);
+  const handleTileError = useMemo(() => () => { }, []);
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -336,10 +351,10 @@ export default function CommandMap({
     // If coverage zones are anchored, only plot vendors belonging to this geographic region (within ~150km)
     const targetFiltered = (coverage.length > 0 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]))
       ? withCoords.filter(v => {
-          const dLat = Math.abs(v.latitude - safeCenter[0]);
-          const dLng = Math.abs(v.longitude - safeCenter[1]);
-          return dLat < 1.8 && dLng < 1.8;
-        })
+        const dLat = Math.abs(v.latitude - safeCenter[0]);
+        const dLng = Math.abs(v.longitude - safeCenter[1]);
+        return dLat < 1.8 && dLng < 1.8;
+      })
       : withCoords;
 
     if (targetFiltered.length <= MAX_MAP_PLOTTED_LEADS) return targetFiltered;
@@ -476,6 +491,21 @@ export default function CommandMap({
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
 
+        {/* Animated Zone Hopping Jump Trail */}
+        {jumpTrail && jumpTrail.from && jumpTrail.to && (
+          <Polyline
+            positions={[jumpTrail.from, jumpTrail.to]}
+            pathOptions={{
+              color: '#f59e0b',
+              weight: 3.5,
+              opacity: 0.95,
+              dashArray: '8 8',
+              lineCap: 'round',
+              lineJoin: 'round'
+            }}
+          />
+        )}
+
         {/* Always-On Live Hub-and-Spoke Vector Network over Satellite Terrain */}
         {coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
           <Polyline
@@ -581,54 +611,54 @@ export default function CommandMap({
                 }}
               >
                 <Popup className="v2-map-popup">
-                <div className="v2-map-popup-card">
-                  <div className="v2-map-popup-head">
-                    <span className="v2-map-popup-avatar">
-                      {(vendor.logo && !/ui-avatars/i.test(vendor.logo))
-                        ? <img src={vendor.logo} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
-                        : <b>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
-                    </span>
-                    <span>
-                      <b>{vendor.name || 'Unknown vendor'}</b>
-                      <small>{vendor.category || 'Business Lead'}</small>
-                    </span>
-                  </div>
-                  <div className="v2-map-popup-meta">
-                    <span><MapPin size={12} /> {vendor.city || vendor.district || vendor.state || 'Location known'}</span>
-                    {vendor.rating != null && (
-                      <span><Star size={12} fill="#fbbf24" stroke="#fbbf24" /> {Number(vendor.rating).toFixed(1)} {vendor.reviewsCount ? `(${formatNumber(vendor.reviewsCount)})` : ''}</span>
-                    )}
-                    {(vendor.phone || (Array.isArray(vendor.phones) && vendor.phones[0])) && (
-                      <span style={{ color: '#059669', fontWeight: 750 }}>
-                        <Phone size={12} /> {vendor.phone || (typeof vendor.phones[0] === 'string' ? vendor.phones[0] : vendor.phones[0].e164)}
+                  <div className="v2-map-popup-card">
+                    <div className="v2-map-popup-head">
+                      <span className="v2-map-popup-avatar">
+                        {(vendor.logo && !/ui-avatars/i.test(vendor.logo))
+                          ? <img src={vendor.logo} alt="" onError={event => { event.currentTarget.style.display = 'none'; }} />
+                          : <b>{(vendor.name || '?').slice(0, 1).toUpperCase()}</b>}
                       </span>
-                    )}
+                      <span>
+                        <b>{vendor.name || 'Unknown vendor'}</b>
+                        <small>{vendor.category || 'Business Lead'}</small>
+                      </span>
+                    </div>
+                    <div className="v2-map-popup-meta">
+                      <span><MapPin size={12} /> {vendor.city || vendor.district || vendor.state || 'Location known'}</span>
+                      {vendor.rating != null && (
+                        <span><Star size={12} fill="#fbbf24" stroke="#fbbf24" /> {Number(vendor.rating).toFixed(1)} {vendor.reviewsCount ? `(${formatNumber(vendor.reviewsCount)})` : ''}</span>
+                      )}
+                      {(vendor.phone || (Array.isArray(vendor.phones) && vendor.phones[0])) && (
+                        <span style={{ color: '#059669', fontWeight: 750 }}>
+                          <Phone size={12} /> {vendor.phone || (typeof vendor.phones[0] === 'string' ? vendor.phones[0] : vendor.phones[0].e164)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="v2-map-popup-actions">
+                      {onSelect && (
+                        <button type="button" onClick={() => onSelect(vendor)}>
+                          <ExternalLink size={12} /> Open Lead
+                        </button>
+                      )}
+                      {vendor.phone && (
+                        <a
+                          href={`tel:${vendor.phone}`}
+                          style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
+                        >
+                          <Phone size={12} /> Call
+                        </a>
+                      )}
+                      {vendor.mapsLink && (
+                        <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
+                          <MapPin size={12} /> Maps
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className="v2-map-popup-actions">
-                    {onSelect && (
-                      <button type="button" onClick={() => onSelect(vendor)}>
-                        <ExternalLink size={12} /> Open Lead
-                      </button>
-                    )}
-                    {vendor.phone && (
-                      <a
-                        href={`tel:${vendor.phone}`}
-                        style={{ color: '#059669', fontWeight: 750, textDecoration: 'none' }}
-                      >
-                        <Phone size={12} /> Call
-                      </a>
-                    )}
-                    {vendor.mapsLink && (
-                      <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
-                        <MapPin size={12} /> Maps
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MarkerClusterGroup>
 
         {activePoint && scanning && (

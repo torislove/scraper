@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { API_URL } from '../apiConfig';
+import { API_URL, DIRECT_BACKEND_URL } from '../apiConfig';
 
 const SESSION_KEY = 'scraper.session.v1';
 const CONFIG_CACHE_KEY = 'scraper.auth.config.v1';
@@ -47,7 +47,7 @@ export function clearSession() {
   try {
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
-  } catch (e) {}
+  } catch (e) { }
   window.dispatchEvent(new CustomEvent('scraper:auth-changed', { detail: null }));
 }
 
@@ -68,15 +68,34 @@ export function withStreamToken(url) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
+  const fetchOpts = {
     credentials: 'include',
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(),
       ...(options.headers || {})
-    },
-    ...options
-  });
+    }
+  };
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, fetchOpts);
+    const ct = response.headers.get('content-type') || '';
+    const shouldRetryDirect =
+      String(API_URL || '').startsWith('/') &&
+      DIRECT_BACKEND_URL &&
+      ([502, 503, 504].includes(response.status) ||
+        (response.status === 500 && !ct.includes('application/json')));
+    if (shouldRetryDirect) {
+      response = await fetch(`${DIRECT_BACKEND_URL}/api${path}`, fetchOpts);
+    }
+  } catch (err) {
+    if (String(API_URL || '').startsWith('/') && DIRECT_BACKEND_URL) {
+      response = await fetch(`${DIRECT_BACKEND_URL}/api${path}`, fetchOpts);
+    } else {
+      throw err;
+    }
+  }
   let body = null;
   try {
     body = await response.json();
@@ -96,7 +115,7 @@ export function getCachedAuthConfig() {
   try {
     const raw = sessionStorage.getItem(CONFIG_CACHE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch (e) {}
+  } catch (e) { }
   return { authRequired: AUTH_REQUIRED, allowSelfSignup: true, googleEnabled: false };
 }
 
@@ -104,7 +123,7 @@ export async function fetchAuthConfig() {
   const cfg = await request('/auth/config');
   try {
     sessionStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(cfg));
-  } catch (e) {}
+  } catch (e) { }
   return cfg;
 }
 
@@ -197,13 +216,13 @@ export function confirmPasswordReset({ email, code, newPassword }) {
 
 export function logout() {
   clearSession();
-  fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+  fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => { });
 }
 
 export async function logoutAll() {
   try {
     await request('/auth/logout-all', { method: 'POST' });
-  } catch (e) {}
+  } catch (e) { }
   clearSession();
 }
 

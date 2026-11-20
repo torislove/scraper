@@ -2,6 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const https = require('https');
 const { normalizePhone, extractPhones } = require('./phoneUtils');
+const { fetchTextSmart } = require('../services/fetchRouter');
 
 // Dedicated agent ignoring SSL errors common on local business websites with keepAlive
 const httpsAgent = new https.Agent({
@@ -321,6 +322,30 @@ function extractFromHtml(html, pageUrl, opts = {}) {
   return data;
 }
 
+async function fetchWebsiteText(targetUrl, timeoutMs = 2500, maxRedirects = 3) {
+  try {
+    const relayed = await fetchTextSmart(targetUrl, {
+      headers: DEFAULT_HEADERS,
+      timeoutMs
+    });
+    if (relayed.ok) return relayed.text || '';
+    if (!relayed.fallbackToServer) return '';
+  } catch (e) {}
+
+  try {
+    const res = await axios.get(targetUrl, {
+      timeout: timeoutMs,
+      httpsAgent,
+      headers: DEFAULT_HEADERS,
+      maxRedirects,
+      validateStatus: status => status >= 200 && status < 400
+    });
+    return typeof res.data === 'string' ? res.data : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 /**
  * Ultra-Fast Parallel Multi-Page Website Contact & Asset Extractor
  * Crawls home page + contact page in parallel (<800ms) to harvest mobile numbers and contacts.
@@ -374,17 +399,7 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
   try {
     // 1. Fetch homepage first with fast 2500ms timeout.
     // If homepage already has verified mobile + email, we save 3 seconds by early exit!
-    let homeHtml = '';
-    try {
-      const homeRes = await axios.get(uniqueUrls[0], {
-        timeout: 2500,
-        httpsAgent,
-        headers: DEFAULT_HEADERS,
-        maxRedirects: 3,
-        validateStatus: status => status >= 200 && status < 400
-      });
-      homeHtml = typeof homeRes.data === 'string' ? homeRes.data : '';
-    } catch (e) {}
+    const homeHtml = await fetchWebsiteText(uniqueUrls[0], 2500, 3);
 
     if (homeHtml) {
       const homeExtracted = extractFromHtml(homeHtml, uniqueUrls[0], opts);
@@ -404,21 +419,13 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
     if (result.mobiles.length === 0 && uniqueUrls.length > 1) {
       const subUrls = uniqueUrls.slice(1);
       const responses = await Promise.allSettled(
-        subUrls.map(targetUrl =>
-          axios.get(targetUrl, {
-            timeout: 2500,
-            httpsAgent,
-            headers: DEFAULT_HEADERS,
-            maxRedirects: 2,
-            validateStatus: status => status >= 200 && status < 400
-          })
-        )
+        subUrls.map(targetUrl => fetchWebsiteText(targetUrl, 2500, 2))
       );
 
       for (let i = 0; i < responses.length; i++) {
         const resp = responses[i];
-        if (resp.status !== 'fulfilled' || !resp.value?.data) continue;
-        const html = typeof resp.value.data === 'string' ? resp.value.data : '';
+        if (resp.status !== 'fulfilled' || !resp.value) continue;
+        const html = resp.value;
         if (!html) continue;
 
         const extracted = extractFromHtml(html, subUrls[i], opts);

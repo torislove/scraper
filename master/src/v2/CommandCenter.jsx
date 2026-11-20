@@ -8,7 +8,7 @@ import {
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
   Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus,
-  Volume2, VolumeX
+  Volume2, VolumeX, Eye
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import CommandMap from './CommandMap';
@@ -21,7 +21,8 @@ import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
   startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
-  deleteSession, renameSession, mergeSessions, batchDeleteSessions
+  deleteSession, renameSession, mergeSessions, batchDeleteSessions,
+  getLiveClientSessions, sessionStreamUrl
 } from './api';
 import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
@@ -32,6 +33,9 @@ import {
   getDisplayPhone, isMobilePhone, whatsappNumber, classifyPhone
 } from '../utils/phoneClassify';
 import { createLiveStream } from './liveStream';
+import { API_URL } from '../apiConfig';
+import { authHeaders, getSession } from './auth';
+import { startRelayAgent } from './utils/relayAgent';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
 
@@ -82,13 +86,27 @@ import MapViewTab from './components/views/MapViewTab';
 import FoldersGridView from './components/views/FoldersGridView';
 import IntelligenceView from './components/views/IntelligenceView';
 import DeepJobsView from './components/views/DeepJobsView';
-import { extractLeadArea, CarriedBadge, qualityOf } from './utils/leadHelpers';
+import { extractLeadArea, CarriedBadge, qualityOf, mergeSingleVendor, mergeVendorLists } from './utils/leadHelpers';
 import { leadSourceMeta } from './utils/leadSource';
 import InstrumentPanel from './components/InstrumentPanel';
 import CountryFlagStrip from './components/CountryFlagStrip';
 import AccountMenu from './components/AccountMenu';
 import TrashModal from './components/TrashModal';
+import RetroDigitalTimer from './components/RetroDigitalTimer';
 import { findCountry } from './data/countries';
+
+const LAST_LIVE_SESSION_KEY = 'scraper_master_last_live_session';
+
+function readLastLiveSession() {
+  try { return localStorage.getItem(LAST_LIVE_SESSION_KEY) || ''; } catch (e) { return ''; }
+}
+
+function persistLastLiveSession(sid) {
+  try {
+    if (sid) localStorage.setItem(LAST_LIVE_SESSION_KEY, sid);
+    else localStorage.removeItem(LAST_LIVE_SESSION_KEY);
+  } catch (e) {}
+}
 
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, matchesFolder,
@@ -170,6 +188,32 @@ export default function CommandCenter() {
   const [reconnectAttemptCount, setReconnectAttemptCount] = useState(0);
   const reconnectStreamRef = useRef(null);
 
+  // RAM Turbo: the master can use the same zero-knowledge relay as the client.
+  const [relayState, setRelayState] = useState({ installed: false, connected: false, relayed: 0, lastError: '' });
+  const relayAgentRef = useRef(null);
+
+  useEffect(() => {
+    const session = getSession();
+    const userId = session?.userId || session?.user?.id || '';
+    relayAgentRef.current = startRelayAgent({
+      apiBase: API_URL,
+      userId,
+      headers: authHeaders(),
+      onStatus: (status) => {
+        setRelayState({
+          installed: status.installed,
+          connected: status.connected,
+          relayed: status.relayed || 0,
+          lastError: status.lastError || ''
+        });
+      }
+    });
+    return () => {
+      relayAgentRef.current?.stop?.();
+      relayAgentRef.current = null;
+    };
+  }, []);
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
@@ -187,20 +231,26 @@ export default function CommandCenter() {
     const pingId = setInterval(async () => {
       if (!navigator.onLine) {
         setIsOnline(false);
+        setConnectionLatency(null);
+        setHealth(null);
         return;
       }
       const t0 = performance.now();
       try {
-        const ctrl = new AbortController();
-        const timeout = setTimeout(() => ctrl.abort(), 4000);
-        const res = await fetch('/api/deep-profile/health', { signal: ctrl.signal });
-        clearTimeout(timeout);
+        const data = await getHealth();
         const latency = Math.round(performance.now() - t0);
-        setConnectionLatency(latency);
-        if (res.ok) setIsOnline(true);
+        if (data && data.ok !== false) {
+          setConnectionLatency(latency);
+          setHealth(data);
+          setIsOnline(true);
+        } else {
+          setConnectionLatency(null);
+          setHealth(null);
+        }
       } catch (e) {
+        setConnectionLatency(null);
+        setHealth(null);
         if (!navigator.onLine) setIsOnline(false);
-        else setConnectionLatency(4000);
       }
     }, 10000);
 
@@ -247,7 +297,10 @@ export default function CommandCenter() {
   const fetchTaxonomy = useCallback(async () => {
     setLoadingTaxonomy(true);
     try {
-      const res = await fetch('/api/search/learned?limit=100');
+      const res = await fetch(`${API_URL}/search/learned?limit=100`, {
+        credentials: 'include',
+        headers: { ...authHeaders(), 'x-workspace-scope': 'master' }
+      });
       const data = await res.json();
       if (data.ok) setTaxonomyData(data);
     } catch (e) {
@@ -260,7 +313,11 @@ export default function CommandCenter() {
   const seedUniversalIntelligence = useCallback(async () => {
     setSeedingTaxonomy(true);
     try {
-      const res = await fetch('/api/search/taxonomy/seed', { method: 'POST' });
+      const res = await fetch(`${API_URL}/search/taxonomy/seed`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { ...authHeaders(), 'x-workspace-scope': 'master' }
+      });
       const data = await res.json();
       if (data.ok) {
         toast.success(data.message || 'Universal Intelligence Seeded!');
@@ -320,6 +377,34 @@ export default function CommandCenter() {
     routerLocation.state?.query || searchParams.get('q') || ''
   );
   const [activeZone, setActiveZone] = useState(null);
+  const [hopTransition, setHopTransition] = useState('');
+  const [jumpTrail, setJumpTrail] = useState(null);
+  const [liveClientSessions, setLiveClientSessions] = useState([]);
+  const [monitorSession, setMonitorSession] = useState(null);
+  const monitorSessionRef = useRef(null);
+  useEffect(() => { monitorSessionRef.current = monitorSession; }, [monitorSession]);
+
+  // Periodic polling for active client sessions to populate Master's "Watch Client Live" monitor
+  useEffect(() => {
+    let alive = true;
+    const pollClients = async () => {
+      try {
+        const list = await getLiveClientSessions();
+        if (alive && Array.isArray(list)) {
+          setLiveClientSessions(list);
+          if (monitorSessionRef.current && !list.some(s => s.id === monitorSessionRef.current.id)) {
+            // Client session ended
+            setMonitorSession(null);
+            toast('Client session completed.', { icon: '🏁' });
+          }
+        }
+      } catch (e) {}
+    };
+    pollClients();
+    const interval = setInterval(pollClients, 3500);
+    return () => { alive = false; clearInterval(interval); };
+  }, []);
+
   const [gridZones, setGridZones] = useState([]);
   const [scanning, setScanning] = useState(false);
 
@@ -342,8 +427,10 @@ export default function CommandCenter() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [sessionFilter, setSessionFilter] = useState('');
+  const [sessionFilter, setSessionFilter] = useState(() => readLastLiveSession());
   const [selectedAreaFilter, setSelectedAreaFilter] = useState('all');
+  const [freshLeadIds, setFreshLeadIds] = useState(() => new Set());
+  const [phoneJustFoundIds, setPhoneJustFoundIds] = useState(() => new Set());
 
   const [launching, setLaunching] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -353,14 +440,84 @@ export default function CommandCenter() {
   const mountedRef = useRef(true);
   const runRef = useRef(null);
   const runVendorIdsRef = useRef(new Set());
-  const activeSessionIdRef = useRef('');
+  const activeSessionIdRef = useRef(readLastLiveSession());
+  const sessionFilterRef = useRef(sessionFilter);
+  const searchCountryRef = useRef(searchCountry);
+  const freshTimersRef = useRef(new Map());
+  const phoneTimersRef = useRef(new Map());
   const lastEventRef = useRef(Date.now());
   const finishingRef = useRef(false);
   const deepJobRef = useRef(null);
 
+  useEffect(() => { sessionFilterRef.current = sessionFilter; }, [sessionFilter]);
+  useEffect(() => { searchCountryRef.current = searchCountry; }, [searchCountry]);
+
+  const markFreshLeads = useCallback((ids = []) => {
+    const valid = ids.filter(Boolean);
+    if (!valid.length || !mountedRef.current) return;
+    setFreshLeadIds(prev => {
+      const next = new Set(prev);
+      for (const id of valid) next.add(id);
+      return next;
+    });
+    for (const id of valid) {
+      const prevTimer = freshTimersRef.current.get(id);
+      if (prevTimer) clearTimeout(prevTimer);
+      const t = setTimeout(() => {
+        freshTimersRef.current.delete(id);
+        if (!mountedRef.current) return;
+        setFreshLeadIds(prev => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 1700);
+      freshTimersRef.current.set(id, t);
+    }
+  }, []);
+
+  const markPhoneFound = useCallback((ids = []) => {
+    const valid = ids.filter(Boolean);
+    if (!valid.length || !mountedRef.current) return;
+    setPhoneJustFoundIds(prev => {
+      const next = new Set(prev);
+      for (const id of valid) next.add(id);
+      return next;
+    });
+    for (const id of valid) {
+      const prevTimer = phoneTimersRef.current.get(id);
+      if (prevTimer) clearTimeout(prevTimer);
+      const t = setTimeout(() => {
+        phoneTimersRef.current.delete(id);
+        if (!mountedRef.current) return;
+        setPhoneJustFoundIds(prev => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 2400);
+      phoneTimersRef.current.set(id, t);
+    }
+  }, []);
+
+  const clearAnimationHighlights = useCallback(() => {
+    for (const t of freshTimersRef.current.values()) clearTimeout(t);
+    for (const t of phoneTimersRef.current.values()) clearTimeout(t);
+    freshTimersRef.current.clear();
+    phoneTimersRef.current.clear();
+    setFreshLeadIds(new Set());
+    setPhoneJustFoundIds(new Set());
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      for (const t of freshTimersRef.current.values()) clearTimeout(t);
+      for (const t of phoneTimersRef.current.values()) clearTimeout(t);
+    };
   }, []);
 
   const progressRef = useRef(null);
@@ -384,6 +541,7 @@ export default function CommandCenter() {
           const sid = runningJob.id || runningJob.sessionId;
           activeSessionIdRef.current = sid;
           setSessionFilter(sid);
+          persistLastLiveSession(sid);
           setScanning(true);
           setRun(prev => {
             if (prev && prev.status === 'running') return prev;
@@ -408,6 +566,31 @@ export default function CommandCenter() {
             sessionActive: true
           });
           setActiveTab('cockpit');
+        } else {
+          const lastSid = readLastLiveSession();
+          if (lastSid) {
+            activeSessionIdRef.current = lastSid;
+            setSessionFilter(lastSid);
+            try {
+              const vault = await getSessionVault(lastSid);
+              if (active && mountedRef.current && vault) {
+                if (Array.isArray(vault.leads) && vault.leads.length > 0) {
+                  setVendors(prev => mergeVendorLists(prev, vault.leads, { countryHint: searchCountryRef.current }));
+                }
+                setRun(prev => prev || {
+                  id: lastSid,
+                  sessionId: lastSid,
+                  category: vault.category || 'Businesses',
+                  location: vault.location || '',
+                  leadCount: vault.leadCount || (Array.isArray(vault.leads) ? vault.leads.length : 0),
+                  completedZones: vault.metadata?.completedZones ?? 0,
+                  totalZones: vault.metadata?.totalZones ?? 0,
+                  status: vault.metadata?.status === 'aborted' ? 'aborted' : 'complete',
+                  finishedAt: Date.now()
+                });
+              }
+            } catch (e) {}
+          }
         }
       } catch (e) { /* ignore */ }
     }
@@ -420,16 +603,21 @@ export default function CommandCenter() {
     return () => clearInterval(id);
   }, []);
 
-  const loadVendors = useCallback(async () => {
+  const loadVendors = useCallback(async (explicitSid = null) => {
+    const cleanSid = typeof explicitSid === 'string' ? explicitSid.trim() : '';
+    const targetSid = cleanSid || activeSessionIdRef.current || sessionFilterRef.current || '';
     try {
-      const data = await getVendors();
-      if (mountedRef.current) {
-        setVendors(prev => {
-          if (!runVendorIdsRef.current.size) return data;
-          const liveLeads = prev.filter(v => runVendorIdsRef.current.has(v.id));
-          const liveIds = new Set(liveLeads.map(v => v.id));
-          return [...liveLeads, ...data.filter(v => !liveIds.has(v.id))];
-        });
+      let data = await getVendors(targetSid ? { sessionId: targetSid } : {});
+      if (targetSid && (!Array.isArray(data) || data.length === 0) && runRef.current?.status !== 'running') {
+        try {
+          const vault = await getSessionVault(targetSid);
+          if (Array.isArray(vault?.leads) && vault.leads.length > 0) {
+            data = vault.leads;
+          }
+        } catch (e) {}
+      }
+      if (mountedRef.current && Array.isArray(data)) {
+        setVendors(prev => mergeVendorLists(prev, data, { countryHint: searchCountryRef.current }));
       }
       return data;
     } catch (error) {
@@ -443,12 +631,13 @@ export default function CommandCenter() {
       if (mountedRef.current) setHealth(data);
       return data;
     } catch (error) {
+      if (mountedRef.current) setHealth(null);
       return null;
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    await Promise.allSettled([loadVendors(), loadHealth()]);
+  const refresh = useCallback(async (explicitSid = null) => {
+    await Promise.allSettled([loadVendors(explicitSid), loadHealth()]);
     try {
       const [sessionData, deepData] = await Promise.all([
         getSessions(), getDeepJobs()
@@ -625,68 +814,44 @@ export default function CommandCenter() {
     const flushBuffers = () => {
       if (vendorBuffer.length) {
         const incoming = vendorBuffer.splice(0, vendorBuffer.length);
+        const newArrivalIds = [];
+        const upgradedPhoneIds = [];
+
         setVendors(prev => {
           const map = new Map(prev.map(vendor => [vendor.id, vendor]));
           const existingIds = prev.map(vendor => vendor.id);
           const freshIds = [];
           let hasChanges = false;
+          const countryHint = searchCountryRef.current || 'IN';
 
           incoming.forEach(v => {
             if (!v || !v.id) return;
             const existing = map.get(v.id);
             if (existing) {
-              const existingPhone = getDisplayPhone(existing);
-              const incomingPhone = getDisplayPhone(v);
-              const isIncomingMob = isMobilePhone(incomingPhone);
-              const isExistingMob = isMobilePhone(existingPhone);
-
-              let mergedPhone = existing.phone;
-              if (isIncomingMob) mergedPhone = incomingPhone;
-              else if (isExistingMob) mergedPhone = existingPhone;
-              else if (incomingPhone) mergedPhone = incomingPhone;
-
-              const mergedPhones = Array.from(new Set([
-                ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
-                ...(Array.isArray(v.phones) ? v.phones : (v.phone ? [v.phone] : []))
-              ])).filter(Boolean);
-
-              const mergedSessionIds = Array.from(new Set([
-                ...(Array.isArray(existing.sessionIds) ? existing.sessionIds : (existing.sessionId ? [existing.sessionId] : [])),
-                ...(Array.isArray(v.sessionIds) ? v.sessionIds : (v.sessionId ? [v.sessionId] : []))
-              ])).filter(Boolean);
-
-              map.set(v.id, {
-                ...existing,
-                ...v,
-                phone: mergedPhone,
-                phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
-                sessionId: v.sessionId || existing.sessionId,
-                lastSessionId: v.lastSessionId || v.sessionId || existing.lastSessionId,
-                sessionIds: mergedSessionIds,
-                website: v.website || existing.website,
-                email: v.email || existing.email,
-                emails: (Array.isArray(v.emails) && v.emails.length) ? v.emails : existing.emails,
-                address: v.address || existing.address,
-                crmStage: existing.crmStage || v.crmStage || 'new',
-                crmStatus: existing.crmStatus || v.crmStatus || 'new',
-                crmNotes: existing.crmNotes || v.crmNotes,
-                crmTasks: existing.crmTasks || v.crmTasks
-              });
-              freshIds.push(v.id);
+              const prevPhone = getDisplayPhone(existing);
+              const wasMob = isMobilePhone(prevPhone, existing.country || countryHint);
+              const merged = mergeSingleVendor(existing, v, countryHint);
+              const nextPhone = getDisplayPhone(merged);
+              const nowMob = isMobilePhone(nextPhone, merged.country || countryHint);
+              if ((!prevPhone && nextPhone) || (!wasMob && nowMob)) {
+                upgradedPhoneIds.push(v.id);
+              }
+              map.set(v.id, merged);
               hasChanges = true;
             } else {
               map.set(v.id, v);
               freshIds.push(v.id);
+              newArrivalIds.push(v.id);
               hasChanges = true;
             }
           });
           if (!hasChanges) return prev;
-          // A vendor can arrive twice in one flush (the same business surfaced
-          // by two zone jobs). Pushing its id twice duplicated the row and made
-          // React complain about duplicate keys, so the order is a Set.
           const fullOrder = Array.from(new Set([...freshIds, ...existingIds]));
           return fullOrder.map(id => map.get(id)).filter(Boolean);
         });
+
+        if (newArrivalIds.length) markFreshLeads(newArrivalIds);
+        if (upgradedPhoneIds.length) markPhoneFound(upgradedPhoneIds);
       }
       if (logBuffer.length) {
         const incoming = logBuffer.splice(0, logBuffer.length);
@@ -728,18 +893,31 @@ export default function CommandCenter() {
           lastEventRef.current = Date.now();
           if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
 
-          const activeSid = activeSessionIdRef.current || sessionFilter || runRef.current?.sessionId || runRef.current?.id;
-          if (activeSid) {
+          const activeSid = monitorSessionRef.current?.id || activeSessionIdRef.current || runRef.current?.sessionId || runRef.current?.id || sessionFilterRef.current;
+          const incomingSid = vendor.sessionId || vendor.lastSessionId;
+          const belongsToActive = Boolean(
+            activeSid && (
+              !incomingSid
+              || incomingSid === activeSid
+              || (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(activeSid))
+            )
+          );
+
+          // STRICT TENANT ISOLATION: Drop foreign vendors if Master has no active run and is not monitoring this session
+          if (!activeSid || (!belongsToActive && incomingSid)) {
+            return;
+          }
+
+          if (belongsToActive) {
             vendor.sessionId = activeSid;
             vendor.lastSessionId = activeSid;
             vendor.sessionIds = Array.isArray(vendor.sessionIds)
               ? Array.from(new Set([...vendor.sessionIds, activeSid]))
               : [activeSid];
-          }
-
-          if (runRef.current?.status === 'running' || activeSessionIdRef.current) {
-            runVendorIdsRef.current.add(vendor.id);
-            setRunLeadCount(runVendorIdsRef.current.size);
+            if (runRef.current?.status === 'running' || activeSessionIdRef.current === activeSid || monitorSessionRef.current) {
+              runVendorIdsRef.current.add(vendor.id);
+              setRunLeadCount(runVendorIdsRef.current.size);
+            }
           }
 
           vendorBuffer.push(vendor);
@@ -753,10 +931,10 @@ export default function CommandCenter() {
         try {
           const data = JSON.parse(event.data);
           const currentRun = runRef.current;
-          const currentId = currentRun?.sessionId || currentRun?.id;
-          // SSE is broadcast to every workspace. Ignore events from another
-          // session so one run can never pause or complete the one on screen.
-          if (currentId && data?.sessionId && data.sessionId !== currentId) return;
+          const currentId = monitorSessionRef.current?.id || currentRun?.sessionId || currentRun?.id;
+          // STRICT PROGRESS ISOLATION: Ignore all progress events if Master is idle and not monitoring!
+          if (!currentId) return;
+          if (data?.sessionId && data.sessionId !== currentId) return;
 
           lastEventRef.current = Date.now();
           setProgress(data);
@@ -785,15 +963,30 @@ export default function CommandCenter() {
             }
           }
           if (data?.activeZone) {
-            setActiveZone(prev => ({
-              ...(prev || {}),
-              ...data.activeZone,
-              name: data.activeZone.name || data.activeZone.zoneName || prev?.name,
-              lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
-              lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
-              radiusKm: Number(data.activeZone.radiusKm) || 3.5,
-              index: data.activeZone.index || prev?.index || 1
-            }));
+            const nextZoneName = data.activeZone.name || data.activeZone.zoneName;
+            setActiveZone(prev => {
+              const prevName = prev?.name || prev?.zoneName;
+              if (nextZoneName && prevName && prevName !== nextZoneName) {
+                setHopTransition(`${prevName} → ${nextZoneName}`);
+                if (Number.isFinite(Number(prev?.lat)) && Number.isFinite(Number(prev?.lng)) && Number.isFinite(Number(data.activeZone.lat)) && Number.isFinite(Number(data.activeZone.lng))) {
+                  setJumpTrail({
+                    from: [Number(prev.lat), Number(prev.lng)],
+                    to: [Number(data.activeZone.lat), Number(data.activeZone.lng)],
+                    fromName: prevName,
+                    toName: nextZoneName
+                  });
+                }
+              }
+              return {
+                ...(prev || {}),
+                ...data.activeZone,
+                name: nextZoneName || prev?.name,
+                lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
+                lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
+                radiusKm: Number(data.activeZone.radiusKm) || 3.5,
+                index: data.activeZone.index || prev?.index || 1
+              };
+            });
           } else if (data?.activeMandal) {
             const zName = data.activeMandal;
             const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -905,11 +1098,15 @@ export default function CommandCenter() {
       onSource: bindSource,
       onStatus: status => {
         if (!mounted) return;
-        updateSseStatus(status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error');
-        if (status === 'open') {
+        const mapped = status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error';
+        updateSseStatus(mapped);
+        if (mapped === 'open') {
           // Folder counts were fetched while the server was unreachable, so
           // pull them once more now that the feed is live again.
           refresh();
+        } else if (mapped === 'error') {
+          setHealth(null);
+          setConnectionLatency(null);
         }
       },
       onAttempt: count => {
@@ -930,7 +1127,13 @@ export default function CommandCenter() {
       if (stream && stream.status !== 1) stream.reconnect();
       refresh();
     };
+    const onServerOffline = () => {
+      if (!mounted) return;
+      setHealth(null);
+      setConnectionLatency(null);
+    };
     window.addEventListener('leadharvest:server_online', onServerOnline);
+    window.addEventListener('leadharvest:server_offline', onServerOffline);
 
     stream.start();
 
@@ -939,6 +1142,7 @@ export default function CommandCenter() {
     return () => {
       mounted = false;
       window.removeEventListener('leadharvest:server_online', onServerOnline);
+      window.removeEventListener('leadharvest:server_offline', onServerOffline);
       if (flushTimer) clearInterval(flushTimer);
       if (microFlushTimer) clearTimeout(microFlushTimer);
       if (stream) stream.stop();
@@ -964,9 +1168,11 @@ export default function CommandCenter() {
     const finishedAt = Date.now();
     setRun(prev => prev ? { ...prev, status, finishedAt } : prev);
     setScanning(false);
-    const targetSessionId = current.sessionId || current.id;
+    const targetSessionId = current.sessionId || current.id || activeSessionIdRef.current;
     if (targetSessionId) {
+      activeSessionIdRef.current = targetSessionId;
       setSessionFilter(targetSessionId);
+      persistLastLiveSession(targetSessionId);
     }
     setLogs(prev => [...prev, `[RUN] ${current.id} ${status} · ${runVendorIdsRef.current.size} vendors observed`].slice(-400));
 
@@ -986,7 +1192,7 @@ export default function CommandCenter() {
     }
 
     setTimeout(() => {
-      refresh();
+      refresh(targetSessionId);
       finishingRef.current = false;
     }, 800);
   }, [refresh]);
@@ -1158,12 +1364,42 @@ export default function CommandCenter() {
       });
 
       if (res?.sessionId) {
+        activeSessionIdRef.current = res.sessionId;
+        runVendorIdsRef.current = new Set();
+        finishingRef.current = false;
+        clearAnimationHighlights();
+        setRunLeadCount(0);
+        setProgress(null);
+        setSessionFilter(res.sessionId);
+        persistLastLiveSession(res.sessionId);
+        setPage(1);
+        setActiveZone(null);
+        setGridZones([]);
+        setScanning(true);
+        lastEventRef.current = Date.now();
+        setRun({
+          id: res.sessionId,
+          sessionId: res.sessionId,
+          category: sweepCat,
+          location: res.targetName || sweepName,
+          familyLabel: 'Master Sweep',
+          strategy: 'broad',
+          engines,
+          postWebsite: true,
+          postDeep: true,
+          startedAt: Date.now(),
+          finishedAt: null,
+          status: 'running',
+          isMasterSweep: true,
+          totalMandalsAcrossAll: Number(res.totalZones) || 1,
+          completedMandals: 0
+        });
         toast.success(
           `🗺️ ${res.targetName} sweep started · ${res.totalZones} zones · about ${Math.max(1, Math.round(Number(res.estimatedSeconds || 0) / 60))} min`
         );
         setMasterPreview(null);
         setActiveTab('cockpit');
-        refresh();
+        getSessions().then(list => { if (mountedRef.current) setSessions(list || []); }).catch(() => {});
       }
     } catch (e) {
       toast.error(e?.response?.data?.error || e.message || 'Failed to start Master Sweep');
@@ -1204,9 +1440,12 @@ export default function CommandCenter() {
     if (overrides.query) setAutoQuery(overrides.query);
     runVendorIdsRef.current = new Set();
     finishingRef.current = false;
+    clearAnimationHighlights();
     setRunLeadCount(0);
     setProgress(null);
     setSessionFilter(sessionId);
+    persistLastLiveSession(sessionId);
+    setPage(1);
     setActiveTab('cockpit');
     setActiveZone(null);
     setGridZones([]);
@@ -1285,15 +1524,8 @@ export default function CommandCenter() {
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · ${(plan.engines || []).join(' + ') || 'auto'}`,
           response?.purge?.removed ? `[PURGE] ${response.purge.removed} stale leads removed · fresh run` : '[PURGE] no stale leads',
-          response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled before purge` : null
+          response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled` : null
         ].filter(Boolean));
-
-        // The purge just deleted the previous dataset. Drop those rows from the
-        // client too, otherwise the map and counters keep showing stale leads
-        // until the next manual refresh.
-        if (response?.purge?.removed || response?.deepStopped) {
-          await loadVendors();
-        }
       } else {
         const response = await startOmni({
           query: `${runCategory} in ${runLocation}`,
@@ -1341,10 +1573,6 @@ export default function CommandCenter() {
           response?.purge?.removed ? `[PURGE] ${response.purge.removed} stale leads removed · fresh run` : '[PURGE] no stale leads',
           response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled` : null
         ].filter(Boolean));
-
-        if (response?.purge?.removed || response?.deepStopped) {
-          await loadVendors();
-        }
       }
 
       lastEventRef.current = Date.now();
@@ -1365,8 +1593,12 @@ export default function CommandCenter() {
   const stopRun = async () => {
     setStopping(true);
     try {
-      const sid = run?.sessionId || run?.id || activeSessionIdRef.current;
-      activeSessionIdRef.current = '';
+      const sid = run?.sessionId || run?.id || activeSessionIdRef.current || sessionFilterRef.current;
+      if (sid) {
+        activeSessionIdRef.current = sid;
+        setSessionFilter(sid);
+        persistLastLiveSession(sid);
+      }
       setRun(prev => ({
         ...(prev || {}),
         id: sid,
@@ -1378,7 +1610,7 @@ export default function CommandCenter() {
       setScanning(false);
       await stopAllScrapes(sid);
       toast('Swarm paused safely. Completed leads preserved.', { icon: '⏹' });
-      refresh();
+      refresh(sid);
     } catch (error) {
       toast.error('Stop request failed.');
     } finally {
@@ -1418,6 +1650,10 @@ export default function CommandCenter() {
   };
 
   const clearActiveRun = () => {
+    activeSessionIdRef.current = '';
+    runVendorIdsRef.current = new Set();
+    clearAnimationHighlights();
+    persistLastLiveSession('');
     setRun(null);
     setSessionFilter('');
     toast('Ready for new search.', { icon: '✨' });
@@ -1635,7 +1871,7 @@ export default function CommandCenter() {
   const backupFolder = runCard => {
     if (!runCard?.id) return;
     const link = document.createElement('a');
-    link.href = `/api/sessions/${runCard.id}/backup`;
+    link.href = `${API_URL}/sessions/${runCard.id}/backup`;
     link.rel = 'noreferrer';
     link.download = `vault_backup_${runCard.id}_${Date.now()}.json`;
     document.body.appendChild(link);
@@ -1646,7 +1882,7 @@ export default function CommandCenter() {
 
   const backupAllFolders = () => {
     const link = document.createElement('a');
-    link.href = `/api/sessions/backup/all`;
+    link.href = `${API_URL}/sessions/backup/all`;
     link.rel = 'noreferrer';
     link.download = `master_vault_complete_backup_${Date.now()}.json`;
     document.body.appendChild(link);
@@ -1660,9 +1896,10 @@ export default function CommandCenter() {
       const text = await file.text();
       const payload = JSON.parse(text);
       toast.loading('Restoring vault backup...', { id: 'restore-toast' });
-      const res = await fetch('/api/sessions/restore-backup', {
+      const res = await fetch(`${API_URL}/sessions/restore-backup`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-workspace-scope': 'master' },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'x-workspace-scope': 'master', ...authHeaders() },
         body: JSON.stringify(payload)
       });
       const data = await res.json();
@@ -1788,8 +2025,10 @@ export default function CommandCenter() {
         toast.error('This folder contains no leads to load.');
         return;
       }
-      setVendors(session.leads);
+      activeSessionIdRef.current = runCard.id;
+      setVendors(prev => mergeVendorLists(prev, session.leads, { countryHint: searchCountryRef.current }));
       setSessionFilter(runCard.id);
+      persistLastLiveSession(runCard.id);
       if (session.category) updateForm('category', session.category);
       if (session.location) updateForm('location', session.location);
       if (session.category && session.location) setAutoQuery(`${session.category} in ${session.location}`);
@@ -2020,23 +2259,6 @@ export default function CommandCenter() {
     });
 
     list = [...list].sort((a, b) => {
-      // Prioritize active live incoming leads right at the very top during a run
-      if (run?.status === 'running') {
-        const aLive = runVendorIdsRef.current?.has(a.id) ? 1 : 0;
-        const bLive = runVendorIdsRef.current?.has(b.id) ? 1 : 0;
-        if (aLive !== bLive) return bLive - aLive;
-        if (aLive && bLive) {
-          return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
-        }
-      }
-
-      // 1. Mobile Priority First: Verified 10-digit mobiles (score 3), Landlines with 0 (score 2), Other phone (score 1), No phone (0)
-      const pA = getDisplayPhone(a);
-      const pB = getDisplayPhone(b);
-      const scoreA = isMobilePhone(pA, searchCountry) ? 3 : (isIndianLandline(pA) ? 2 : (pA ? 1 : 0));
-      const scoreB = isMobilePhone(pB, searchCountry) ? 3 : (isIndianLandline(pB) ? 2 : (pB ? 1 : 0));
-      if (scoreB !== scoreA) return scoreB - scoreA;
-
       if (filters.sort === 'rating') {
         const rA = Number(a.rating) || 0;
         const rB = Number(b.rating) || 0;
@@ -2044,15 +2266,23 @@ export default function CommandCenter() {
         return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
       }
       if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
-      if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
+      if (filters.sort === 'quality') {
+        const pA = getDisplayPhone(a);
+        const pB = getDisplayPhone(b);
+        const scoreA = isMobilePhone(pA, searchCountry) ? 3 : (isIndianLandline(pA) ? 2 : (pA ? 1 : 0));
+        const scoreB = isMobilePhone(pB, searchCountry) ? 3 : (isIndianLandline(pB) ? 2 : (pB ? 1 : 0));
+        if (scoreB !== scoreA) return scoreB - scoreA;
+        return (qualityOf(b) || 0) - (qualityOf(a) || 0);
+      }
       if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      // Default 'newest': deterministic arrival/scrapedAt order during and after completion (no post-run jump)
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
     });
 
     return list;
-  }, [vendors, filters, sessionFilter, selectedAreaFilter, run?.status, run?.sessionId, run?.id, runLeadCount, autoQuery, form.category]);
+  }, [vendors, filters, sessionFilter, effectiveSessionFilter, selectedAreaFilter, run?.status, run?.sessionId, run?.id, runLeadCount, autoQuery, form.category, searchCountry]);
 
-  useEffect(() => { setPage(1); }, [filters, sessionFilter, pageSize]);
+  useEffect(() => { setPage(1); }, [filters, effectiveSessionFilter, pageSize]);
 
   const pageCount = Math.max(1, Math.ceil(filteredVendors.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -2350,11 +2580,52 @@ export default function CommandCenter() {
     return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
   };
 
-  const isEngineReady = sseStatus === 'open' || (isOnline && connectionLatency < 3500);
+  const isEngineReady = sseStatus === 'open' || Boolean(health) || (isOnline && connectionLatency !== null && connectionLatency < 3500);
 
   return (
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
+
+      {/* Observer Mode Banner when monitoring a Client session */}
+      {monitorSession && (
+        <div
+          className="lx-observer-banner"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 1200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '10px 20px',
+            background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
+            color: '#e0e7ff',
+            borderBottom: '2px solid #818cf8',
+            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
+            fontSize: '13px',
+            fontWeight: 650
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 10px #34d399' }} />
+            <span>
+              <b style={{ color: '#38bdf8' }}>OBSERVER MONITOR MODE:</b> Watching live Client session{' '}
+              <span style={{ color: '#fef08a', fontFamily: 'monospace' }}>{monitorSession.id}</span>
+              {monitorSession.category ? ` · ${monitorSession.category} in ${monitorSession.location || 'Selected Area'}` : ''}{' '}
+              — Read Only Live Stream (Zero Master State Pollution)
+            </span>
+          </div>
+          <button
+            type="button"
+            className="v2-btn v2-btn-secondary v2-btn-sm"
+            style={{ background: 'rgba(255,255,255,0.18)', color: '#ffffff', border: '1.5px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: '4px 12px' }}
+            onClick={() => setMonitorSession(null)}
+          >
+            <X size={12} /> Exit Observer Mode
+          </button>
+        </div>
+      )}
 
       {/* Real-time Network Offline & Reconnecting Supervisor Banner */}
       {(!isOnline || (!isEngineReady && sseStatus === 'error' && reconnectAttemptCount >= 3)) && (
@@ -2472,7 +2743,45 @@ export default function CommandCenter() {
             {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
 
+          <span
+            className={cx('cb-relay-pill', relayState.connected && 'is-live')}
+            title={relayState.connected
+              ? `RAM Turbo connected · ${relayState.relayed} pages relayed`
+              : 'Add the RAM Turbo extension in Chrome to use your own hardware'}
+          >
+            <span className={cx('cb-led', relayState.connected ? 'is-live' : 'is-warn')} />
+            {relayState.connected ? `RAM TURBO · ${relayState.relayed}` : 'RAM TURBO OFF'}
+          </span>
+
           <SystemCheckPill variant="master" />
+
+          {liveClientSessions.length > 0 && !monitorSession && (
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm lx-watch-client-btn"
+              style={{
+                background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)',
+                border: '1.5px solid #8b5cf6',
+                color: '#5b21b6',
+                fontWeight: 800,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                borderRadius: 999,
+                padding: '4px 10px'
+              }}
+              onClick={() => {
+                const target = liveClientSessions[0];
+                setMonitorSession(target);
+                toast.success(`Observing Client live scrape: ${target.id}`, { icon: '👁️' });
+              }}
+              title="Watch active Client scrape live without modifying Master state"
+            >
+              <Eye size={12} />
+              <span>WATCH CLIENT ({liveClientSessions.length})</span>
+            </button>
+          )}
+
           <DesktopBadge />
           <AccountMenu variant="master" />
           <div className="v2-tools" ref={toolsRef}>
@@ -2576,18 +2885,36 @@ export default function CommandCenter() {
 
           {run?.status === 'running' && (
             <div className="lx-live-progress-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
                 <span className="lx-live-dot" />
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
                   Sweeping <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
-                  {progress?.activeMandal ? (
-                    <span style={{ fontWeight: 500, color: '#475569' }}> · {progress.activeMandal}</span>
+                  {(effectiveActiveZone?.name || progress?.activeMandal) ? (
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {hopTransition || effectiveActiveZone?.name || progress?.activeMandal}</span>
                   ) : null}
                 </div>
                 <span className="lx-zone-pill is-live">
                   Zone {Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)} / {Math.max(1, runTotal || mapZones.length || 1)}
                 </span>
               </div>
+
+              {/* Master Retro Digital Watch Chrono & Orchestrator ETA */}
+              <RetroDigitalTimer
+                etaMs={progress?.etaMs || 0}
+                etaText={progress?.etaText || ''}
+                elapsedSeconds={runElapsed}
+                zoneIndex={Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)}
+                totalZones={Math.max(1, runTotal || mapZones.length || 1)}
+                activeZoneName={effectiveActiveZone?.name || progress?.activeMandal || ''}
+                hopTransition={hopTransition}
+                leadsCount={runLeadCount}
+                runningCount={progress?.runningZones || progress?.runningJobs || 1}
+                doneCount={runDone}
+                queuedCount={Math.max(0, (runTotal || mapZones.length || 1) - runDone - 1)}
+                engineCount={searchCountry === 'IN' ? 11 : 10}
+                scanning={scanning}
+              />
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <b style={{ fontSize: 14, fontWeight: 800, color: '#4f46e5', fontVariantNumeric: 'tabular-nums' }}>
                   {formatNumber(runLeadCount)} leads · {formatNumber(runMobilesCount)} mobiles
@@ -2686,9 +3013,15 @@ export default function CommandCenter() {
                 onPage={setPage}
                 onPageSize={setPageSize}
                 run={run}
+                runStatus={run?.status}
+                freshLeadIds={freshLeadIds}
+                phoneJustFoundIds={phoneJustFoundIds}
+                searchCountry={searchCountry}
                 stats={stats}
                 selectedAreaFilter={selectedAreaFilter}
                 onSelectArea={setSelectedAreaFilter}
+                jumpTrail={jumpTrail}
+                hopTransition={hopTransition}
                 onOpenTrash={() => setTrashOpen(true)}
               />
             )}
@@ -2731,6 +3064,7 @@ export default function CommandCenter() {
                 mapZoom={mapZoom}
                 estimate={estimate}
                 cellStates={progress?.cellStates || {}}
+                jumpTrail={jumpTrail}
                 setSelectedVendor={setSelectedVendor}
               />
             )}

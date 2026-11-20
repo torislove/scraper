@@ -473,6 +473,14 @@ function pickAutoEngines(classification, options = {}) {
     engines = engines.filter(engine => engine !== 'indiamart');
   }
 
+  // Always retain fast Tier-0 HTTP engines in auto mode for sub-second first leads
+  if (!engines.includes('web-discovery')) {
+    engines.push('web-discovery');
+  }
+  if (!engines.includes('openstreetmap')) {
+    engines.push('openstreetmap');
+  }
+
   return [...new Set(engines)];
 }
 

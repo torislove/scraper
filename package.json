@@ -9,6 +9,7 @@
     "start:master": "cd master && npm run dev",
     "dev": "node dev.js",
     "dev:master": "cd master && npm run dev",
+    "stop": "node scripts/free-port.js 5002 5173 5174",
     "build": "cd client && npm run build",
     "build:client": "cd client && npm run build",
     "build:master": "cd master && npm run build",

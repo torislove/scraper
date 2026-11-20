@@ -114,14 +114,20 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
     next.addEventListener('error', () => {
       if (stopped || source !== next) return;
       clearTimeout(checkTimer);
+      let overrideDelayMs = null;
       if (fallbackUrl && fallbackUrl !== url) {
-        useFallback = !useFallback;
+        if (!useFallback && attempt === 0) {
+          useFallback = true;
+          overrideDelayMs = 300;
+        } else {
+          useFallback = !useFallback;
+        }
       }
-      scheduleReconnect(false);
+      scheduleReconnect(false, overrideDelayMs);
     });
   }
 
-  function scheduleReconnect(immediate = false) {
+  function scheduleReconnect(immediate = false, overrideDelayMs = null) {
     if (stopped) return;
     closeSource();
     if (retryTimer) {
@@ -140,7 +146,9 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
       emitStatus('connecting');
     }
     const base = Math.min(MAX_BACKOFF_MS, 750 * Math.pow(1.5, Math.min(attempt - 1, 5)));
-    const delay = Math.min(MAX_BACKOFF_MS, base) + Math.floor(Math.random() * 350);
+    const delay = Number.isFinite(overrideDelayMs)
+      ? overrideDelayMs
+      : (Math.min(MAX_BACKOFF_MS, base) + Math.floor(Math.random() * 350));
     retryTimer = setTimeout(() => {
       retryTimer = null;
       if (!stopped) connect();

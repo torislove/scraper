@@ -48,6 +48,7 @@ import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
 import LeadsTableView from './components/views/LeadsTableView';
 import AccountMenu from './components/AccountMenu';
+import RetroDigitalTimer from './components/RetroDigitalTimer';
 import SystemCheckPill from './components/SystemCheckPill';
 import { API_URL } from '../apiConfig';
 import { getUserId } from '../utils/sessionManager';
@@ -56,7 +57,21 @@ import {
   startBrowserRamAssist, detectDeviceHardware, detectRamExtension,
   DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL
 } from './utils/deviceRamEngine';
-import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
+import { startRelayAgent } from './utils/relayAgent';
+import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm, mergeSingleVendor, mergeVendorLists } from './utils/leadHelpers';
+
+const LAST_LIVE_SESSION_KEY = 'scraper_client_last_live_session';
+
+function readLastLiveSession() {
+  try { return localStorage.getItem(LAST_LIVE_SESSION_KEY) || ''; } catch (e) { return ''; }
+}
+
+function persistLastLiveSession(sid) {
+  try {
+    if (sid) localStorage.setItem(LAST_LIVE_SESSION_KEY, sid);
+    else localStorage.removeItem(LAST_LIVE_SESSION_KEY);
+  } catch (e) {}
+}
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 const SORTS = [
@@ -203,55 +218,82 @@ export default function CommandCenter() {
   });
 
   const hardware = useMemo(() => detectDeviceHardware(), []);
-  const [hwTurboEnabled, setHwTurboEnabled] = useState(() => {
-    try { return localStorage.getItem('scraper_hw_turbo_v2') !== 'false'; } catch (e) { return true; }
-  });
+  const [hwTurboEnabled, setHwTurboEnabled] = useState(true);
   const [hwPopupOpen, setHwPopupOpen] = useState(() => {
     try { return localStorage.getItem('scraper_hw_popup_seen_v2') !== 'true'; } catch (e) { return true; }
   });
-  const [extState, setExtState] = useState({ installed: false, version: '', extensionOnly: false });
+  const [extState, setExtState] = useState({
+    installed: false,
+    version: '',
+    connected: false,
+    paired: false,
+    relayed: 0,
+    capabilities: [],
+    extensionOnly: false,
+    storeUrl: '',
+    lastError: ''
+  });
+  const relayRef = useRef(null);
 
   useEffect(() => {
-    let active = true;
-    const syncExt = async () => {
-      const local = await detectRamExtension(450);
-      if (!active) return;
-      let extOnly = false;
-      try {
-        const res = await fetch(`${API_URL}/scrape/extension-status`);
-        if (res.ok) {
-          const data = await res.json();
-          extOnly = Boolean(data?.extensionOnly);
-        }
-      } catch (e) {}
-      if (!active) return;
-      setExtState({ installed: local.installed, version: local.version, extensionOnly: extOnly });
-      if (local.installed) {
-        fetch(`${API_URL}/scrape/extension-heartbeat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(getUserId() ? { 'x-user-id': getUserId() } : {}) },
-          body: JSON.stringify({
-            installed: true,
-            version: local.version || '1.0.0',
-            ramGb: hardware.ramGb,
-            cpuCores: hardware.cpuCores
-          })
-        }).catch(() => {});
+    const userId = getUserId();
+    const headers = {};
+    const token = getToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    relayRef.current = startRelayAgent({
+      apiBase: API_URL,
+      userId,
+      headers,
+      onStatus: (status) => {
+        setExtState(prev => ({
+          ...prev,
+          installed: status.installed,
+          version: status.version || prev.version,
+          connected: status.connected,
+          paired: status.paired,
+          relayed: status.relayed ?? prev.relayed,
+          capabilities: status.capabilities || prev.capabilities,
+          lastError: status.lastError || ''
+        }));
       }
+    });
+
+    let active = true;
+    const readServer = async () => {
+      try {
+        const res = await fetch(`${API_URL}/scrape/extension-status`, { headers });
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        setExtState(prev => ({
+          ...prev,
+          extensionOnly: Boolean(data?.extensionOnly),
+          storeUrl: data?.storeUrl || prev.storeUrl,
+          capabilities: data?.capabilities?.length ? data.capabilities : prev.capabilities,
+          relayed: data?.relayedTotal ?? prev.relayed
+        }));
+      } catch (e) { /* server offline; the agent keeps retrying */ }
     };
-    syncExt();
-    const timer = setInterval(syncExt, hwPopupOpen ? 3000 : 25000);
-    return () => { active = false; clearInterval(timer); };
-  }, [hwPopupOpen, hardware.ramGb, hardware.cpuCores]);
+    readServer();
+
+    return () => {
+      active = false;
+      relayRef.current?.stop?.();
+      relayRef.current = null;
+    };
+  }, []);
   const enableLocalHardwareTurbo = useCallback(() => {
     setHwTurboEnabled(true);
     setHwPopupOpen(false);
     try {
-      localStorage.setItem('scraper_hw_turbo_v2', 'true');
       localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
     } catch (e) {}
-    toast.success(`Local Hardware Accelerated: ${hardware.ramGb} GB RAM · ${hardware.cpuCores} Cores · All 6 Engines Active!`, { icon: '⚡' });
-  }, [hardware.ramGb, hardware.cpuCores]);
+    if (extState.connected) {
+      toast.success(`RAM Turbo connected · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`, { icon: '⚡' });
+    } else {
+      toast.error('Add RAM Turbo to Chrome, then reload. It connects itself.', { icon: '🔌' });
+    }
+  }, [hardware.ramGb, hardware.parallelZones, extState.connected]);
 
   // Country context for the flag bar. India is home; every other country runs
   // the keyless global engines. The choice only pre-fills an empty location box,
@@ -282,6 +324,8 @@ export default function CommandCenter() {
     routerLocation.state?.query || searchParams.get('q') || ''
   );
   const [activeZone, setActiveZone] = useState(null);
+  const [hopTransition, setHopTransition] = useState('');
+  const [jumpTrail, setJumpTrail] = useState(null);
   const [gridZones, setGridZones] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [mascotAlert, setMascotAlert] = useState(null);
@@ -305,7 +349,9 @@ export default function CommandCenter() {
   });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [sessionFilter, setSessionFilter] = useState('');
+  const [sessionFilter, setSessionFilter] = useState(() => readLastLiveSession());
+  const [freshLeadIds, setFreshLeadIds] = useState(() => new Set());
+  const [phoneJustFoundIds, setPhoneJustFoundIds] = useState(() => new Set());
 
   const [launching, setLaunching] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -315,16 +361,84 @@ export default function CommandCenter() {
   const mountedRef = useRef(true);
   const runRef = useRef(null);
   const runVendorIdsRef = useRef(new Set());
-  const activeSessionIdRef = useRef('');
+  const activeSessionIdRef = useRef(readLastLiveSession());
+  const sessionFilterRef = useRef(sessionFilter);
+  const searchCountryRef = useRef(searchCountry);
+  const freshTimersRef = useRef(new Map());
+  const phoneTimersRef = useRef(new Map());
   const lastEventRef = useRef(Date.now());
   const finishingRef = useRef(false);
   const deepJobRef = useRef(null);
   const ramAssistStopRef = useRef(null);
 
+  useEffect(() => { sessionFilterRef.current = sessionFilter; }, [sessionFilter]);
+  useEffect(() => { searchCountryRef.current = searchCountry; }, [searchCountry]);
+
+  const markFreshLeads = useCallback((ids = []) => {
+    const valid = ids.filter(Boolean);
+    if (!valid.length || !mountedRef.current) return;
+    setFreshLeadIds(prev => {
+      const next = new Set(prev);
+      for (const id of valid) next.add(id);
+      return next;
+    });
+    for (const id of valid) {
+      const prevTimer = freshTimersRef.current.get(id);
+      if (prevTimer) clearTimeout(prevTimer);
+      const t = setTimeout(() => {
+        freshTimersRef.current.delete(id);
+        if (!mountedRef.current) return;
+        setFreshLeadIds(prev => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 1700);
+      freshTimersRef.current.set(id, t);
+    }
+  }, []);
+
+  const markPhoneFound = useCallback((ids = []) => {
+    const valid = ids.filter(Boolean);
+    if (!valid.length || !mountedRef.current) return;
+    setPhoneJustFoundIds(prev => {
+      const next = new Set(prev);
+      for (const id of valid) next.add(id);
+      return next;
+    });
+    for (const id of valid) {
+      const prevTimer = phoneTimersRef.current.get(id);
+      if (prevTimer) clearTimeout(prevTimer);
+      const t = setTimeout(() => {
+        phoneTimersRef.current.delete(id);
+        if (!mountedRef.current) return;
+        setPhoneJustFoundIds(prev => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, 2400);
+      phoneTimersRef.current.set(id, t);
+    }
+  }, []);
+
+  const clearAnimationHighlights = useCallback(() => {
+    for (const t of freshTimersRef.current.values()) clearTimeout(t);
+    for (const t of phoneTimersRef.current.values()) clearTimeout(t);
+    freshTimersRef.current.clear();
+    phoneTimersRef.current.clear();
+    setFreshLeadIds(new Set());
+    setPhoneJustFoundIds(new Set());
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      for (const t of freshTimersRef.current.values()) clearTimeout(t);
+      for (const t of phoneTimersRef.current.values()) clearTimeout(t);
       try { ramAssistStopRef.current?.(); } catch (e) {}
     };
   }, []);
@@ -350,6 +464,7 @@ export default function CommandCenter() {
           const sid = runningJob.id || runningJob.sessionId;
           activeSessionIdRef.current = sid;
           setSessionFilter(sid);
+          persistLastLiveSession(sid);
           setScanning(true);
           setRun(prev => {
             if (prev && prev.status === 'running') return prev;
@@ -374,6 +489,29 @@ export default function CommandCenter() {
             sessionActive: true
           });
           setActiveTab('cockpit');
+        } else {
+          // Restore last completed or stopped scrape session so its leads stay pinned across reload
+          const lastSid = readLastLiveSession();
+          if (lastSid) {
+            activeSessionIdRef.current = lastSid;
+            setSessionFilter(lastSid);
+            try {
+              const vault = await getSessionVault(lastSid);
+              if (active && mountedRef.current && vault) {
+                if (Array.isArray(vault.leads) && vault.leads.length > 0) {
+                  setVendors(prev => mergeVendorLists(prev, vault.leads, { countryHint: searchCountryRef.current }));
+                }
+                setRun(prev => prev || {
+                  id: lastSid,
+                  sessionId: lastSid,
+                  category: vault.category || 'Businesses',
+                  location: vault.location || '',
+                  status: vault.metadata?.status === 'aborted' ? 'stopped' : 'complete',
+                  finishedAt: Date.now()
+                });
+              }
+            } catch (e) {}
+          }
         }
       } catch (e) { /* ignore */ }
     }
@@ -386,10 +524,22 @@ export default function CommandCenter() {
     return () => clearInterval(id);
   }, []);
 
-  const loadVendors = useCallback(async () => {
+  const loadVendors = useCallback(async (explicitSid = null) => {
+    const cleanSid = typeof explicitSid === 'string' ? explicitSid.trim() : '';
+    const targetSid = cleanSid || activeSessionIdRef.current || sessionFilterRef.current || '';
     try {
-      const data = await getVendors();
-      if (mountedRef.current) setVendors(data);
+      let data = await getVendors(targetSid ? { sessionId: targetSid } : {});
+      if (targetSid && (!Array.isArray(data) || data.length === 0) && runRef.current?.status !== 'running') {
+        try {
+          const vault = await getSessionVault(targetSid);
+          if (Array.isArray(vault?.leads) && vault.leads.length > 0) {
+            data = vault.leads;
+          }
+        } catch (e) {}
+      }
+      if (mountedRef.current && Array.isArray(data)) {
+        setVendors(prev => mergeVendorLists(prev, data, { countryHint: searchCountryRef.current }));
+      }
       return data;
     } catch (error) {
       return [];
@@ -402,12 +552,13 @@ export default function CommandCenter() {
       if (mountedRef.current) setHealth(data);
       return data;
     } catch (error) {
+      if (mountedRef.current) setHealth(null);
       return null;
     }
   }, []);
 
-  const refresh = useCallback(async () => {
-    await Promise.allSettled([loadVendors(), loadHealth()]);
+  const refresh = useCallback(async (explicitSid = null) => {
+    await Promise.allSettled([loadVendors(explicitSid), loadHealth()]);
     try {
       const [sessionData, deepData] = await Promise.all([
         getSessions(), getDeepJobs()
@@ -424,13 +575,17 @@ export default function CommandCenter() {
 
   useEffect(() => {
     refresh();
+    const folderRetry = setTimeout(() => { refresh(); }, 1800);
     const id = setInterval(() => {
       getDeepJobs().then(deepData => {
         if (!mountedRef.current) return;
         setDeepJobs(deepData || []);
       }).catch(() => { });
     }, 9000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(folderRetry);
+      clearInterval(id);
+    };
   }, [refresh]);
 
   // Live estimate. Auto mode parses the free-text query server-side, so the
@@ -527,67 +682,44 @@ export default function CommandCenter() {
     const flushBuffers = () => {
       if (vendorBuffer.length) {
         const incoming = vendorBuffer.splice(0, vendorBuffer.length);
+        const newArrivalIds = [];
+        const upgradedPhoneIds = [];
+
         setVendors(prev => {
           const map = new Map(prev.map(vendor => [vendor.id, vendor]));
           const existingIds = prev.map(vendor => vendor.id);
           const freshIds = [];
           let hasChanges = false;
+          const countryHint = searchCountryRef.current || 'IN';
 
           incoming.forEach(v => {
             if (!v || !v.id) return;
             const existing = map.get(v.id);
             if (existing) {
-              const existingPhone = getDisplayPhone(existing);
-              const incomingPhone = getDisplayPhone(v);
-              const isIncomingMob = incomingPhone && /^[6-9]\d{9}$/.test(incomingPhone.replace(/\D/g, '').slice(-10));
-              const isExistingMob = existingPhone && /^[6-9]\d{9}$/.test(existingPhone.replace(/\D/g, '').slice(-10));
-
-              let mergedPhone = existing.phone;
-              if (isIncomingMob) mergedPhone = incomingPhone;
-              else if (isExistingMob) mergedPhone = existingPhone;
-              else if (incomingPhone) mergedPhone = incomingPhone;
-
-              const mergedPhones = Array.from(new Set([
-                ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
-                ...(Array.isArray(v.phones) ? v.phones : (v.phone ? [v.phone] : []))
-              ])).filter(Boolean);
-
-              const mergedSessionIds = Array.from(new Set([
-                ...(Array.isArray(existing.sessionIds) ? existing.sessionIds : (existing.sessionId ? [existing.sessionId] : [])),
-                ...(Array.isArray(v.sessionIds) ? v.sessionIds : (v.sessionId ? [v.sessionId] : []))
-              ])).filter(Boolean);
-
-              map.set(v.id, {
-                ...existing,
-                ...v,
-                phone: mergedPhone,
-                phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
-                sessionId: v.sessionId || existing.sessionId,
-                lastSessionId: v.lastSessionId || v.sessionId || existing.lastSessionId,
-                sessionIds: mergedSessionIds,
-                website: v.website || existing.website,
-                email: v.email || existing.email,
-                emails: (Array.isArray(v.emails) && v.emails.length) ? v.emails : existing.emails,
-                address: v.address || existing.address,
-                crmStage: existing.crmStage || v.crmStage || 'new',
-                crmStatus: existing.crmStatus || v.crmStatus || 'new',
-                crmNotes: existing.crmNotes || v.crmNotes,
-                crmTasks: existing.crmTasks || v.crmTasks
-              });
+              const prevPhone = getDisplayPhone(existing);
+              const wasMob = isMobilePhone(prevPhone, existing.country || countryHint);
+              const merged = mergeSingleVendor(existing, v, countryHint);
+              const nextPhone = getDisplayPhone(merged);
+              const nowMob = isMobilePhone(nextPhone, merged.country || countryHint);
+              if ((!prevPhone && nextPhone) || (!wasMob && nowMob)) {
+                upgradedPhoneIds.push(v.id);
+              }
+              map.set(v.id, merged);
               hasChanges = true;
             } else {
               map.set(v.id, v);
               freshIds.push(v.id);
+              newArrivalIds.push(v.id);
               hasChanges = true;
             }
           });
           if (!hasChanges) return prev;
-          // A vendor can arrive twice in one flush (the same business surfaced
-          // by two zone jobs). Pushing its id twice duplicated the row and made
-          // React complain about duplicate keys, so the order is a Set.
           const fullOrder = Array.from(new Set([...freshIds, ...existingIds]));
           return fullOrder.map(id => map.get(id)).filter(Boolean);
         });
+
+        if (newArrivalIds.length) markFreshLeads(newArrivalIds);
+        if (upgradedPhoneIds.length) markPhoneFound(upgradedPhoneIds);
       }
       if (logBuffer.length) {
         const incoming = logBuffer.splice(0, logBuffer.length);
@@ -623,18 +755,31 @@ export default function CommandCenter() {
           lastEventRef.current = Date.now();
           if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
 
-          const activeSid = activeSessionIdRef.current || sessionFilter || runRef.current?.sessionId || runRef.current?.id;
-          if (activeSid) {
+          const activeSid = activeSessionIdRef.current || runRef.current?.sessionId || runRef.current?.id || sessionFilterRef.current;
+          const incomingSid = vendor.sessionId || vendor.lastSessionId;
+          const belongsToActive = Boolean(
+            activeSid && (
+              !incomingSid
+              || incomingSid === activeSid
+              || (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(activeSid))
+            )
+          );
+
+          // STRICT SESSION GUARD: Drop foreign vendors belonging to another session
+          if (!belongsToActive && incomingSid && activeSid) {
+            return;
+          }
+
+          if (belongsToActive) {
             vendor.sessionId = activeSid;
             vendor.lastSessionId = activeSid;
             vendor.sessionIds = Array.isArray(vendor.sessionIds)
               ? Array.from(new Set([...vendor.sessionIds, activeSid]))
               : [activeSid];
-          }
-
-          if (runRef.current?.status === 'running' || activeSessionIdRef.current) {
-            runVendorIdsRef.current.add(vendor.id);
-            setRunLeadCount(runVendorIdsRef.current.size);
+            if (runRef.current?.status === 'running' || activeSessionIdRef.current === activeSid) {
+              runVendorIdsRef.current.add(vendor.id);
+              setRunLeadCount(runVendorIdsRef.current.size);
+            }
           }
           vendorBuffer.push(vendor);
           pushLog(`[LEAD] ${vendor.name || vendor.id} · ${vendor.phone || 'no phone'} · ${vendor.city || vendor.village || 'location unknown'}`);
@@ -656,15 +801,30 @@ export default function CommandCenter() {
             }
           }
           if (data?.activeZone) {
-            setActiveZone(prev => ({
-              ...(prev || {}),
-              ...data.activeZone,
-              name: data.activeZone.name || data.activeZone.zoneName || prev?.name,
-              lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
-              lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
-              radiusKm: Number(data.activeZone.radiusKm) || 3.5,
-              index: data.activeZone.index || prev?.index || 1
-            }));
+            const nextZoneName = data.activeZone.name || data.activeZone.zoneName;
+            setActiveZone(prev => {
+              const prevName = prev?.name || prev?.zoneName;
+              if (nextZoneName && prevName && prevName !== nextZoneName) {
+                setHopTransition(`${prevName} → ${nextZoneName}`);
+                if (Number.isFinite(Number(prev?.lat)) && Number.isFinite(Number(prev?.lng)) && Number.isFinite(Number(data.activeZone.lat)) && Number.isFinite(Number(data.activeZone.lng))) {
+                  setJumpTrail({
+                    from: [Number(prev.lat), Number(prev.lng)],
+                    to: [Number(data.activeZone.lat), Number(data.activeZone.lng)],
+                    fromName: prevName,
+                    toName: nextZoneName
+                  });
+                }
+              }
+              return {
+                ...(prev || {}),
+                ...data.activeZone,
+                name: nextZoneName || prev?.name,
+                lat: Number.isFinite(Number(data.activeZone.lat)) ? Number(data.activeZone.lat) : prev?.lat,
+                lng: Number.isFinite(Number(data.activeZone.lng)) ? Number(data.activeZone.lng) : prev?.lng,
+                radiusKm: Number(data.activeZone.radiusKm) || 3.5,
+                index: data.activeZone.index || prev?.index || 1
+              };
+            });
           } else if (data?.activeMandal) {
             const zName = data.activeMandal;
             const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -775,15 +935,43 @@ export default function CommandCenter() {
       url: streamUrl(),
       fallbackUrl: fallbackStreamUrl(),
       onSource: bindSource,
-      onStatus: status => setSseStatus(status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error'),
-      onAttempt: count => setReconnectAttempts(count)
+      onStatus: status => {
+        if (!mountedRef.current) return;
+        if (status === 'open') {
+          setSseStatus('open');
+          refresh();
+        } else if (status === 'connecting') {
+          setSseStatus('connecting');
+        } else {
+          setSseStatus('error');
+          setHealth(null);
+        }
+      },
+      onAttempt: count => {
+        if (mountedRef.current) setReconnectAttempts(count);
+      }
     });
     reconnectStreamRef.current = () => stream.reconnect();
+
+    const onServerOnline = () => {
+      if (!mountedRef.current) return;
+      if (stream && stream.status !== 1) stream.reconnect();
+      refresh();
+    };
+    const onServerOffline = () => {
+      if (!mountedRef.current) return;
+      setHealth(null);
+    };
+    window.addEventListener('leadharvest:server_online', onServerOnline);
+    window.addEventListener('leadharvest:server_offline', onServerOffline);
+
     stream.start();
 
     return () => {
       if (flushTimer) clearInterval(flushTimer);
       if (microFlushTimer) clearTimeout(microFlushTimer);
+      window.removeEventListener('leadharvest:server_online', onServerOnline);
+      window.removeEventListener('leadharvest:server_offline', onServerOffline);
       stream.stop();
     };
   }, []);
@@ -803,6 +991,13 @@ export default function CommandCenter() {
     }
 
     finishingRef.current = true;
+
+    const targetSid = current.sessionId || current.id || activeSessionIdRef.current;
+    if (targetSid) {
+      activeSessionIdRef.current = targetSid;
+      setSessionFilter(targetSid);
+      persistLastLiveSession(targetSid);
+    }
 
     const finishedAt = Date.now();
     setRun(prev => prev ? { ...prev, status, finishedAt } : prev);
@@ -825,7 +1020,7 @@ export default function CommandCenter() {
     }
 
     setTimeout(() => {
-      refresh();
+      refresh(targetSid);
       finishingRef.current = false;
     }, 800);
   }, [refresh]);
@@ -946,9 +1141,12 @@ export default function CommandCenter() {
     if (overrides.query) setAutoQuery(overrides.query);
     runVendorIdsRef.current = new Set();
     finishingRef.current = false;
+    clearAnimationHighlights();
     setRunLeadCount(0);
     setProgress(null);
     setSessionFilter(sessionId);
+    persistLastLiveSession(sessionId);
+    setPage(1);
     setActiveTab('cockpit');
     setActiveZone(null);
     setGridZones([]);
@@ -1028,15 +1226,8 @@ export default function CommandCenter() {
           ...prev,
           `[PLAN] ${plan.familyLabel || 'General vendors'} · ${(plan.engines || []).join(' + ') || 'auto'}`,
           response?.purge?.removed ? `[PURGE] ${response.purge.removed} stale leads removed · fresh run` : '[PURGE] no stale leads',
-          response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled before purge` : null
+          response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled` : null
         ].filter(Boolean));
-
-        // The purge just deleted the previous dataset. Drop those rows from the
-        // client too, otherwise the map and counters keep showing stale leads
-        // until the next manual refresh.
-        if (response?.purge?.removed || response?.deepStopped) {
-          await loadVendors();
-        }
       } else {
         const response = await startOmni({
           query: `${runCategory} in ${runLocation}`,
@@ -1085,10 +1276,6 @@ export default function CommandCenter() {
           response?.purge?.removed ? `[PURGE] ${response.purge.removed} stale leads removed · fresh run` : '[PURGE] no stale leads',
           response?.deepStopped ? `[DEEP] ${response.deepStopped} superseded deep job(s) cancelled` : null
         ].filter(Boolean));
-
-        if (response?.purge?.removed || response?.deepStopped) {
-          await loadVendors();
-        }
       }
 
       lastEventRef.current = Date.now();
@@ -1119,11 +1306,24 @@ export default function CommandCenter() {
           onLeads: (freshBatch) => {
             if (!mountedRef.current || !Array.isArray(freshBatch) || !freshBatch.length) return;
             lastEventRef.current = Date.now();
-            setVendors(prev => {
-              const knownIds = new Set(prev.map(v => v.id));
-              const add = freshBatch.filter(v => v && !knownIds.has(v.id));
-              return add.length ? [...add, ...prev] : prev;
-            });
+            const tagged = freshBatch
+              .filter(Boolean)
+              .map(v => ({
+                ...v,
+                sessionId: v.sessionId || sessionId,
+                lastSessionId: v.lastSessionId || sessionId,
+                sessionIds: Array.isArray(v.sessionIds) ? Array.from(new Set([...v.sessionIds, sessionId])) : [sessionId]
+              }));
+            const newIds = [];
+            for (const v of tagged) {
+              if (v.id && !runVendorIdsRef.current.has(v.id)) {
+                runVendorIdsRef.current.add(v.id);
+                newIds.push(v.id);
+              }
+            }
+            setRunLeadCount(runVendorIdsRef.current.size);
+            setVendors(prev => mergeVendorLists(prev, tagged, { countryHint: searchCountryRef.current }));
+            if (newIds.length) markFreshLeads(newIds);
           }
         });
       } catch (e) {}
@@ -1153,8 +1353,12 @@ export default function CommandCenter() {
     try { ramAssistStopRef.current?.(); } catch (e) {}
     ramAssistStopRef.current = null;
     try {
-      const sid = run?.sessionId || run?.id || activeSessionIdRef.current;
-      activeSessionIdRef.current = '';
+      const sid = run?.sessionId || run?.id || activeSessionIdRef.current || sessionFilterRef.current;
+      if (sid) {
+        activeSessionIdRef.current = sid;
+        setSessionFilter(sid);
+        persistLastLiveSession(sid);
+      }
       setRun(prev => ({
         ...(prev || {}),
         id: sid,
@@ -1166,7 +1370,7 @@ export default function CommandCenter() {
       setScanning(false);
       await stopAllScrapes(sid);
       toast('Run stopped. Completed leads remain saved.', { icon: '■' });
-      refresh();
+      refresh(sid);
     } catch (error) {
       toast.error('Stop request failed.');
     } finally {
@@ -1489,8 +1693,10 @@ export default function CommandCenter() {
         toast.error('This folder contains no leads to load.');
         return;
       }
-      setVendors(session.leads);
+      activeSessionIdRef.current = runCard.id;
+      setVendors(prev => mergeVendorLists(prev, session.leads, { countryHint: searchCountryRef.current }));
       setSessionFilter(runCard.id);
+      persistLastLiveSession(runCard.id);
       if (session.category) updateForm('category', session.category);
       if (session.location) updateForm('location', session.location);
       if (session.category && session.location) setAutoQuery(`${session.category} in ${session.location}`);
@@ -1906,17 +2112,21 @@ export default function CommandCenter() {
         <div className="v2-cmd-top-status">
           <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
             {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {isEngineReady ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
+            {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
 
           <button
             type="button"
-            className={cx('v2-gbc-cartridge-pill', hwTurboEnabled && 'is-on')}
+            className={cx('v2-gbc-cartridge-pill', extState.connected && 'is-on')}
             onClick={() => setHwPopupOpen(true)}
-            title="Configure local RAM & CPU Web Worker acceleration"
+            title="RAM Turbo status and your hardware lanes"
           >
             <Cpu size={12} />
-            <span>{hwTurboEnabled ? `RAM TURBO · ${hardware.ramGb}GB · 6 ENGINES` : 'ENABLE LOCAL RAM'}</span>
+            <span>
+              {extState.connected
+                ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
+                : 'CONNECT RAM TURBO'}
+            </span>
           </button>
 
           <SystemCheckPill variant="client" />
@@ -2027,18 +2237,36 @@ export default function CommandCenter() {
 
           {run?.status === 'running' && (
             <div className="lx-live-progress-card">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
                 <span className="lx-live-dot" />
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
                   Searching <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
                   {(effectiveActiveZone?.name || progress?.activeMandal) ? (
-                    <span style={{ fontWeight: 500, color: '#475569' }}> · {effectiveActiveZone?.name || progress?.activeMandal}</span>
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {hopTransition || effectiveActiveZone?.name || progress?.activeMandal}</span>
                   ) : null}
                 </div>
                 <span className="lx-zone-pill is-live">
                   Zone {Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)} / {Math.max(1, runTotal || mapZones.length || 1)}
                 </span>
               </div>
+
+              {/* Retro Digital Watch Chrono & Orchestrator ETA */}
+              <RetroDigitalTimer
+                etaMs={progress?.etaMs || 0}
+                etaText={progress?.etaText || ''}
+                elapsedSeconds={runElapsed}
+                zoneIndex={Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)}
+                totalZones={Math.max(1, runTotal || mapZones.length || 1)}
+                activeZoneName={effectiveActiveZone?.name || progress?.activeMandal || ''}
+                hopTransition={hopTransition}
+                leadsCount={runLeadCount}
+                runningCount={progress?.runningZones || progress?.runningJobs || 1}
+                doneCount={runDone}
+                queuedCount={Math.max(0, (runTotal || mapZones.length || 1) - runDone - 1)}
+                engineCount={searchCountry === 'IN' ? 11 : 6}
+                scanning={scanning}
+              />
+
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <b style={{ fontSize: 14, fontWeight: 800, color: '#059669', fontVariantNumeric: 'tabular-nums' }}>
                   {formatNumber(runLeadCount)} leads found
@@ -2092,7 +2320,13 @@ export default function CommandCenter() {
                 onPage={setPage}
                 onPageSize={setPageSize}
                 run={run}
+                runStatus={run?.status}
+                freshLeadIds={freshLeadIds}
+                phoneJustFoundIds={phoneJustFoundIds}
+                searchCountry={searchCountry}
                 stats={stats}
+                jumpTrail={jumpTrail}
+                hopTransition={hopTransition}
                 onOpenTrash={() => setTrashOpen(true)}
               />
             )}
@@ -2141,6 +2375,7 @@ export default function CommandCenter() {
                     height="100%"
                     fitKey={run?.id || 'live'}
                     cellStates={progress?.cellStates || {}}
+                    jumpTrail={jumpTrail}
                     onSelect={vendor => setSelectedVendor(vendor)}
                     onSelectZone={name => updateFilter('query', name)}
                   />
@@ -2449,51 +2684,67 @@ export default function CommandCenter() {
                 ))}
               </div>
 
-              <div
-                style={{
-                  padding: '12px 14px',
-                  borderRadius: 14,
-                  marginBottom: 14,
-                  background: extState.installed ? '#ecfdf5' : '#f5f3ff',
-                  border: extState.installed ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px solid rgba(124,58,237,0.28)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ minWidth: 220, flex: 1 }}>
-                  <b style={{ display: 'block', fontSize: 12.5, color: extState.installed ? '#065f46' : '#5b21b6' }}>
-                    {extState.installed
-                      ? `🟢 Zero-Knowledge RAM Extension Connected (v${extState.version || '1.0.0'})`
-                      : `🔌 Cloud Extension-Only Bridge ${extState.extensionOnly ? '(Required in Cloud Deploy)' : '(Recommended)'}`}
-                  </b>
-                  <span style={{ fontSize: 11.5, color: '#475569' }}>
-                    All 6 engines stay 100% protected on our server; the extension only borrows your idle RAM for instant speed.
-                    {!extState.installed && ' 1. Download ZIP & unzip → 2. chrome://extensions (Dev Mode ON) → 3. Load unpacked.'}
+              <div className={cx('cb-glass-card', extState.connected ? 'is-live' : 'is-idle')}>
+                <div className="cb-glass-head">
+                  <span className={cx('cb-led', extState.connected ? 'is-live' : 'is-warn')} />
+                  <div className="cb-glass-title">
+                    <b>{extState.connected ? 'RAM TURBO CONNECTED' : 'ADD RAM TURBO'}</b>
+                    <span>
+                      {extState.connected
+                        ? `v${extState.version || '1.1.0'} · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes · ${extState.relayed || 0} pages relayed`
+                        : 'One click in Chrome. After that it connects itself.'}
+                    </span>
+                  </div>
+                  <span className={cx('cb-chip', extState.connected ? 'is-live' : 'is-idle')}>
+                    {extState.connected ? 'READY' : 'NOT CONNECTED'}
                   </span>
                 </div>
-                <a
-                  href={EXTENSION_DOWNLOAD_URL}
-                  download="scraper-co-in-ram-turbo-extension.zip"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '8px 13px',
-                    borderRadius: 999,
-                    background: extState.installed ? '#059669' : '#6d28d9',
-                    color: '#ffffff',
-                    fontSize: 11.5,
-                    fontWeight: 800,
-                    textDecoration: 'none',
-                    whiteSpace: 'nowrap'
-                  }}
-                >
-                  <Download size={13} />
-                  <span>{extState.installed ? 'Re-Download Extension' : 'Download RAM Extension (.zip)'}</span>
-                </a>
+
+                <p className="cb-glass-copy">
+                  All 6 engines stay on our servers. RAM Turbo only lets them read pages through your
+                  connection, so your searches skip the queue and never share your browsing data.
+                </p>
+
+                {!extState.connected && (
+                  <ol className="cb-steps">
+                    <li><b>Add</b> RAM Turbo to Chrome.</li>
+                    <li><b>Reload</b> this page.</li>
+                    <li><b>Search</b> — it starts on its own.</li>
+                  </ol>
+                )}
+
+                <div className="cb-glass-actions">
+                  {extState.connected ? (
+                    <span className="cb-badge-live">All engines on your hardware</span>
+                  ) : extState.storeUrl ? (
+                    <a
+                      className="cb-btn-primary"
+                      href={extState.storeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Download size={14} />
+                      <span>Add to Chrome</span>
+                    </a>
+                  ) : (
+                    <a className="cb-btn-primary" href={EXTENSION_DOWNLOAD_URL} download>
+                      <Download size={14} />
+                      <span>Install (developer build)</span>
+                    </a>
+                  )}
+                </div>
+
+                {!extState.connected && !extState.storeUrl && (
+                  <p className="cb-glass-fine">
+                    The Chrome Web Store listing is in review. Until it is live, use the developer
+                    build: unzip it, open <code>chrome://extensions</code>, turn on Developer mode,
+                    then choose Load unpacked.
+                  </p>
+                )}
+
+                {extState.lastError && (
+                  <p className="cb-glass-fine is-error">Last error: {extState.lastError}</p>
+                )}
               </div>
 
               <div className="v2-gbc-hw-actions">
@@ -2504,22 +2755,11 @@ export default function CommandCenter() {
                 >
                   <span className="lx-gbc-keycap is-a">A</span>
                   <Zap size={16} />
-                  <span>USE LOCAL HARDWARE &amp; ALL 6 ENGINES ({hardware.parallelZones}x SPEED)</span>
-                </button>
-                <button
-                  type="button"
-                  className="v2-gbc-hw-secondary"
-                  onClick={() => {
-                    setHwTurboEnabled(false);
-                    setHwPopupOpen(false);
-                    try {
-                      localStorage.setItem('scraper_hw_turbo_v2', 'false');
-                      localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
-                    } catch (e) {}
-                    toast('Using standard cloud-only queue mode.', { icon: '☁️' });
-                  }}
-                >
-                  Cloud-Only Mode
+                  <span>
+                    {extState.connected
+                      ? `START SEARCHING · ${hardware.parallelZones}x ON YOUR HARDWARE`
+                      : 'CONNECT RAM TURBO TO START'}
+                  </span>
                 </button>
               </div>
             </div>

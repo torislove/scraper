@@ -50,8 +50,13 @@ function isPrivateHost(host) {
   if (/^10\./.test(h)) return true;
   if (/^192\.168\./.test(h)) return true;
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h)) return true; // Tailscale / CGNAT
   if (/^169\.254\./.test(h)) return true; // link-local
   if (h.endsWith('.local')) return true;
+  if (h === 'scraper.co.in' || h.endsWith('.scraper.co.in')) return true;
+  if (/^[a-z0-9-]+$/.test(h)) return true; // single-label local hostname
+  const extra = String(process.env.ALLOWED_ORIGINS || '').split(',').map((s) => normaliseHost(s)).filter(Boolean);
+  if (extra.some((allowed) => h === allowed || h.endsWith(`.${allowed}`))) return true;
   return false;
 }
 
@@ -63,6 +68,8 @@ function isPrivateHost(host) {
 function originAllowed(origin) {
   if (!origin) return true;
   if (origin === 'null') return true; // file:// in an old shell build
+  if (remoteAllowed()) return true;
+  if (/^(chrome|moz)-extension:\/\//i.test(String(origin))) return true;
   let url;
   try {
     url = new URL(origin);
@@ -124,7 +131,7 @@ const CSP = [
   "font-src 'self' data: https://fonts.gstatic.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
-  "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https:",
+  "connect-src 'self' http: https: ws: wss:",
 ].join('; ');
 
 function securityHeaders(req, res, next) {
@@ -279,7 +286,22 @@ const corsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-workspace-scope', 'x-master-key', 'x-request-id'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'Cache-Control',
+    'Pragma',
+    'X-Requested-With',
+    'x-user-id',
+    'x-workspace-scope',
+    'x-master-key',
+    'x-request-id',
+    'x-scraper-extension',
+    'x-extension-ready',
+    'x-country',
+    'x-session-id'
+  ],
   maxAge: 600,
 };
 

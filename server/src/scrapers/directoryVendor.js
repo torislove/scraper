@@ -574,17 +574,23 @@ function saveDirectoryVendor(incoming, sessionId = incoming.sessionId || 'legacy
     } catch (e) {}
   }
   // O(1) Instant Match lookup via indexed vendor store
+  const owner = dbAdapter.getSessionOwner(sessionId) || incoming.userId || 'admin_1';
   const existing = dbAdapter.findMatch(incoming);
 
   if (existing) {
     const merged = mergeDirectoryVendor(existing, incoming, sessionId);
-    dbAdapter.saveVendor(existing.userId || 'admin_1', merged);
+    const resolvedOwner = (owner && owner !== 'admin_1' && owner !== 'anonymous')
+      ? owner
+      : (existing.userId || owner || 'admin_1');
+    merged.userIds = uniqueStrings([...(existing.userIds || []), existing.userId, resolvedOwner, owner].filter(Boolean), 60);
+    dbAdapter.saveVendor(resolvedOwner, merged);
     return { vendor: merged, created: false, updated: true };
   }
 
-  const vendor = { ...incoming };
+  const vendor = { ...incoming, userId: owner };
+  vendor.userIds = uniqueStrings([...(vendor.userIds || []), owner].filter(Boolean), 60);
   vendor.sessionIds = uniqueStrings([...(vendor.sessionIds || []), sessionId], 50);
-  dbAdapter.saveVendor('admin_1', vendor);
+  dbAdapter.saveVendor(owner, vendor);
   return { vendor, created: true, updated: false };
 }
 

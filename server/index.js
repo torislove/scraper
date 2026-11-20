@@ -1,4 +1,4 @@
-process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
+﻿process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -141,7 +141,7 @@ let systemLogs = [];
 /* Vendor SSE batching                                                 */
 /*                                                                     */
 /* Every inserted lead used to be one JSON.stringify plus one socket    */
-/* write per connected client. Five zones × twenty cards produced a     */
+/* write per connected client. Five zones Ã— twenty cards produced a     */
 /* burst of hundreds of synchronous writes in the same tick, which is   */
 /* exactly the kind of stall that makes the whole UI feel late. Events  */
 /* now coalesce for 100 ms and are written once per client. The wire    */
@@ -158,6 +158,23 @@ function vendorBelongsToSession(vendor, sessionId) {
   return Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(sessionId);
 }
 
+// Audience of a run's live events: who started it (userId) and whether it is a
+// Master run. Used so the Client and Master dashboards never see each other's
+// leads, zones, progress or console lines.
+function audienceForSession(sessionId) {
+  if (!sessionId) return null;
+  try {
+    const dbAdapterRef = require('./src/config/dbAdapter');
+    const scope = dbAdapterRef.getSessionScope(sessionId);
+    return scope ? { isMaster: scope.isMaster === true, userId: scope.userId } : null;
+  } catch (e) { return null; }
+}
+
+function audienceForVendor(vendor) {
+  if (!vendor) return null;
+  return audienceForSession(vendor.lastSessionId || vendor.sessionId);
+}
+
 function flushVendorOutbox() {
   if (vendorFlushTimer) {
     clearTimeout(vendorFlushTimer);
@@ -166,7 +183,7 @@ function flushVendorOutbox() {
   if (!vendorOutbox.length) return;
   const batch = vendorOutbox;
   vendorOutbox = [];
-  liveStreams.broadcastVendorBatch(batch, vendorBelongsToSession);
+  liveStreams.broadcastVendorBatch(batch, vendorBelongsToSession, audienceForVendor);
 }
 
 /* Console lines are coalesced the same way vendor rows are. A live sweep can
@@ -186,10 +203,22 @@ function flushLogOutbox() {
   const batch = logOutbox;
   logOutbox = [];
   // The contract is unchanged: unnamed `data:` frames that the console renders
-  // as plain lines. Batch them into one write per client.
-  liveStreams.broadcastRaw(batch.map(line => `data: ${String(line).replace(/\n/g, '\\n')}\n\n`).join(''));
+  // as plain lines, batched into one write per client. Lines produced inside a
+  // run are routed to that run's audience only; system lines go to everyone.
+  const groups = new Map();
+  for (const entry of batch) {
+    const key = entry.sessionId || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry.line);
+  }
+  for (const [sessionId, lines] of groups.entries()) {
+    const frame = lines.map(line => `data: ${String(line).replace(/\n/g, '\\n')}\n\n`).join('');
+    liveStreams.broadcastRaw(frame, audienceForSession(sessionId));
+    if (sessionId) {
+      for (const line of lines) liveStreams.broadcastSessionLine(sessionId, line);
+    }
+  }
 }
-
 function sendSse(msg) {
   if (!msg) return;
   logOutbox.push(msg);
@@ -262,7 +291,8 @@ function emitVendorEvent(vendorObj, action = 'inserted') {
 
 function emitGridEvent(gridCoords) {
   try {
-    liveStreams.broadcastEvent('grid_points', gridCoords);
+    const gridSid = Array.isArray(gridCoords) ? (gridCoords.find(g => g && g.sessionId) || {}).sessionId : gridCoords && gridCoords.sessionId;
+    liveStreams.broadcastEvent('grid_points', gridCoords, audienceForSession(gridSid));
   } catch (e) { console.error('Failed to emit grid SSE', e.message); }
 }
 
@@ -272,21 +302,21 @@ function emitInterventionEvent(platformName, isActive) {
   } catch (e) { console.error('Failed to emit intervention SSE', e.message); }
 }
 
-function emitDispatchEvent(targets) {
+function emitDispatchEvent(targets, sessionId = null) {
   try {
-    liveStreams.broadcastEvent('dispatch_targets', targets);
+    liveStreams.broadcastEvent('dispatch_targets', targets, audienceForSession(sessionId || (targets && targets.sessionId)));
   } catch (e) { console.error('Failed to emit dispatch_targets SSE', e.message); }
 }
 
 function emitActivePointEvent(pointInfo) {
   try {
-    liveStreams.broadcastEvent('active_point', pointInfo);
+    liveStreams.broadcastEvent('active_point', pointInfo, audienceForSession(pointInfo && pointInfo.sessionId));
   } catch (e) { console.error('Failed to emit active_point SSE', e.message); }
 }
 
 function emitProgressEvent(progressInfo) {
   try {
-    liveStreams.broadcastEvent('progress', progressInfo);
+    liveStreams.broadcastEvent('progress', progressInfo, audienceForSession(progressInfo && progressInfo.sessionId));
   } catch (e) { console.error('Failed to emit progress SSE', e.message); }
 }
 
@@ -457,7 +487,7 @@ app.use('/api/api/map-tiles', mapTilesRoutes);
 app.use('/downloads', express.static(paths.DOWNLOADS_DIR, { index: false, dotfiles: 'deny', fallthrough: true }));
 
 // Ultra-fast lightweight health heartbeat consumed by Client & Master frontends (<1ms)
-app.get('/api/health', (req, res) => {
+app.get(['/api/health', '/health', '/api/api/health'], (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.json({
     ok: true,
@@ -534,7 +564,13 @@ app.get('/api/license/status', (req, res) => {
 // stale socket can never permanently lock a dashboard out of the feed.
 const handleLogStream = (req, res) => {
   try {
-    liveStreams.attachLog(req, res, systemLogs);
+    // A verified session token (resolveIdentity) wins over the self-declared
+    // query hints, which only exist for token-less local installs.
+    const verified = Boolean(req.identity);
+    liveStreams.attachLog(req, res, systemLogs, {
+      scope: verified ? req.headers['x-workspace-scope'] : (req.query && req.query.scope),
+      userId: verified ? req.headers['x-user-id'] : (req.query && req.query.uid)
+    });
   } catch (err) {
     console.error('[SSE] log stream attach failed:', err.message);
     try { res.end(); } catch (e) { /* already closed */ }
@@ -623,7 +659,7 @@ const httpServer = app.listen(PORT, HOST, () => {
   const actualPort = addr && typeof addr === 'object' ? addr.port : PORT;
   // The Electron launcher reads this exact line to learn the port.
   console.log(`[ready] ${JSON.stringify({ port: actualPort, host: HOST, desktop: paths.isDesktop })}`);
-  console.log(`🚀 LeadHarvest Pro Intelligence Engine running on port ${actualPort}`);
+  console.log(`ðŸš€ LeadHarvest Pro Intelligence Engine running on port ${actualPort}`);
   // Warm the suggestion + geo indexes just after boot so the first keystroke
   // never waits for a cold 619k-village scan.
   setTimeout(() => {

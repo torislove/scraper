@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "start": "vite",
+    "dev": "node ../scripts/run-frontend.js client",
+    "start": "node ../scripts/run-frontend.js client",
+    "dev:only": "node ../scripts/free-port.js 5173 && vite",
     "build": "vite build",
     "build:desktop": "vite build --mode desktop --outDir dist-desktop --emptyOutDir",
     "bild": "vite build",

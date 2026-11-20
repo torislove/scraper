@@ -43,8 +43,19 @@ const autoDefaultSlots = (() => {
   }
 })();
 
+const autoEnrichReserve = (() => {
+  try {
+    const totalGb = os.totalmem() / (1024 * 1024 * 1024);
+    if (totalGb >= 15.5) return 3;
+    if (totalGb >= 8) return 2;
+    return 1;
+  } catch (e) {
+    return 1;
+  }
+})();
+
 const TOTAL_SLOTS = Math.max(1, Math.min(16, envInt('SCRAPER_BROWSER_SLOTS', autoDefaultSlots)));
-const ENRICH_RESERVE = Math.max(1, Math.min(2, envInt('SCRAPER_ENRICH_RESERVE', 1)));
+const ENRICH_RESERVE = Math.max(1, Math.min(4, envInt('SCRAPER_ENRICH_RESERVE', autoEnrichReserve)));
 // Enrichment must run concurrently with discovery so leads receive verified mobile numbers in real time.
 const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD === '1';
 
@@ -63,11 +74,13 @@ function freeRamPct() {
 
 /** Discovery may use every slot the enricher is not holding. */
 function discoveryLimit() {
-  let critical = false;
+  let ramCap = TOTAL_SLOTS;
   try {
-    critical = os.freemem() < 600 * 1024 * 1024 || freeRamPct() < 10;
-  } catch (e) {}
-  const ramCap = critical ? 1 : TOTAL_SLOTS;
+    const freeBytes = os.freemem();
+    // Gate on absolute free bytes (Windows standby cache routinely leaves 5-9% strictly free even on 16GB hosts)
+    if (freeBytes < 450 * 1024 * 1024) ramCap = 1;
+    else if (freeBytes < 950 * 1024 * 1024) ramCap = Math.min(4, TOTAL_SLOTS);
+  } catch (e) { }
   return Math.max(1, Math.min(ramCap, TOTAL_SLOTS - enrichmentActive));
 }
 
@@ -77,13 +90,14 @@ function enrichmentLimit() {
   const slotsRemaining = TOTAL_SLOTS - enrichmentActive;
   if (slotsRemaining <= 0) return 0;
   const free = Math.max(0, TOTAL_SLOTS - discoveryActive - enrichmentActive);
-  // Ensure at least 1-2 enrichment workers are active while leads are in queue
-  return Math.max(1, Math.min(ENRICH_RESERVE, free > 0 ? free : 1));
+  // Guarantee real-time enrichment throughput alongside multi-slot discovery
+  const baseline = TOTAL_SLOTS >= 6 ? 2 : 1;
+  return Math.max(baseline, Math.min(ENRICH_RESERVE, Math.max(free, baseline)));
 }
 
 function notify() {
   for (const listener of listeners) {
-    try { listener(); } catch (e) {}
+    try { listener(); } catch (e) { }
   }
 }
 
@@ -106,7 +120,7 @@ function setDiscoveryQueued(count) {
 }
 
 function onSlotChange(listener) {
-  if (typeof listener !== 'function') return () => {};
+  if (typeof listener !== 'function') return () => { };
   listeners.add(listener);
   return () => listeners.delete(listener);
 }

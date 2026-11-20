@@ -1,0 +1,519 @@
+/* ==========================================================================
+   console3d.css — 3D glass ColourBoy shell on a white canvas
+   --------------------------------------------------------------------------
+   Imported LAST so it wins over v2.css / whiteTheme.css / designSystem.css.
+
+   Design rules
+   ------------
+   1. The page is white. Always. #ffffff canvas, #f8fafc bands.
+   2. Depth comes from glass, not from darkness: inner top highlight, a hairline
+      border, and a soft ambient shadow.
+   3. The Game Boy Colour language is hardware, not wallpaper: embossed
+      keycaps, a cartridge pill, a D-pad, an LED, a screen bezel. Used sparingly.
+   4. Only the map chrome and code blocks may stay dark.
+   ========================================================================== */
+
+:root {
+  --cb-canvas: #ffffff;
+  --cb-band: #f8fafc;
+  --cb-sunken: #f1f5f9;
+
+  --cb-surface: #ffffff;
+  --cb-surface-2: #fbfdfe;
+
+  --cb-line: #e6ebf1;
+  --cb-line-strong: #d5dde6;
+
+  --cb-text: #0f172a;
+  --cb-text-muted: #5b6779;
+  --cb-text-faint: #94a3b8;
+
+  --cb-accent: #059669;
+  --cb-accent-2: #0d9488;
+  --cb-accent-soft: #ecfdf5;
+  --cb-berry: #7c3aed;
+  --cb-kiwi: #65a30d;
+  --cb-amber: #d97706;
+  --cb-danger: #dc2626;
+
+  --cb-glass:
+    linear-gradient(160deg, #ffffff 0%, #fbfdff 48%, #f4f8fb 100%);
+  --cb-glass-strong:
+    linear-gradient(160deg, #ffffff 0%, #f7fbfd 55%, #eef4f8 100%);
+
+  --cb-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --cb-shadow-md: 0 6px 18px rgba(15, 23, 42, 0.07);
+  --cb-shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.10);
+
+  --cb-inset-top: inset 0 1px 0 #ffffff;
+  --cb-inset-bottom: inset 0 -2px 0 rgba(15, 23, 42, 0.06);
+
+  --cb-radius-sm: 10px;
+  --cb-radius-md: 14px;
+  --cb-radius-lg: 20px;
+  --cb-radius-xl: 26px;
+}
+
+/* ---- canvas ------------------------------------------------------------- */
+
+html,
+body,
+#root,
+.v2-root {
+  background-color: var(--cb-canvas) !important;
+  color: var(--cb-text) !important;
+}
+
+/* Faint bands instead of dark sections. */
+.cb-band {
+  background: var(--cb-band) !important;
+}
+
+/* ---- glass primitives --------------------------------------------------- */
+
+.cb-glass {
+  background: var(--cb-glass);
+  border: 1px solid var(--cb-line);
+  border-radius: var(--cb-radius-lg);
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-md);
+}
+
+.cb-glass-strong {
+  background: var(--cb-glass-strong);
+  border: 1px solid var(--cb-line-strong);
+  border-radius: var(--cb-radius-lg);
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-lg);
+}
+
+/* ---- status LED --------------------------------------------------------- */
+
+.cb-led {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #cbd5e1;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 0 0 3px #f1f5f9;
+}
+.cb-led.is-live {
+  background: radial-gradient(circle at 35% 30%, #6ee7b7, #10b981 62%, #059669);
+  box-shadow: 0 0 0 3px #d1fae5, 0 0 12px rgba(16, 185, 129, 0.55);
+  animation: cb-pulse 2.4s ease-in-out infinite;
+}
+.cb-led.is-warn {
+  background: radial-gradient(circle at 35% 30%, #fcd34d, #f59e0b 62%, #d97706);
+  box-shadow: 0 0 0 3px #fef3c7;
+}
+
+@keyframes cb-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ---- extension card ----------------------------------------------------- */
+
+.cb-glass-card {
+  position: relative;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  border-radius: var(--cb-radius-lg);
+  background: var(--cb-glass);
+  border: 1px solid var(--cb-line);
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-md);
+  overflow: hidden;
+}
+
+/* A thin glass sheen across the top edge — the "3D" part. */
+.cb-glass-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 42%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+
+.cb-glass-card.is-live {
+  border-color: #b7ead7;
+  box-shadow: var(--cb-inset-top), 0 8px 22px rgba(5, 150, 105, 0.12);
+}
+.cb-glass-card.is-live::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, #10b981, #0d9488);
+}
+
+.cb-glass-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cb-glass-title {
+  flex: 1;
+  min-width: 0;
+}
+.cb-glass-title b {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--cb-text);
+}
+.cb-glass-title span {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cb-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cb-chip {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--cb-line-strong);
+  background: var(--cb-surface);
+  color: var(--cb-text-muted);
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-sm);
+}
+.cb-chip.is-live {
+  background: var(--cb-accent-soft);
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+.cb-glass-copy {
+  position: relative;
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--cb-text-muted);
+}
+
+.cb-steps {
+  position: relative;
+  margin: 0 0 12px;
+  padding: 10px 12px 10px 30px;
+  border-radius: var(--cb-radius-md);
+  background: var(--cb-band);
+  border: 1px solid var(--cb-line);
+  font-size: 11px;
+  line-height: 1.75;
+  color: var(--cb-text-muted);
+  list-style: decimal;
+}
+.cb-steps li::marker {
+  color: var(--cb-accent);
+  font-weight: 800;
+}
+.cb-steps b { color: var(--cb-text); }
+
+.cb-glass-actions {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Embossed primary key — the Game Boy "A" button, but professional. */
+.cb-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid #047857;
+  background: linear-gradient(160deg, #10b981, #059669 55%, #047857);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 3px 0 #065f46,
+    0 8px 18px rgba(5, 150, 105, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.cb-btn-primary:hover { filter: brightness(1.04); }
+.cb-btn-primary:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 1px 0 #065f46,
+    0 3px 8px rgba(5, 150, 105, 0.24);
+}
+
+.cb-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #065f46;
+  background: var(--cb-accent-soft);
+  border: 1px solid #a7f3d0;
+  box-shadow: var(--cb-inset-top);
+}
+
+.cb-glass-fine {
+  position: relative;
+  margin: 10px 0 0;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--cb-text-faint);
+}
+.cb-glass-fine code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--cb-sunken);
+  border: 1px solid var(--cb-line);
+  font-size: 9.5px;
+  color: var(--cb-text-muted);
+}
+.cb-glass-fine.is-error { color: var(--cb-danger); }
+
+/* ---- hardware modal: white glass, GBC hardware accents ------------------ */
+
+.v2-gbc-hw-modal-backdrop {
+  background: rgba(15, 23, 42, 0.28) !important;
+  backdrop-filter: blur(6px);
+}
+
+.v2-gbc-hw-modal,
+.v2-gbc-hw-bezel {
+  background: var(--cb-glass-strong) !important;
+  border: 1px solid var(--cb-line-strong) !important;
+  border-radius: var(--cb-radius-xl) !important;
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-lg) !important;
+  color: var(--cb-text) !important;
+}
+
+.v2-gbc-hw-head {
+  border-bottom: 1px solid var(--cb-line);
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.v2-gbc-hw-led {
+  background: radial-gradient(circle at 35% 30%, #6ee7b7, #10b981 62%, #059669) !important;
+  box-shadow: 0 0 0 3px #d1fae5, 0 0 12px rgba(16, 185, 129, 0.5) !important;
+}
+
+.v2-gbc-hw-title b,
+.v2-gbc-hw-title h2,
+.v2-gbc-hw-title h3 {
+  color: var(--cb-text) !important;
+  letter-spacing: -0.01em;
+}
+.v2-gbc-hw-title span,
+.v2-gbc-hw-title small {
+  color: var(--cb-text-muted) !important;
+}
+
+/* Spec cards: glass tiles with an embossed top edge. */
+.v2-gbc-spec-card {
+  background: var(--cb-surface) !important;
+  border: 1px solid var(--cb-line) !important;
+  border-radius: var(--cb-radius-md) !important;
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-sm) !important;
+  color: var(--cb-text) !important;
+}
+.v2-gbc-spec-card.is-best {
+  background: linear-gradient(160deg, #ffffff, #f0fdf8) !important;
+  border-color: #b7ead7 !important;
+  box-shadow: var(--cb-inset-top), 0 6px 16px rgba(5, 150, 105, 0.12) !important;
+}
+.v2-gbc-spec-card > span {
+  color: var(--cb-text-faint) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+}
+.v2-gbc-spec-card > b {
+  color: var(--cb-text) !important;
+  font-variant-numeric: tabular-nums;
+}
+.v2-gbc-spec-card > small {
+  color: var(--cb-text-muted) !important;
+}
+
+/* Engine pills: white with a kiwi LED dot. */
+.v2-gbc-hw-engine-pill {
+  background: var(--cb-surface) !important;
+  border: 1px solid var(--cb-line) !important;
+  border-radius: var(--cb-radius-sm) !important;
+  box-shadow: var(--cb-inset-top) !important;
+  color: var(--cb-text) !important;
+}
+.v2-gbc-hw-engine-pill b { color: var(--cb-text) !important; }
+.v2-gbc-hw-engine-pill span {
+  color: var(--cb-accent) !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em;
+}
+
+/* Tier chips. */
+.v2-gbc-tier-chip {
+  background: var(--cb-surface) !important;
+  border: 1px solid var(--cb-line) !important;
+  border-radius: var(--cb-radius-md) !important;
+  box-shadow: var(--cb-inset-top) !important;
+  color: var(--cb-text) !important;
+}
+.v2-gbc-tier-chip.is-current {
+  background: linear-gradient(160deg, #ffffff, #f0fdf8) !important;
+  border-color: #6ee7b7 !important;
+  box-shadow: var(--cb-inset-top), 0 0 0 3px rgba(16, 185, 129, 0.12) !important;
+}
+.v2-gbc-tier-chip b { color: var(--cb-text) !important; }
+.v2-gbc-tier-chip span { color: var(--cb-text-muted) !important; }
+
+/* Primary action: the embossed "A" key. */
+.v2-gbc-hw-primary {
+  background: linear-gradient(160deg, #10b981, #059669 55%, #047857) !important;
+  color: #ffffff !important;
+  border: 1px solid #047857 !important;
+  border-radius: 999px !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 3px 0 #065f46,
+    0 10px 22px rgba(5, 150, 105, 0.26) !important;
+}
+.v2-gbc-hw-primary:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 0 #065f46,
+    0 4px 10px rgba(5, 150, 105, 0.22) !important;
+}
+
+/* Keycap: the physical plastic key. */
+.lx-gbc-keycap {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 900;
+  color: #334155;
+  background: linear-gradient(180deg, #ffffff, #eef2f7);
+  border: 1px solid #d5dde6;
+  box-shadow: var(--cb-inset-top), 0 2px 0 #cfd8e3;
+}
+.lx-gbc-keycap.is-a { color: #065f46; }
+
+/* Cartridge pill in the top bar. */
+.v2-gbc-cartridge-pill,
+.cb-relay-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  background: var(--cb-surface) !important;
+  border: 1px solid var(--cb-line-strong) !important;
+  color: var(--cb-text-muted) !important;
+  border-radius: 999px !important;
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-sm) !important;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.cb-relay-pill.is-live {
+  background: var(--cb-accent-soft) !important;
+  border-color: #a7f3d0 !important;
+  color: #065f46 !important;
+}
+.v2-gbc-cartridge-pill.is-on {
+  background: var(--cb-accent-soft) !important;
+  border-color: #a7f3d0 !important;
+  color: #065f46 !important;
+}
+
+/* ---- generic white sweep ------------------------------------------------ */
+
+/* Cards and panels that were dark slabs become glass. The selector list is
+   deliberately explicit: a blanket `div { background: white }` would erase the
+   map and the code blocks. */
+.v2-card,
+.v2-panel,
+.v2-run-card,
+.v2-metric-card,
+.v2-folder-card,
+.v2-drawer,
+.v2-modal,
+.v2-sheet {
+  background: var(--cb-surface) !important;
+  border: 1px solid var(--cb-line) !important;
+  border-radius: var(--cb-radius-lg) !important;
+  box-shadow: var(--cb-inset-top), var(--cb-shadow-md) !important;
+  color: var(--cb-text) !important;
+}
+
+/* Tables: white rows, hairline rules. */
+.v2-table,
+.v2-leads-table {
+  background: var(--cb-surface) !important;
+  color: var(--cb-text) !important;
+}
+.v2-table thead th,
+.v2-leads-table thead th {
+  background: var(--cb-band) !important;
+  color: var(--cb-text-muted) !important;
+  border-bottom: 1px solid var(--cb-line) !important;
+}
+.v2-table tbody tr,
+.v2-leads-table tbody tr {
+  background: var(--cb-surface) !important;
+  border-bottom: 1px solid var(--cb-line) !important;
+}
+.v2-table tbody tr:hover,
+.v2-leads-table tbody tr:hover {
+  background: var(--cb-band) !important;
+}
+
+/* ---- deliberate exceptions (do not "fix" these) ------------------------- */
+
+.leaflet-container,
+.map-overlay,
+.cb-inverse,
+pre,
+code[class*="language-"] {
+  color-scheme: dark;
+}
+
+/* ---- motion ------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cb-led.is-live { animation: none; }
+  .cb-btn-primary,
+  .v2-gbc-hw-primary { transition: none; }
+}
+
+/* ---- small screens ------------------------------------------------------ */
+
+@media (max-width: 560px) {
+  .cb-glass-head { flex-wrap: wrap; }
+  .cb-chip { order: 3; }
+  .cb-glass-card { padding: 12px 13px; }
+  .cb-btn-primary { width: 100%; justify-content: center; }
+}

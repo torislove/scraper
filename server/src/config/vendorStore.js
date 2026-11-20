@@ -357,6 +357,19 @@ function mergeVendor(existing, incoming) {
       merged.sessionIds = uniqueStrings([...(existing.sessionIds || []), ...(value || [])], 100);
       continue;
     }
+    if (key === 'userIds') {
+      merged.userIds = uniqueStrings([...(existing.userIds || []), existing.userId, ...(value || [])], 60);
+      continue;
+    }
+    if (key === 'userId') {
+      if (hasValue(value)) {
+        merged.userIds = uniqueStrings([...(merged.userIds || existing.userIds || []), existing.userId, value], 60);
+        if (!existing.userId || existing.userId === 'admin_1' || existing.userId === 'anonymous' || value !== 'admin_1') {
+          merged.userId = value;
+        }
+      }
+      continue;
+    }
     if (key === 'phones') {
       if (Array.isArray(value) && value.length) {
         merged.phones = normalizePhoneEntries([...(Array.isArray(existing.phones) ? existing.phones : []), ...value], 60);
@@ -807,6 +820,7 @@ function upsertInternal(incoming, options = {}) {
   if (idx === -1) {
     stored = promoteBestMobile({ ...incoming });
     stored.sessionIds = uniqueStrings([...(stored.sessionIds || []), stored.sessionId].filter(Boolean), 100);
+    stored.userIds = uniqueStrings([...(stored.userIds || []), stored.userId, stored.clientId].filter(Boolean), 60);
     vendors.push(stored);
     byId.set(stored.id, vendors.length - 1);
   } else {

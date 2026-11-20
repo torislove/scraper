@@ -30,8 +30,39 @@ export function lazyRetry(importer, attempts = 3) {
   });
 }
 
-const CHUNK_ERROR = /Failed to fetch dynamically imported module|Unable to preload CSS|Importing a module script failed|error loading dynamically imported module|ChunkLoadError/i;
+const CHUNK_ERROR = /Failed to fetch dynamically imported module|Unable to preload CSS|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Outdated Optimize Dep/i;
 
 export function isChunkLoadError(error) {
   return CHUNK_ERROR.test(String(error?.message || error || ''));
+}
+
+function reloadOnce() {
+  if (typeof window === 'undefined') return;
+  try {
+    const last = Number(sessionStorage.getItem('chunkReloadAt') || 0);
+    if (Date.now() - last > 15000) {
+      sessionStorage.setItem('chunkReloadAt', String(Date.now()));
+      window.location.reload();
+    }
+  } catch (e) {
+    /* storage blocked */
+  }
+}
+
+/**
+ * Installs global stale-chunk and Vite preload error recovery before React mounts
+ * so Vite restarts or redeploys do not strand open tabs on a blank white page.
+ */
+export function installChunkErrorRecovery() {
+  if (typeof window === 'undefined' || window.__scraperChunkRecoveryInstalled) return;
+  window.__scraperChunkRecoveryInstalled = true;
+  window.addEventListener('vite:preloadError', (event) => {
+    event?.preventDefault?.();
+    reloadOnce();
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isChunkLoadError(event?.reason)) {
+      reloadOnce();
+    }
+  });
 }

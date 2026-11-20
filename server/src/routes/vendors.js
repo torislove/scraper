@@ -39,7 +39,11 @@ router.get('/', (req, res) => {
       );
     } else if (!isMaster && requestingUserId && requestingUserId !== 'anonymous') {
       // Multi-tenant protection: non-master callers without sessionId only see their own leads
-      data = data.filter(v => v.userId === requestingUserId || v.clientId === requestingUserId);
+      data = data.filter(v =>
+        v.userId === requestingUserId
+        || v.clientId === requestingUserId
+        || (Array.isArray(v.userIds) && v.userIds.includes(requestingUserId))
+      );
     }
 
     if (since && Number(since) > 0) {

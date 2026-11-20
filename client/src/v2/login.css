@@ -71,8 +71,13 @@
 }
 
 @keyframes loginAuroraFloat {
-  from { transform: translate3d(-1.5%, -1%, 0) scale(1); }
-  to { transform: translate3d(1.5%, 2%, 0) scale(1.05); }
+  from {
+    transform: translate3d(-1.5%, -1%, 0) scale(1);
+  }
+
+  to {
+    transform: translate3d(1.5%, 2%, 0) scale(1.05);
+  }
 }
 
 /* ── Top Bar ─────────────────────────────────────────────────────────────── */
@@ -399,9 +404,20 @@
   box-shadow: inset 0 1.5px 1px rgba(255, 255, 255, 0.65);
 }
 
-.login-gbc-dot.is-kiwi { background: #10b981; box-shadow: 0 0 8px rgba(16, 185, 129, 0.65); }
-.login-gbc-dot.is-atomic { background: #7c3aed; box-shadow: 0 0 8px rgba(124, 58, 237, 0.65); }
-.login-gbc-dot.is-berry { background: #ec4899; box-shadow: 0 0 8px rgba(236, 72, 153, 0.6); }
+.login-gbc-dot.is-kiwi {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.65);
+}
+
+.login-gbc-dot.is-atomic {
+  background: #7c3aed;
+  box-shadow: 0 0 8px rgba(124, 58, 237, 0.65);
+}
+
+.login-gbc-dot.is-berry {
+  background: #ec4899;
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.6);
+}
 
 .login-card-head {
   margin-bottom: 18px;
@@ -577,7 +593,10 @@
   transition: transform 0.14s ease, box-shadow 0.14s ease;
 }
 
-.login-google-btn:hover { transform: translateY(-1px); }
+.login-google-btn:hover {
+  transform: translateY(-1px);
+}
+
 .login-google-btn:active {
   transform: translateY(2px);
   box-shadow: inset 0 1px 0 #ffffff, 0 1px 0 rgba(15, 23, 42, 0.1);
@@ -732,10 +751,21 @@
   transition: background 0.2s ease;
 }
 
-.login-strength-bars span.lvl-1 { background: #e11d48; }
-.login-strength-bars span.lvl-2 { background: #f59e0b; }
-.login-strength-bars span.lvl-3 { background: #06b6d4; }
-.login-strength-bars span.lvl-4 { background: #10b981; }
+.login-strength-bars span.lvl-1 {
+  background: #e11d48;
+}
+
+.login-strength-bars span.lvl-2 {
+  background: #f59e0b;
+}
+
+.login-strength-bars span.lvl-3 {
+  background: #06b6d4;
+}
+
+.login-strength-bars span.lvl-4 {
+  background: #10b981;
+}
 
 .login-strength small {
   font-size: 11px;
@@ -778,7 +808,9 @@
   color: #a78bfa;
 }
 
-.login-link-btn:hover { text-decoration: underline; }
+.login-link-btn:hover {
+  text-decoration: underline;
+}
 
 /* Alerts */
 .login-alert {
@@ -884,7 +916,9 @@
 }
 
 @keyframes loginSpin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 920px) {
@@ -892,9 +926,11 @@
     grid-template-columns: 1fr;
     padding-top: 8px;
   }
+
   .login-hero {
     order: 2;
   }
+
   .login-card-wrap {
     order: 1;
   }

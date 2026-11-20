@@ -236,41 +236,114 @@ export function getDisplayPhone(vendor) {
   return null;
 }
 
-export function isMobilePhone(phoneStr, countryHint = null) {
-  if (!phoneStr) return false;
-  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
-  if (adaptive) return Boolean(adaptive.isMobile);
+/**
+ * Resolve one phone string or vendor object using India-first rules when country
+ * is IN (or +91/0-trunk), falling back to adaptive 11-country parsing.
+ */
+export function formatLeadPhone(valueOrVendor, countryHint = 'IN') {
+  const rawValue = (valueOrVendor && typeof valueOrVendor === 'object')
+    ? getDisplayPhone(valueOrVendor)
+    : valueOrVendor;
+  const text = String(rawValue == null ? '' : rawValue).trim();
+  if (!text || /requires|obfuscated|lookup|hidden/i.test(text)) return null;
 
-  const parsed = parseIndianPhone(phoneStr);
-  if (parsed) return Boolean(parsed.isMobile);
+  const hint = String(
+    (valueOrVendor && typeof valueOrVendor === 'object' ? (valueOrVendor.country || valueOrVendor.countryCode) : '')
+    || countryHint
+    || 'IN'
+  ).trim().toUpperCase();
+  const explicitOtherIntl = /^\+(?!91)\d/.test(text);
 
-  const digits = String(phoneStr).replace(/\D/g, '');
-  const last10 = digits.slice(-10);
-  return last10.length === 10;
+  if (!explicitOtherIntl && (hint === 'IN' || /^\+?91\b/.test(text) || text.startsWith('0'))) {
+    const parsedIn = parseIndianPhone(text);
+    if (parsedIn) {
+      return {
+        raw: text,
+        display: parsedIn.display,
+        e164: parsedIn.e164,
+        callUrl: parsedIn.callUrl,
+        whatsappUrl: parsedIn.whatsappUrl || '',
+        isMobile: Boolean(parsedIn.isMobile),
+        isLandline: Boolean(parsedIn.isLandline),
+        country: 'IN'
+      };
+    }
+  }
+
+  const adaptive = parseAdaptivePhone(text, hint || 'IN');
+  if (adaptive) {
+    const isIn = adaptive.country === 'IN';
+    let display = adaptive.display || text;
+    if (isIn) {
+      const parsedIn = parseIndianPhone(adaptive.e164 || text);
+      if (parsedIn) return { ...parsedIn, country: 'IN' };
+    }
+    return {
+      raw: text,
+      display,
+      e164: adaptive.e164 || text,
+      callUrl: adaptive.callUrl || `tel:${text}`,
+      whatsappUrl: adaptive.whatsappUrl || '',
+      isMobile: Boolean(adaptive.isMobile),
+      isLandline: Boolean(adaptive.isLandline),
+      country: adaptive.country || hint || 'IN'
+    };
+  }
+
+  const startsWithZero = text.startsWith('0') || text.startsWith('+910');
+  const digits = text.replace(/\D/g, '');
+  if (digits.length < 7) return null;
+  if (hint === 'IN' && startsWithZero) {
+    return {
+      raw: text,
+      display: text,
+      e164: text,
+      callUrl: `tel:${digits}`,
+      whatsappUrl: '',
+      isMobile: false,
+      isLandline: true,
+      country: 'IN'
+    };
+  }
+  return {
+    raw: text,
+    display: text,
+    e164: text.startsWith('+') ? text : `+${digits}`,
+    callUrl: `tel:${text}`,
+    whatsappUrl: '',
+    isMobile: false,
+    isLandline: true,
+    country: hint || 'IN'
+  };
 }
 
-export function whatsappNumber(phoneStr, countryHint = null) {
+export function isMobilePhone(phoneStr, countryHint = 'IN') {
+  if (!phoneStr) return false;
+  const resolved = formatLeadPhone(phoneStr, countryHint);
+  if (resolved) return Boolean(resolved.isMobile);
+  const text = String(phoneStr).trim();
+  if (text.startsWith('0') || text.startsWith('+910')) return false;
+  return false;
+}
+
+export function whatsappNumber(phoneStr, countryHint = 'IN') {
   if (!phoneStr) return '';
-  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
-  if (adaptive && adaptive.isMobile) {
-    return adaptive.e164 ? adaptive.e164.replace(/\D/g, '') : adaptive.national;
+  const resolved = formatLeadPhone(phoneStr, countryHint);
+  if (resolved && resolved.isMobile) {
+    if (resolved.whatsappUrl) return resolved.whatsappUrl.replace(/^https:\/\/wa\.me\//, '');
+    return (resolved.e164 || '').replace(/\D/g, '');
   }
-  const parsed = parseIndianPhone(phoneStr);
-  if (parsed && parsed.isMobile) {
-    return `91${parsed.national}`;
-  }
-  const digits = String(phoneStr).replace(/\D/g, '');
-  return digits.length >= 10 ? digits : '';
+  return '';
 }
 
 export function classifyPhone(phoneStr, countryHint = null) {
   if (!phoneStr || String(phoneStr).includes('Requires')) {
     return { type: 'none', phoneType: 'none', raw: '', digits: '', display: 'No contact', isMobile: false, isLandline: false, hasWhatsapp: false };
   }
-  const adaptive = parseAdaptivePhone(phoneStr, countryHint || 'IN');
-  if (adaptive) {
-    const isMobile = Boolean(adaptive.isMobile);
-    const digits = adaptive.e164 ? adaptive.e164.replace(/\D/g, '') : (adaptive.national || String(phoneStr).replace(/\D/g, ''));
+  const resolved = formatLeadPhone(phoneStr, countryHint || 'IN');
+  if (resolved) {
+    const isMobile = Boolean(resolved.isMobile);
+    const digits = resolved.e164 ? resolved.e164.replace(/\D/g, '') : String(phoneStr).replace(/\D/g, '');
     return {
       type: isMobile ? 'mobile' : 'landline',
       phoneType: isMobile ? 'mobile' : 'landline',
@@ -279,31 +352,14 @@ export function classifyPhone(phoneStr, countryHint = null) {
       hasWhatsapp: isMobile,
       raw: phoneStr,
       digits,
-      display: adaptive.display || phoneStr,
-      callUrl: adaptive.callUrl || `tel:${phoneStr}`,
-      whatsappUrl: (name, city, category, rating) => {
-        const text = `Hi ${name || 'there'}, I found your ${category || 'business'} listing${city ? ` in ${city}` : ''}${rating ? ` (${rating}★)` : ''} and wanted to connect.`;
-        return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
-      }
-    };
-  }
-
-  const parsed = parseIndianPhone(phoneStr);
-  if (parsed && parsed.isMobile) {
-    const national = parsed.national;
-    return {
-      type: 'mobile',
-      phoneType: 'mobile',
-      isMobile: true,
-      isLandline: false,
-      hasWhatsapp: true,
-      raw: phoneStr,
-      digits: national,
-      display: `+91 ${national.slice(0, 5)} ${national.slice(5)}`,
-      whatsappUrl: (name, city, category, rating) => {
-        const text = `Hi ${name || 'there'}, I found your ${category || 'business'} listing${city ? ` in ${city}` : ''}${rating ? ` (${rating}★)` : ''} and wanted to connect.`;
-        return `https://wa.me/91${national}?text=${encodeURIComponent(text)}`;
-      }
+      display: resolved.display || phoneStr,
+      callUrl: resolved.callUrl || `tel:${digits || phoneStr}`,
+      whatsappUrl: isMobile
+        ? (name, city, category, rating) => {
+            const text = `Hi ${name || 'there'}, I found your ${category || 'business'} listing${city ? ` in ${city}` : ''}${rating ? ` (${rating}★)` : ''} and wanted to connect.`;
+            return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`;
+          }
+        : undefined
     };
   }
   return {

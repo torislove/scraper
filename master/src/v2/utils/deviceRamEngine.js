@@ -340,6 +340,10 @@ export function startBrowserRamAssist({
 
 export const EXTENSION_DOWNLOAD_URL = '/api/scrape/extension-download';
 
+// Set VITE_EXTENSION_STORE_URL once the Chrome Web Store listing is approved.
+// Until then the UI falls back to a clearly-labelled developer build.
+export const EXTENSION_STORE_URL = String(import.meta.env.VITE_EXTENSION_STORE_URL || '').trim();
+
 export function detectRamExtension(timeoutMs = 500) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return Promise.resolve({ installed: false, version: '' });

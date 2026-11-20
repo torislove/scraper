@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
@@ -504,7 +504,9 @@ router.get('/jobs', (req, res) => {
     const started = Number(s.startTime) || 0;
     const isRecent = !started || now - started < 2 * 60 * 60 * 1000;
     if (!isRecent) return false;
-    if (isMaster) return true;
+    // Master sees its own runs by default. ?all=1 also lists client runs so
+    // the Master can pick one to watch read-only.
+    if (isMaster) return req.query.all === '1' || s.isMaster === true || !s.userId || s.userId === 'master';
     if (!requestingUserId || requestingUserId === 'anonymous') {
       return !s.userId || s.userId === 'anonymous';
     }
@@ -525,7 +527,14 @@ router.get('/jobs', (req, res) => {
     activeMandal: s.activeMandal,
     completedCount: s.overallCompletedMandals,
     totalCount: s.overallTotalMandals || s.totalMandals || Object.keys(s.completedTargetsMap || {}).length,
-    etaText: s.eta,
+    eta: s.eta || s.etaText || '',
+    etaText: s.etaText || s.eta || '',
+    etaMs: s.etaMs || null,
+    pendingJobs: s.pendingJobs ?? null,
+    runningJobs: s.runningJobs ?? null,
+    userId: s.userId || 'anonymous',
+    isMaster: s.isMaster === true,
+    clientLabel: s.clientLabel || s.userId || 'anonymous',
     type: 'omni'
   }));
 
@@ -557,6 +566,10 @@ router.get('/active', (req, res) => {
     } else {
       sessions = sessions.filter(s => !s.userId || s.userId === 'anonymous');
     }
+  } else if (req.query.all !== '1') {
+    // Master's own Live view only follows Master runs. ?all=1 is the
+    // read-only 'Watch Live' picker and also lists client runs.
+    sessions = sessions.filter(s => s.isMaster === true || !s.userId || s.userId === 'master');
   }
 
   // Prefer the genuinely live session, newest first.
@@ -586,7 +599,25 @@ router.get('/active', (req, res) => {
     location: runningSession?.location || activeQueue[0]?.args?.[2] || null,
     activeMandal: runningSession?.activeMandal || null,
     activeDistrict: runningSession?.activeDistrict || null,
-    eta: runningSession?.eta || null
+    eta: runningSession?.eta || null,
+    etaText: runningSession?.etaText || runningSession?.eta || null,
+    etaMs: runningSession?.etaMs || null,
+    liveSessions: (isMaster && req.query.all === '1')
+      ? Object.values(activeSessions)
+          .filter(s => s.sessionActive && !s.finished && s.status !== 'aborted' && s.status !== 'completed')
+          .map(s => ({
+            sessionId: s.sessionId,
+            category: s.category,
+            location: s.location,
+            userId: s.userId || 'anonymous',
+            isMaster: s.isMaster === true,
+            completedMandals: s.overallCompletedMandals || 0,
+            totalMandals: s.overallTotalMandals || s.totalMandals || 0,
+            eta: s.eta || '',
+            etaMs: s.etaMs || null,
+            startTime: s.startTime || null
+          }))
+      : undefined
   });
 });
 
@@ -773,8 +804,9 @@ router.post('/omni', async (req, res) => {
     return res.status(428).json({
       ok: false,
       extensionRequired: true,
-      downloadUrl: '/api/scrape/extension-download',
-      error: 'Extension-Only Mode: Install & connect the Scraper.co.in RAM Turbo Extension (30s setup) to run searches on your local hardware.'
+      storeUrl: String(process.env.EXTENSION_STORE_URL || '').trim(),
+      packageUrl: '/api/scrape/extension-download',
+      error: 'RAM Turbo is not connected. Add the extension to Chrome, then reload this page â€” it connects itself.'
     });
   }
   const requestedCode = requestedCountry(req);
@@ -822,6 +854,8 @@ router.post('/omni', async (req, res) => {
 
   const finalSessionId = sessionId || makeSessionId('omni');
   clearSessionAborted(finalSessionId);
+  dbAdapter.registerSessionOwner(finalSessionId, userId);
+  dbAdapter.registerSessionScope(finalSessionId, { userId, isMaster });
   const classification = categoryRouter.classifyCategory(matchedCategory);
 
   // If explicit engines are provided by the user/UI, honor them; otherwise route automatically.
@@ -883,7 +917,7 @@ router.post('/omni', async (req, res) => {
   });
 
   addLog(`\n[Omni Search] Triggered for string: "${searchQuery}" with radius: ${radius || 0}km. Session ID: ${finalSessionId}`);
-  addLog(`[Omni Search] Family ${classification.label} · engines ${resolvedEngines.join(', ')}`);
+  addLog(`[Omni Search] Family ${classification.label} Â· engines ${resolvedEngines.join(', ')}`);
 
   // Add the orchestrator task to the background queue so it starts running
   addScrapeJob('scrapeOmniOrchestrator', [matchedCategory, baseLocation, strategy, radius, gridDensity, resolvedEngines, finalSessionId, userId, {}, null, isMaster, runCountry], 10, { sessionId: finalSessionId, userId, isMaster });
@@ -923,8 +957,9 @@ router.post('/auto', async (req, res) => {
       return res.status(428).json({
         ok: false,
         extensionRequired: true,
-        downloadUrl: '/api/scrape/extension-download',
-        error: 'Extension-Only Mode: Install & connect the Scraper.co.in RAM Turbo Extension (30s setup) to run searches on your local hardware.'
+        storeUrl: String(process.env.EXTENSION_STORE_URL || '').trim(),
+        packageUrl: '/api/scrape/extension-download',
+        error: 'RAM Turbo is not connected. Add the extension to Chrome, then reload this page â€” it connects itself.'
       });
     }
     const detectedCountry = require('../services/localBrain/countries').detectCountry(plan.location || '');
@@ -1041,6 +1076,8 @@ router.post('/auto', async (req, res) => {
     globalAbortSignal.aborted = false;
     clearSessionAborted(finalSessionId);
     sessionAbortSignals.set(finalSessionId, { aborted: false });
+    dbAdapter.registerSessionOwner(finalSessionId, userId);
+    dbAdapter.registerSessionScope(finalSessionId, { userId, isMaster });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
     // Register session immediately so jobs watchdog and client learn about active session
@@ -1077,7 +1114,7 @@ router.post('/auto', async (req, res) => {
       deepStopped
     });
 
-    addLog(`\n[Auto Scrape] "${plan.category}" in "${plan.location}" · ${plan.familyLabel} · ${plan.engines.join(' + ')} · session ${finalSessionId}`);
+    addLog(`\n[Auto Scrape] "${plan.category}" in "${plan.location}" Â· ${plan.familyLabel} Â· ${plan.engines.join(' + ')} Â· session ${finalSessionId}`);
 
     addScrapeJob('scrapeOmniOrchestrator', [
       plan.category,
@@ -1099,15 +1136,15 @@ router.post('/auto', async (req, res) => {
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MASTER GEO-COVERAGE SWEEP API (District, Mandal Cluster, & State Sweeps)
 // Dedicated orchestrator for full-district and state coverage folders
-// ──────────────────────────────────────────────────────────────────────────────
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ENGINE & API HEALTH BOARD
 // The master command center renders this as green/red chips so the operator
 // knows which engines can actually answer before launching a swarm.
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/engines/status', (req, res) => {
   try {
     const status = engineHealth.getStatus();
@@ -1169,8 +1206,8 @@ router.post('/master-sweep/preview', async (req, res) => {
     // parallel engine board). The UI labels it "approx" so it never promises
     // a precise finish time for a 700-zone state sweep.
     const zones = plan.zones.length;
-    // Honest preview ETA: measured browser-seconds per zone ÷ live slots.
-    // The old `zones × 3 s` ignored concurrency and disagreed with the live
+    // Honest preview ETA: measured browser-seconds per zone Ã· live slots.
+    // The old `zones Ã— 3 s` ignored concurrency and disagreed with the live
     // ETA by an order of magnitude on large sweeps.
     const previewMetrics = typeof getConcurrencyMetrics === 'function' ? getConcurrencyMetrics() : null;
     const previewSlots = etaModel.liveBrowserSlots(previewMetrics);
@@ -1220,11 +1257,11 @@ router.post('/master-sweep', async (req, res) => {
     }
 
     // Resolve the requested scope through the country-aware planner:
-    //   India    → gazetteer policy (state / district / mandal / city, exhaustive)
-    //   Anywhere → buildCountrySweepPlan (curated child territories when the
+    //   India    â†’ gazetteer policy (state / district / mandal / city, exhaustive)
+    //   Anywhere â†’ buildCountrySweepPlan (curated child territories when the
     //              taxonomy knows them, otherwise a lattice over the real
     //              administrative bounding box, labelled `sampled`)
-    // `deep` adds every village of a district in India and a 3×3 lattice inside
+    // `deep` adds every village of a district in India and a 3Ã—3 lattice inside
     // every zone elsewhere.
     const sweepCountry = requestedCountry(req) || 'IN';
     let plan;
@@ -1264,6 +1301,8 @@ router.post('/master-sweep', async (req, res) => {
     globalAbortSignal.aborted = false;
     clearSessionAborted(sessionId);
     sessionAbortSignals.set(sessionId, { aborted: false });
+    dbAdapter.registerSessionOwner(sessionId, userId || 'master');
+    dbAdapter.registerSessionScope(sessionId, { userId: userId || 'master', isMaster: true });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
     res.json({
@@ -1287,7 +1326,7 @@ router.post('/master-sweep', async (req, res) => {
       isMasterSweep: true
     });
 
-    addLog(`\n[Master Sweep] 🗺️ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
+    addLog(`\n[Master Sweep] ðŸ—ºï¸ Swarming entire ${resolvedScope}: "${sweepTitle}" across ${targetZones.length} zones for category "${category}" (Master Folder: ${sessionId})`);
     addLog(`[Master Sweep] Coverage policy: ${plan.policy.label}. ${plan.policy.note}`);
 
     addScrapeJob('scrapeOmniOrchestrator', [
@@ -1312,13 +1351,13 @@ router.post('/master-sweep', async (req, res) => {
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // DISTRICT BOUNDARY AUDIT
 // Re-checks every lead a district sweep already saved and removes anything that
 // does not belong to that district. Used after tightening containment so an
 // older folder can be repaired without losing data: rejected rows are archived
 // (recovery bin + out_of_bounds ledger) before the folder is rewritten.
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/district-audit', async (req, res) => {
   try {
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
@@ -1487,10 +1526,10 @@ router.post('/district-audit', async (req, res) => {
   }
 });
 
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // ON-DEMAND DEEP CONTACT ENRICHMENT API
 // Probes websites for verified owner emails, Instagram, Facebook, and direct mobile lines
-// ──────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.post('/deep-enrich', async (req, res) => {
   try {
     const { leadIds, sessionId } = req.body;
@@ -1510,7 +1549,7 @@ router.post('/deep-enrich', async (req, res) => {
       return res.json({ success: true, message: 'No eligible leads found for deep enrichment', targetCount: 0 });
     }
 
-    addLog(`[Deep Enrich] ⚡ Customer triggered deep contact enrichment for ${targets.length} leads...`);
+    addLog(`[Deep Enrich] âš¡ Customer triggered deep contact enrichment for ${targets.length} leads...`);
     res.json({ success: true, message: `Deep enrichment initiated for ${targets.length} leads in background`, targetCount: targets.length });
 
     // Background asynchronous enrichment with parallel workers (concurrency 6)
@@ -1578,7 +1617,7 @@ router.post('/deep-enrich', async (req, res) => {
       };
 
       await Promise.all(Array.from({ length: Math.min(workerConcurrency, targets.length) }, worker));
-      addLog(`[Deep Enrich] ✅ Completed deep enrichment: +${enrichedCount} leads enriched with verified owner contacts in parallel.`);
+      addLog(`[Deep Enrich] âœ… Completed deep enrichment: +${enrichedCount} leads enriched with verified owner contacts in parallel.`);
     })();
   } catch (err) {
     addLog(`[Deep Enrich Error] ${err.message}`);
@@ -1657,8 +1696,8 @@ const handleMasterStopAll = async (req, res) => {
   const bodySessionId = req.body?.sessionId || req.query?.sessionId || req.headers['x-session-id'] || null;
   const workspaceScope = req.headers['x-workspace-scope'] || (req.body?.isMaster ? 'master' : null);
   addLog(bodySessionId
-    ? `🛑 [SYSTEM] STOP INITIATED for session ${bodySessionId}.`
-    : `🛑 [SYSTEM] STOP INITIATED (scope: ${workspaceScope || 'global'}). Aborting active scrapes & clearing queue.`);
+    ? `ðŸ›‘ [SYSTEM] STOP INITIATED for session ${bodySessionId}.`
+    : `ðŸ›‘ [SYSTEM] STOP INITIATED (scope: ${workspaceScope || 'global'}). Aborting active scrapes & clearing queue.`);
 
   // 1. Determine targets: targeted stop must never abort unrelated runs
   const runningSessions = Object.values(activeSessions).filter(session =>
@@ -1784,7 +1823,7 @@ const handleMasterStopAll = async (req, res) => {
     } catch (e) { }
   }
 
-  addLog(`🛑 [SYSTEM] STOP EXECUTED. Safely committed ${totalPreserved} collected stores into session folder with 'Aborted' badge.`);
+  addLog(`ðŸ›‘ [SYSTEM] STOP EXECUTED. Safely committed ${totalPreserved} collected stores into session folder with 'Aborted' badge.`);
 
   return res.json({
     success: true,
@@ -1881,7 +1920,7 @@ router.post('/resume', async (req, res) => {
       });
     }
 
-    addLog(`[Resume] 🔄 Resuming session "${sessionId}" ("${category}" in "${location}"): ${remainingZones.length}/${allZones.length} zones remaining.`);
+    addLog(`[Resume] ðŸ”„ Resuming session "${sessionId}" ("${category}" in "${location}"): ${remainingZones.length}/${allZones.length} zones remaining.`);
 
     // 3. Reset abort flags for this session
     sessionAbortSignals.set(sessionId, { aborted: false });
@@ -1955,6 +1994,8 @@ router.post('/resume', async (req, res) => {
     globalAbortSignal.aborted = false;
     clearSessionAborted(sessionId);
     sessionAbortSignals.set(sessionId, { aborted: false });
+    dbAdapter.registerSessionOwner(sessionId, userId);
+    dbAdapter.registerSessionScope(sessionId, { userId, isMaster });
     addScrapeJob('scrapeOmniOrchestrator', [
       category,
       location,
@@ -2116,14 +2157,23 @@ router.post('/client-ingest', async (req, res) => {
   }
 });
 
-// Zero-Knowledge Extension-Only Status, Heartbeat, Blind Relay Ticket Result & ZIP Download
+// Zero-Knowledge Extension-Only Status, Pairing, Heartbeat, Blind Relay Ticket Result & Package
 router.get('/extension-status', (req, res) => {
   const userId = String(req.headers['x-user-id'] || req.query.userId || 'anonymous').trim() || 'anonymous';
   return res.json({
     ok: true,
     ...extensionRelayHub.getStats(userId),
-    downloadUrl: '/api/scrape/extension-download'
+    storeUrl: String(process.env.EXTENSION_STORE_URL || '').trim(),
+    packageUrl: '/api/scrape/extension-download'
   });
+});
+
+// One-time pairing token. The extension calls this on first load so the user
+// never copies a key anywhere.
+router.post('/extension-pair-token', (req, res) => {
+  const userId = String(req.headers['x-user-id'] || req.body?.userId || 'anonymous').trim() || 'anonymous';
+  const issued = extensionRelayHub.issuePairToken(userId);
+  return res.json({ ok: true, ...issued });
 });
 
 router.post('/extension-heartbeat', (req, res) => {
@@ -2131,9 +2181,11 @@ router.post('/extension-heartbeat', (req, res) => {
     const userId = String(req.headers['x-user-id'] || req.body?.userId || 'anonymous').trim() || 'anonymous';
     const record = extensionRelayHub.registerHeartbeat({
       userId,
-      version: req.body?.version || req.headers['x-scraper-extension'] || '1.0.0',
+      version: req.body?.version || req.headers['x-scraper-extension'] || '1.1.0',
       ramGb: req.body?.ramGb,
       cpuCores: req.body?.cpuCores,
+      capabilities: req.body?.capabilities,
+      standalone: req.body?.standalone === true,
       installed: req.body?.installed !== false
     });
     const tickets = record.installed ? extensionRelayHub.pullPendingTickets(userId, 4) : [];
@@ -2141,6 +2193,8 @@ router.post('/extension-heartbeat', (req, res) => {
       ok: true,
       connected: extensionRelayHub.hasActiveExtension(userId),
       extensionOnly: extensionRelayHub.isExtensionOnlyMode(),
+      storeUrl: String(process.env.EXTENSION_STORE_URL || '').trim(),
+      capabilities: record.capabilities || [],
       tickets
     });
   } catch (err) {
@@ -2151,13 +2205,26 @@ router.post('/extension-heartbeat', (req, res) => {
 router.post('/relay-result', (req, res) => {
   try {
     const outcome = extensionRelayHub.resolveTicketResult(req.body || {});
-    if (outcome.matched && !outcome.verified) {
-      return res.status(403).json({ ok: false, error: outcome.error || 'Invalid ticket signature' });
+    if (outcome.status === 'replayed') {
+      return res.status(410).json({ ok: false, error: 'Ticket already used', ...outcome });
+    }
+    if (outcome.status === 'expired_ticket') {
+      return res.status(410).json({ ok: false, error: 'Ticket expired', ...outcome });
+    }
+    if (outcome.status === 'invalid_signature') {
+      return res.status(403).json({ ok: false, error: 'Invalid ticket signature', ...outcome });
+    }
+    if (outcome.status === 'unknown_ticket') {
+      return res.status(404).json({ ok: false, error: 'Unknown ticket', ...outcome });
     }
     return res.json({ ok: true, ...outcome });
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+router.get('/relay-stats', (_req, res) => {
+  return res.json({ ok: true, ...extensionRelayHub.getRelayDiagnostics() });
 });
 
 router.get('/extension-download', (_req, res) => {
@@ -2168,7 +2235,13 @@ router.get('/extension-download', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     return res.send(zipBuffer);
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    const missing = err.code === 'extension_dir_missing' || err.code === 'extension_empty';
+    return res.status(missing ? 503 : 500).json({
+      ok: false,
+      error: missing
+        ? 'This server image does not carry the extension package. Install from the Chrome Web Store instead.'
+        : err.message
+    });
   }
 });
 

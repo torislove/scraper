@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Globe2 } from 'lucide-react';
 import Country3DFlag from './Country3DFlag';
+import { API_URL } from '../../apiConfig';
 
 const LOCKED_COUNTRIES = [
   { code: 'IN', name: 'India', home: true },
@@ -28,7 +29,7 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
       onMeta?.(metaCache[code]);
       return undefined;
     }
-    fetch(`/api/sources?country=${encodeURIComponent(code)}`)
+    fetch(`${API_URL}/sources?country=${encodeURIComponent(code)}`)
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (!alive || !data) return;

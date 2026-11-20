@@ -19,7 +19,8 @@ export default function MapViewTab({
   mapZoom,
   estimate,
   setSelectedVendor,
-  cellStates = {}
+  cellStates = {},
+  jumpTrail = null
 }) {
   const mapVendors = (run?.id || sessionFilter)
     ? filteredVendors.filter(v => v.sessionId === (run?.id || sessionFilter) || v.lastSessionId === (run?.id || sessionFilter))
@@ -55,6 +56,7 @@ export default function MapViewTab({
           fitKey={run?.id || sessionFilter || 'map-tab'}
           scopeTitle={scopeTitle}
           cellStates={cellStates}
+          jumpTrail={jumpTrail}
           onSelect={vendor => setSelectedVendor(vendor)}
           onSelectZone={name => updateFilter('query', name)}
         />

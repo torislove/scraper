@@ -12,6 +12,7 @@ import {
 import './v2/v2.css';
 import './v2/whiteTheme.css';
 import './v2/designSystem.css';
+import './v2/console3d.css';
 
 const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));

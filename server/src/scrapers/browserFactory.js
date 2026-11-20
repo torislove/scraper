@@ -241,6 +241,48 @@ function getOptimalLaunchConfig(req = null) {
   };
 }
 
+/**
+ * Fetch one URL as HTML using a server browser, then close everything.
+ *
+ * This is the server-side arm of `services/fetchRouter.js`. It exists so the
+ * router has one symmetrical call for both transports: relay (user's browser)
+ * and server (Playwright here). Engines keep using their own Playwright flows;
+ * this is only for the generic "give me the HTML" path.
+ *
+ * @param {string} url
+ * @param {{timeoutMs?: number, waitUntil?: string, settleMs?: number, abortSignal?: object}} [options]
+ * @returns {Promise<{html: string, status: number, contentType: string}>}
+ */
+async function fetchHtmlViaServerBrowser(url, options = {}) {
+  if (!chromium) throw new Error('Playwright not available on this server.');
+
+  const timeoutMs = Math.min(45_000, Math.max(3000, Number(options.timeoutMs) || 20_000));
+  const waitUntil = options.waitUntil || 'domcontentloaded';
+  const settleMs = Math.min(4000, Math.max(0, Number(options.settleMs) || 0));
+
+  const { browser } = await launchStealthBrowser(false);
+  const context = await browser.newContext({
+    viewport: { width: 1366, height: 900 },
+    locale: 'en-US'
+  });
+
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(timeoutMs);
+    const response = await page.goto(url, { waitUntil, timeout: timeoutMs });
+    if (settleMs) await new Promise((resolve) => setTimeout(resolve, settleMs));
+    const html = await page.content();
+    return {
+      html,
+      status: response ? response.status() : 200,
+      contentType: (response && response.headers()['content-type']) || 'text/html'
+    };
+  } finally {
+    try { await context.close(); } catch (error) { /* already closed */ }
+    try { await browser.close(); } catch (error) { /* already closed */ }
+  }
+}
+
 module.exports = {
   launchStealthBrowser,
   launchBraveBrowser,
@@ -250,5 +292,6 @@ module.exports = {
   optimizePageForSpeed,
   closeAllBrowsers,
   getOptimalLaunchConfig,
+  fetchHtmlViaServerBrowser,
   chromium
 };

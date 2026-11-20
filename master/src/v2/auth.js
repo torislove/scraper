@@ -45,7 +45,7 @@ export function clearSession() {
   try {
     localStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem(SESSION_KEY);
-  } catch (e) {}
+  } catch (e) { }
   window.dispatchEvent(new CustomEvent('scraper:auth-changed', { detail: null }));
 }
 
@@ -94,7 +94,7 @@ export function getCachedAuthConfig() {
   try {
     const raw = sessionStorage.getItem(CONFIG_CACHE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch (e) {}
+  } catch (e) { }
   return { authRequired: AUTH_REQUIRED, allowSelfSignup: false, googleEnabled: false };
 }
 
@@ -102,7 +102,7 @@ export async function fetchAuthConfig() {
   const cfg = await request('/auth/config');
   try {
     sessionStorage.setItem(CONFIG_CACHE_KEY, JSON.stringify(cfg));
-  } catch (e) {}
+  } catch (e) { }
   return cfg;
 }
 
@@ -195,13 +195,13 @@ export function confirmPasswordReset({ email, code, newPassword }) {
 
 export function logout() {
   clearSession();
-  fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
+  fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => { });
 }
 
 export async function logoutAll() {
   try {
     await request('/auth/logout-all', { method: 'POST' });
-  } catch (e) {}
+  } catch (e) { }
   clearSession();
 }
 

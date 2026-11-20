@@ -1,20 +1,90 @@
 {
   "manifest_version": 3,
-  "name": "Scraper.co.in — RAM Turbo Bridge (Zero-Knowledge Relay)",
-  "version": "1.0.0",
-  "description": "Connects your device RAM to Scraper.co.in cloud engines for instant parallel lead delivery across 11 countries.",
+  "name": "Scraper.co.in — RAM Turbo",
+  "short_name": "RAM Turbo",
+  "version": "1.1.0",
+  "description": "Lets Scraper.co.in find local businesses faster by fetching pages from your own connection. No passwords, no history, no personal data.",
+  "minimum_chrome_version": "116",
   "permissions": [
-    "storage"
+    "storage",
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://scraper.co.in/*",
+    "https://*.scraper.co.in/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+
+    "https://*.bing.com/*",
+    "https://*.duckduckgo.com/*",
+    "https://*.search.brave.com/*",
+
+    "https://*.google.com/*",
+    "https://*.google.co.in/*",
+    "https://*.google.co.uk/*",
+    "https://*.google.ca/*",
+    "https://*.google.com.au/*",
+    "https://*.google.ae/*",
+    "https://*.google.com.sg/*",
+    "https://*.google.co.nz/*",
+    "https://*.google.co.za/*",
+    "https://*.google.ie/*",
+    "https://*.google.de/*",
+
+    "https://*.justdial.com/*",
+    "https://*.indiamart.com/*",
+    "https://*.yelp.com/*",
+    "https://*.yelp.ca/*",
+    "https://*.yelp.com.au/*",
+    "https://*.yellowpages.com/*",
+    "https://*.yellowpages.ca/*",
+    "https://*.yellowpages.com.au/*",
+    "https://*.yellowpages.co.za/*",
+    "https://*.yellowpages.ae/*",
+    "https://*.yellowpages.com.sg/*",
+    "https://*.yellow.co.nz/*",
+    "https://*.yell.com/*",
+    "https://*.cylex.us.com/*",
+    "https://*.cylex.co.uk/*",
+    "https://*.cylex.ca/*",
+    "https://*.cylex.com.au/*",
+    "https://*.cylex.ae/*",
+    "https://*.cylex.com.sg/*",
+    "https://*.freeindex.co.uk/*",
+    "https://*.goldenpages.ie/*",
+    "https://*.trustpilot.com/*",
+    "https://*.weddingwire.com/*",
+    "https://*.weddingwire.in/*",
+    "https://*.weddingbazaar.com/*",
+    "https://*.mandap.com/*",
+
+    "https://*.openstreetmap.org/*",
+    "https://*.overpass-api.de/*",
+    "https://*.wikidata.org/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Scraper.co.in RAM Turbo Bridge"
+    "default_title": "Scraper.co.in RAM Turbo",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "content_scripts": [
     {

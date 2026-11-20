@@ -47,7 +47,7 @@ export default function LoginV2({ variant = 'master' }) {
     let alive = true;
     fetchAuthConfig()
       .then(cfg => { if (alive) setConfig(cfg); })
-      .catch(() => {});
+      .catch(() => { });
     return () => { alive = false; };
   }, []);
 

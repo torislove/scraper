@@ -1,5 +1,5 @@
-import axios from 'axios';
-import { API_URL, SSE_STREAM_BASE } from '../apiConfig';
+﻿import axios from 'axios';
+import { API_URL, BACKEND_URL, DIRECT_BACKEND_URL, SSE_STREAM_BASE } from '../apiConfig';
 import { getToken, withStreamToken } from './auth';
 
 const client = axios.create({
@@ -33,9 +33,9 @@ client.interceptors.request.use(config => {
  * The first version dispatched `leadharvest:server_online` on every successful
  * response. The command centre listened for that event, reconnected the event
  * stream and refreshed every panel. Each refresh produced another successful
- * response, which fired the event again — a self-feeding loop that exhausted
+ * response, which fired the event again â€” a self-feeding loop that exhausted
  * the API rate limit within a minute, made the stream flap, and surfaced to the
- * customer as "Reconnecting to Swarm Server … Attempt #473" while the engine
+ * customer as "Reconnecting to Swarm Server â€¦ Attempt #473" while the engine
  * was perfectly healthy.
  *
  * The event now fires only on a real offline -> online transition, so it is a
@@ -43,15 +43,24 @@ client.interceptors.request.use(config => {
  */
 let serverReachable = true;
 
+function isBackendUnreachableError(error) {
+  const status = error?.response?.status;
+  if (!error?.response) return true;
+  if (status === 502 || status === 503 || status === 504) return true;
+  if (error?.response?.data?.backendOffline === true) return true;
+  if (status === 500 && typeof error?.response?.data === 'string' && !error.response.data.trim().startsWith('{')) {
+    return true;
+  }
+  return error?.code === 'ERR_NETWORK'
+    || error?.code === 'ECONNREFUSED'
+    || error?.code === 'ERR_INSUFFICIENT_RESOURCES';
+}
+
 function markOffline(error) {
   if (typeof window === 'undefined') return;
-  const status = error?.response?.status;
-  const isOffline = !error?.response || status === 503 || status === 502
-    || error?.code === 'ERR_NETWORK' || error?.code === 'ECONNREFUSED'
-    || error?.code === 'ERR_INSUFFICIENT_RESOURCES';
   // A 429 means the engine is alive and merely asking us to slow down; treating
   // it as "offline" is what turned a throttle into a reconnect storm.
-  if (!isOffline) return;
+  if (!isBackendUnreachableError(error)) return;
   if (!serverReachable) return;
   serverReachable = false;
   window.dispatchEvent(new CustomEvent('leadharvest:server_offline', { detail: { error } }));
@@ -65,7 +74,25 @@ client.interceptors.response.use(
     }
     return response;
   },
-  error => {
+  async error => {
+    const cfg = error?.config;
+    const currentBase = String(cfg?.baseURL || API_URL || '');
+    if (
+      cfg &&
+      !cfg._retriedDirect &&
+      DIRECT_BACKEND_URL &&
+      currentBase.startsWith('/') &&
+      isBackendUnreachableError(error)
+    ) {
+      cfg._retriedDirect = true;
+      cfg.baseURL = `${DIRECT_BACKEND_URL}/api`;
+      try {
+        return await client.request(cfg);
+      } catch (retryError) {
+        markOffline(retryError);
+        return Promise.reject(retryError);
+      }
+    }
     markOffline(error);
     return Promise.reject(error);
   }
@@ -340,11 +367,30 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
 }
 
 export function streamUrl() {
-  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream`);
+  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream?scope=master`);
 }
 
 export function fallbackStreamUrl() {
-  return withStreamToken(`${API_URL}/logs/stream`);
+  const primary = streamUrl();
+  const direct = withStreamToken(`${DIRECT_BACKEND_URL || BACKEND_URL}/api/logs/stream?scope=master`);
+  const proxied = withStreamToken(`${API_URL}/logs/stream?scope=master`);
+  return primary === direct ? proxied : direct;
+}
+
+export function sessionStreamUrl(sessionId) {
+  const base = streamUrl();
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}sessionId=${encodeURIComponent(sessionId)}`;
+}
+
+export async function getLiveClientSessions() {
+  try {
+    const { data } = await client.get('/scrape/active?all=1');
+    const jobs = Array.isArray(data?.jobs) ? data.jobs : (Array.isArray(data) ? data : []);
+    return jobs.filter(j => j && (j.scope === 'client' || j.source === 'client' || (!j.scope && !j.type?.includes('master'))));
+  } catch (e) {
+    return [];
+  }
 }
 
 export async function getGeoHierarchy(params = {}) {
@@ -513,7 +559,7 @@ export async function updateWaSettings(patch) {
   return data?.session;
 }
 
-/* ── Master Client Auth Provisioning ─────────────────────────────────────── */
+/* â”€â”€ Master Client Auth Provisioning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 export async function setMasterClientCredentials(id, payload) {
   const { data } = await client.post(`/master/clients/${encodeURIComponent(id)}/credentials`, payload);

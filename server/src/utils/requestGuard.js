@@ -28,19 +28,19 @@ const MAX_DEFER_MS = 45_000;
  * block up to `maxCooldownMs`.
  */
 const POLICIES = {
-  'google-local-finder': { gapMs: 550, jitterMs: 350, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 },
-  maps: { gapMs: 350, jitterMs: 250, cooldownMs: 60_000, maxCooldownMs: 10 * 60_000 },
-  'google-serp': { gapMs: 900, jitterMs: 500, cooldownMs: 120_000, maxCooldownMs: 15 * 60_000 },
-  justdial: { gapMs: 1_100, jitterMs: 600, cooldownMs: 150_000, maxCooldownMs: 20 * 60_000 },
-  indiamart: { gapMs: 1_500, jitterMs: 800, cooldownMs: 180_000, maxCooldownMs: 30 * 60_000 },
-  weddingbazaar: { gapMs: 900, jitterMs: 500, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  weddingwire: { gapMs: 900, jitterMs: 500, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  mandap: { gapMs: 900, jitterMs: 500, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  openstreetmap: { gapMs: 1_200, jitterMs: 600, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  'web-contact': { gapMs: 350, jitterMs: 250, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 },
-  social: { gapMs: 650, jitterMs: 350, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  brave: { gapMs: 800, jitterMs: 400, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
-  geocoder: { gapMs: 1_100, jitterMs: 500, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  'google-local-finder': { gapMs: 250, jitterMs: 150, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 },
+  maps: { gapMs: 150, jitterMs: 100, cooldownMs: 60_000, maxCooldownMs: 10 * 60_000 },
+  'google-serp': { gapMs: 650, jitterMs: 350, cooldownMs: 120_000, maxCooldownMs: 15 * 60_000 },
+  justdial: { gapMs: 350, jitterMs: 200, cooldownMs: 150_000, maxCooldownMs: 20 * 60_000 },
+  indiamart: { gapMs: 1_200, jitterMs: 600, cooldownMs: 180_000, maxCooldownMs: 30 * 60_000 },
+  weddingbazaar: { gapMs: 600, jitterMs: 300, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  weddingwire: { gapMs: 600, jitterMs: 300, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  mandap: { gapMs: 600, jitterMs: 300, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  openstreetmap: { gapMs: 600, jitterMs: 300, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  'web-contact': { gapMs: 150, jitterMs: 100, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 },
+  social: { gapMs: 500, jitterMs: 250, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  brave: { gapMs: 650, jitterMs: 350, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
+  geocoder: { gapMs: 800, jitterMs: 400, cooldownMs: 120_000, maxCooldownMs: 20 * 60_000 },
 };
 
 const DEFAULT_POLICY = { gapMs: 400, jitterMs: 200, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 };

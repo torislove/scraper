@@ -25,6 +25,7 @@ const dbAdapter = require('../config/dbAdapter');
 const dv = require('./directoryVendor');
 const fidelity = require('../services/categoryFidelity');
 const { extractPhones } = require('../utils/phoneUtils');
+const { fetchTextSmart } = require('../services/fetchRouter');
 
 const httpsAgent = new https.Agent({ rejectUnauthorized: false, keepAlive: true });
 
@@ -124,7 +125,7 @@ const VARIANT_RULES = [
 let deps = {
   logger: console.log,
   abortSignal: { aborted: false },
-  emitVendorEvent: () => {}
+  emitVendorEvent: () => { }
 };
 
 function setDeps(newDeps) {
@@ -153,7 +154,7 @@ function buildVariants(category) {
   try {
     const { normalizeTradePhrase } = require('../utils/tradeIntelligence');
     base = normalizeTradePhrase(base) || base;
-  } catch (e) {}
+  } catch (e) { }
   const list = [];
   const seen = new Set();
   const push = value => {
@@ -238,20 +239,31 @@ async function lookupCategoryId(label, city, attempt = 0) {
   });
 
   try {
-    const response = await axios.get(`${SUGGEST_URL}?${params.toString()}`, {
-      timeout: 15000,
-      httpsAgent,
-      responseType: 'text',
-      headers: {
-        'User-Agent': pickUserAgent(attempt),
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Referer': 'https://www.justdial.com/',
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    });
+    const suggestHeaders = {
+      'User-Agent': pickUserAgent(attempt),
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'Accept-Language': 'en-IN,en;q=0.9',
+      'Referer': 'https://www.justdial.com/',
+      'X-Requested-With': 'XMLHttpRequest'
+    };
+    const suggestUrl = `${SUGGEST_URL}?${params.toString()}`;
+    let rawData = '';
+    const relayed = await fetchTextSmart(suggestUrl, { headers: suggestHeaders, timeoutMs: 12000 });
+    if (relayed.ok) {
+      rawData = relayed.text || '';
+    } else if (relayed.fallbackToServer) {
+      const response = await axios.get(suggestUrl, {
+        timeout: 12000,
+        httpsAgent,
+        responseType: 'text',
+        headers: suggestHeaders
+      });
+      rawData = response.data || '';
+    } else {
+      return null;
+    }
 
-    const text = String(response.data || '').replace(/^\uFEFF/, '').trim();
+    const text = String(rawData || '').replace(/^\uFEFF/, '').trim();
     if (!text.startsWith('{')) return null;
     const payload = JSON.parse(text);
     const results = Array.isArray(payload.results) ? payload.results : [];
@@ -302,21 +314,37 @@ async function fetchListing({ ncatid, label, city, state, area = '', attempt = 0
   const referer = `https://m.justdial.com/${slugCity}/${slugCategory}/nct-${ncatid}?source=2&searchcity=${encodeURIComponent(city)}`;
 
   try {
-    const response = await axios.post(RESULTS_URL, body.toString(), {
-      timeout: 20000,
-      httpsAgent,
-      responseType: 'text',
-      headers: {
-        'User-Agent': pickUserAgent(attempt + 1),
-        'Accept': '*/*',
-        'Accept-Language': 'en-IN,en;q=0.9',
-        'Referer': referer,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-      }
+    const postHeaders = {
+      'User-Agent': pickUserAgent(attempt + 1),
+      'Accept': '*/*',
+      'Accept-Language': 'en-IN,en;q=0.9',
+      'Referer': referer,
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+    };
+    const bodyStr = body.toString();
+    let rawData = '';
+    const relayed = await fetchTextSmart(RESULTS_URL, {
+      method: 'POST',
+      headers: postHeaders,
+      body: bodyStr,
+      timeoutMs: 15000
     });
+    if (relayed.ok) {
+      rawData = relayed.text || '';
+    } else if (relayed.fallbackToServer) {
+      const response = await axios.post(RESULTS_URL, bodyStr, {
+        timeout: 16000,
+        httpsAgent,
+        responseType: 'text',
+        headers: postHeaders
+      });
+      rawData = response.data || '';
+    } else {
+      return null;
+    }
 
-    const text = String(response.data || '').trim();
+    const text = String(rawData || '').trim();
     if (!text.startsWith('{')) {
       throw new Error(`non-JSON response (${text.slice(0, 60)})`);
     }
@@ -553,79 +581,17 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
       .filter(z => !z.toLowerCase().includes('central') && !z.toLowerCase().includes('core'))
       .slice(0, 8);
     if (subAreas.length) targetAreas = ['', ...subAreas];
-  } catch (e) {}
+  } catch (e) { }
 
-  const fetchTasks = [];
-  for (const resolved of resolvedCategories) {
-    for (const area of targetAreas) {
-      fetchTasks.push({
-        ncatid: resolved.id,
-        label: resolved.label,
-        city,
-        state,
-        area
-      });
-    }
-  }
-
-  const listingResults = await Promise.allSettled(fetchTasks.map(t => fetchListing(t)));
-
-  for (let index = 0; index < fetchTasks.length; index++) {
-    if (deps.abortSignal && deps.abortSignal.aborted) break;
-    if (parsed.length >= 300) break; // Uncapped from 36 to 300 for high yield
-
-    const task = fetchTasks[index];
-    const listing = listingResults[index];
-    if (listing.status !== 'fulfilled' || !listing.value) continue;
-
-    const data = listing.value;
-    if (!data || !Array.isArray(data.results?.data)) continue;
-
-    const rows = data.results.data;
-    let added = 0;
-    for (const row of rows) {
-      const vendor = parseRow(row, {
-        category: task.label || baseCategory,
-        city,
-        state
-      });
-      if (!vendor) continue;
-
-      const rowKey = vendor.docId || `${dv.normalizeName(vendor.name)}|${dv.slug(vendor.area)}`;
-      if (seenRows.has(rowKey)) continue;
-
-      const nameKey = `${dv.normalizeName(vendor.name)}|${dv.slug(vendor.area || vendor.city)}`;
-      if (seenNames.has(nameKey)) continue;
-
-      seenRows.add(rowKey);
-      seenNames.add(nameKey);
-      vendor.categoryLabel = task.label || baseCategory;
-      vendor.categoryId = task.ncatid;
-      vendor.queryLabel = task.label || baseCategory;
-      parsed.push(vendor);
-      added += 1;
-    }
-
-    if (added > 0) {
-      deps.logger(`[JustDial] ${task.label}${task.area ? ` (${task.area})` : ''} → ${rows.length} rows, ${added} new, total: ${parsed.length}.`);
-    }
-  }
-
-  if (!parsed.length) {
-    deps.logger(`[JustDial] No live listings returned for "${baseCategory}" in "${city}". The city may not exist in JustDial's directory.`);
-    return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0 };
-  }
-
-  const shared = dropSharedHelplines(parsed);
   const primaryCategory = titleCase(baseCategory) || 'Business';
   let created = 0;
   let updated = 0;
   let phoneCount = 0;
   let mobileCount = 0;
 
-  for (const item of parsed) {
-    if (deps.abortSignal && deps.abortSignal.aborted) break;
-
+  // Real-time Vendor Persist & Stream Helper
+  function saveAndEmitVendor(item) {
+    if (!item || !item.name) return null;
     const detail = splitCategoryDetail(item.rowCategory);
     const subcategory = detail.label && detail.label.toLowerCase() !== primaryCategory.toLowerCase()
       ? detail.label
@@ -682,12 +648,9 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
       }]
     });
 
-    if (!vendor.name) continue;
+    if (!vendor.name) return null;
+    if (!fidelity.isVendorRelevant(vendor, primaryCategory)) return null;
 
-    // Category fidelity: keep only vendors that match the requested category.
-    if (!fidelity.isVendorRelevant(vendor, primaryCategory)) continue;
-
-    // Enable WhatsApp direct connection for valid Indian mobile numbers
     const primaryMobile = (item.phones || []).find(phone => phone && phone.isMobile);
     if (primaryMobile) {
       const tenDigits = primaryMobile.national ? primaryMobile.national.slice(-10) : primaryMobile.e164.replace(/\D/g, '').slice(-10);
@@ -709,25 +672,125 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
     }
 
     const result = dv.saveDirectoryVendor(vendor, sessionId);
-    if (!result.vendor) continue;
+    if (!result.vendor) return null;
     phoneCount += (result.vendor.phones || []).filter(phone => phone && phone.e164).length;
     mobileCount += (result.vendor.phones || []).filter(phone => phone && phone.isMobile).length;
 
     if (result.created) {
       created += 1;
-      try { deps.emitVendorEvent(result.vendor, 'inserted'); } catch (e) {}
+      try { deps.emitVendorEvent(result.vendor, 'inserted'); } catch (e) { }
     } else {
       updated += 1;
-      try { deps.emitVendorEvent(result.vendor, 'updated'); } catch (e) {}
+      try { deps.emitVendorEvent(result.vendor, 'updated'); } catch (e) { }
     }
 
     try {
       const { streamingEnricher } = require('../services/phoneBackfillService');
       streamingEnricher.enqueue(result.vendor);
-    } catch (e) {}
+    } catch (e) { }
+
+    return result.vendor;
   }
 
-  try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) {}
+  function ingestRowsFromData(task, data) {
+    if (!data || !Array.isArray(data.results?.data)) return 0;
+    const rows = data.results.data;
+    let added = 0;
+    for (const row of rows) {
+      if (deps.abortSignal && deps.abortSignal.aborted) break;
+      if (parsed.length >= 300) break;
+      const vendor = parseRow(row, {
+        category: task.label || baseCategory,
+        city,
+        state
+      });
+      if (!vendor) continue;
+
+      const rowKey = vendor.docId || `${dv.normalizeName(vendor.name)}|${dv.slug(vendor.area)}`;
+      if (seenRows.has(rowKey)) continue;
+
+      const nameKey = `${dv.normalizeName(vendor.name)}|${dv.slug(vendor.area || vendor.city)}`;
+      if (seenNames.has(nameKey)) continue;
+
+      seenRows.add(rowKey);
+      seenNames.add(nameKey);
+      vendor.categoryLabel = task.label || baseCategory;
+      vendor.categoryId = task.ncatid;
+      vendor.queryLabel = task.label || baseCategory;
+      parsed.push(vendor);
+
+      saveAndEmitVendor(vendor);
+      added += 1;
+    }
+    return added;
+  }
+
+  // Split tasks into Wave 1 (immediate city-wide queries, area === '') and Wave 2 (sub-areas)
+  const wave1Tasks = [];
+  const wave2Tasks = [];
+  for (const resolved of resolvedCategories) {
+    wave1Tasks.push({
+      ncatid: resolved.id,
+      label: resolved.label,
+      city,
+      state,
+      area: ''
+    });
+    for (const area of targetAreas) {
+      if (area) {
+        wave2Tasks.push({
+          ncatid: resolved.id,
+          label: resolved.label,
+          city,
+          state,
+          area
+        });
+      }
+    }
+  }
+
+  // WAVE 1: Execute city-level calls in parallel to stream initial leads at t ~ 1-2s
+  const wave1Results = await Promise.allSettled(wave1Tasks.map(t => fetchListing(t)));
+  for (let i = 0; i < wave1Tasks.length; i++) {
+    const task = wave1Tasks[i];
+    const res = wave1Results[i];
+    if (res.status === 'fulfilled' && res.value) {
+      const added = ingestRowsFromData(task, res.value);
+      if (added > 0) {
+        deps.logger(`[JustDial] Wave 1 · ${task.label} → ${added} leads streaming live (${parsed.length} total).`);
+      }
+    }
+  }
+  try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) { }
+
+  // WAVE 2: Sub-areas in concurrent batches of 4, streaming leads per chunk
+  const CHUNK_SIZE = 4;
+  for (let i = 0; i < wave2Tasks.length; i += CHUNK_SIZE) {
+    if (deps.abortSignal && deps.abortSignal.aborted) break;
+    if (parsed.length >= 300) break;
+
+    const chunk = wave2Tasks.slice(i, i + CHUNK_SIZE);
+    const chunkResults = await Promise.allSettled(chunk.map(t => fetchListing(t)));
+    for (let c = 0; c < chunk.length; c++) {
+      const task = chunk[c];
+      const res = chunkResults[c];
+      if (res.status === 'fulfilled' && res.value) {
+        const added = ingestRowsFromData(task, res.value);
+        if (added > 0) {
+          deps.logger(`[JustDial] Wave 2 · ${task.label} (${task.area}) → ${added} new leads, total: ${parsed.length}.`);
+        }
+      }
+    }
+    try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) { }
+  }
+
+  if (!parsed.length) {
+    deps.logger(`[JustDial] No live listings returned for "${baseCategory}" in "${city}". The city may not exist in JustDial's directory.`);
+    return { totalScraped: 0, newInserted: 0, updated: 0, phoneCount: 0 };
+  }
+
+  const shared = dropSharedHelplines(parsed);
+  try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) { }
 
   const elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
   deps.logger(`[JustDial] Complete in ${elapsed}s. ${parsed.length} live vendors, ${created} new, ${updated} refreshed, ${mobileCount} mobile numbers, ${shared.sharedCount} shared helplines filtered.`);

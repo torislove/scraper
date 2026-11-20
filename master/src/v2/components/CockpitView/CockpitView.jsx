@@ -2,12 +2,12 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download,
-  Globe2, MapPin, Maximize2, Phone, Radar as RadarIcon, Search, X, Zap
+  Globe2, MapPin, Maximize2, MessageCircle, Phone, Radar as RadarIcon, Search, Smartphone, X, Zap
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import { EmptyState, VendorAvatar } from '../cards/MetricCard';
 import { CarriedBadge, calculateHaversineKm } from '../../utils/leadHelpers';
-import { getDisplayPhone, isMobilePhone } from '../../../utils/phoneClassify';
+import { formatLeadPhone, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber } from '../../ui';
 import FloatingActionDock from '../cards/FloatingActionDock';
@@ -31,7 +31,13 @@ export default function CockpitView({
   onPage,
   onPageSize,
   run = null,
-  progress = null
+  runStatus = '',
+  freshLeadIds = null,
+  phoneJustFoundIds = null,
+  searchCountry = 'IN',
+  progress = null,
+  jumpTrail = null,
+  hopTransition = ''
 }) {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [hoveredLeadId, setHoveredLeadId] = useState(null);
@@ -89,7 +95,7 @@ export default function CockpitView({
       lines.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${getDisplayPhone(r) || ''}"`,
+        `"${formatLeadPhone(r, r.country || searchCountry)?.display || getDisplayPhone(r) || ''}"`,
         `"${(r.address || '').replace(/"/g, '""')}"`,
         `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
         `"${(r.district || '').replace(/"/g, '""')}"`,
@@ -137,10 +143,18 @@ export default function CockpitView({
     return filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).slice(0, 200);
   }, [filteredVendors, run?.id, run?.sessionId, sessionFilter]);
 
-  const phoneCount = useMemo(
-    () => filteredVendors.filter(v => Boolean(getDisplayPhone(v))).length,
-    [filteredVendors]
-  );
+  const { phoneCount, mobileCount } = useMemo(() => {
+    let totalPhones = 0;
+    let totalMobiles = 0;
+    for (const v of filteredVendors) {
+      const parsed = formatLeadPhone(v, v?.country || searchCountry);
+      if (parsed) {
+        totalPhones += 1;
+        if (parsed.isMobile) totalMobiles += 1;
+      }
+    }
+    return { phoneCount: totalPhones, mobileCount: totalMobiles };
+  }, [filteredVendors, searchCountry]);
   const plottedCount = useMemo(
     () => mapVendors.filter(v => Number.isFinite(Number(v.latitude))).length,
     [mapVendors]
@@ -157,13 +171,17 @@ export default function CockpitView({
           <div className="lx-pane-title">
             <span className={cx('lx-status-dot', scanning && 'is-live')} />
             <h2>Live Leads</h2>
-            {scanning && (
+            {scanning ? (
               <span className="lx-zone-pill is-hot">
                 <Zap size={10} /> LIVE
               </span>
-            )}
+            ) : filteredVendors.length > 0 && (runStatus === 'complete' || runStatus === 'completed' || runStatus === 'aborted' || runStatus === 'stopped' || sessionFilter) ? (
+              <span className="lx-zone-pill is-done">
+                <CheckCircle2 size={10} /> SAVED · LAST RUN
+              </span>
+            ) : null}
             <span className="lx-count-badge">{formatNumber(filteredVendors.length)}</span>
-            <span className="lx-sub-stat">{formatNumber(phoneCount)} with phone</span>
+            <span className="lx-sub-stat">{formatNumber(mobileCount)} mobiles · {formatNumber(phoneCount)} phones</span>
           </div>
 
           <div className="lx-pane-controls">
@@ -223,8 +241,11 @@ export default function CockpitView({
             <tbody>
               {pageRows.map((vendor, index) => {
                 const vKey = vendor.id || `${vendor.name}-${vendor.phone || index}`;
-                const phone = getDisplayPhone(vendor);
-                const isMob = phone ? isMobilePhone(phone, vendor.country) : false;
+                const parsedPhone = formatLeadPhone(vendor, vendor.country || searchCountry);
+                const phone = parsedPhone?.display || '';
+                const isMob = Boolean(parsedPhone?.isMobile);
+                const isFresh = Boolean(freshLeadIds?.has(vendor.id || vKey));
+                const isPhonePop = Boolean(phoneJustFoundIds?.has(vendor.id || vKey));
                 const locality = vendor.city || vendor.village || vendor.district || '';
                 const address = vendor.address || [vendor.locality, locality, vendor.state].filter(Boolean).join(', ') || 'Location available';
                 const distKm = calculateHaversineKm(originLat, originLng, vendor.latitude ?? vendor.lat, vendor.longitude ?? vendor.lng);
@@ -234,7 +255,7 @@ export default function CockpitView({
                   <tr
                     key={vKey}
                     id={`lead-row-${vKey}`}
-                    className={cx(selectedIds.has(vKey) && 'is-selected', isHovered && 'is-hovered')}
+                    className={cx(selectedIds.has(vKey) && 'is-selected', isHovered && 'is-hovered', isFresh && 'lx-row-enter')}
                     onClick={() => onSelectVendor?.(vendor)}
                     onMouseEnter={() => setHoveredLeadId(vKey)}
                     onMouseLeave={() => setHoveredLeadId(null)}
@@ -268,9 +289,24 @@ export default function CockpitView({
                       <div className="lx-contact-stack">
                         {phone ? (
                           <div className="lx-phone-row">
-                            <a href={`tel:${phone}`} className={cx('lx-phone-pill', isMob ? 'is-mob' : 'is-land')}>
-                              <Phone size={11} /> {phone}
+                            <a href={parsedPhone?.callUrl || `tel:${phone}`} className={cx('lx-phone-pill', isMob ? 'is-mob' : 'is-land', isPhonePop && 'lx-phone-pop')}>
+                              {isMob ? <Smartphone size={11} /> : <Phone size={11} />}
+                              <span>{phone}</span>
+                              <span className={cx('lx-phone-tag', isMob ? 'is-mob' : 'is-land')}>
+                                {isMob ? 'MOB' : 'STD'}
+                              </span>
                             </a>
+                            {isMob && parsedPhone?.whatsappUrl && (
+                              <a
+                                href={parsedPhone.whatsappUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="lx-wa-mini"
+                                title="Message on WhatsApp"
+                              >
+                                <MessageCircle size={11} />
+                              </a>
+                            )}
                             <button
                               type="button"
                               className="lx-copy-mini"
@@ -280,6 +316,10 @@ export default function CockpitView({
                               <Copy size={11} />
                             </button>
                           </div>
+                        ) : scanning ? (
+                          <span className="lx-phone-scanning">
+                            <span className="lx-dot-pulse" /> Finding phone…
+                          </span>
                         ) : (
                           <span className="lx-muted-text">No phone listed</span>
                         )}
@@ -358,6 +398,11 @@ export default function CockpitView({
                 ? `⚡ Zone ${Math.min(zoneTotal, zoneDone + 1)} of ${zoneTotal}`
                 : `${formatNumber(mapZones.length || 1)} Zones Ready`}
             </span>
+            {hopTransition ? (
+              <span className="retro-hop-transition" style={{ fontSize: '11px', color: '#f59e0b', fontWeight: 800 }}>
+                {hopTransition}
+              </span>
+            ) : null}
             <span className="lx-count-badge">{formatNumber(plottedCount)} pinned</span>
           </div>
           <button type="button" className="lx-chip-toggle" onClick={() => onTab?.('map')} title="Open full screen map">
@@ -377,6 +422,7 @@ export default function CockpitView({
             compact={false}
             hoveredLeadId={hoveredLeadId}
             cellStates={progress?.cellStates || {}}
+            jumpTrail={jumpTrail}
             fitKey={run?.id || sessionFilter || 'master-workspace-map'}
             scopeTitle={run?.category ? `${run.category} (${run.location || 'Area'})` : 'Live Map'}
             onSelect={vendor => {

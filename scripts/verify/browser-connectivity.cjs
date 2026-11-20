@@ -66,11 +66,13 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const state = () => page.evaluate(() => {
     const pill = document.querySelector('.v2-cmd-top-status');
     const banner = document.querySelector('.v2-network-alert-banner');
+    const badge = document.querySelector('.lx-count-badge');
     const text = document.body.innerText;
+    const badgeCount = badge ? badge.innerText.trim() : null;
     return {
       pill: pill ? pill.innerText.replace(/\n/g, ' | ') : null,
       banner: banner ? banner.innerText.replace(/\n/g, ' ').slice(0, 160) : null,
-      leads: (text.match(/(\d[\d,]*) leads/) || [])[1] || null
+      leads: badgeCount || (text.match(/(\d[\d,]*) leads/i) || [])[1] || null
     };
   });
 

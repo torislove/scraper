@@ -43,10 +43,10 @@ function countryForLead(lead) {
   const cityKey = (lead.city || '').toLowerCase().trim();
   const stateKey = (lead.state || '').toLowerCase().trim();
   const addr = (lead.address || '').toLowerCase();
-  
+
   const { CITY_ALIASES } = require('./localBrain/countries');
   if (CITY_ALIASES && CITY_ALIASES[cityKey]) return CITY_ALIASES[cityKey].country;
-  
+
   if (
     stateKey === 'india' || stateKey === 'telangana' || stateKey === 'andhra pradesh' ||
     stateKey === 'karnataka' || stateKey === 'maharashtra' || stateKey === 'tamil nadu' ||
@@ -322,7 +322,7 @@ function readPlaceDetails(page) {
           }
         }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Authority / official website links & Bio/Linktree profiles
     const websiteEl = document.querySelector('a[data-item-id="authority"], a[aria-label*="Website" i], a[data-tooltip*="Open website" i], a[data-tooltip*="website" i], a[data-value="Website"], a[href*="linktr.ee"], a[href*="bio.link"], a[data-item-id="menu"]');
@@ -410,7 +410,7 @@ function pickNumbers(rawValues, countryCode = 'IN') {
   for (const raw of rawValues || []) {
     if (!raw) continue;
     let parsed = normalizePhone(raw, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
-    
+
     // Fallback: If not parsed, try removing leading zero trunk for national format or stripping punctuation
     if (!parsed) {
       const stripped = String(raw).replace(/\D+/g, '');
@@ -452,15 +452,15 @@ async function openDetailPage(context, url, leadOrName = '') {
   const leadObj = typeof leadOrName === 'object' && leadOrName !== null ? leadOrName : { name: String(leadOrName || '') };
   const expectedName = leadObj.name || '';
   const page = await context.newPage();
-  await applyAdvancedStealth(page).catch(() => {});
-  await optimizePageForSpeed(page).catch(() => {});
+  await applyAdvancedStealth(page).catch(() => { });
+  await optimizePageForSpeed(page).catch(() => { });
   const target = url.includes('hl=') ? url : `${url}${url.includes('?') ? '&' : '?'}hl=en`;
-  await page.goto(target, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT_MS }).catch(() => {});
+  await page.goto(target, { waitUntil: 'domcontentloaded', timeout: PAGE_TIMEOUT_MS }).catch(() => { });
   await Promise.race([
     page.waitForSelector('[data-item-id^="phone:tel:"], button[aria-label*="Phone" i], button[aria-label*="Call" i], a[href^="tel:"], div.Io6YTe, button.CsEnBe', { timeout: 6000 }),
     page.waitForSelector('[data-item-id="address"]', { timeout: 6000 }),
     page.waitForSelector('div.Nv2PK', { timeout: 4000 })
-  ]).catch(() => {});
+  ]).catch(() => { });
 
   // A synthesized name search usually opens a result list. Click the card that
   // actually matches this lead's name or address/locality instead of blindly taking the first one.
@@ -475,23 +475,23 @@ async function openDetailPage(context, url, leadOrName = '') {
     }
     if (!chosen) chosen = cards[0];
     const clickable = (await chosen.$('a.hfpxzc').catch(() => null)) || chosen;
-    await clickable.click().catch(() => {});
+    await clickable.click().catch(() => { });
     await Promise.race([
       page.waitForSelector('h1.DUwDvf, div[role="main"] h1', { timeout: 3500 }),
       page.waitForSelector('[data-item-id^="phone:tel:"], button[aria-label*="Phone" i], button[aria-label*="Call" i], a[href^="tel:"], div.Io6YTe, button.CsEnBe', { timeout: 3500 }),
       page.waitForFunction(() => window.location.href.includes('/maps/place/'), { timeout: 3500 })
-    ]).catch(() => {});
+    ]).catch(() => { });
   }
 
   // Give the panel a beat to hydrate after the selector appears.
-  await page.waitForTimeout(250).catch(() => {});
+  await page.waitForTimeout(250).catch(() => { });
   try {
     await page.waitForFunction(() => {
       const text = document.body?.innerText || '';
       return /(?:(?:\+|00)[1-9]\d{0,3}|\b[6-9]\d{4}|\b[2-9]\d{2})[\s-]?\d{3,5}/.test(text) ||
-             document.querySelector('[data-item-id^="phone:tel:"], a[href^="tel:"], a[href*="wa.me"], button[aria-label*="Phone" i], button[aria-label*="Call" i], div.Io6YTe, button.CsEnBe');
-    }, { timeout: 1500 }).catch(() => {});
-  } catch (e) {}
+        document.querySelector('[data-item-id^="phone:tel:"], a[href^="tel:"], a[href*="wa.me"], button[aria-label*="Phone" i], button[aria-label*="Call" i], div.Io6YTe, button.CsEnBe');
+    }, { timeout: 1500 }).catch(() => { });
+  } catch (e) { }
   return page;
 }
 
@@ -517,8 +517,8 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
   const sessionId = options.sessionId || '';
   const budgetMs = Math.max(10_000, Number(options.budgetMs) || DEFAULT_BUDGET_MS);
   const concurrency = Math.max(1, Math.min(10, Number(options.concurrency) || DEFAULT_CONCURRENCY));
-  const emit = typeof options.emit === 'function' ? options.emit : (typeof options.onProgress === 'function' ? options.onProgress : () => {});
-  const log = typeof options.log === 'function' ? options.log : (typeof options.addLog === 'function' ? options.addLog : () => {});
+  const emit = typeof options.emit === 'function' ? options.emit : (typeof options.onProgress === 'function' ? options.onProgress : () => { });
+  const log = typeof options.log === 'function' ? options.log : (typeof options.addLog === 'function' ? options.addLog : () => { });
   const shouldAbort = typeof options.shouldAbort === 'function' ? options.shouldAbort : () => false;
   const startedAt = Date.now();
 
@@ -702,7 +702,7 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
                   }
                 }
               }
-            } catch (e) {}
+            } catch (e) { }
           }
 
           const newScore = calculateQualityScore(lead);
@@ -758,7 +758,7 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
         } catch (error) {
           // A single bad place page must never stop the pass.
         } finally {
-          if (page) await page.close().catch(() => {});
+          if (page) await page.close().catch(() => { });
         }
       }
 
@@ -769,7 +769,7 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
   } catch (error) {
     log(`[Phone Backfill] Pass failed: ${error.message}`);
   } finally {
-    if (context) await context.close().catch(() => {});
+    if (context) await context.close().catch(() => { });
     summary.elapsedMs = Date.now() - startedAt;
   }
 
@@ -791,8 +791,8 @@ class StreamingEnrichmentManager {
     this.active = false;
     this.browser = null;
     this.context = null;
-    this.emit = () => {};
-    this.log = () => {};
+    this.emit = () => { };
+    this.log = () => { };
     this.activeWorkers = 0;
     this.maxConcurrency = browserBudget.ENRICH_RESERVE || 2;
     this.retryTimer = null;
@@ -801,8 +801,8 @@ class StreamingEnrichmentManager {
 
   async start({ sessionId, emit, log, concurrency }) {
     this.sessionId = sessionId;
-    this.emit = typeof emit === 'function' ? emit : () => {};
-    this.log = typeof log === 'function' ? log : () => {};
+    this.emit = typeof emit === 'function' ? emit : () => { };
+    this.log = typeof log === 'function' ? log : () => { };
     this.queue = [];
     this.seenIds = new Set();
     this.seenWebsites = new Set();
@@ -815,12 +815,12 @@ class StreamingEnrichmentManager {
     );
 
     if (this.unsubscribeBudget) {
-      try { this.unsubscribeBudget(); } catch (e) {}
+      try { this.unsubscribeBudget(); } catch (e) { }
       this.unsubscribeBudget = null;
     }
     this.unsubscribeBudget = browserBudget.onSlotChange(() => this._pump());
     browserBudget.setEnrichmentActive(0);
-    
+
     try {
       this.browser = await getBrowser();
       if (this.browser) {
@@ -844,11 +844,11 @@ class StreamingEnrichmentManager {
     const websiteUrl = lead.website || '';
     if (websiteUrl && websiteUrl.startsWith('http') && !websiteUrl.includes('google.com') && !this.seenWebsites.has(websiteUrl)) {
       this.seenWebsites.add(websiteUrl);
-      this._processWebsite(lead, websiteUrl).catch(() => {});
+      this._processWebsite(lead, websiteUrl).catch(() => { });
     }
 
     if (this.seenIds.has(leadId)) return;
-    
+
     // 2. Playwright Google Maps Place Detail Probe (Parallel resolution across ALL engines)
     let url = lead.mapsLink || lead.googleMapsUrl || '';
     if (!url || (!url.includes('google.') && !url.includes('goo.gl'))) {
@@ -856,7 +856,7 @@ class StreamingEnrichmentManager {
       url = `https://www.google.com/maps/search/${encodeURIComponent(queryPart)}?hl=en`;
       lead.mapsLink = url;
     }
-    
+
     const needsMobile = !hasValidMobile(lead.phone, countryForLead(lead));
     const needsAddress = !lead.address || lead.address.length < 15;
     const needsWebsite = !lead.website || !lead.website.startsWith('http');
@@ -934,7 +934,7 @@ class StreamingEnrichmentManager {
           const bestPhone = newMobiles[0] || newLandlines[0] || moreNumbers[0];
 
           if (bestPhone && !lead.phone) {
-            lead.phone = bestPhone.isMobile ? bestPhone.e164 : (bestPhone.displayPhone || bestPhone.e164);
+            lead.phone = bestPhone.displayPhone || bestPhone.e164;
             lead.phoneType = bestPhone.isMobile ? 'mobile' : 'landline';
             lead.callUrl = bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`;
             if (bestPhone.isMobile) {
@@ -944,7 +944,7 @@ class StreamingEnrichmentManager {
             lead.verified = true;
             changed = true;
           } else if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
-            lead.phone = newMobiles[0].e164;
+            lead.phone = newMobiles[0].displayPhone || newMobiles[0].e164;
             lead.phoneType = 'mobile';
             lead.whatsappAvailable = true;
             lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
@@ -991,7 +991,7 @@ class StreamingEnrichmentManager {
             websiteEnrichedAt: lead.websiteEnrichedAt
           });
           dbAdapter.saveVendor(target.userId || lead.userId || 'admin_1', target);
-        } catch (e) {}
+        } catch (e) { }
 
         this.emit(lead, 'updated');
         this.log(`[Web Scout] 🌐 ${lead.name} enriched from ${url}: ${lead.email || 'No email'} · ${lead.instagram || lead.facebook || 'Social synced'}`);
@@ -1018,10 +1018,27 @@ class StreamingEnrichmentManager {
 
       let page = null;
       try {
+        const countryCode = countryForLead(lead);
+
+        // Step A (Fast HTTP first — ~250ms, 0 browser slots):
+        // Check website before launching a Playwright detail tab if we still lack a verified mobile.
+        if (
+          lead.website
+          && lead.website.startsWith('http')
+          && !lead.website.includes('google.com')
+          && !hasValidMobile(lead.phone, countryCode)
+          && !this.seenWebsites.has(lead.website)
+        ) {
+          this.seenWebsites.add(lead.website);
+          await this._processWebsite(lead, lead.website);
+          if (hasValidMobile(lead.phone, countryCode) && lead.address && lead.address.length >= 10) {
+            continue;
+          }
+        }
+
         const url = lead.mapsLink || lead.googleMapsUrl || lead.sourceUrl;
         page = await openDetailPage(this.context, url, lead);
         const details = await readPlaceDetails(page);
-        const countryCode = countryForLead(lead);
         const numbers = pickNumbers(details.rawPhones, countryCode);
         const mobiles = numbers.filter(n => n.isMobile);
         const landlines = numbers.filter(n => n.isLandline);
@@ -1032,9 +1049,7 @@ class StreamingEnrichmentManager {
         let changed = false;
         const bestPhoneObj = mobiles[0] || landlines[0] || numbers[0];
         if (bestPhoneObj && !lead.phone) {
-          lead.phone = bestPhoneObj.isMobile
-            ? bestPhoneObj.e164
-            : (bestPhoneObj.displayPhone || bestPhoneObj.e164);
+          lead.phone = bestPhoneObj.displayPhone || bestPhoneObj.e164;
           lead.phoneType = bestPhoneObj.isMobile ? 'mobile' : 'landline';
           lead.isMobile = Boolean(bestPhoneObj.isMobile);
           lead.isLandline = Boolean(!bestPhoneObj.isMobile);
@@ -1047,7 +1062,7 @@ class StreamingEnrichmentManager {
           lead.aiVerified = true;
           changed = true;
         } else if (mobiles.length && !hasValidMobile(lead.phone, countryCode)) {
-          lead.phone = mobiles[0].e164;
+          lead.phone = mobiles[0].displayPhone || mobiles[0].e164;
           lead.phoneType = 'mobile';
           lead.isMobile = true;
           lead.isLandline = false;
@@ -1100,7 +1115,7 @@ class StreamingEnrichmentManager {
                 if (morePhones.length > 0) {
                   const newMobiles = morePhones.filter(n => n.isMobile);
                   if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
-                    lead.phone = newMobiles[0].e164;
+                    lead.phone = newMobiles[0].displayPhone || newMobiles[0].e164;
                     lead.whatsappAvailable = true;
                     lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
                     lead.verified = true;
@@ -1112,7 +1127,7 @@ class StreamingEnrichmentManager {
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) { }
         }
 
         // Recalculate lead quality score & tier
@@ -1159,7 +1174,7 @@ class StreamingEnrichmentManager {
             });
             dbAdapter.saveVendor(target.userId || lead.userId || 'admin_1', target);
             this.emit(target, 'updated');
-          } catch (e) {}
+          } catch (e) { }
 
           if (mobiles.length) {
             this.log(`[Realtime Scout] 📞 ${lead.name}: ${mobiles[0].e164}${lead.whatsappAvailable ? ' (WhatsApp)' : ''}${lead.website ? ` · ${lead.website}` : ''}`);
@@ -1168,7 +1183,7 @@ class StreamingEnrichmentManager {
       } catch (err) {
         // Individual page error
       } finally {
-        if (page) await page.close().catch(() => {});
+        if (page) await page.close().catch(() => { });
       }
     }
 
@@ -1186,7 +1201,7 @@ class StreamingEnrichmentManager {
 
   async stop(force = false) {
     if (!force && (this.queue.length > 0 || this.activeWorkers > 0)) {
-      await this.drain(30000).catch(() => {});
+      await this.drain(30000).catch(() => { });
     }
     this.active = false;
     this.queue = [];
@@ -1195,13 +1210,13 @@ class StreamingEnrichmentManager {
       this.retryTimer = null;
     }
     if (this.unsubscribeBudget) {
-      try { this.unsubscribeBudget(); } catch (e) {}
+      try { this.unsubscribeBudget(); } catch (e) { }
       this.unsubscribeBudget = null;
     }
     this.activeWorkers = 0;
     browserBudget.setEnrichmentActive(0);
     if (this.context) {
-      await this.context.close().catch(() => {});
+      await this.context.close().catch(() => { });
       this.context = null;
     }
   }
