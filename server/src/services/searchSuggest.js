@@ -202,6 +202,13 @@ const TRADE_TYPO_MAP = {
   'photograpy': 'photography',
   'potography': 'photography',
   'photogrpahy': 'photography',
+  'camra': 'camera',
+  'camras': 'cameras',
+  'camara': 'camera',
+  'camaras': 'cameras',
+  'cammera': 'camera',
+  'dslrs': 'dslr cameras',
+  'photostudio': 'photo studio',
   'fotographer': 'photographer',
   'photograper': 'photographer',
   'fotographers': 'photographers',
@@ -730,9 +737,9 @@ function filterRelevantCategories(matches, fragment, intent) {
     return meaningfulTokens(match.label).some(token => queryTokens.has(token));
   });
 
-  // Never return an empty list just because the gate was strict; a single
-  // best-effort row is more useful than a blank console.
-  return keep.length ? keep : matches.slice(0, 1);
+  // Never invent an unrelated directory row ("CCTV Installation", "Car Wash") when no
+  // matched category actually shares meaningful meaning with the user's phrase.
+  return keep;
 }
 
 /**
@@ -989,7 +996,19 @@ function suggest(options = {}) {
     }
   }
 
-  const bestCategory = buildCategoryInfo(categoryMatches[0], categoryFragment);
+  const bestCategory = categoryMatches[0]
+    ? buildCategoryInfo(categoryMatches[0], categoryFragment)
+    : (categoryFragment.length >= 2 ? {
+        value: titleCase(categoryFragment),
+        family: 'generic',
+        familyLabel: 'Verified Business Search',
+        description: `Verified ${titleCase(categoryFragment)} with phone numbers & addresses`,
+        engines: ['maps', 'local_finder', 'justdial', 'openstreetmap', 'web-discovery'],
+        confidence: 'high',
+        raw: clean(rawCatBeforeFix || categoryFragment),
+        corrected: Boolean(rawCatBeforeFix && norm(rawCatBeforeFix) !== norm(categoryFragment)),
+        matched: titleCase(categoryFragment)
+      } : null);
 
   let bestLocation = null;
   const firstLocation = locationMatches[0];

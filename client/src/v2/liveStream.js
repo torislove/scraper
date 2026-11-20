@@ -25,17 +25,20 @@
  *   • immediate reconnect when the tab becomes visible or the network returns.
  */
 
-const MAX_BACKOFF_MS = 8000;
-const SILENCE_LIMIT_MS = 15000;
-const WATCHDOG_MS = 3000;
+const MAX_BACKOFF_MS = 6000;
+const SILENCE_LIMIT_MS = 45000;
+const WATCHDOG_MS = 4000;
 
-export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
+export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, onAttempt }) {
   let source = null;
   let retryTimer = null;
   let watchdog = null;
   let attempt = 0;
   let stopped = true;
   let lastActivity = Date.now();
+  let useFallback = false;
+
+  const activeUrl = () => (useFallback && fallbackUrl ? fallbackUrl : url);
 
   const emitStatus = status => {
     try { onStatus?.(status); } catch (e) { /* UI must never break transport */ }
@@ -57,10 +60,12 @@ export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
     if (source && source.readyState === 0) return;
     closeSource();
 
-    emitStatus('connecting');
+    if (attempt < 3) {
+      emitStatus('connecting');
+    }
     let next;
     try {
-      next = new EventSource(url);
+      next = new EventSource(activeUrl());
     } catch (e) {
       scheduleReconnect(false);
       return;
@@ -104,12 +109,14 @@ export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
 
     const checkTimer = setTimeout(() => {
       if (next && next.readyState === 1) markOpen();
-    }, 400);
+    }, 350);
 
     next.addEventListener('error', () => {
       if (stopped || source !== next) return;
       clearTimeout(checkTimer);
-      emitStatus('error');
+      if (fallbackUrl && fallbackUrl !== url) {
+        useFallback = !useFallback;
+      }
       scheduleReconnect(false);
     });
   }
@@ -127,9 +134,13 @@ export function createLiveStream({ url, onSource, onStatus, onAttempt }) {
     }
     attempt += 1;
     emitAttempt(attempt);
-    emitStatus('error');
-    const base = Math.min(MAX_BACKOFF_MS, 1000 * Math.pow(1.6, Math.min(attempt - 1, 6)));
-    const delay = Math.min(MAX_BACKOFF_MS, base) + Math.floor(Math.random() * 500);
+    if (attempt >= 3) {
+      emitStatus('error');
+    } else {
+      emitStatus('connecting');
+    }
+    const base = Math.min(MAX_BACKOFF_MS, 750 * Math.pow(1.5, Math.min(attempt - 1, 5)));
+    const delay = Math.min(MAX_BACKOFF_MS, base) + Math.floor(Math.random() * 350);
     retryTimer = setTimeout(() => {
       retryTimer = null;
       if (!stopped) connect();

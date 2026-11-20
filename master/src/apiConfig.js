@@ -27,3 +27,12 @@ export const BACKEND_URL = sameOriginBackend
 // In local development and in desktop mode alike, relative '/api' is correct:
 // Vite proxies it in dev, Express serves it in production.
 export const API_URL = import.meta.env.VITE_API_URL || '/api';
+
+// SSE EventSource connects directly to BACKEND_URL in Vite dev to prevent proxy buffering/drops.
+export const SSE_STREAM_BASE = (
+  isLocalEnv &&
+  typeof window !== 'undefined' &&
+  ['5173', '5174', '5175', '3000'].includes(String(window.location.port || ''))
+)
+  ? `${BACKEND_URL}/api`
+  : API_URL;

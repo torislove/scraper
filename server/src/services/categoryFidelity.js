@@ -65,9 +65,16 @@ const ROLES = [
     avoids: ['photo studio', 'wedding photographer', 'banquet', 'function hall', 'caterer', 'makeup']
   },
   {
+    id: 'camera_store',
+    label: 'Camera & DSLR Stores',
+    match: ['camera shop', 'camera shops', 'camera store', 'camera stores', 'camera dealer', 'camera dealers', 'camera showroom', 'dslr', 'mirrorless camera', 'camera lens', 'camera repair', 'action camera'],
+    wants: ['camera', 'dslr', 'mirrorless', 'canon', 'nikon', 'sony', 'fujifilm', 'gopro', 'lens', 'tripod', 'gimbal', 'camera shop', 'camera store', 'camera dealer', 'camera showroom', 'photography equipment'],
+    avoids: ['cctv', 'security camera', 'surveillance', 'biometric', 'dvr', 'nvr', 'wedding photographer', 'makeup', 'banquet', 'function hall', 'caterer', 'plumber', 'dentist']
+  },
+  {
     id: 'photographer',
     label: 'Photography',
-    match: ['photograph', 'photographer', 'photography', 'photo studio', 'photo studios', 'photo shoot', 'photoshoot', 'videograph', 'videographer', 'cinematograph', 'candid photography', 'drone photography', 'digital studio', 'camera'],
+    match: ['photograph', 'photographer', 'photography', 'photo studio', 'photo studios', 'photo shoot', 'photoshoot', 'videograph', 'videographer', 'cinematograph', 'candid photography', 'drone photography', 'digital studio'],
     wants: ['photograph', 'photography', 'photo studio', 'photoshoot', 'photo shoot', 'videograph', 'videographer', 'cinematograph', 'candid', 'digital studio', 'digital photo lab', 'portrait studio', 'wedding studio'],
     avoids: [
       'banquet', 'function hall', 'kalyana mandapam', 'mandapam', 'convention hall', 'convention center',

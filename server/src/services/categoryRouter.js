@@ -133,7 +133,7 @@ const FAMILY_KEYWORDS = {
     ['mobile shop', 13], ['mobile shops', 13], ['mobile store', 13], ['mobile repair', 13],
     ['smartphone', 11], ['iphone repair', 12], ['electronics shop', 11], ['electronics store', 11],
     ['cctv', 11], ['security camera', 11], ['biometric', 10], ['printer repair', 11],
-    ['printer dealer', 11], ['toner refill', 10], ['networking', 10], ['software company', 11],
+    ['printer dealer', 11], ['toner refill', 10], ['camera repair', 13], ['dslr repair', 13], ['networking', 10], ['software company', 11],
     ['web development', 10], ['app development', 10], ['it services', 11], ['it company', 11],
     ['computer', 9], ['laptop', 9], ['desktop', 8], ['hardware', 6], ['electronics', 6]
   ],
@@ -177,6 +177,9 @@ const FAMILY_KEYWORDS = {
     ['home service', 5], ['repair service', 5]
   ],
   retail: [
+    ['camera shop', 15], ['camera shops', 15], ['camera store', 15], ['camera stores', 15],
+    ['camera dealer', 14], ['camera dealers', 14], ['camera showroom', 14], ['dslr shop', 14],
+    ['dslr store', 14], ['dslr camera', 13], ['camera lens', 13], ['camera', 11],
     ['showroom', 5], ['store', 4], ['shop', 4], ['boutique', 5], ['mall', 4],
     ['supermarket', 6], ['kirana', 6], ['grocery', 6], ['electronics', 6],
     ['mobile shop', 7], ['mobile store', 7], ['furniture', 6], ['jewell', 6],
@@ -602,7 +605,7 @@ const CATEGORY_CATALOG = [
   { label: 'Packers and Movers', family: 'home-services', aliases: ['packers', 'movers', 'shifting service', 'relocation'] },
   { label: 'Interior Designers', family: 'home-services', aliases: ['interior design', 'interiors', 'home interior'] },
   { label: 'Modular Kitchen', family: 'home-services', aliases: ['modular kitchen', 'kitchen design'] },
-  { label: 'CCTV Installation', family: 'home-services', aliases: ['cctv', 'security camera', 'surveillance'] },
+  { label: 'CCTV Installation', family: 'home-services', aliases: ['cctv', 'cctv installation', 'cctv camera', 'cctv dealer', 'cctv shops', 'surveillance camera', 'security surveillance'] },
   { label: 'Solar Installation', family: 'home-services', aliases: ['solar', 'solar panels', 'solar rooftop'] },
   { label: 'Borewell Services', family: 'home-services', aliases: ['borewell', 'bore well', 'drilling'] },
   { label: 'Waterproofing', family: 'home-services', aliases: ['waterproof', 'terrace waterproofing', 'leakage repair'] },
@@ -610,7 +613,9 @@ const CATEGORY_CATALOG = [
   { label: 'Gardeners', family: 'home-services', aliases: ['gardening', 'landscaping', 'garden maintenance'] },
   { label: 'Lift Repair', family: 'home-services', aliases: ['elevator repair', 'lift service'] },
 
-  // IT, Computers, Mobiles & Electronics
+  // IT, Computers, Cameras, Mobiles & Electronics
+  { label: 'Camera & DSLR Shops', family: 'retail', aliases: ['camera shop', 'camera shops', 'camera store', 'camera stores', 'camera dealer', 'camera dealers', 'camera showroom', 'dslr shop', 'dslr store', 'dslr camera shop', 'digital camera store', 'camera lens shop', 'photography equipment store', 'camera gear store', 'canon dealer', 'nikon dealer', 'sony camera store'] },
+  { label: 'Camera & Lens Repair Centres', family: 'technology', aliases: ['camera repair', 'dslr repair', 'camera service center', 'camera servicing', 'lens repair'] },
   { label: 'Computer Shops', family: 'technology', aliases: ['computer shop', 'computer shops', 'computer store', 'computer stores', 'pc shop', 'desktop shop', 'computer dealer', 'computer dealers', 'computer showroom', 'computers'] },
   { label: 'Laptop Repair & Dealers', family: 'technology', aliases: ['laptop shop', 'laptop store', 'laptop dealer', 'laptop repair', 'laptop service', 'laptops', 'second hand laptop', 'refurbished laptops', 'macbook repair'] },
   { label: 'Computer Hardware & Accessories', family: 'technology', aliases: ['computer hardware', 'computer accessories', 'gaming pc', 'custom pc', 'computer parts', 'pc components', 'monitors', 'ssd', 'graphics card', 'it hardware'] },
@@ -1135,7 +1140,15 @@ function suggestCategories(fragment, limit = 6) {
     }
   }
 
-  return scored
+  // Strict disambiguation: a query about buying/repairing cameras ("camera shop", "camra store", "dslr lens")
+  // must NEVER fall into "CCTV Installation" unless cctv/surveillance/security/dvr/nvr/biometric is explicitly present.
+  const isCameraHardwareQuery = /\b(?:camera|cameras|camra|camras|camara|dslr|mirrorless|gopro|gimbal)\b/i.test(normalizedTradeQuery || query)
+    && !/\b(?:cctv|surveillance|security|biometric|dvr|nvr|intercom|access control)\b/i.test(normalizedTradeQuery || query);
+  const filteredScored = isCameraHardwareQuery
+    ? scored.filter(item => !/\bcctv\b|surveillance|security/i.test(item.label))
+    : scored;
+
+  return filteredScored
     .sort((a, b) => b.score - a.score || a.label.length - b.label.length)
     .slice(0, Math.max(1, Math.min(20, Number(limit) || 6)));
 }

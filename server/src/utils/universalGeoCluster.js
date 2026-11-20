@@ -853,6 +853,16 @@ const CATEGORY_SUBVECTORS = [
       'Mobile phone repair center', 'Electronics showroom', 'UPS and inverter dealer'
     ]
   },
+  // 2b. Camera & DSLR Shops, Lenses, Repair & Photography Gear (Distinct from CCTV & Photo Studios)
+  {
+    match: /\b(camera|cameras|camra|dslr|mirrorless|camera lens|photography gear|gimbal)\b/i,
+    exclude: /\b(cctv|surveillance|security|biometric|dvr|nvr)\b/i,
+    labels: [
+      'Camera showroom', 'DSLR camera dealer', 'Canon camera store', 'Nikon camera shop',
+      'Sony Alpha camera dealer', 'Camera lens and accessories store', 'Camera and lens repair center',
+      'Second hand DSLR camera shop', 'Drone and gimbal store', 'Studio lighting and tripod dealer'
+    ]
+  },
   // 3. Photography, Studios, Videography & Digital Labs
   {
     match: /\b(photo|photographer|photographers|photography|photo studio|photo studios|studio|studios|videographer|videographers|videography|candid|digital lab|shoot)\b/i,
@@ -1030,7 +1040,7 @@ function buildCategorySubVectorZones(category, cityLabel, limit = 32) {
   const city = String(cityLabel || '').replace(/,\s*$/, '').trim();
   if (!city) return [];
 
-  const family = CATEGORY_SUBVECTORS.find(entry => entry.match.test(cat));
+  const family = CATEGORY_SUBVECTORS.find(entry => entry.match.test(cat) && (!entry.exclude || !entry.exclude.test(cat)));
   let labels = family ? [...family.labels] : [];
   const tradeVectors = indiaTradeIntelligence.getSubvectorsForQuery(cat);
   if (Array.isArray(tradeVectors) && tradeVectors.length) {
@@ -1311,8 +1321,20 @@ function getUniversalCategoryVectors(category, cleanLoc) {
     ];
   }
 
+  // 2b. Camera Stores, DSLR Dealers, Lenses & Camera Repair (Distinct from CCTV & Photo Studios!)
+  if (lowerCat.match(/\b(camera|cameras|camra|dslr|mirrorless|camera lens|photography gear|gimbal)\b/i) && !lowerCat.match(/\b(cctv|surveillance|security|biometric|dvr|nvr)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} Camera & DSLR Showrooms`, queryText: `Camera Shop in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Canon Nikon Sony Camera Dealers`, queryText: `DSLR Camera Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Camera Lenses & Studio Gear`, queryText: `Camera Lens and Accessories Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Camera & Lens Repair Centres`, queryText: `Camera Repair Center in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Drone & Gimbal Dealers`, queryText: `Drone and Gimbal Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Used & Refurbished Cameras`, queryText: `Second Hand Camera Shop in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
   // 3. Photography, Studios & Videography
-  if (lowerCat.match(/photo|camera|studio|album|shoot|video|candid|cinemat/i)) {
+  if (lowerCat.match(/photo|studio|album|shoot|video|candid|cinemat/i)) {
     return [
       { zoneName: `${cleanLoc} Photo Studios & Digital Labs`, queryText: `Photo Studio in ${cleanLoc}`, isVectorQuery: true },
       { zoneName: `${cleanLoc} Wedding Photographers`, queryText: `Wedding Photographers in ${cleanLoc}`, isVectorQuery: true },

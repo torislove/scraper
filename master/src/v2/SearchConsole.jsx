@@ -630,7 +630,20 @@ function SearchConsole({
                                 </b>
                                 {item.subtitle && <small>{item.subtitle}</small>}
                               </span>
-                              {item.detail && <span className="v2-suggest-fix">{item.detail}</span>}
+                              {item.detail && (() => {
+                                const intentKind = item.type === 'location'
+                                  ? 'is-location'
+                                  : item.intentType
+                                    ? `is-${item.intentType}`
+                                    : /store|shop|showroom|retail/i.test(item.detail)
+                                      ? 'is-store'
+                                      : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
+                                        ? 'is-product'
+                                        : /vendor|wholesale|distributor|b2b/i.test(item.detail)
+                                          ? 'is-vendor'
+                                          : 'is-service';
+                                return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
+                              })()}
                             </button>
                           );
                         })}

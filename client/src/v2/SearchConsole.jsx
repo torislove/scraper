@@ -607,7 +607,20 @@ function SearchConsole({
                                 </b>
                                 {item.subtitle && <small>{item.subtitle}</small>}
                               </span>
-                              {item.detail && <span className="v2-suggest-fix">{item.detail}</span>}
+                              {item.detail && (() => {
+                                const intentKind = item.type === 'location'
+                                  ? 'is-location'
+                                  : item.intentType
+                                    ? `is-${item.intentType}`
+                                    : /store|shop|showroom|retail/i.test(item.detail)
+                                      ? 'is-store'
+                                      : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
+                                        ? 'is-product'
+                                        : /vendor|wholesale|distributor|b2b/i.test(item.detail)
+                                          ? 'is-vendor'
+                                          : 'is-service';
+                                return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
+                              })()}
                             </button>
                           );
                         })}
@@ -628,15 +641,14 @@ function SearchConsole({
         </AnimatePresence>
       </div>
 
-      {/* Animated Helper Strip: Live Service/Place/Precision, 3 Built-In Engines & Hardware RAM Guide */}
+      {/* Clean Game Boy Color 3D Liquid Glass Search Strip */}
       <div className="lx-search-helper-strip" role="region" aria-label="Search assistant and 11-country examples">
         <div className="lx-search-helper-row">
           <div className="lx-precision-badges">
-            <span className="lx-precision-pill is-scope">🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES</span>
-            <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
-            <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
-            <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> All 6 Lead Engines Auto: Satellite Map · Directories · Websites · B2B · Open Web · Clean Excel</span>
+            <span className="lx-precision-pill is-service">🎯 <b>{displayService}</b></span>
+            <span className="lx-precision-pill is-place">📍 <b>{displayPlace}</b></span>
+            <span className="lx-precision-pill is-scope">⚡ <b>{precisionBadge}</b></span>
+            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> All 6 Engines Auto On</span>
           </div>
 
           <button
@@ -648,7 +660,7 @@ function SearchConsole({
           >
             <Cpu size={13} />
             <span>
-              Your Hardware: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Zones
+              {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Speed
             </span>
           </button>
         </div>

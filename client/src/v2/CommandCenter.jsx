@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   Activity, AlertTriangle, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2, CheckSquare, ChevronDown, Clock, Compass,
-  ChevronLeft, ChevronRight, CircleDot, Copy, Crosshair, Database, Download,
+  ChevronLeft, ChevronRight, CircleDot, Copy, Cpu, Crosshair, Database, Download,
   ExternalLink, FileSpreadsheet, FileText, Filter, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
@@ -23,7 +23,7 @@ import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
-  startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl,
+  startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
@@ -52,7 +52,7 @@ import SystemCheckPill from './components/SystemCheckPill';
 import { API_URL } from '../apiConfig';
 import { getUserId } from '../utils/sessionManager';
 import { getToken } from './auth';
-import { startBrowserRamAssist, detectDeviceHardware } from './utils/deviceRamEngine';
+import { startBrowserRamAssist, detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES } from './utils/deviceRamEngine';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
@@ -191,13 +191,30 @@ export default function CommandCenter() {
     maps: true,
     ai: false,
     justdial: true,
-    indiamart: false,
-    weddings: false,
-    social: false,
+    indiamart: true,
+    weddings: true,
+    social: true,
     postWebsite: true,
     postDeep: true,
     deepLimit: 100
   });
+
+  const hardware = useMemo(() => detectDeviceHardware(), []);
+  const [hwTurboEnabled, setHwTurboEnabled] = useState(() => {
+    try { return localStorage.getItem('scraper_hw_turbo_v2') !== 'false'; } catch (e) { return true; }
+  });
+  const [hwPopupOpen, setHwPopupOpen] = useState(() => {
+    try { return localStorage.getItem('scraper_hw_popup_seen_v2') !== 'true'; } catch (e) { return true; }
+  });
+  const enableLocalHardwareTurbo = useCallback(() => {
+    setHwTurboEnabled(true);
+    setHwPopupOpen(false);
+    try {
+      localStorage.setItem('scraper_hw_turbo_v2', 'true');
+      localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
+    } catch (e) {}
+    toast.success(`Local Hardware Accelerated: ${hardware.ramGb} GB RAM · ${hardware.cpuCores} Cores · All 6 Engines Active!`, { icon: '⚡' });
+  }, [hardware.ramGb, hardware.cpuCores]);
 
   // Country context for the flag bar. India is home; every other country runs
   // the keyless global engines. The choice only pre-fills an empty location box,
@@ -719,6 +736,7 @@ export default function CommandCenter() {
 
     const stream = createLiveStream({
       url: streamUrl(),
+      fallbackUrl: fallbackStreamUrl(),
       onSource: bindSource,
       onStatus: status => setSseStatus(status === 'open' ? 'open' : status === 'connecting' ? 'connecting' : 'error'),
       onAttempt: count => setReconnectAttempts(count)
@@ -1040,6 +1058,7 @@ export default function CommandCenter() {
       setScanning(true);
 
       // Start Client-RAM Browser Web Worker assist using the user's own RAM & cores
+      if (hwTurboEnabled) {
       try {
         const hw = detectDeviceHardware();
         const uid = getUserId();
@@ -1071,6 +1090,7 @@ export default function CommandCenter() {
           }
         });
       } catch (e) {}
+      }
 
       toast.success(auto ? 'Search started. Live leads will appear in seconds.' : 'Search started. We chose the sources automatically.');
       setActiveTab('cockpit');
@@ -1763,11 +1783,13 @@ export default function CommandCenter() {
     return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
   };
 
+  const isEngineReady = sseStatus === 'open' || Boolean(health);
+
   return (
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
 
-      {(sseStatus === 'error' && reconnectAttempts >= 2) && (
+      {(!isEngineReady && sseStatus === 'error' && reconnectAttempts >= 3) && (
         <div
           className="v2-network-alert-banner is-error"
           style={{
@@ -1840,10 +1862,20 @@ export default function CommandCenter() {
         </div>
 
         <div className="v2-cmd-top-status">
-          <StatusPill tone={sseStatus === 'open' ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={sseStatus === 'open'}>
-            {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {sseStatus === 'open' ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
+          <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
+            {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
+            {isEngineReady ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
+
+          <button
+            type="button"
+            className={cx('v2-gbc-cartridge-pill', hwTurboEnabled && 'is-on')}
+            onClick={() => setHwPopupOpen(true)}
+            title="Configure local RAM & CPU Web Worker acceleration"
+          >
+            <Cpu size={12} />
+            <span>{hwTurboEnabled ? `RAM TURBO · ${hardware.ramGb}GB · 6 ENGINES` : 'ENABLE LOCAL RAM'}</span>
+          </button>
 
           <SystemCheckPill variant="client" />
           <NotificationBell />
@@ -2312,6 +2344,98 @@ export default function CommandCenter() {
           onClose={() => setTrashOpen(false)}
           onRestored={() => { refresh(); }}
         />
+      )}
+
+      {hwPopupOpen && (
+        <div className="v2-gbc-hw-modal-backdrop" role="dialog" aria-modal="true" aria-label="Local Hardware Acceleration Setup">
+          <div className="v2-gbc-hw-modal">
+            <div className="v2-gbc-hw-bezel">
+              <div className="v2-gbc-hw-head">
+                <div className="v2-gbc-hw-title">
+                  <span className="v2-gbc-hw-led" />
+                  <div>
+                    <small>SCRAPER.CO.IN · GAME BOY COLOR TURBO ENGINE</small>
+                    <h3>Use Your Computer Hardware for Zero-Queue Ultra-Fast Leads</h3>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="v2-icon-btn"
+                  onClick={() => {
+                    setHwPopupOpen(false);
+                    try { localStorage.setItem('scraper_hw_popup_seen_v2', 'true'); } catch (e) {}
+                  }}
+                  aria-label="Close hardware popup"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="v2-gbc-hw-specs">
+                <div className="v2-gbc-spec-card is-best">
+                  <span>DETECTED RAM</span>
+                  <b>{hardware.ramGb} GB RAM</b>
+                  <small>{hardware.tierLabel} · Web Worker Ready</small>
+                </div>
+                <div className="v2-gbc-spec-card">
+                  <span>CPU THREADS</span>
+                  <b>{hardware.cpuCores} Cores</b>
+                  <small>{hardware.parallelZones}x Parallel Zones Simultaneous</small>
+                </div>
+                <div className="v2-gbc-spec-card">
+                  <span>BACKGROUND ENGINES</span>
+                  <b>All 6 Active</b>
+                  <small>Maps · Directories · Websites · Auto-Dedup</small>
+                </div>
+              </div>
+
+              <div className="v2-gbc-hw-engines">
+                {ALL_BUILTIN_ENGINES.map(eng => (
+                  <div key={eng.id} className="v2-gbc-hw-engine-pill">
+                    <b>{eng.number} · {eng.name}</b>
+                    <span>AUTO ON</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="v2-gbc-hw-tiers">
+                {DEVICE_REQUIREMENTS.map(req => (
+                  <div key={req.tier} className={cx('v2-gbc-tier-chip', req.tier === hardware.tier && 'is-current')}>
+                    <b>{req.badge} ({req.ram})</b>
+                    <span>{req.parallelZones} Parallel Zones · {req.speed}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="v2-gbc-hw-actions">
+                <button
+                  type="button"
+                  className="v2-gbc-hw-primary"
+                  onClick={enableLocalHardwareTurbo}
+                >
+                  <span className="lx-gbc-keycap is-a">A</span>
+                  <Zap size={16} />
+                  <span>USE LOCAL HARDWARE &amp; ALL 6 ENGINES ({hardware.parallelZones}x SPEED)</span>
+                </button>
+                <button
+                  type="button"
+                  className="v2-gbc-hw-secondary"
+                  onClick={() => {
+                    setHwTurboEnabled(false);
+                    setHwPopupOpen(false);
+                    try {
+                      localStorage.setItem('scraper_hw_turbo_v2', 'false');
+                      localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
+                    } catch (e) {}
+                    toast('Using standard cloud-only queue mode.', { icon: '☁️' });
+                  }}
+                >
+                  Cloud-Only Mode
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

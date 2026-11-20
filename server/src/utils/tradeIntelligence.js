@@ -52,7 +52,7 @@ const COMMON_WORD_WHITELIST = new Set([
   'digital', 'electronic', 'electronics', 'electrical', 'electricals', 'gadget', 'gadgets',
   'mobile', 'mobiles', 'cellphone', 'cellphones', 'phone', 'phones', 'smartphone', 'smartphones',
   'iphone', 'android', 'tablet', 'tablets', 'ipad', 'macbook', 'accessories', 'peripherals',
-  'cctv', 'security', 'camera', 'cameras', 'surveillance', 'biometric', 'intercom',
+  'cctv', 'security', 'camera', 'cameras', 'dslr', 'mirrorless', 'lens', 'lenses', 'gimbal', 'tripod', 'canon', 'nikon', 'sony', 'surveillance', 'biometric', 'intercom',
   'printer', 'printers', 'scanner', 'scanners', 'toner', 'cartridge', 'refill', 'ups', 'inverter',
   'gaming', 'monitor', 'monitors', 'keyboard', 'mouse', 'ssd', 'ram', 'motherboard', 'gpu',
   'wifi', 'broadband', 'internet', 'cyber', 'cafe', 'coding', 'web', 'app', 'design',
@@ -144,6 +144,17 @@ const TRADE_TYPOS_MAP = new Map([
   ['accesories', 'accessories'],
   ['netwrking', 'networking'],
   ['cc tv', 'cctv'],
+  ['camra', 'camera'],
+  ['camras', 'cameras'],
+  ['camara', 'camera'],
+  ['camaras', 'cameras'],
+  ['cammera', 'camera'],
+  ['cammeras', 'cameras'],
+  ['cmera', 'camera'],
+  ['cmeras', 'cameras'],
+  ['dslrs', 'dslr cameras'],
+  ['photostudio', 'photo studio'],
+  ['photostudios', 'photo studios'],
 
   // Photography & Videography
   ['phtgaphers', 'photographers'],
@@ -427,7 +438,7 @@ function normalizeTradePhrase(phrase) {
 function isKnownServiceOrTypo(text) {
   if (!text) return false;
   const normalized = normalizeTradePhrase(text).toLowerCase();
-  const serviceStemRegex = /(shop|store|dealer|showroom|computer|laptop|mobile|electronic|hardware|software|cctv|printer|repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|school|college|academy|institute|doctor|clinic|hospital|dental|dentist|pharmacy|diagnostic|salon|spa|gym|fitness|yoga|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|travel|transport|logistic|courier|packers|movers|interior|architect|builder|contractor|real estate|property|security|event|restaurant|cafe|dhaba|bakery|sweet|hotel|resort|mandap|auditorium|studio|cameraman|lawyer|advocate|accountant|ca\b|tax|gst|garage|tyre|boutique|jeweller|cloth|garment|textile|furniture|supermarket|grocery|solar|borewell|fabricat|manufactur|wholesal|distribut|supplier|agency|marketing|print|pet|vet|agri|nursery|biryani)/i;
+  const serviceStemRegex = /(shop|store|dealer|showroom|computer|laptop|mobile|electronic|hardware|software|cctv|camera|dslr|lens|printer|repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|school|college|academy|institute|doctor|clinic|hospital|dental|dentist|pharmacy|diagnostic|salon|spa|gym|fitness|yoga|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|travel|transport|logistic|courier|packers|movers|interior|architect|builder|contractor|real estate|property|security|event|restaurant|cafe|dhaba|bakery|sweet|hotel|resort|mandap|auditorium|studio|cameraman|lawyer|advocate|accountant|ca\b|tax|gst|garage|tyre|boutique|jeweller|cloth|garment|textile|furniture|supermarket|grocery|solar|borewell|fabricat|manufactur|wholesal|distribut|supplier|vendor|agency|marketing|print|pet|vet|agri|nursery|biryani)/i;
   return serviceStemRegex.test(normalized) || serviceStemRegex.test(text.toLowerCase());
 }
 
@@ -449,74 +460,97 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
     label: item.label,
     subtitle: item.subtitle,
     detail: item.detail,
+    intentType: item.intentType || inferIntentType(item.detail, item.baseValue || item.label),
     family: resolvedFamily || 'generic',
     familyLabel: item.familyLabel || item.detail,
     corrected: false,
     matched: cleanLabel
   }));
 
+  function inferIntentType(detail = '', title = '') {
+    const combined = `${detail} ${title}`.toLowerCase();
+    if (/\b(?:wholesale|distributor|stockist|b2b|manufacturer|vendor|bulk|factory|oem|supplier)\b/.test(combined)) return 'vendor';
+    if (/\b(?:product|gear|hardware|peripherals|parts|equipment|lens|accessories|tyre|refurbished|custom pc)\b/.test(combined)) return 'product';
+    if (/\b(?:store|stores|shop|shops|showroom|dealer|dealers|retail|outlet|boutique)\b/.test(combined)) return 'store';
+    return 'service';
+  }
+
   // 1. IT, Computers, Laptops & Peripherals
   if (/\b(?:computer|computers|laptop|laptops|desktop|pc|gaming pc|computer hardware|it hardware|peripherals)\b/i.test(norm)) {
     return formatRows([
-      { baseValue: 'Computer Shops & Laptop Dealers', label: `Computer Shops & Laptop Dealers${locSuffix}`, subtitle: 'Desktops, Laptops, Accessories & Multi-Brand Stores', detail: 'IT & COMPUTERS' },
-      { baseValue: 'Laptop Repair & Service Centres', label: `Laptop Repair & Service Centres${locSuffix}`, subtitle: 'Chip-Level Repair, Screen Replacement & Upgrades', detail: 'REPAIR & SERVICE' },
-      { baseValue: 'Computer Hardware & Peripherals', label: `Computer Hardware & Peripherals${locSuffix}`, subtitle: 'Monitors, SSDs, RAM, Motherboards & Accessories', detail: 'HARDWARE' },
-      { baseValue: 'Gaming PC & Custom Builders', label: `Gaming PC & Custom Builders${locSuffix}`, subtitle: 'Custom Workstations, GPUs & High-Performance Rigs', detail: 'CUSTOM PC' },
-      { baseValue: 'Second Hand Laptop & PC Dealers', label: `Second Hand Laptop & PC Dealers${locSuffix}`, subtitle: 'Refurbished Business Laptops & Bulk Office PCs', detail: 'REFURBISHED' }
+      { baseValue: 'Computer Shops & Laptop Dealers', label: `Computer Shops & Laptop Dealers${locSuffix}`, subtitle: 'Desktops, Laptops, Accessories & Multi-Brand Stores', detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: 'Computer Hardware & Peripherals', label: `Computer Hardware & Peripherals${locSuffix}`, subtitle: 'Monitors, SSDs, RAM, Motherboards & Graphics Cards', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Laptop Repair & Service Centres', label: `Laptop Repair & Service Centres${locSuffix}`, subtitle: 'Chip-Level Repair, Screen Replacement & Upgrades', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Gaming PC & Custom Builders', label: `Gaming PC & Custom Builders${locSuffix}`, subtitle: 'Custom Workstations, GPUs & High-Performance Rigs', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Wholesale Computer & IT Distributors', label: `Wholesale Computer & IT Distributors${locSuffix}`, subtitle: 'Bulk Corporate Systems, Refurbished PCs & Trade Suppliers', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'technology');
   }
 
   // 2. Mobile Phones & Smartphones
   if (/\b(?:mobile|mobiles|smartphone|smartphones|iphone|cellphone|phone shop|phone repair|tablet)\b/i.test(norm)) {
     return formatRows([
-      { baseValue: 'Mobile Phone Shops & Showrooms', label: `Mobile Phone Shops & Showrooms${locSuffix}`, subtitle: 'Multi-Brand Smartphones, Tablets & EMI Stores', detail: 'MOBILE STORES' },
-      { baseValue: 'Mobile Repair & Service Centres', label: `Mobile Repair & Service Centres${locSuffix}`, subtitle: 'Screen Replacement, Battery & Motherboard Repair', detail: 'REPAIR' },
-      { baseValue: 'Mobile Accessories & Wholesale', label: `Mobile Accessories & Wholesale${locSuffix}`, subtitle: 'Chargers, Cases, Tempered Glass & Audio Gear', detail: 'ACCESSORIES' },
-      { baseValue: 'Second Hand & Refurbished Mobiles', label: `Second Hand & Refurbished Mobiles${locSuffix}`, subtitle: 'Pre-Owned Verified Smartphones & Exchange', detail: 'PRE-OWNED' }
+      { baseValue: 'Mobile Phone Shops & Showrooms', label: `Mobile Phone Shops & Showrooms${locSuffix}`, subtitle: 'Multi-Brand Smartphones, Tablets & EMI Stores', detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: 'Mobile Accessories & Spare Parts', label: `Mobile Accessories & Spare Parts${locSuffix}`, subtitle: 'Chargers, Cases, Displays, Batteries & Audio Gear', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Mobile Repair & Service Centres', label: `Mobile Repair & Service Centres${locSuffix}`, subtitle: 'Screen Replacement, Battery & Motherboard Repair', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Wholesale Mobile Distributors', label: `Wholesale Mobile Distributors${locSuffix}`, subtitle: 'Bulk Smartphones, Accessories & Pre-Owned Dealers', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'technology');
   }
 
-  // 3. CCTV, Security & Surveillance
-  if (/\b(?:cctv|security camera|surveillance|biometric|intercom|access control)\b/i.test(norm)) {
+  // 2b. Camera & DSLR Stores, Lenses, Gear & Camera Repair (Distinct from Photo Studios & CCTV!)
+  if (/\b(?:camera|cameras|dslr|mirrorless|camera lens|photography gear|action camera|gopro|gimbal)\b/i.test(norm) && !/\b(?:cctv|surveillance|security camera|biometric|dvr|nvr)\b/i.test(norm)) {
     return formatRows([
-      { baseValue: 'CCTV Camera Dealers & Installation', label: `CCTV Camera Dealers & Installation${locSuffix}`, subtitle: 'HD/IP Security Cameras, DVR/NVR & Home Setup', detail: 'SECURITY' },
-      { baseValue: 'Biometric & Access Control Systems', label: `Biometric & Access Control Systems${locSuffix}`, subtitle: 'Office Attendance, Video Door Phones & Smart Locks', detail: 'COMMERCIAL' },
-      { baseValue: 'CCTV Repair & AMC Services', label: `CCTV Repair & AMC Services${locSuffix}`, subtitle: 'Annual Maintenance, Wiring & Remote View Setup', detail: 'MAINTENANCE' }
-    ], 'technology');
+      { baseValue: 'Camera Shops & DSLR Dealers', label: `Camera Shops & DSLR Dealers${locSuffix}`, subtitle: 'Authorised Canon, Nikon, Sony, DSLR & Mirrorless Camera Showrooms', detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: 'Camera Lenses, Gimbals & Studio Gear', label: `Camera Lenses, Gimbals & Studio Gear${locSuffix}`, subtitle: 'Prime/Zoom Lenses, Tripods, Studio Lights, Drones & Bags', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Camera & DSLR Repair Service Centres', label: `Camera & DSLR Repair Service Centres${locSuffix}`, subtitle: 'Sensor Cleaning, Shutter Repair, Lens Calibration & Servicing', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Photo Studios & Photographers', label: `Photo Studios & Photographers${locSuffix}`, subtitle: 'Booking a shoot instead of buying a camera? Browse Studios & Event Photographers', detail: '🛠️ STUDIO SERVICE', intentType: 'service' },
+      { baseValue: 'Wholesale Photography Equipment Vendors', label: `Wholesale Photography Equipment Vendors${locSuffix}`, subtitle: 'Bulk Camera Gear, Album Labs & B2B Trade Suppliers', detail: '🏢 VENDOR', intentType: 'vendor' }
+    ], 'retail');
+  }
+
+  // 3. CCTV, Security & Surveillance
+  if (/\b(?:cctv|security camera|surveillance|biometric|intercom|access control|dvr|nvr)\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'CCTV Camera Dealers & Stores', label: `CCTV Camera Dealers & Stores${locSuffix}`, subtitle: 'HD/IP Security Cameras, DVR/NVR Kits & Hardware Shops', detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: 'CCTV Installation & AMC Services', label: `CCTV Installation & AMC Services${locSuffix}`, subtitle: 'Home, Shop & Factory Surveillance Setup & Wiring', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Biometric & Access Control Systems', label: `Biometric & Access Control Systems${locSuffix}`, subtitle: 'Office Attendance, Video Door Phones & Smart Locks', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Wholesale Security Surveillance Distributors', label: `Wholesale Security Surveillance Distributors${locSuffix}`, subtitle: 'Bulk CCTV Hardware & Authorised Brands Distributors', detail: '🏢 VENDOR', intentType: 'vendor' }
+    ], 'home-services');
   }
 
   // 4. Printers, Networking & Software / IT Companies
   if (/\b(?:printer|scanner|toner|cartridge|networking|software|web design|web dev|app dev|it company|it services|digital marketing|seo)\b/i.test(norm)) {
     if (/printer|scanner|toner|cartridge/i.test(norm)) {
       return formatRows([
-        { baseValue: 'Printer Dealers & Service Centres', label: `Printer Dealers & Service Centres${locSuffix}`, subtitle: 'Laser, Inkjet & Multifunction Printers Sales & Repair', detail: 'PRINTERS' },
-        { baseValue: 'Toner & Cartridge Refilling Shops', label: `Toner & Cartridge Refilling Shops${locSuffix}`, subtitle: 'Original Cartridges, Inks & Onsite Refilling', detail: 'SUPPLIES' }
+        { baseValue: 'Printer Dealers & Showrooms', label: `Printer Dealers & Showrooms${locSuffix}`, subtitle: 'Laser, Inkjet & Multifunction Printers Sales & Repair', detail: '🏪 STORE', intentType: 'store' },
+        { baseValue: 'Toner, Cartridges & Printer Inks', label: `Toner, Cartridges & Printer Inks${locSuffix}`, subtitle: 'Original Cartridges, Refill Kits & Drum Units', detail: '📦 PRODUCT', intentType: 'product' },
+        { baseValue: 'Printer Repair & Cartridge Refill Services', label: `Printer Repair & Cartridge Refill Services${locSuffix}`, subtitle: 'Onsite Printer Servicing & Refilling', detail: '🛠️ SERVICE', intentType: 'service' }
       ], 'technology');
     }
     return formatRows([
-      { baseValue: 'Software & IT Service Companies', label: `Software & IT Service Companies${locSuffix}`, subtitle: 'Custom Software, ERP, Cloud & Enterprise IT', detail: 'IT & SOFTWARE' },
-      { baseValue: 'Website & Mobile App Developers', label: `Website & Mobile App Developers${locSuffix}`, subtitle: 'Business Websites, E-Commerce & iOS/Android Apps', detail: 'WEB & APPS' },
-      { baseValue: 'Digital Marketing & SEO Agencies', label: `Digital Marketing & SEO Agencies${locSuffix}`, subtitle: 'Google Ads, Social Media & Lead Generation', detail: 'MARKETING' }
+      { baseValue: 'Software & IT Service Companies', label: `Software & IT Service Companies${locSuffix}`, subtitle: 'Custom Software, ERP, Cloud & Enterprise IT', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Website & Mobile App Developers', label: `Website & Mobile App Developers${locSuffix}`, subtitle: 'Business Websites, E-Commerce & iOS/Android Apps', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Enterprise IT Solutions Vendors', label: `Enterprise IT Solutions Vendors${locSuffix}`, subtitle: 'B2B Cloud, Networking & Managed Security Vendors', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'technology');
   }
 
   // 5. Electronics & Home Appliances Showrooms
   if (/\b(?:electronics|electronic|appliances|tv showroom|inverter|battery|ups)\b/i.test(norm) && !/repair/i.test(norm)) {
     return formatRows([
-      { baseValue: 'Electronics & Appliance Showrooms', label: `Electronics & Appliance Showrooms${locSuffix}`, subtitle: 'TVs, Refrigerators, ACs, Washing Machines & Audio', detail: 'ELECTRONICS' },
-      { baseValue: 'Inverter, UPS & Battery Dealers', label: `Inverter, UPS & Battery Dealers${locSuffix}`, subtitle: 'Home Power Backup, Batteries & Solar Inverters', detail: 'POWER BACKUP' },
-      { baseValue: 'Wholesale Electronics Dealers', label: `Wholesale Electronics Dealers${locSuffix}`, subtitle: 'Bulk Electronic Components & Trade Pricing', detail: 'WHOLESALE' }
+      { baseValue: 'Electronics & Appliance Showrooms', label: `Electronics & Appliance Showrooms${locSuffix}`, subtitle: 'TVs, Refrigerators, ACs, Washing Machines & Audio', detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: 'Inverter, UPS & Battery Products', label: `Inverter, UPS & Battery Products${locSuffix}`, subtitle: 'Home Power Backup, Batteries & Solar Inverters', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: 'Wholesale Electronics Suppliers', label: `Wholesale Electronics Suppliers${locSuffix}`, subtitle: 'Bulk Electronic Components & Trade Distributors', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'technology');
   }
 
-  // 6. Photography & Videography Studios
+  // 6. Photography & Videography Studios (Distinct from Camera Hardware Stores!)
   if (/photograph|studio|cameraman|videograph|photoshoot|candid/i.test(norm)) {
     return formatRows([
-      { baseValue: 'Photographers', label: `Photographers${locSuffix}`, subtitle: 'Verified Professional Photographers & Studios', detail: 'PHOTOGRAPHY' },
-      { baseValue: 'Wedding Photographers', label: `Wedding Photographers${locSuffix}`, subtitle: 'Weddings, Receptions & Candid Event Specialists', detail: 'WEDDING' },
-      { baseValue: 'Photo Studios', label: `Photo Studios${locSuffix}`, subtitle: 'Portraits, Passport & Indoor Shoot Labs', detail: 'STUDIOS' },
-      { baseValue: 'Product & Commercial Photographers', label: `Product & Commercial Photographers${locSuffix}`, subtitle: 'E-Commerce, Catalogue & Brand Photography', detail: 'COMMERCIAL' },
-      { baseValue: 'Pre-Wedding & Drone Videographers', label: `Pre-Wedding & Drone Videographers${locSuffix}`, subtitle: 'Cinematic 4K Aerial Coverage & Film Shoots', detail: 'CINEMA' }
+      { baseValue: 'Photo Studios', label: `Photo Studios${locSuffix}`, subtitle: 'Portraits, Passport, Indoor Shoot Labs & Printing Studios', detail: '🛠️ STUDIO SERVICE', intentType: 'service' },
+      { baseValue: 'Photographers', label: `Photographers${locSuffix}`, subtitle: 'Verified Professional Photographers & Creative Teams', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Wedding Photographers', label: `Wedding Photographers${locSuffix}`, subtitle: 'Weddings, Receptions, Candid & Pre-Wedding Shoots', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Pre-Wedding & Drone Videographers', label: `Pre-Wedding & Drone Videographers${locSuffix}`, subtitle: 'Cinematic 4K Aerial Coverage & Film Shoots', detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: 'Camera Shops & DSLR Dealers', label: `Camera Shops & DSLR Dealers${locSuffix}`, subtitle: 'Looking to buy a Camera or Lens? Browse Camera & Gear Stores', detail: '🏪 CAMERA STORE', intentType: 'store' },
+      { baseValue: 'Wholesale Photo Album & Studio Labs', label: `Wholesale Photo Album & Studio Labs${locSuffix}`, subtitle: 'Bulk Karizma Albums, Frame Labs & Printing Vendors', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'photography');
   }
 
@@ -802,19 +836,22 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
     ], 'retail');
   }
   if (family === 'retail' || /store|shop|showroom|boutique|jewel|cloth|garment|saree|footwear|shoe|supermarket|grocery|optical|gift|toy|cycle|watch|sports/i.test(norm)) {
-    const baseRetail = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|outlets|outlet)$/i, '').trim() || cleanLabel;
+    const baseRetail = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|outlets|outlet|dealers|dealer)$/i, '').trim() || cleanLabel;
     return formatRows([
-      { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Local ${cleanLabel} with Direct Phones`, detail: 'RETAIL & SHOPS' },
-      { baseValue: `${baseRetail} Dealers & Showrooms`, label: `${baseRetail} Dealers & Showrooms${locSuffix}`, subtitle: 'Authorised Brand Outlets & Multi-Brand Stores', detail: 'SHOWROOMS' },
-      { baseValue: `Wholesale ${baseRetail} Suppliers`, label: `Wholesale ${baseRetail} Suppliers${locSuffix}`, subtitle: 'Bulk Trade Pricing & Distributors', detail: 'WHOLESALE' }
+      { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Local Retail ${cleanLabel} with Direct Phones`, detail: '🏪 STORE', intentType: 'store' },
+      { baseValue: `${baseRetail} Products & Accessories`, label: `${baseRetail} Products & Accessories${locSuffix}`, subtitle: `Retail Equipment, Spare Parts & Product Showrooms`, detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: `${baseRetail} Service & Repair`, label: `${baseRetail} Service & Repair${locSuffix}`, subtitle: `Authorised Service Centres & After-Sales Support`, detail: '🛠️ SERVICE', intentType: 'service' },
+      { baseValue: `Wholesale ${baseRetail} Suppliers`, label: `Wholesale ${baseRetail} Suppliers${locSuffix}`, subtitle: `Bulk B2B Distributors, Stockists & Trade Vendors`, detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'retail');
   }
 
   // 24. Open-Domain Universal Preservation (Works for ANY niche business on Earth!)
+  const baseOpen = cleanLabel.replace(/\s+(stores|store|shops|shop|showrooms|showroom|dealers|dealer|services|service|suppliers|supplier|vendors|vendor)$/i, '').trim() || cleanLabel;
   return formatRows([
-    { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified ${cleanLabel} with Phone Numbers & Locations`, detail: 'TOP MATCH' },
-    { baseValue: `${cleanLabel} Dealers & Suppliers`, label: `${cleanLabel} Dealers & Suppliers${locSuffix}`, subtitle: `Authorised Dealers, Stockists & Commercial Suppliers`, detail: 'DEALERS' },
-    { baseValue: `${cleanLabel} Services`, label: `${cleanLabel} Services${locSuffix}`, subtitle: `Local Specialists & Direct Business Contacts`, detail: 'SERVICES' }
+    { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified Local ${cleanLabel} with Direct Phones & Locations`, detail: '🏪 STORE / MATCH', intentType: 'store' },
+    { baseValue: `${baseOpen} Products & Dealers`, label: `${baseOpen} Products & Dealers${locSuffix}`, subtitle: `Product Showrooms, Gear & Equipment Dealers`, detail: '📦 PRODUCT', intentType: 'product' },
+    { baseValue: `${baseOpen} Services`, label: `${baseOpen} Services${locSuffix}`, subtitle: `Local Technicians, Repair & Specialist Service Providers`, detail: '🛠️ SERVICE', intentType: 'service' },
+    { baseValue: `Wholesale ${baseOpen} Vendors`, label: `Wholesale ${baseOpen} Vendors${locSuffix}`, subtitle: `Wholesale Suppliers, Manufacturers & B2B Trade Distributors`, detail: '🏢 VENDOR', intentType: 'vendor' }
   ], family || 'generic');
 }
 

@@ -13,7 +13,8 @@ export function isCleanLocalityLabel(raw, fallbackCity = '') {
 
   if (trimmed.length < 3 || trimmed.length > 36) return false;
   if (lower === city || /^(other|unknown|null|undefined|area|india)$/i.test(trimmed)) return false;
-  if (trimmed.includes('·')) return false;
+  if (trimmed.includes('·') || trimmed.includes('•')) return false;
+  if (/\s[-–—]\s.*\b(?:dealer|dealers|installation|showroom|repair|service|supplier|suppliers|wholesale|wholesalers|refill|builder|company|accessories|peripherals|computer|laptop|printer|camera|cctv|studio)\b/i.test(trimmed)) return false;
   if (/\b(?:North|South|East|West|North-East|North-West|South-East|South-West|NW|NE|SW|SE)\s+(?:Sector|Grid|\d+)\b/i.test(trimmed)) return false;
   if (/\b(?:Central Commercial Hub|Main Market & Bazaar Area|Railway Station & Bus Stand|Main Arterial|Industrial & Trade Zone|Top Rated Specialists)\b/i.test(trimmed)) return false;
   if (/\b(?:Home|Downloads|About|Contact\s+Us|Select\s+Page|We\s+would\s+love|http|https|www\.|Batchus\s+Plaza)\b/i.test(trimmed)) return false;

@@ -531,29 +531,51 @@ async function runOmniSearchOrchestrator(
   let allowSweepLead = () => true;
 
   try {
-    // 1. Geocode the sweep's own anchor first. Every master zone is then laid
-    // out around the mandal / district / city the operator actually asked for,
-    // not around its parent district HQ (the old bug put Tenali villages on
-    // Guntur city and returned Guntur businesses for a Tenali sweep).
-    let baseGeo = null;
-    try {
-      baseGeo = await geocodeLocation(baseLocation, countryCode === 'IN' ? {} : { countryCode });
-    } catch (e) {}
-    if (!baseGeo || !baseGeo.lat) baseGeo = null;
-
-    // Gazetteer first, network second. Fuzzy geocoding once resolved "Guntur
-    // District" to Madhya Pradesh, which invalidated every zone anchor and every
-    // containment radius in the sweep.
+    // 1. Instant Gazetteer-first resolution (0ms local memory): check plan/gazetteer BEFORE
+    // network geocoding so Vijayawada, Guntur, Hyderabad, London, New York, Dubai, Sydney
+    // start Tier-0 & Zone 1 immediately with zero geocoder round-trip wait.
     const gazetteerHit = (() => {
       const clean = String(baseLocation || '').toLowerCase().trim();
       const stripped = clean.replace(/\b(city|town|district|dist|mandal|tehsil|taluk|taluka|block)\b/gi, '').replace(/\s+/g, ' ').trim();
       const hub = ZONE_COORDINATES[clean] || ZONE_COORDINATES[stripped];
-      return hub && Number.isFinite(Number(hub.lat)) ? { lat: Number(hub.lat), lng: Number(hub.lng) } : null;
+      if (hub && Number.isFinite(Number(hub.lat))) {
+        return { lat: Number(hub.lat), lng: Number(hub.lng), district: baseLocation, state: regionLabel };
+      }
+      if (countryCode === 'IN') {
+        try {
+          const indiaGeoIndex = require('../utils/indiaGeoIndex');
+          const matches = indiaGeoIndex.searchLocations(baseLocation, 1);
+          if (matches && matches[0] && Number.isFinite(Number(matches[0].lat))) {
+            return {
+              lat: Number(matches[0].lat),
+              lng: Number(matches[0].lng),
+              district: matches[0].district || baseLocation,
+              state: matches[0].state || regionLabel
+            };
+          }
+        } catch (e) {}
+      }
+      return null;
     })();
+
+    let baseGeo = null;
+    if (plan?.center && Number.isFinite(Number(plan.center.lat))) {
+      baseGeo = { lat: Number(plan.center.lat), lng: Number(plan.center.lng), district: plan.district || baseLocation, state: plan.state || regionLabel };
+    } else if (gazetteerHit) {
+      baseGeo = gazetteerHit;
+    } else {
+      try {
+        baseGeo = await Promise.race([
+          geocodeLocation(baseLocation, countryCode === 'IN' ? {} : { countryCode }),
+          new Promise(resolve => setTimeout(() => resolve(null), 2200))
+        ]);
+      } catch (e) {}
+      if (!baseGeo || !baseGeo.lat) baseGeo = null;
+    }
 
     let planCenter = (plan?.center && Number.isFinite(Number(plan.center.lat)))
       ? { lat: Number(plan.center.lat), lng: Number(plan.center.lng) }
-      : (gazetteerHit || (baseGeo ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) } : null));
+      : (gazetteerHit ? { lat: gazetteerHit.lat, lng: gazetteerHit.lng } : (baseGeo ? { lat: Number(baseGeo.lat), lng: Number(baseGeo.lng) } : null));
 
     const sweepScope = plan?.resolvedScope || (isMaster ? 'district' : 'city');
 
@@ -1142,9 +1164,9 @@ async function runOmniSearchOrchestrator(
       }
     }
 
-    // 2b. Queue all active zones into the high-speed worker pool.
-    // Named zones carry priority 10 (they produce the leads), grid cells 4.
-    await zonePoolWarm;
+    // 2b. Queue all active zones immediately into the high-speed worker pool!
+    // Zone pool warming continues in parallel in the background so Zone 1 starts at t=0ms.
+    zonePoolWarm.catch(() => {});
     for (const deferred of deferredZones) {
       activeSessions[sessionId].completedTargetsMap[zoneKey(deferred)] = 'deferred';
     }

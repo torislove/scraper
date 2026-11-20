@@ -511,7 +511,32 @@ html, body {
 .v2-suggest-copy small { font-size: 11.5px !important; color: var(--lx-ink-muted) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .v2-suggest-fix {
   background: var(--lx-canvas-soft) !important; color: var(--lx-ink-soft) !important;
-  border: 1px solid var(--lx-border) !important; border-radius: 999px !important; padding: 2px 8px !important; font-size: 10px !important; font-weight: 700 !important;
+  border: 1px solid var(--lx-border) !important; border-radius: 999px !important; padding: 2px 9px !important; font-size: 10px !important; font-weight: 800 !important; flex-shrink: 0;
+}
+.v2-suggest-fix.is-store {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #065f46 !important;
+}
+.v2-suggest-fix.is-product {
+  background: linear-gradient(135deg, #ecfeff, #cffafe) !important;
+  border-color: rgba(6, 182, 212, 0.38) !important;
+  color: #0e7490 !important;
+}
+.v2-suggest-fix.is-service {
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe) !important;
+  border-color: rgba(124, 58, 237, 0.32) !important;
+  color: #5b21b6 !important;
+}
+.v2-suggest-fix.is-vendor {
+  background: linear-gradient(135deg, #fffbeb, #fef3c7) !important;
+  border-color: rgba(245, 158, 11, 0.38) !important;
+  color: #92400e !important;
+}
+.v2-suggest-fix.is-location {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe) !important;
+  border-color: rgba(59, 130, 246, 0.32) !important;
+  color: #1d4ed8 !important;
 }
 .lx-suggest-foot {
   display: flex; align-items: center; gap: 14px; margin-top: 10px;

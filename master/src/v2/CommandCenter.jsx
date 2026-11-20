@@ -20,7 +20,7 @@ import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
-  startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl,
+  startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
 import {
@@ -901,6 +901,7 @@ export default function CommandCenter() {
 
     stream = createLiveStream({
       url: streamUrl(),
+      fallbackUrl: fallbackStreamUrl(),
       onSource: bindSource,
       onStatus: status => {
         if (!mounted) return;
@@ -2349,12 +2350,14 @@ export default function CommandCenter() {
     return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
   };
 
+  const isEngineReady = sseStatus === 'open' || (isOnline && connectionLatency < 3500);
+
   return (
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
 
       {/* Real-time Network Offline & Reconnecting Supervisor Banner */}
-      {(!isOnline || (sseStatus === 'error' && reconnectAttemptCount >= 2)) && (
+      {(!isOnline || (!isEngineReady && sseStatus === 'error' && reconnectAttemptCount >= 3)) && (
         <div
           className={cx(
             'v2-network-alert-banner',
@@ -2464,9 +2467,9 @@ export default function CommandCenter() {
         </div>
 
         <div className="v2-cmd-top-status">
-          <StatusPill tone={sseStatus === 'open' ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={sseStatus === 'open'}>
-            {sseStatus === 'open' ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
+          <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
+            {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
+            {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
 
           <SystemCheckPill variant="master" />

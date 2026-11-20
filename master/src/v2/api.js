@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_URL } from '../apiConfig';
+import { API_URL, SSE_STREAM_BASE } from '../apiConfig';
 import { getToken, withStreamToken } from './auth';
 
 const client = axios.create({
@@ -340,6 +340,10 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
 }
 
 export function streamUrl() {
+  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream`);
+}
+
+export function fallbackStreamUrl() {
   return withStreamToken(`${API_URL}/logs/stream`);
 }
 
