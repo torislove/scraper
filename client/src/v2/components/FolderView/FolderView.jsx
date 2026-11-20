@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import { VendorAvatar } from '../cards/MetricCard';
-import { extractLeadArea, CarriedBadge } from '../../utils/leadHelpers';
+import { extractLeadArea, formatCleanAreaDisplay, CarriedBadge } from '../../utils/leadHelpers';
 import {
   tokenizeQuery, normalizePhoneDigits, matchesLead, scoreLead, highlightMatches
 } from '../../../utils/universalSearchEngine';
@@ -34,6 +34,7 @@ export default function FolderView({
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'map' | 'cards' | 'analytics'
   const [copied, setCopied] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showAllAreas, setShowAllAreas] = useState(false);
 
   const phoneLeads = useMemo(() => leads.filter(l => Boolean(getDisplayPhone(l))), [leads]);
   const webLeads = useMemo(() => leads.filter(l => Boolean(l.website)), [leads]);
@@ -455,7 +456,7 @@ export default function FolderView({
                   >
                     All Areas ({leads.length})
                   </button>
-                  {areaSubfolders.map(({ area, count }) => (
+                  {(showAllAreas ? areaSubfolders : areaSubfolders.slice(0, 14)).map(({ area, count }) => (
                     <button
                       type="button"
                       key={area}
@@ -465,6 +466,15 @@ export default function FolderView({
                       {area} <b style={{ opacity: 0.85 }}>({count})</b>
                     </button>
                   ))}
+                  {areaSubfolders.length > 14 && (
+                    <button
+                      type="button"
+                      className="v2-subfolder-chip is-more-btn"
+                      onClick={() => setShowAllAreas(prev => !prev)}
+                    >
+                      {showAllAreas ? 'Show Less' : `+${areaSubfolders.length - 14} More Neighborhoods`}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -559,7 +569,7 @@ export default function FolderView({
                         <b className="v2-tc-name">{lead.name || 'Business'}</b>
                         <CarriedBadge lead={lead} />
                         <small className="v2-tc-cat">
-                          {[lead.area, lead.city || lead.village].filter(Boolean).join(', ') || 'Local'}
+                          {formatCleanAreaDisplay(lead, session?.location)}
                           {lead.rating != null && (
                             <span className="v2-tc-star">★ {Number(lead.rating).toFixed(1)} {lead.reviewsCount ? `(${formatNumber(lead.reviewsCount)})` : ''}</span>
                           )}
@@ -730,7 +740,7 @@ export default function FolderView({
                         </td>
                         <td>
                           <span className="v2-folder-loc-text">
-                            {highlightMatches([lead.area, lead.city || lead.village, lead.district].filter(Boolean).join(', ') || '—', searchTokens)}
+                            {highlightMatches(formatCleanAreaDisplay(lead, session?.location), searchTokens)}
                           </span>
                         </td>
                         <td>

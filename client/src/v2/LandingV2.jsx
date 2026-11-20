@@ -10,12 +10,58 @@ import {
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
 import { POPULAR_COUNTRIES } from './data/countries';
-import { COUNTRY_COUNTY_SHOWCASE } from './data/searchExamples';
+import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
   detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
 import { pingHealth } from './api';
 import './landingExecutive.css';
+
+function useLandingTypewriter(items, active) {
+  const [text, setText] = useState('');
+  const listKey = useMemo(() => (items || []).map(i => i.query).join('|'), [items]);
+
+  useEffect(() => {
+    const list = Array.isArray(items) && items.length
+      ? items
+      : [{ country: 'India', query: 'Software companies in HITEC City Hyderabad' }];
+    if (!active) {
+      setText(`Search anywhere: ${list[0].query} (${list[0].country})`);
+      return undefined;
+    }
+    let idx = 0;
+    let char = 0;
+    let deleting = false;
+    let holdTicks = 0;
+    const timer = setInterval(() => {
+      const current = list[idx % list.length] || list[0];
+      const full = `${current.query} (${current.country})`;
+      if (holdTicks > 0) {
+        holdTicks -= 1;
+        return;
+      }
+      if (!deleting) {
+        char += 1;
+        setText(`Search anywhere: ${full.slice(0, char)}|`);
+        if (char >= full.length) {
+          deleting = true;
+          holdTicks = 24;
+        }
+      } else {
+        char -= 2;
+        if (char <= 0) {
+          char = 0;
+          deleting = false;
+          idx = (idx + 1) % list.length;
+        }
+        setText(`Search anywhere: ${full.slice(0, Math.max(0, char))}|`);
+      }
+    }, 46);
+    return () => clearInterval(timer);
+  }, [listKey, active]);
+
+  return text;
+}
 
 // Strictly locked to the 11 supported revenue markets — India pinned as Home
 const LOCKED_11_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
@@ -453,7 +499,10 @@ export default function LandingV2() {
   const [weeklySearches, setWeeklySearches] = useState(12);
   const [activePulseZone, setActivePulseZone] = useState(0);
   const [selectedMarketCode, setSelectedMarketCode] = useState('IN');
+  const [heroQuery, setHeroQuery] = useState('');
+  const [tickerOffset, setTickerOffset] = useState(0);
   const hardware = useMemo(() => detectDeviceHardware(), []);
+  const heroPlaceholder = useLandingTypewriter(GLOBAL_11_COUNTRY_TICKER, !heroQuery);
 
   useEffect(() => {
     let cancelled = false;
@@ -482,7 +531,13 @@ export default function LandingV2() {
     const zTimer = setInterval(() => {
       setActivePulseZone(prev => (prev + 1) % STORY_ZONES.length);
     }, 900);
-    return () => clearInterval(zTimer);
+    const tTimer = setInterval(() => {
+      setTickerOffset(prev => (prev + 1) % GLOBAL_11_COUNTRY_TICKER.length);
+    }, 3200);
+    return () => {
+      clearInterval(zTimer);
+      clearInterval(tTimer);
+    };
   }, []);
 
   const demo = DEMO_SCENARIOS[activeDemo];
@@ -502,6 +557,7 @@ export default function LandingV2() {
 
   return (
     <div className="lx-landing">
+      <a href="#main-content" className="lx-skip-link">Skip to main content</a>
       <div className="lx-aurora-wrap" aria-hidden="true">
         <div className="lx-orb lx-orb-1" />
         <div className="lx-orb lx-orb-2" />
@@ -517,10 +573,10 @@ export default function LandingV2() {
 
           <nav className="lx-nav-links" aria-label="Primary">
             <a href="#story">Why It Works</a>
-            <a href="#engines">Zero Setup</a>
+            <a href="#engines">3 Engines &amp; RAM</a>
             <a href="#playbooks">For Teams</a>
-            <a href="#industries">Industries</a>
-            <a href="#markets">11 Markets</a>
+            <a href="#markets">11 Countries</a>
+            <a href="#master-concierge">Master Service</a>
             <button type="button" onClick={() => navigate('/pricing')}>Pricing</button>
           </nav>
 
@@ -533,13 +589,14 @@ export default function LandingV2() {
               <LogIn size={15} /> Sign in
             </button>
             <button type="button" className="lx-btn lx-btn-primary" onClick={() => openWorkspace('IN')}>
+              <span className="lx-gbc-keycap-landing is-a" aria-hidden="true">A</span>
               Find Leads Now <ArrowRight size={15} />
             </button>
           </div>
         </div>
       </header>
 
-      <main style={{ position: 'relative', zIndex: 1 }}>
+      <main id="main-content" tabIndex={-1} style={{ position: 'relative', zIndex: 1 }}>
         {/* Hero */}
         <section className="lx-hero">
           <div className="lx-wrap lx-hero-grid">
@@ -562,15 +619,68 @@ export default function LandingV2() {
               <h1 className="lx-h1">
                 Just pay for our 3 engines. Your RAM powers{' '}
                 <span className="lx-h1-accent">blazing-fast leads</span>{' '}
-                in seconds.
+                anywhere across 11 countries.
               </h1>
 
               <p className="lx-lead-copy">
-                Zero external tools or slow shared server queues. Pick one of 11 country flags,
-                type what you need in any city, mandal, or county, and watch our 3 built-in engines
-                use your computer&apos;s own RAM ({hardware.ramGb} GB · {hardware.parallelZones}x parallel zones) to gather
-                every verified phone, address, and website directly across the web into a clean Excel file.
+                Zero external tools or slow shared server queues. Search any business and any
+                city, mandal, county, or neighborhood across all 11 countries — and watch our 3 built-in
+                engines use your computer&apos;s own RAM ({hardware.ramGb} GB · {hardware.parallelZones}x parallel zones)
+                to gather every verified phone, address, and website into a clean Excel sheet.
               </p>
+
+              {/* Interactive Game Boy Color 3D Hero Search Bar (11 Countries · Search Anywhere) */}
+              <form
+                className="lx-hero-search-gbc lx-gbc-cartridge-card"
+                role="search"
+                aria-label="Search anywhere across all 11 countries"
+                onSubmit={e => {
+                  e.preventDefault();
+                  const q = heroQuery.trim() || GLOBAL_11_COUNTRY_TICKER[tickerOffset]?.query || 'Software companies in HITEC City Hyderabad';
+                  openWorkspace('IN', q);
+                }}
+              >
+                <div className="lx-hero-search-top">
+                  <span className="lx-precision-pill is-scope">
+                    🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9' }}>GAME BOY COLOR × 3D ENGINE</span>
+                </div>
+                <div className="lx-hero-search-bar">
+                  <Search size={18} color="#7c3aed" aria-hidden="true" />
+                  <label htmlFor="hero-gbc-search" className="lx-sr-only">
+                    Search any business and city, mandal, or county across 11 countries
+                  </label>
+                  <input
+                    id="hero-gbc-search"
+                    type="text"
+                    className="lx-hero-search-input"
+                    value={heroQuery}
+                    onChange={e => setHeroQuery(e.target.value)}
+                    placeholder={heroPlaceholder}
+                  />
+                  <button type="submit" className="lx-hero-search-btn">
+                    <span className="lx-gbc-keycap-landing is-a" aria-hidden="true">A</span>
+                    <span>FIND LEADS</span>
+                  </button>
+                </div>
+                <div className="lx-global-ticker-bar" aria-label="Sample searches across 11 countries">
+                  {Array.from({ length: 4 }, (_, offset) => {
+                    const item = GLOBAL_11_COUNTRY_TICKER[(tickerOffset + offset) % GLOBAL_11_COUNTRY_TICKER.length];
+                    return (
+                      <button
+                        key={`${item.code}-${item.query}`}
+                        type="button"
+                        className="lx-example-chip"
+                        onClick={() => openWorkspace(item.code, item.query)}
+                      >
+                        <b style={{ color: '#6d28d9' }}>{item.country}:</b>
+                        <span>{item.query}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </form>
 
               <div className="lx-hero-mode-split">
                 <div>
@@ -590,6 +700,7 @@ export default function LandingV2() {
                   className="lx-btn lx-btn-primary lx-btn-lg"
                   onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}
                 >
+                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">START</span>
                   Open Lead Workspace <ArrowRight size={17} />
                 </motion.button>
                 <button
@@ -597,6 +708,7 @@ export default function LandingV2() {
                   className="lx-btn lx-btn-atomic lx-btn-lg"
                   onClick={() => navigate('/signup')}
                 >
+                  <span className="lx-gbc-keycap-landing is-b" aria-hidden="true">B</span>
                   Create Free Account
                 </button>
               </div>
@@ -1042,6 +1154,7 @@ export default function LandingV2() {
                   <motion.button
                     key={country.code}
                     type="button"
+                    aria-pressed={isSelected}
                     className={`lx-country-btn ${isHome ? 'is-home' : ''} ${isSelected ? 'is-selected' : ''}`}
                     onClick={() => setSelectedMarketCode(country.code)}
                     initial={{ opacity: 0, y: 12 }}

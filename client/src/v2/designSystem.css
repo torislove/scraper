@@ -2188,3 +2188,88 @@ h1, h2, h3, h4, .v2-cmd-home, .lx-pane-title h2 {
     overflow-x: auto;
   }
 }
+
+
+/* ============================================================================
+   SAVED FOLDER NEIGHBORHOOD & CATEGORY CHIPS (3D GBC LIQUID GLASS) + A11Y FOCUS
+   ============================================================================ */
+.v2-subfolder-container {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.82), rgba(241, 245, 249, 0.6));
+}
+
+.v2-subfolder-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.v2-subfolder-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.v2-subfolder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  color: #1e293b;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 0 rgba(15, 23, 42, 0.07);
+  transition: transform 90ms ease, box-shadow 90ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.v2-subfolder-chip:hover {
+  transform: translateY(-1.5px);
+  border-color: rgba(124, 58, 237, 0.35);
+  color: #5b21b6;
+  box-shadow: inset 0 1px 0 #ffffff, 0 3px 0 rgba(124, 58, 237, 0.16), 0 6px 14px -6px rgba(124, 58, 237, 0.25);
+}
+
+.v2-subfolder-chip:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+}
+
+.v2-subfolder-chip.is-active {
+  background: linear-gradient(135deg, #6d28d9, #7c3aed 55%, #10b981 100%);
+  color: #ffffff;
+  border-color: #5b21b6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36), 0 2px 0 #4c1d95, 0 6px 14px -4px rgba(124, 58, 237, 0.42);
+}
+
+.v2-subfolder-chip.is-more-btn {
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+  border-color: rgba(124, 58, 237, 0.32);
+  color: #5b21b6;
+  font-weight: 800;
+}
+
+:focus-visible {
+  outline: 2.5px solid #7c3aed !important;
+  outline-offset: 2px !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,20 +1,40 @@
 import React from 'react';
 
 /**
+ * Check whether a raw locality label is clean human-readable neighborhood text
+ * (excluding internal grid IDs, sub-vector prefixes with `·`, rating snippets,
+ * door/shop numbers, and scraped webpage menu noise).
+ */
+export function isCleanLocalityLabel(raw, fallbackCity = '') {
+  if (!raw || typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  const city = String(fallbackCity || '').trim().toLowerCase();
+
+  if (trimmed.length < 3 || trimmed.length > 36) return false;
+  if (lower === city || /^(other|unknown|null|undefined|area|india)$/i.test(trimmed)) return false;
+  if (trimmed.includes('·')) return false;
+  if (/\b(?:North|South|East|West|North-East|North-West|South-East|South-West|NW|NE|SW|SE)\s+(?:Sector|Grid|\d+)\b/i.test(trimmed)) return false;
+  if (/\b(?:Central Commercial Hub|Main Market & Bazaar Area|Railway Station & Bus Stand|Main Arterial|Industrial & Trade Zone|Top Rated Specialists)\b/i.test(trimmed)) return false;
+  if (/\b(?:Home|Downloads|About|Contact\s+Us|Select\s+Page|We\s+would\s+love|http|https|www\.|Batchus\s+Plaza)\b/i.test(trimmed)) return false;
+  if (/^\d+(?:\.\d+)?\s*\(/.test(trimmed)) return false;
+  if (/^\d+$/.test(trimmed)) return false;
+  if (/^(?:no\.?\s*\d+|\d+\/\d+|near|opp|behind|plot|door|flat|shop|floor|beside)\b/i.test(trimmed)) return false;
+  return true;
+}
+
+/**
  * Extract clean neighborhood / area / locality from a lead object,
  * using explicit fields first and falling back to parsed address segments.
  */
 export function extractLeadArea(lead, fallbackCity) {
   if (!lead) return '';
-  const city = (fallbackCity || lead.city || '').trim().toLowerCase();
-  
-  // 1. Explicit locality/suburb/zone fields
-  for (const cand of [lead.locality, lead.suburb, lead.zoneName, lead.area, lead.mandal, lead.village]) {
-    if (cand && typeof cand === 'string') {
-      const trimmed = cand.trim();
-      if (trimmed && trimmed.toLowerCase() !== city && !/^(other|unknown|null|undefined)$/i.test(trimmed)) {
-        return trimmed;
-      }
+  const city = String(fallbackCity || lead.city || '').trim();
+
+  // 1. Explicit locality/suburb/area fields (prioritize real locality over zoneName)
+  for (const cand of [lead.locality, lead.suburb, lead.area, lead.mandal, lead.village, lead.zoneName]) {
+    if (isCleanLocalityLabel(cand, city)) {
+      return cand.trim();
     }
   }
 
@@ -22,22 +42,38 @@ export function extractLeadArea(lead, fallbackCity) {
   const address = lead.address || '';
   if (address) {
     const segs = address.split(',').map(s => s.trim()).filter(Boolean);
-    const clean = segs.filter(s => !/^\d{6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
-    if (clean.length >= 2) {
-      const cand = clean[clean.length - 2];
-      if (cand && cand.length >= 3 && cand.length <= 40 && !/^(near|opp|behind|plot|door|flat|shop|floor|no\.)/i.test(cand) && cand.toLowerCase() !== city) {
-        return cand;
-      }
+    const clean = segs.filter(s => !/^\d{5,6}$/.test(s) && !/^(Telangana|Andhra Pradesh|Karnataka|Maharashtra|Tamil Nadu|India)$/i.test(s));
+    if (clean.length >= 2 && isCleanLocalityLabel(clean[clean.length - 2], city)) {
+      return clean[clean.length - 2];
     }
-    if (clean.length >= 1) {
-      const cand = clean[clean.length - 1];
-      if (cand && cand.length >= 3 && cand.length <= 40 && cand.toLowerCase() !== city) {
-        return cand;
-      }
+    if (clean.length >= 1 && isCleanLocalityLabel(clean[clean.length - 1], city)) {
+      return clean[clean.length - 1];
     }
   }
 
   return '';
+}
+
+/**
+ * Format area · city · district cleanly without duplicate adjacent tokens like "Guntur, Guntur".
+ */
+export function formatCleanAreaDisplay(lead, fallbackCity) {
+  if (!lead) return '—';
+  const parts = [
+    extractLeadArea(lead, fallbackCity),
+    lead.city || lead.village,
+    lead.district
+  ].map(s => String(s || '').trim()).filter(Boolean);
+
+  const seen = new Set();
+  const unique = [];
+  for (const p of parts) {
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(p);
+  }
+  return unique.join(', ') || '—';
 }
 
 /**

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
-import { examplesFor } from './data/searchExamples';
+import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
   detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
@@ -18,7 +18,7 @@ function useTypewriterPlaceholder(examples, active) {
   useEffect(() => {
     const items = Array.isArray(examples) && examples.length ? examples : ['Computer shops in Hyderabad'];
     if (!active) {
-      setText(`Type service in place — e.g. ${items[0]}`);
+      setText(`Search anywhere in 11 countries — Type service in place: e.g. ${items[0]}`);
       return undefined;
     }
     let idx = 0;
@@ -33,10 +33,10 @@ function useTypewriterPlaceholder(examples, active) {
       }
       if (!deleting) {
         char += 1;
-        setText(`Type service in place — e.g. ${target.slice(0, char)}|`);
+        setText(`Search anywhere in 11 countries — Type service in place: e.g. ${target.slice(0, char)}|`);
         if (char >= target.length) {
           deleting = true;
-          holdTicks = 26;
+          holdTicks = 24;
         }
       } else {
         char -= 2;
@@ -45,9 +45,9 @@ function useTypewriterPlaceholder(examples, active) {
           deleting = false;
           idx = (idx + 1) % items.length;
         }
-        setText(`Type service in place — e.g. ${target.slice(0, Math.max(0, char))}|`);
+        setText(`Search anywhere in 11 countries — Type service in place: e.g. ${target.slice(0, Math.max(0, char))}|`);
       }
-    }, 55);
+    }, 48);
     return () => clearInterval(timer);
   }, [listKey, active]);
 
@@ -468,7 +468,9 @@ function SearchConsole({
 
   const hardware = useMemo(() => detectDeviceHardware(), []);
   const [ramCardOpen, setRamCardOpen] = useState(false);
-  const animatedPlaceholder = useTypewriterPlaceholder(examples, !draft);
+  const [showAll11Countries, setShowAll11Countries] = useState(false);
+  const omniExamples = useMemo(() => omniExamplesFor(country), [country]);
+  const animatedPlaceholder = useTypewriterPlaceholder(omniExamples, !draft);
   const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
   const displayService = parsedCategory || category || 'Any Business / Service';
   const displayPlace = parsedLocation || location || 'City, Mandal or County';
@@ -627,9 +629,10 @@ function SearchConsole({
       </div>
 
       {/* Animated Helper Strip: Live Service/Place/Precision, 3 Built-In Engines & Hardware RAM Guide */}
-      <div className="lx-search-helper-strip">
+      <div className="lx-search-helper-strip" role="region" aria-label="Search assistant and 11-country examples">
         <div className="lx-search-helper-row">
           <div className="lx-precision-badges">
+            <span className="lx-precision-pill is-scope">🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES</span>
             <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
             <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
             <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
@@ -640,6 +643,7 @@ function SearchConsole({
             type="button"
             className="lx-ram-pill"
             onClick={() => setRamCardOpen(prev => !prev)}
+            aria-expanded={ramCardOpen}
             title="View device RAM acceleration & system requirements"
           >
             <Cpu size={13} />
@@ -667,7 +671,38 @@ function SearchConsole({
               <span>{example}</span>
             </button>
           ))}
+          <button
+            type="button"
+            className="lx-example-chip"
+            style={{ background: showAll11Countries ? '#f5f3ff' : '#ffffff', borderColor: 'rgba(124, 58, 237, 0.3)', color: '#5b21b6' }}
+            onClick={() => setShowAll11Countries(prev => !prev)}
+            aria-expanded={showAll11Countries}
+          >
+            <span>{showAll11Countries ? 'Hide 11 Countries ▲' : 'All 11 Countries 🌍'}</span>
+          </button>
         </div>
+
+        {showAll11Countries && (
+          <div className="lx-example-chips-row" role="list" aria-label="Starter searches across all 11 countries">
+            {GLOBAL_11_COUNTRY_TICKER.map(item => (
+              <button
+                key={`${item.code}-${item.query}`}
+                type="button"
+                role="listitem"
+                className="lx-example-chip"
+                onClick={() => {
+                  setDraft(item.query);
+                  lastExternalRef.current = item.query;
+                  onChange?.(item.query);
+                  commitAndDeploy(item.query);
+                }}
+              >
+                <b style={{ color: '#6d28d9' }}>{item.country}:</b>
+                <span>{item.query}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <AnimatePresence>
           {ramCardOpen && (

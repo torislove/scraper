@@ -257,6 +257,40 @@ export const COUNTRY_COUNTY_SHOWCASE = Object.entries(SEARCH_EXAMPLES).map(([cod
   areas: data.cities.slice(0, 5)
 }));
 
+export const GLOBAL_11_COUNTRY_TICKER = [
+  { code: 'IN', country: 'India', query: 'Software companies in HITEC City Hyderabad' },
+  { code: 'US', country: 'USA', query: 'HVAC contractors in Harris County TX' },
+  { code: 'GB', country: 'UK', query: 'Luxury caterers in Westminster London' },
+  { code: 'CA', country: 'Canada', query: 'Corporate caterers in Peel Region ON' },
+  { code: 'AU', country: 'Australia', query: 'Solar installers in Gold Coast QLD' },
+  { code: 'AE', country: 'UAE', query: 'Event organizers in Business Bay Dubai' },
+  { code: 'SG', country: 'Singapore', query: 'Corporate caterers in Downtown Core Singapore' },
+  { code: 'NZ', country: 'New Zealand', query: 'Wedding venues in Auckland Region' },
+  { code: 'IE', country: 'Ireland', query: 'Wedding venues in County Cork' },
+  { code: 'ZA', country: 'South Africa', query: 'Conference venues in Sandton Johannesburg' },
+  { code: 'DE', country: 'Germany', query: 'Catering in Berlin Mitte' },
+  { code: 'IN', country: 'India', query: 'Photo studios in Tenali Mandal' }
+];
+
+/**
+ * Interleaved "Search Anywhere" examples starting with the active country's top
+ * examples and rotating across all 11 supported countries' cities, mandals & counties.
+ */
+export function omniExamplesFor(countryCode) {
+  const code = String(countryCode || 'IN').toUpperCase();
+  const active = examplesFor(code).prompts || [];
+  const rotatedGlobal = GLOBAL_11_COUNTRY_TICKER
+    .filter(item => item.code !== code || !active.includes(item.query))
+    .map(item => `${item.query} (${item.country})`);
+  const out = [];
+  const maxLen = Math.max(active.length, rotatedGlobal.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    if (active[i]) out.push(active[i]);
+    if (rotatedGlobal[i]) out.push(rotatedGlobal[i]);
+  }
+  return out;
+}
+
 /** The examples for a market, falling back to India. */
 export function examplesFor(countryCode) {
   const code = String(countryCode || 'IN').toUpperCase();
