@@ -842,15 +842,34 @@ const CATEGORY_SUBVECTORS = [
       'Pipes and fittings manufacturer', 'Corrugated box manufacturer', 'Textile mill'
     ]
   },
-  // 2. Computer Stores, Laptops, IT Hardware, Networking & CCTV
+  // 2. Computer Stores, Laptops, IT Hardware, PC Builders & Laptop Repair (Strictly zero CCTV)
   {
-    match: /computer|laptop|printer|cctv|software|it service|mobile|electronics|hardware store|pc builder|gaming pc/i,
+    match: /\b(computer|computers|laptop|laptops|desktop|pc|gaming pc|macbook|pc builder|computer hardware|computer accessories)\b/i,
+    exclude: /\b(cctv|surveillance|security|biometric|dvr|nvr|camera|dslr)\b/i,
     labels: [
       'Laptop showroom', 'Computer hardware shop', 'Desktop PC builder', 'Computer repair and service',
-      'Laptop screen and motherboard repair', 'CCTV camera dealer and installation', 'Networking equipment supplier',
-      'Printer dealer and cartridge refill', 'Refurbished laptop store', 'Computer accessories and peripherals',
-      'Computer AMC service provider', 'Software development company', 'Mobile shop and accessories',
-      'Mobile phone repair center', 'Electronics showroom', 'UPS and inverter dealer'
+      'Laptop screen and motherboard repair', 'Refurbished laptop store', 'Computer accessories and peripherals',
+      'Gaming PC builder', 'Computer AMC service provider', 'Networking equipment supplier',
+      'Printer dealer and cartridge refill'
+    ]
+  },
+  // 2a. CCTV, Security Systems & Surveillance (Strictly Isolated from Computer Stores)
+  {
+    match: /\b(cctv|surveillance|security camera|security systems|biometric|dvr|nvr|access control|video door phone)\b/i,
+    labels: [
+      'CCTV camera dealer', 'CCTV installation and wiring', 'Security surveillance systems',
+      'Hikvision and CP Plus dealer', 'IP camera and wireless security', 'DVR and NVR setup and networking',
+      'Biometric attendance systems', 'Access control and smart locks', 'CCTV repair and AMC service'
+    ]
+  },
+  // 2b. Mobile Phones, Smartphones, Tablets & Mobile Repair
+  {
+    match: /\b(mobile|mobiles|smartphone|smartphones|iphone|cellphone|phone shop|phone store|phone repair|mobile repair)\b/i,
+    exclude: /\b(automobile|mobility)\b/i,
+    labels: [
+      'Mobile phone showroom', 'Multi-brand smartphone store', 'Mobile phone repair center',
+      'Mobile accessories and back covers', 'Second hand and refurbished mobile phones',
+      'iPhone repair and service center'
     ]
   },
   // 2b. Camera & DSLR Shops, Lenses, Repair & Photography Gear (Distinct from CCTV & Photo Studios)
@@ -948,6 +967,16 @@ const CATEGORY_SUBVECTORS = [
       'Sanitaryware shop', 'Plywood and laminates', 'TMT steel and cement dealer',
       'Paints and hardware store', 'Electrical goods and wiring', 'Glass and aluminium works',
       'Bathroom fittings dealer', 'Modular kitchen hardware', 'PVC pipe dealer'
+    ]
+  },
+  // 8b. Shopping Malls, Commercial Centers & Retail Plazas
+  {
+    match: /\b(mall|malls|shopping mall|shopping malls|shopping cent(?:er|re)|commercial complex|retail plaza|hypermarket)\b/i,
+    labels: [
+      'Shopping mall', 'Commercial shopping complex', 'Central retail mall',
+      'Multiplex and shopping mall', 'Hypermarket and departmental mall',
+      'Retail plaza and fashion center', 'Food court and entertainment mall',
+      'Commercial business arcade'
     ]
   },
   // 9. Wholesale, Retail, Products, Showrooms & FMCG
@@ -1298,7 +1327,7 @@ function getUniversalCategoryVectors(category, cleanLoc) {
   const lowerCat = cat.toLowerCase();
 
   // 1. Manufacturers & Industrial Units
-  if (lowerCat.match(/manufactur|factory|factories|industrial|fabricat|oem|production|plant|mill|processing/i)) {
+  if (lowerCat.match(/manufactur|factory|factories|industrial|fabricat|oem|production|plant|mill|processing|packaging material|corrugated/i)) {
     return [
       { zoneName: `${cleanLoc} Industrial Equipment Manufacturers`, queryText: `Industrial Equipment Manufacturers in ${cleanLoc}`, isVectorQuery: true },
       { zoneName: `${cleanLoc} Fabrication Works & Workshops`, queryText: `Fabrication Works in ${cleanLoc}`, isVectorQuery: true },
@@ -1309,15 +1338,37 @@ function getUniversalCategoryVectors(category, cleanLoc) {
     ];
   }
 
-  // 2. Computer Stores, IT Hardware, Laptops & CCTV
-  if (lowerCat.match(/computer|laptop|printer|cctv|software|it service|pc builder|hardware/i)) {
+  // 1b. Shopping Malls & Commercial Complexes
+  if (lowerCat.match(/\b(mall|malls|shopping mall|shopping malls|shopping cent(?:er|re)|commercial complex|retail plaza|hypermarket)\b/i)) {
+    return [
+      { zoneName: `${cleanLoc} Shopping Malls & Retail Plazas`, queryText: `Shopping Malls in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Commercial Shopping Complexes`, queryText: `Commercial Shopping Complex in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Central Shopping Centers`, queryText: `Shopping Center in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Hypermarket & Departmental Malls`, queryText: `Hypermarket in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Entertainment & Multiplex Malls`, queryText: `Mall Multiplex in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 2. Computer Stores, IT Hardware & Laptops (Strictly zero CCTV)
+  if (lowerCat.match(/\b(computer|laptop|pc|desktop|pc builder|hardware store|gaming pc)\b/i) && !lowerCat.match(/\b(cctv|surveillance|security|biometric|dvr|nvr)\b/i)) {
     return [
       { zoneName: `${cleanLoc} Laptop & Computer Showrooms`, queryText: `Laptop Store in ${cleanLoc}`, isVectorQuery: true },
       { zoneName: `${cleanLoc} Computer Hardware & PC Builders`, queryText: `Computer Hardware Shop in ${cleanLoc}`, isVectorQuery: true },
       { zoneName: `${cleanLoc} Computer & Laptop Repair Centers`, queryText: `Computer Repair and Service in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Refurbished & Used Laptop Stores`, queryText: `Second Hand Laptop Shop in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Computer Peripherals & Accessories`, queryText: `Computer Accessories Shop in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Networking & Server Equipment`, queryText: `Networking Solutions in ${cleanLoc}`, isVectorQuery: true }
+    ];
+  }
+
+  // 2a. CCTV & Security Surveillance (Dedicated Independent Category)
+  if (lowerCat.match(/\b(cctv|surveillance|security camera|security systems|biometric|access control|dvr|nvr)\b/i)) {
+    return [
       { zoneName: `${cleanLoc} CCTV & Security System Dealers`, queryText: `CCTV Camera Dealers in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Networking & Server Equipment`, queryText: `Networking Solutions in ${cleanLoc}`, isVectorQuery: true },
-      { zoneName: `${cleanLoc} Printer Dealers & Cartridge Refill`, queryText: `Printer Dealers in ${cleanLoc}`, isVectorQuery: true }
+      { zoneName: `${cleanLoc} CCTV Installation & Wiring Services`, queryText: `CCTV Installation Services in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} IP Camera & Wireless Surveillance`, queryText: `IP Security Camera Store in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} Biometric Attendance & Access Control`, queryText: `Biometric Attendance System Dealers in ${cleanLoc}`, isVectorQuery: true },
+      { zoneName: `${cleanLoc} DVR NVR Hardware & Setup`, queryText: `DVR NVR Security Systems in ${cleanLoc}`, isVectorQuery: true }
     ];
   }
 

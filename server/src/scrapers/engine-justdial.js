@@ -82,6 +82,9 @@ function isGenericRowName(value) {
 // Category fan-out. Each variant is resolved to its own JustDial ncatid, so a
 // single city query can cover related marketplace categories without guessing.
 const VARIANT_RULES = [
+  { test: /\b(computer|laptop|desktop|gaming pc|macbook)\b/i, variants: ['Computer Dealers', 'Laptop Dealers', 'Computer Hardware Dealers', 'Laptop Repair & Services', 'Computer Software Dealers', 'Computer Accessory Dealers'] },
+  { test: /\b(mall|malls|shopping mall|shopping complex)\b/i, variants: ['Shopping Malls', 'Commercial Complexes', 'Malls', 'Departmental Stores', 'Supermarkets'] },
+  { test: /\b(manufactur\w*|factor\w*|industrial|machinery|fabricat\w*)\b/i, variants: ['Industrial Machinery Manufacturers', 'Fabrication Works', 'Manufacturers', 'Industrial Equipment Dealers', 'OEM Manufacturers'] },
   { test: /album|color lab|colour lab|photo book|photobook|karizma|canvera/i, variants: ['Photo Album Manufacturers', 'Digital Color Laboratories', 'Wedding Album Printers', 'Photo Book Printing Services', 'Digital Photo Printing Services', 'Offset Printers'] },
   { test: /print|flex|offset|screen print|dtp|banner|visiting card|brochure/i, variants: ['Printing Services', 'Offset Printers', 'Digital Printers', 'Flex Printing Services', 'Printing Press', 'Screen Printers'] },
   { test: /solar|inverter|battery|ups/i, variants: ['Solar Panel Dealers', 'Inverter Dealers', 'Battery Dealers', 'Solar Power System Dealers', 'UPS Dealers'] },

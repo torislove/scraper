@@ -635,6 +635,7 @@ const CATEGORY_CATALOG = [
   { label: 'Inverter & Battery Dealers', family: 'technology', aliases: ['inverter dealer', 'battery shop', 'ups dealer', 'car battery', 'inverter battery'] },
 
   // Retail
+  { label: 'Shopping Malls', family: 'retail', aliases: ['shopping mall', 'shopping malls', 'mall', 'malls', 'shopping complex', 'commercial complex', 'retail plaza', 'hypermarket', 'multiplex mall'] },
   { label: 'Showrooms', family: 'retail', aliases: ['showroom', 'retail showroom', 'brand outlet'] },
   { label: 'Furniture Stores', family: 'retail', aliases: ['furniture', 'furniture shop', 'sofa store'] },
   { label: 'Jewellery Stores', family: 'retail', aliases: ['jewellery', 'jewelry', 'jewel shop', 'gold shop'] },
@@ -1149,10 +1150,12 @@ function suggestCategories(fragment, limit = 6) {
   }
 
   // Strict disambiguation: a query about buying/repairing cameras ("camera shop", "camra store", "dslr lens")
+  // or computers ("computer shop", "laptop store", "pc builder", "laptop repair")
   // must NEVER fall into "CCTV Installation" unless cctv/surveillance/security/dvr/nvr/biometric is explicitly present.
-  const isCameraHardwareQuery = /\b(?:camera|cameras|camra|camras|camara|dslr|mirrorless|gopro|gimbal)\b/i.test(normalizedTradeQuery || query)
-    && !/\b(?:cctv|surveillance|security|biometric|dvr|nvr|intercom|access control)\b/i.test(normalizedTradeQuery || query);
-  const filteredScored = isCameraHardwareQuery
+  const hasExplicitCctv = /\b(?:cctv|surveillance|security camera|security system|biometric|dvr|nvr|intercom|access control)\b/i.test(normalizedTradeQuery || query);
+  const isCameraHardwareQuery = /\b(?:camera|cameras|camra|camras|camara|dslr|mirrorless|gopro|gimbal)\b/i.test(normalizedTradeQuery || query) && !hasExplicitCctv;
+  const isComputerHardwareQuery = /\b(?:computer|computers|laptop|laptops|desktop|pc|gaming pc|macbook)\b/i.test(normalizedTradeQuery || query) && !hasExplicitCctv;
+  const filteredScored = (isCameraHardwareQuery || isComputerHardwareQuery)
     ? scored.filter(item => !/\bcctv\b|surveillance|security/i.test(item.label))
     : scored;
 

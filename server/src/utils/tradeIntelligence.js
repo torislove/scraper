@@ -438,7 +438,7 @@ function normalizeTradePhrase(phrase) {
 function isKnownServiceOrTypo(text) {
   if (!text) return false;
   const normalized = normalizeTradePhrase(text).toLowerCase();
-  const serviceStemRegex = /(shop|store|dealer|showroom|computer|laptop|mobile|electronic|hardware|software|cctv|camera|dslr|lens|printer|repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|school|college|academy|institute|doctor|clinic|hospital|dental|dentist|pharmacy|diagnostic|salon|spa|gym|fitness|yoga|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|travel|transport|logistic|courier|packers|movers|interior|architect|builder|contractor|real estate|property|security|event|restaurant|cafe|dhaba|bakery|sweet|hotel|resort|mandap|auditorium|studio|cameraman|lawyer|advocate|accountant|ca\b|tax|gst|garage|tyre|boutique|jeweller|cloth|garment|textile|furniture|supermarket|grocery|solar|borewell|fabricat|manufactur|wholesal|distribut|supplier|vendor|agency|marketing|print|pet|vet|agri|nursery|biryani)/i;
+  const serviceStemRegex = /(shop|store|dealer|showroom|mall|complex|plaza|hypermarket|computer|laptop|mobile|electronic|hardware|software|cctv|camera|dslr|lens|printer|repair|servic|mechanic|technician|install|amc|maintenance|plumb|electric|carpent|paint|clean|pest|tutor|tuition|coach|school|college|academy|institute|doctor|clinic|hospital|dental|dentist|pharmacy|diagnostic|salon|spa|gym|fitness|yoga|photograph|videograph|cater|banquet|decorat|makeup|parlour|parlor|travel|transport|logistic|courier|packers|movers|interior|architect|builder|contractor|real estate|property|security|event|restaurant|cafe|dhaba|bakery|sweet|hotel|resort|mandap|auditorium|studio|cameraman|lawyer|advocate|accountant|ca\b|tax|gst|garage|tyre|boutique|jeweller|cloth|garment|textile|furniture|supermarket|grocery|solar|borewell|fabricat|manufactur|factory|machinery|packaging|corrugated|foundry|wholesal|distribut|supplier|vendor|agency|marketing|print|pet|vet|agri|nursery|biryani)/i;
   return serviceStemRegex.test(normalized) || serviceStemRegex.test(text.toLowerCase());
 }
 
@@ -469,9 +469,11 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
 
   function inferIntentType(detail = '', title = '') {
     const combined = `${detail} ${title}`.toLowerCase();
-    if (/\b(?:wholesale|distributor|stockist|b2b|manufacturer|vendor|bulk|factory|oem|supplier)\b/.test(combined)) return 'vendor';
+    if (/\b(?:mall|shopping mall|commercial complex|retail plaza)\b/.test(combined)) return 'mall';
+    if (/\b(?:factory|plant|mill|oem|manufacturer|production unit)\b/.test(combined)) return 'manufacturer';
+    if (/\b(?:wholesale|distributor|stockist|b2b|vendor|bulk|supplier)\b/.test(combined)) return 'vendor';
     if (/\b(?:product|gear|hardware|peripherals|parts|equipment|lens|accessories|tyre|refurbished|custom pc)\b/.test(combined)) return 'product';
-    if (/\b(?:store|stores|shop|shops|showroom|dealer|dealers|retail|outlet|boutique)\b/.test(combined)) return 'store';
+    if (/\b(?:store|stores|shop|shops|showroom|dealer|dealers|retail|outlet|boutique|hypermarket)\b/.test(combined)) return 'store';
     return 'service';
   }
 
@@ -484,6 +486,17 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
       { baseValue: 'Gaming PC & Custom Builders', label: `Gaming PC & Custom Builders${locSuffix}`, subtitle: 'Custom Workstations, GPUs & High-Performance Rigs', detail: '📦 PRODUCT', intentType: 'product' },
       { baseValue: 'Wholesale Computer & IT Distributors', label: `Wholesale Computer & IT Distributors${locSuffix}`, subtitle: 'Bulk Corporate Systems, Refurbished PCs & Trade Suppliers', detail: '🏢 VENDOR', intentType: 'vendor' }
     ], 'technology');
+  }
+
+  // 1b. Shopping Malls & Commercial Complexes (Dedicated Shopping Infrastructure)
+  if (/\b(?:mall|malls|shopping mall|shopping malls|shopping cent(?:er|re)|commercial complex|retail plaza|hypermarket)\b/i.test(norm)) {
+    return formatRows([
+      { baseValue: 'Shopping Malls & Retail Plazas', label: `Shopping Malls & Retail Plazas${locSuffix}`, subtitle: 'Major City Malls, Retail Centers & Anchor Departmental Stores', detail: '🏬 MALL', intentType: 'mall' },
+      { baseValue: 'Commercial Shopping Complexes', label: `Commercial Shopping Complexes${locSuffix}`, subtitle: 'Retail Shopping Arcades, Complexes & Multi-Floor Markets', detail: '🏢 COMPLEX', intentType: 'mall' },
+      { baseValue: 'Hypermarkets & Departmental Stores', label: `Hypermarkets & Departmental Stores${locSuffix}`, subtitle: 'Large Supermarkets, Grocery Marts & Departmental Centers', detail: '🏪 HYPERMARKET', intentType: 'store' },
+      { baseValue: 'Mall Food Courts & Restaurants', label: `Mall Food Courts & Restaurants${locSuffix}`, subtitle: 'Dine-In, Quick Service Cafes & Mall Entertainment Zones', detail: '🍽️ FOOD COURT', intentType: 'service' },
+      { baseValue: 'Wholesale Trade & Commercial Plazas', label: `Wholesale Trade & Commercial Plazas${locSuffix}`, subtitle: 'B2B Trade Centers, Wholesalers & Commercial Distributors', detail: '🏢 VENDOR', intentType: 'vendor' }
+    ], 'retail');
   }
 
   // 2. Mobile Phones & Smartphones
@@ -804,19 +817,31 @@ function getUniversalRichExpansions(categoryLabel, family = 'generic', location 
     ], 'real-estate');
   }
 
-  // 22. Printing, Packaging & Industrial Manufacturing / B2B
-  if (/print|flex|banner|signage|manufactur|supplier|wholesal|factory|machinery|steel|hardware|fabricat|packaging|chemical|plastic|cnc|laser|hydraulic/i.test(norm)) {
+  // 22. Products, Industrial Machinery & Manufacturing Plants (B2B / OEM / Factories)
+  if (/\b(?:manufactur\w*|factor\w*|industrial|machinery|fabricat\w*|packaging|corrugated|plastic\w*|chemical\w*|foundry|cnc|laser cutting|oem|plant\w*|mill\w*)\b/i.test(norm)) {
     if (/print|flex|banner|signage/i.test(norm)) {
       return formatRows([
-        { baseValue: 'Printing Press & Digital Print Shops', label: `Printing Press & Digital Print Shops${locSuffix}`, subtitle: 'Brochures, Business Cards, Offset & Custom Prints', detail: 'PRINTING' },
-        { baseValue: 'Flex, Banner & LED Signage Makers', label: `Flex, Banner & LED Signage Makers${locSuffix}`, subtitle: 'Shop Boards, Hoardings & Commercial Branding', detail: 'SIGNAGE' }
+        { baseValue: 'Printing Press & Digital Print Shops', label: `Printing Press & Digital Print Shops${locSuffix}`, subtitle: 'Brochures, Business Cards, Offset & Custom Prints', detail: 'PRINTING', intentType: 'service' },
+        { baseValue: 'Flex, Banner & LED Signage Makers', label: `Flex, Banner & LED Signage Makers${locSuffix}`, subtitle: 'Shop Boards, Hoardings & Commercial Branding', detail: 'SIGNAGE', intentType: 'service' }
       ], 'professional');
     }
-    const baseInd = cleanLabel.replace(/\s+(manufacturers|manufacturer|suppliers|supplier|wholesalers|wholesaler|factories|factory)$/i, '').trim() || cleanLabel;
+    const baseInd = cleanLabel.replace(/\s+(manufacturers|manufacturer|suppliers|supplier|wholesalers|wholesaler|factories|factory|manufacturing)$/i, '').trim() || cleanLabel;
+    const isGenericMfg = /^(product|products|manufacturing|products manufacturing|industrial)$/i.test(cleanLabel);
+    if (isGenericMfg) {
+      return formatRows([
+        { baseValue: 'Industrial Machinery & Equipment Manufacturers', label: `Industrial Machinery & Equipment Manufacturers${locSuffix}`, subtitle: 'Machine Tools, Heavy Equipment, Hydraulic & Production Machinery', detail: '🏭 FACTORY', intentType: 'manufacturer' },
+        { baseValue: 'Metal & Steel Fabrication Works', label: `Metal & Steel Fabrication Works${locSuffix}`, subtitle: 'Heavy Structural Fabrication, Sheet Metal & CNC Job Works', detail: '🛠️ SERVICE', intentType: 'service' },
+        { baseValue: 'OEM Parts & Components Manufacturers', label: `OEM Parts & Components Manufacturers${locSuffix}`, subtitle: 'Precision Engineering, Castings, Turned Components & Tooling', detail: '🏢 MANUFACTURER', intentType: 'manufacturer' },
+        { baseValue: 'Plastic & Packaging Material Manufacturers', label: `Plastic & Packaging Material Manufacturers${locSuffix}`, subtitle: 'Corrugated Boxes, Film Rolls, Molding & Packaging Supplies', detail: '📦 PRODUCT', intentType: 'product' },
+        { baseValue: 'Chemical & Industrial Processing Plants', label: `Chemical & Industrial Processing Plants${locSuffix}`, subtitle: 'Process Chemicals, Resins, Polymers & Industrial Compounds', detail: '🏭 FACTORY', intentType: 'manufacturer' },
+        { baseValue: 'Wholesale B2B Industrial Suppliers', label: `Wholesale B2B Industrial Suppliers${locSuffix}`, subtitle: 'Industrial Raw Materials, Hardware & Bulk Trade Stockists', detail: '🏢 VENDOR', intentType: 'vendor' }
+      ], 'industrial');
+    }
     return formatRows([
-      { baseValue: cleanLabel, label: `${cleanLabel}${locSuffix}`, subtitle: `Verified ${cleanLabel} & Direct Business Contacts`, detail: 'B2B & INDUSTRIAL' },
-      { baseValue: `${baseInd} Manufacturers`, label: `${baseInd} Manufacturers${locSuffix}`, subtitle: 'Direct Factory & OEM Production Units', detail: 'MANUFACTURERS' },
-      { baseValue: `${baseInd} Wholesale Suppliers`, label: `${baseInd} Wholesale Suppliers${locSuffix}`, subtitle: 'Bulk Distributors & Trade Stockists', detail: 'WHOLESALE' }
+      { baseValue: `${baseInd} Manufacturers & Factories`, label: `${baseInd} Manufacturers & Factories${locSuffix}`, subtitle: 'Direct OEM Production Plants & Industrial Factory Units', detail: '🏭 FACTORY', intentType: 'manufacturer' },
+      { baseValue: `${baseInd} Wholesale Suppliers & Distributors`, label: `${baseInd} Wholesale Suppliers & Distributors${locSuffix}`, subtitle: 'Bulk B2B Trade Stockists, Importers & Dealers', detail: '🏢 VENDOR', intentType: 'vendor' },
+      { baseValue: `${baseInd} Machinery & Equipment`, label: `${baseInd} Machinery & Equipment${locSuffix}`, subtitle: 'Heavy Industrial Equipment, Spare Parts & Production Tooling', detail: '📦 PRODUCT', intentType: 'product' },
+      { baseValue: `${baseInd} Fabrication & Job Work`, label: `${baseInd} Fabrication & Job Work${locSuffix}`, subtitle: 'Custom Fabrication, CNC Machining & Engineering Works', detail: '🛠️ SERVICE', intentType: 'service' }
     ], 'industrial');
   }
 

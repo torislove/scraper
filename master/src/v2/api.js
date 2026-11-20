@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 import { API_URL, BACKEND_URL, DIRECT_BACKEND_URL, SSE_STREAM_BASE } from '../apiConfig';
 import { getToken, withStreamToken } from './auth';
 

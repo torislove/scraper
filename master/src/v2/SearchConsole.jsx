@@ -635,13 +635,17 @@ function SearchConsole({
                                   ? 'is-location'
                                   : item.intentType
                                     ? `is-${item.intentType}`
-                                    : /store|shop|showroom|retail/i.test(item.detail)
-                                      ? 'is-store'
-                                      : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
-                                        ? 'is-product'
-                                        : /vendor|wholesale|distributor|b2b/i.test(item.detail)
-                                          ? 'is-vendor'
-                                          : 'is-service';
+                                    : /mall|complex/i.test(item.detail)
+                                      ? 'is-mall'
+                                      : /factory|manufacturer|oem/i.test(item.detail)
+                                        ? 'is-manufacturer'
+                                        : /store|shop|showroom|retail/i.test(item.detail)
+                                          ? 'is-store'
+                                          : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
+                                            ? 'is-product'
+                                            : /vendor|wholesale|distributor|b2b/i.test(item.detail)
+                                              ? 'is-vendor'
+                                              : 'is-service';
                                 return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
                               })()}
                             </button>

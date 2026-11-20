@@ -171,11 +171,32 @@ const ROLES = [
     avoids: ['plumber', 'plumbing', 'pipe', 'interior design', 'furniture', 'paint', 'photo studio', 'wedding', 'caterer', 'venue', 'dental', 'beauty', 'salon']
   },
   {
+    id: 'computer_store',
+    label: 'Computer & Laptop Stores',
+    match: ['computer shop', 'computer store', 'computer dealer', 'computer hardware', 'computer repair', 'laptop shop', 'laptop store', 'laptop dealer', 'laptop repair', 'desktop pc', 'gaming pc', 'macbook', 'computer accessories', 'pc builder'],
+    wants: ['computer', 'laptop', 'desktop', 'pc', 'macbook', 'hardware', 'motherboard', 'ssd', 'ram', 'processor', 'monitor', 'keyboard', 'mouse', 'repair', 'service', 'accessories', 'peripherals', 'gaming rig', 'it store'],
+    avoids: ['cctv', 'surveillance', 'security camera', 'security system', 'biometric', 'dvr', 'nvr', 'access control', 'intercom', 'spy cam', 'wedding', 'mandap', 'spa', 'saloon', 'parlour', 'plumber', 'dentist']
+  },
+  {
+    id: 'shopping_mall',
+    label: 'Shopping Malls & Commercial Complexes',
+    match: ['shopping mall', 'shopping malls', 'mall', 'malls', 'shopping complex', 'commercial complex', 'retail plaza', 'hypermarket'],
+    wants: ['mall', 'shopping mall', 'shopping complex', 'commercial complex', 'plaza', 'hypermarket', 'arcade', 'retail center', 'retail centre', 'multiplex mall', 'central mall'],
+    avoids: ['repair service', 'plumber', 'cctv', 'dentist', 'clinic', 'welder', 'scrap']
+  },
+  {
+    id: 'industrial_mfg',
+    label: 'Industrial & Machinery Manufacturing',
+    match: ['manufacturer', 'manufacturing', 'machinery', 'factory', 'oem', 'industrial equipment', 'packaging material', 'corrugated box', 'processing plant'],
+    wants: ['manufactur', 'factory', 'industrial', 'machinery', 'fabricat', 'oem', 'plant', 'mill', 'packaging', 'production', 'engineering works', 'tooling'],
+    avoids: ['beauty parlour', 'spa', 'barber', 'salon', 'wedding', 'mandap', 'bridal', 'dental', 'clinic']
+  },
+  {
     id: 'cctv',
     label: 'CCTV & Surveillance',
     match: ['cctv', 'surveillance', 'security camera', 'security system'],
-    wants: ['cctv', 'camera', 'surveillance', 'security system', 'biometric', 'access control', 'spy cam'],
-    avoids: ['plumber', 'sanitary', 'pipe', 'interior designer', 'furniture', 'paint', 'wedding venue', 'caterer', 'sweet', 'bakery']
+    wants: ['cctv', 'camera', 'surveillance', 'security system', 'biometric', 'access control', 'spy cam', 'dvr', 'nvr'],
+    avoids: ['computer shop', 'laptop showroom', 'gaming pc', 'desktop pc', 'plumber', 'sanitary', 'pipe', 'interior designer', 'furniture', 'paint', 'wedding venue', 'caterer', 'sweet', 'bakery']
   },
   {
     id: 'carpenter',

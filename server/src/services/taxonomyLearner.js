@@ -94,11 +94,69 @@ function load() {
         synonyms: raw.synonyms || {},
         typos: raw.typos || {}
       };
+      sanitizeContaminatedLearnedSynonyms(store);
       absorbTypos();
     }
   } catch (err) {
     store = { version: 3, updatedAt: null, queries: {}, products: {}, categories: {}, services: {}, brands: {}, localities: {}, synonyms: {}, typos: {} };
   }
+}
+
+function sanitizeContaminatedLearnedSynonyms(targetStore) {
+  if (!targetStore || !targetStore.synonyms) return;
+  for (const [key, entry] of Object.entries(targetStore.synonyms)) {
+    // If the key is about computer/laptop
+    if (/\b(?:computer|laptop|desktop|pc|gaming pc)\b/i.test(key)) {
+      if (Array.isArray(entry.synonyms)) {
+        entry.synonyms = entry.synonyms.filter(s => {
+          const sNorm = String(s || '').toLowerCase();
+          return !/\b(?:cctv|surveillance|security|biometric|dvr|nvr|camera|spas?|saloon?|parlour|wedding|mandap|plumber|dentist)\b/i.test(sNorm);
+        });
+      }
+    }
+    // If the key is about cctv/surveillance
+    if (/\b(?:cctv|surveillance|security camera|biometric)\b/i.test(key)) {
+      if (Array.isArray(entry.synonyms)) {
+        entry.synonyms = entry.synonyms.filter(s => {
+          const sNorm = String(s || '').toLowerCase();
+          return !/\b(?:computer shop|laptop showroom|laptop dealer|desktop pc|gaming pc|spas?)\b/i.test(sNorm);
+        });
+      }
+    }
+    // Remove empty synonym records
+    if (!entry.synonyms || !entry.synonyms.length) {
+      delete targetStore.synonyms[key];
+    }
+  }
+}
+
+function isCategoryCompatible(queryText, observedCategory) {
+  if (!queryText || !observedCategory) return false;
+  const qNorm = normalize(queryText);
+  const oNorm = normalize(observedCategory);
+
+  // Computer & Laptop searches MUST NEVER accept CCTV, surveillance, spas, salons, etc.
+  if (/\b(?:computer|laptop|desktop|pc|gaming pc)\b/i.test(qNorm)) {
+    if (/\b(?:cctv|surveillance|security|biometric|dvr|nvr|intercom|access control|camera|spa|spas|salon|parlour|wedding|mandap|plumber|dentist)\b/i.test(oNorm)) {
+      return false;
+    }
+  }
+
+  // CCTV & Surveillance searches MUST NEVER accept computer shops, spas, salons
+  if (/\b(?:cctv|surveillance|security camera|biometric)\b/i.test(qNorm)) {
+    if (/\b(?:computer shop|laptop showroom|gaming pc|spa|salon|wedding|mandap)\b/i.test(oNorm)) {
+      return false;
+    }
+  }
+
+  // Manufacturing & Industrial searches MUST NEVER accept retail salons, spas, weddings, clinics
+  if (/\b(?:manufactur|factory|industrial|machinery|fabricat|foundry)\b/i.test(qNorm)) {
+    if (/\b(?:spa|salon|beauty parlour|barber|wedding|bridal|dentist|clinic)\b/i.test(oNorm)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -344,6 +402,8 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
       const cat = canonical(vendorCategory(vendor));
       const catKey = normalize(cat);
       if (!catKey || catKey.length < 3 || catKey === norm || /^(business|vendor|store|shop|service|local|other|unknown|general)$/i.test(catKey)) continue;
+      // Strict semantic compatibility guard: Never learn cross-family or contaminated categories
+      if (!isCategoryCompatible(text, cat)) continue;
       const existing = catFreq.get(catKey) || { name: cat, count: 0 };
       existing.count += 1;
       catFreq.set(catKey, existing);
@@ -428,7 +488,18 @@ function matchEntries(map, text, max = 3) {
       matches.push({ entry, score: 100 });
       continue;
     }
-    if (norm.includes(key) || key.includes(norm)) {
+    // Strict word boundary check for short terms (<= 3 chars, e.g. "ac", "pc", "tv", "ro")
+    // to prevent "ac" from matching inside "manufacturing" or "packaging".
+    let isMatch = false;
+    if (key.length <= 3 || norm.length <= 3) {
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const escapedNorm = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      isMatch = new RegExp(`(^|\\s)${escapedKey}(\\s|$)`, 'i').test(norm) ||
+                new RegExp(`(^|\\s)${escapedNorm}(\\s|$)`, 'i').test(key);
+    } else {
+      isMatch = norm.includes(key) || key.includes(norm);
+    }
+    if (isMatch) {
       matches.push({ entry, score: 40 + Math.min(20, key.length) });
     }
   }

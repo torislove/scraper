@@ -1018,6 +1018,18 @@ body {
   color: #1d4ed8 !important;
 }
 
+.v2-suggest-fix.is-mall {
+  background: linear-gradient(135deg, #fdf2f8, #fce7f3) !important;
+  border-color: rgba(236, 72, 153, 0.35) !important;
+  color: #9d174d !important;
+}
+
+.v2-suggest-fix.is-manufacturer {
+  background: linear-gradient(135deg, #fff7ed, #ffedd5) !important;
+  border-color: rgba(249, 115, 22, 0.38) !important;
+  color: #9a3412 !important;
+}
+
 .lx-suggest-foot {
   display: flex;
   align-items: center;
