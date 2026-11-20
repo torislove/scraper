@@ -2273,3 +2273,64 @@ h1, h2, h3, h4, .v2-cmd-home, .lx-pane-title h2 {
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ============================================================================
+   ANIMATED SATELLITE LIVE ZONE BEACONS & PULSING RADAR PILLS
+   ============================================================================ */
+.v2-zone-beacon-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+
+.v2-zone-beacon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #f8fafc;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.82));
+  border: 1px solid rgba(56, 189, 248, 0.6);
+  box-shadow: 0 4px 12px rgba(2, 6, 23, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(8px);
+  animation: v2ZonePulse 2.8s ease-in-out infinite;
+}
+
+.v2-zone-beacon-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+.v2-zone-beacon-pill.is-done {
+  border-color: rgba(52, 211, 153, 0.72);
+  background: linear-gradient(145deg, rgba(6, 78, 59, 0.9), rgba(15, 23, 42, 0.85));
+}
+
+.v2-zone-beacon-pill.is-done i {
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+}
+
+.v2-zone-beacon-pill.is-scanning {
+  border-color: #22d3ee;
+  background: linear-gradient(135deg, rgba(8, 145, 178, 0.95), rgba(109, 40, 217, 0.92));
+  transform: scale(1.06);
+}
+
+@keyframes v2ZonePulse {
+  0%, 100% {
+    transform: translateY(0px);
+    box-shadow: 0 4px 12px rgba(2, 6, 23, 0.55), 0 0 0 0 rgba(56, 189, 248, 0.25);
+  }
+  50% {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.65), 0 0 0 5px rgba(56, 189, 248, 0);
+  }
+}

@@ -7,26 +7,46 @@
  * local hardware speed with zero cloud server waiting queues.
  */
 
-export const THREE_BUILTIN_ENGINES = [
+export const ALL_BUILTIN_ENGINES = [
   {
     id: 'maps_pins',
     number: 'Engine 1',
-    name: 'Local Map & Street Pin Engine',
-    shortDesc: 'Splits every city, mandal & county into commercial pockets and captures every street pin, GPS coordinate & shop name using your device RAM.'
+    name: 'Satellite & Street Map Pin Engine',
+    shortDesc: 'Divides any city, mandal, or county into every neighborhood pocket and captures every shop pin, address & GPS coordinate.'
   },
   {
     id: 'directory_match',
     number: 'Engine 2',
-    name: 'Business Directory Matching Engine',
-    shortDesc: 'Cross-checks regional business directories in parallel for verified phone numbers, categories, star ratings & customer review counts.'
+    name: 'Local Business Directory Engine',
+    shortDesc: 'Cross-checks regional business directories in parallel for verified mobile numbers, categories, star ratings & review counts.'
   },
   {
     id: 'website_contact',
     number: 'Engine 3',
-    name: 'Official Website & Contact Finder Engine',
-    shortDesc: 'Checks official business websites & public contact pages to uncover direct phone lines, mobile numbers & business emails.'
+    name: 'Official Website & Email Finder Engine',
+    shortDesc: 'Checks listed business websites & contact pages to surface direct phone lines and official business emails.'
+  },
+  {
+    id: 'b2b_trade',
+    number: 'Engine 4',
+    name: 'B2B Trade & Wholesale Supplier Engine',
+    shortDesc: 'Finds manufacturers, wholesalers, distributors, and commercial vendors across industrial estates and trade corridors.'
+  },
+  {
+    id: 'open_web_social',
+    number: 'Engine 5',
+    name: 'Public Web & Social Business Engine',
+    shortDesc: 'Captures active local businesses from open web pages, public registries, and business profiles.'
+  },
+  {
+    id: 'dedupe_excel',
+    number: 'Engine 6',
+    name: 'Smart Deduplication & Area-Wise Excel Engine',
+    shortDesc: 'Automatically removes duplicate numbers, verifies contact quality, and exports a clean multi-sheet Excel workbook.'
   }
 ];
+
+export const THREE_BUILTIN_ENGINES = ALL_BUILTIN_ENGINES.slice(0, 3);
 
 export const DEVICE_REQUIREMENTS = [
   {

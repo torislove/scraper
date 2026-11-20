@@ -28,11 +28,12 @@ const TILE_VOYAGER = '/api/map-tiles/voyager/{z}/{x}/{y}.png';
 const TILE_VOYAGER_ATTRIBUTION = '&copy; Local Cached Map &copy; OpenStreetMap';
 const TILE_STREETS = '/api/map-tiles/streets/{z}/{x}/{y}.png';
 const TILE_SATELLITE = '/api/map-tiles/satellite/{z}/{x}/{y}.png';
+const TILE_SATELLITE_LABELS = '/api/map-tiles/labels/{z}/{x}/{y}.png';
 const TILE_LIGHT_CANVAS = '/api/map-tiles/light/{z}/{x}/{y}.png';
 const TILE_OSM = '/api/map-tiles/osm/{z}/{x}/{y}.png';
 const TILE_DARK_CANVAS = '/api/map-tiles/dark/{z}/{x}/{y}.png';
 const TILE_OFFLINE = '/api/map-tiles/offline/{z}/{x}/{y}.svg';
-const TILE_ATTRIBUTION = '&copy; Local Offline Vector Engine';
+const TILE_ATTRIBUTION = '&copy; Esri Satellite &copy; OpenStreetMap &copy; Local Cache';
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
 const MAX_MAP_PLOTTED_LEADS = 300;
@@ -206,6 +207,23 @@ function scanTargetIcon(label = '') {
   });
 }
 
+function zoneBeaconIcon(zoneName = '', cellState = 'queued', leadsCount = 0) {
+  const safeName = String(zoneName || '').replace(/[<>&"]/g, '').slice(0, 24);
+  const countTag = leadsCount > 0 ? ` · ${leadsCount}` : '';
+  const stateClass = cellState === 'scanning'
+    ? 'is-scanning'
+    : (cellState === 'done' || cellState === 'saturated')
+      ? 'is-done'
+      : 'is-queued';
+  const iconGlyph = cellState === 'scanning' ? '⚡' : (cellState === 'done' || cellState === 'saturated') ? '✅' : '🛰️';
+  return L.divIcon({
+    className: 'v2-zone-beacon-wrap',
+    html: `<div class="v2-zone-beacon-pill ${stateClass}"><i></i><span>${iconGlyph} ${safeName}${countTag}</span></div>`,
+    iconSize: [144, 24],
+    iconAnchor: [72, 12]
+  });
+}
+
 function InitialFit({ points, zonePoints = [], fitKey = 'default' }) {
   const map = useMap();
   const fittedKey = useRef(null);
@@ -245,26 +263,10 @@ export default function CommandMap({
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
-  const [tileMode, setTileMode] = useState('voyager');
+  const [tileMode, setTileMode] = useState('satellite');
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
-  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'offline'];
-  const handleTileError = useMemo(() => () => {
-    const now = Date.now();
-    const tracker = tileErrorTrackerRef.current;
-    if (now - tracker.since > 10000) {
-      tracker.count = 1;
-      tracker.since = now;
-    } else {
-      tracker.count += 1;
-    }
-    if (tracker.count >= 4) {
-      tracker.count = 0;
-      setTileMode(prev => {
-        const idx = TILE_FAILOVER_ORDER.indexOf(prev);
-        return TILE_FAILOVER_ORDER[(idx + 1) % TILE_FAILOVER_ORDER.length];
-      });
-    }
-  }, []);
+  const TILE_FAILOVER_ORDER = ['satellite'];
+  const handleTileError = useMemo(() => () => {}, []);
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -450,81 +452,20 @@ export default function CommandMap({
         attributionControl={false}
         zoomControl={false}
       >
-        {/* Layer 0: Cached Voyager — Crisp Vibrant Natural 3D (Default, Keyless) */}
-        {tileMode === 'voyager' && (
-          <TileLayer
-            url={TILE_VOYAGER}
-            attribution={TILE_VOYAGER_ATTRIBUTION}
-            maxNativeZoom={19}
-            maxZoom={20}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
-
-        {/* Layer 0B: 100% Offline Procedural Vector Showcase Engine (0ms SVG grid) */}
-        {tileMode === 'offline' && (
-          <TileLayer
-            url={TILE_OFFLINE}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={19}
-            maxZoom={20}
-          />
-        )}
-
-        {/* Layer 1: Pristine Executive White */}
-        {tileMode === 'light' && (
-          <TileLayer
-            url={TILE_LIGHT_CANVAS}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={16}
-            maxZoom={19}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
-
-        {/* Layer 2: OpenStreetMap Standard (Full-Color Classic Roads) */}
-        {tileMode === 'osm' && (
-          <TileLayer
-            url={TILE_OSM}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={19}
-            maxZoom={19}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
-
-        {/* Layer 3: Esri World Street Map (Detailed Topographic Street Infrastructure) */}
-        {tileMode === 'streets' && (
-          <TileLayer
-            url={TILE_STREETS}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={18}
-            maxZoom={19}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
-
-        {/* Layer 4: Esri Satellite World Imagery (Photorealistic Aerial) */}
-        {tileMode === 'satellite' && (
-          <TileLayer
-            url={TILE_SATELLITE}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={18}
-            maxZoom={19}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
-
-        {/* Layer 5: Night Tactical Mode (Esri Dark Canvas) */}
-        {tileMode === 'dark' && (
-          <TileLayer
-            url={TILE_DARK_CANVAS}
-            attribution={TILE_ATTRIBUTION}
-            maxNativeZoom={16}
-            maxZoom={19}
-            eventHandlers={{ tileerror: handleTileError }}
-          />
-        )}
+        {/* Locked 100% HD Satellite World Imagery + Crisp Place/Road Boundaries */}
+        <TileLayer
+          url={TILE_SATELLITE}
+          attribution={TILE_ATTRIBUTION}
+          maxNativeZoom={18}
+          maxZoom={19}
+        />
+        <TileLayer
+          url={TILE_SATELLITE_LABELS}
+          attribution={TILE_ATTRIBUTION}
+          maxNativeZoom={18}
+          maxZoom={19}
+          opacity={0.92}
+        />
 
         <SmartMapController
           center={safeCenter}
@@ -535,21 +476,21 @@ export default function CommandMap({
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
 
-        {/* Offline / Live Showcase Hub-and-Spoke Vector Network */}
-        {(tileMode === 'offline' || scanning) && coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
+        {/* Always-On Live Hub-and-Spoke Vector Network over Satellite Terrain */}
+        {coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
           <Polyline
             key={`spoke-${zone.index || idx}-${zone.name}`}
             positions={[safeCenter, [zone.lat, zone.lng]]}
             pathOptions={{
-              color: tileMode === 'offline' ? '#7c3aed' : '#06b6d4',
-              weight: tileMode === 'offline' ? 1.8 : 1.35,
-              opacity: tileMode === 'offline' ? 0.45 : 0.3,
+              color: '#38bdf8',
+              weight: scanning ? 2.0 : 1.5,
+              opacity: scanning ? 0.65 : 0.45,
               dashArray: '5 7'
             }}
           />
         ))}
 
-        {/* Territory Regions & 3D GBC Coverage Radar Cells */}
+        {/* Territory Regions, Glowing Coverage Radar Rings & Animated Live Zone Beacons */}
         {coverage.map((zone, index) => {
           const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const cleanZoneName = norm(zone.name);
@@ -562,48 +503,59 @@ export default function CommandMap({
           const tone = cellState === 'scanning'
             ? '#06b6d4'
             : (cellState === 'saturated' || cellInfo?.splitDepth > 0)
-              ? '#7c3aed'
+              ? '#c084fc'
               : cellState === 'done'
-                ? '#10b981'
+                ? '#34d399'
                 : (cellState === 'dry' || cellState === 'approx')
-                  ? '#f59e0b'
+                  ? '#fbbf24'
                   : cellState === 'resting'
-                    ? '#e11d48'
-                    : '#6366f1';
+                    ? '#fb7185'
+                    : '#38bdf8';
 
           return (
-            <Circle
-              key={`zone-${zone.index || index}-${zone.name}`}
-              center={[zone.lat, zone.lng]}
-              radius={Math.max(850, Math.min(8000, (zone.radiusKm || (zone.approximate ? 5 : 2.5)) * 1000))}
-              eventHandlers={{
-                click: () => onSelectZone?.(zone.name)
-              }}
-              pathOptions={{
-                color: tone,
-                weight: cellState === 'scanning' ? 3 : cellState === 'saturated' || cellState === 'done' ? 2.2 : 1.5,
-                opacity: cellState === 'scanning' ? 1 : cellState === 'done' || cellState === 'saturated' ? 0.85 : 0.5,
-                fillColor: tone,
-                fillOpacity: cellState === 'scanning' ? 0.24 : cellState === 'saturated' ? 0.16 : cellState === 'done' ? 0.11 : 0.05,
-                dashArray: cellState === 'scanning' || cellState === 'done' ? undefined : cellState === 'dry' || cellState === 'approx' ? '3 6' : '6 8'
-              }}
-            >
-              <Tooltip direction="top" opacity={0.95}>
-                <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
-                  {cellState === 'scanning'
-                    ? `⚡ ACTIVE SWARM · ${zone.name}`
-                    : cellState === 'saturated'
-                      ? `🟣 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
-                      : cellState === 'done'
-                        ? `✅ DONE · ${zone.name} (${cellInfo?.leads || 0} leads)`
-                        : cellState === 'dry'
-                          ? `🟡 LOW DENSITY · ${zone.name}`
-                          : zone.approximate
-                            ? `📍 Region · ${zone.name} (Estimated)`
-                            : `🎯 Verified Zone · ${zone.name}`}
-                </div>
-              </Tooltip>
-            </Circle>
+            <React.Fragment key={`zone-${zone.index || index}-${zone.name}`}>
+              <Circle
+                center={[zone.lat, zone.lng]}
+                radius={Math.max(850, Math.min(8000, (zone.radiusKm || (zone.approximate ? 5 : 2.5)) * 1000))}
+                eventHandlers={{
+                  click: () => onSelectZone?.(zone.name)
+                }}
+                pathOptions={{
+                  color: tone,
+                  weight: cellState === 'scanning' ? 3.2 : cellState === 'saturated' || cellState === 'done' ? 2.4 : 1.7,
+                  opacity: cellState === 'scanning' ? 1 : cellState === 'done' || cellState === 'saturated' ? 0.92 : 0.65,
+                  fillColor: tone,
+                  fillOpacity: cellState === 'scanning' ? 0.28 : cellState === 'saturated' ? 0.18 : cellState === 'done' ? 0.14 : 0.08,
+                  dashArray: cellState === 'scanning' || cellState === 'done' ? undefined : '5 7'
+                }}
+              >
+                <Tooltip direction="top" opacity={0.95}>
+                  <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
+                    {cellState === 'scanning'
+                      ? `⚡ ACTIVE SWARM · ${zone.name}`
+                      : cellState === 'saturated'
+                        ? `🟣 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                        : cellState === 'done'
+                          ? `✅ DONE · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                          : cellState === 'dry'
+                            ? `🟡 LOW DENSITY · ${zone.name}`
+                            : zone.approximate
+                              ? `📍 Region · ${zone.name} (Estimated)`
+                              : `🎯 Verified Zone · ${zone.name}`}
+                  </div>
+                </Tooltip>
+              </Circle>
+              {(!compact && index < 28 && !isActive) && (
+                <Marker
+                  position={[zone.lat, zone.lng]}
+                  icon={zoneBeaconIcon(zone.name, cellState, cellInfo?.leads || 0)}
+                  zIndexOffset={cellState === 'scanning' ? 950 : 250}
+                  eventHandlers={{
+                    click: () => onSelectZone?.(zone.name)
+                  }}
+                />
+              )}
+            </React.Fragment>
           );
         })}
 
@@ -765,38 +717,13 @@ export default function CommandMap({
         >
           <span style={{ fontSize: 10, fontWeight: 900 }}>3D</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setTileMode(prev => {
-            if (prev === 'voyager') return 'offline';
-            if (prev === 'offline') return 'streets';
-            if (prev === 'streets') return 'satellite';
-            if (prev === 'satellite') return 'light';
-            return 'voyager';
-          })}
-          title={`Map Style: ${tileMode.toUpperCase()} (Click to switch)`}
-          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0284c7', cursor: 'pointer' }}
-        >
-          <Layers size={14} />
-        </button>
       </div>
 
-      {/* 1-Click Offline Showcase / HD Map Mode Switcher Bar */}
+      {/* Live Satellite Zone Radar Telemetry Pill */}
       <div className="lx-map-mode-bar">
-        {[
-          { id: 'voyager', label: 'Voyager HD' },
-          { id: 'offline', label: '⚡ Offline 3D Showcase' },
-          { id: 'satellite', label: 'Satellite' }
-        ].map(mode => (
-          <button
-            key={mode.id}
-            type="button"
-            className={cx('lx-map-mode-pill', tileMode === mode.id && 'is-active')}
-            onClick={() => setTileMode(mode.id)}
-          >
-            {mode.label}
-          </button>
-        ))}
+        <span className="lx-map-mode-pill is-active">
+          🛰️ HD SATELLITE LIVE RADAR · {formatNumber(coverage.length || 1)} ZONES
+        </span>
       </div>
 
       {scanning && (

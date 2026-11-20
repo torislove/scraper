@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Check, Cpu, Globe2, Mail, Phone, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import BrandLogo from '../v2/components/BrandLogo';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from '../v2/utils/deviceRamEngine';
 
 const PLANS = [
@@ -170,13 +170,13 @@ export default function PricingPage() {
               fontSize: 12, fontWeight: 850, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16
             }}
           >
-            <Sparkles size={13} /> Pay Only for Our 3 Built-In Engines
+            <Sparkles size={13} /> All 6 Built-In Lead Engines Included
           </span>
           <h1 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 850, letterSpacing: '-0.035em', margin: '0 0 14px', lineHeight: 1.08 }}>
-            Pay only for our 3 engines — powered by your device RAM.
+            All 6 lead discovery engines included in every plan.
           </h1>
           <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
-            Your computer&apos;s own RAM runs the discovery engines directly at hardware speed with zero shared cloud queues — so you simply pay for our 3 Built-In Discovery Engines, live offline maps, and 1-click Excel export.
+            Every plan unlocks all 6 built-in lead discovery engines — sweeping live Satellite Maps, Business Directories, Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
           </p>
 
           {/* Tactile 3D Liquid Glass Billing Toggle */}
@@ -233,15 +233,15 @@ export default function PricingPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 850 }}>
               <Cpu size={16} color="#7c3aed" />
-              <span>What You Get: All 3 Built-In Discovery Engines Running on Your RAM</span>
+              <span>Included Automatically: All 6 Built-In Lead Engines Running in Parallel</span>
             </div>
             <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 12, fontWeight: 800 }}>
               💻 Your Device Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Zones ({hardware.expectedSpeed})
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, marginBottom: 14 }}>
-            {THREE_BUILTIN_ENGINES.map(eng => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 14 }}>
+            {ALL_BUILTIN_ENGINES.map(eng => (
               <div key={eng.id} style={{ padding: '12px 14px', borderRadius: 14, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)' }}>
                 <div style={{ fontSize: 11, fontWeight: 850, color: '#7c3aed', textTransform: 'uppercase' }}>{eng.number}</div>
                 <b style={{ display: 'block', fontSize: 14, marginTop: 2 }}>{eng.name}</b>

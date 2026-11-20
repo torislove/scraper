@@ -14,6 +14,7 @@ const STYLE_TEMPLATES = {
   osm: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
   streets: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
   satellite: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+  labels: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`,
   light: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`,
   dark: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`
 };
@@ -33,6 +34,9 @@ function tile2lat(y, z) {
  * so Leaflet always renders a crisp map even with zero internet access.
  */
 function renderOfflineVectorTile(style, z, x, y) {
+  if (style === 'labels') {
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"></svg>';
+  }
   const latN = tile2lat(y, z);
   const latS = tile2lat(y + 1, z);
   const lngW = tile2lng(x, z);
@@ -42,13 +46,14 @@ function renderOfflineVectorTile(style, z, x, y) {
   const latLabel = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}`;
   const lngLabel = `${Math.abs(lng).toFixed(2)}°${lng >= 0 ? 'E' : 'W'}`;
 
-  const isDark = style === 'dark' || style === 'offline' || style === 'satellite';
-  const bg = style === 'dark' ? '#0b1220' : style === 'offline' ? '#0f172a' : '#f4f8fc';
-  const gridMajor = isDark ? 'rgba(56, 189, 248, 0.16)' : 'rgba(15, 23, 42, 0.08)';
-  const gridMinor = isDark ? 'rgba(124, 58, 237, 0.10)' : 'rgba(6, 182, 212, 0.07)';
-  const roadStroke = isDark ? 'rgba(16, 185, 129, 0.28)' : 'rgba(14, 165, 233, 0.24)';
-  const accentRing = isDark ? 'rgba(167, 139, 250, 0.22)' : 'rgba(16, 185, 129, 0.16)';
-  const labelColor = isDark ? 'rgba(148, 163, 184, 0.72)' : 'rgba(71, 85, 105, 0.72)';
+  const isSat = style === 'satellite';
+  const isDark = style === 'dark' || style === 'offline' || isSat;
+  const bg = isSat ? '#061a23' : style === 'dark' ? '#0b1220' : style === 'offline' ? '#0f172a' : '#f4f8fc';
+  const gridMajor = isSat ? 'rgba(56, 189, 248, 0.22)' : isDark ? 'rgba(56, 189, 248, 0.16)' : 'rgba(15, 23, 42, 0.08)';
+  const gridMinor = isSat ? 'rgba(16, 185, 129, 0.12)' : isDark ? 'rgba(124, 58, 237, 0.10)' : 'rgba(6, 182, 212, 0.07)';
+  const roadStroke = isSat ? 'rgba(52, 211, 153, 0.35)' : isDark ? 'rgba(16, 185, 129, 0.28)' : 'rgba(14, 165, 233, 0.24)';
+  const accentRing = isDark ? 'rgba(56, 189, 248, 0.24)' : 'rgba(16, 185, 129, 0.16)';
+  const labelColor = isSat ? 'rgba(125, 211, 252, 0.78)' : isDark ? 'rgba(148, 163, 184, 0.72)' : 'rgba(71, 85, 105, 0.72)';
 
   const hash = Math.abs((x * 73856093) ^ (y * 19349663) ^ (z * 83492791));
   const cx1 = 40 + (hash % 170);
@@ -64,7 +69,7 @@ function renderOfflineVectorTile(style, z, x, y) {
   <path d="M${88 + (offset % 48)} -16 Q ${140 - (offset % 32)} 128, ${180 - offset} 272" fill="none" stroke="${roadStroke}" stroke-width="1.3"/>
   <circle cx="${cx1}" cy="${cy1}" r="${r1}" fill="none" stroke="${accentRing}" stroke-width="1.2" stroke-dasharray="4 4"/>
   <circle cx="${cx1}" cy="${cy1}" r="${Math.round(r1 * 0.45)}" fill="${accentRing}" fill-opacity="0.25"/>
-  <text x="10" y="18" fill="${labelColor}" font-family="monospace" font-size="9" font-weight="700">${latLabel} · ${lngLabel} · Z${z}</text>
+  <text x="10" y="18" fill="${labelColor}" font-family="monospace" font-size="9" font-weight="700">${latLabel} · ${lngLabel} · ${isSat ? 'SAT-' : ''}Z${z}</text>
 </svg>`;
 }
 

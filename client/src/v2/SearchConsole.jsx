@@ -8,7 +8,7 @@ import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
 import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
 
 function useTypewriterPlaceholder(examples, active) {
@@ -636,7 +636,7 @@ function SearchConsole({
             <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
             <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
             <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> 3 Engines Auto: Map &amp; Pin · Business Directory · Website Contact Finder</span>
+            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> All 6 Lead Engines Auto: Satellite Map · Directories · Websites · B2B · Open Web · Clean Excel</span>
           </div>
 
           <button
@@ -744,7 +744,7 @@ function SearchConsole({
                 ))}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-                {THREE_BUILTIN_ENGINES.map(eng => (
+                {ALL_BUILTIN_ENGINES.map(eng => (
                   <div key={eng.id} style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', padding: '7px 10px', borderRadius: 10, border: '1px solid rgba(15,23,42,0.08)' }}>
                     <b style={{ color: '#0f172a' }}>{eng.number}: {eng.name}</b>
                     <div style={{ color: '#64748b', marginTop: 2 }}>{eng.shortDesc}</div>

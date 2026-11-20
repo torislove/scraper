@@ -12,7 +12,7 @@ import Country3DFlag from './components/Country3DFlag';
 import { POPULAR_COUNTRIES } from './data/countries';
 import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, THREE_BUILTIN_ENGINES
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
 import { pingHealth } from './api';
 import './landingExecutive.css';
@@ -310,18 +310,18 @@ const LEAD_ANATOMY = [
 const PROOF_STATS = [
   { value: '11', label: 'Core Countries Locked & Tuned' },
   { value: '619,287', label: 'Indian Towns & Villages Covered' },
-  { value: '3', label: 'Built-In Engines You Simply Pay For' },
-  { value: 'Your RAM', label: 'Hardware-Accelerated · 0 Cloud Queues' }
+  { value: 'All 6', label: 'Built-In Lead Discovery Engines' },
+  { value: '1-Click', label: 'Live Satellite Radar & Excel Export' }
 ];
 
 const FAQ = [
   {
     q: 'Why can’t I just copy businesses from Google Maps manually?',
-    a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Our Client Workspace automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps them in parallel using your device RAM, and exports a clean Excel spreadsheet in minutes.'
+    a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Scraper.co.in automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps all of them in parallel on a live Satellite Radar map, and exports a clean Excel spreadsheet in minutes.'
   },
   {
-    q: 'Why do I just pay for the 3 built-in engines without extra cloud server fees?',
-    a: 'All heavy discovery processing, geospatial matching, and duplicate cleanup run directly using your own computer RAM and CPU Web Workers! Because you are not waiting in shared cloud server queues, your leads stream faster on your hardware and you simply pay for access to our 3 Built-In Engines.'
+    q: 'Do I get all 6 built-in lead discovery engines automatically?',
+    a: 'Yes! Every search runs our Satellite & Street Map Engine, Business Directory Engine, Official Website & Email Finder Engine, B2B Trade Supplier Engine, Public Web Business Engine, and Smart Deduplication Engine together automatically — with zero extra extensions, proxy bills, or API keys.'
   },
   {
     q: 'What if I want leads from an entire District, State, or every website across the internet?',
@@ -341,7 +341,7 @@ const FAQ = [
   }
 ];
 
-function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
+function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, onLaunch }) {
   const [typedText, setTypedText] = useState(demo.query);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -370,6 +370,9 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
     mouseY.set(0);
   };
 
+  const prevDemo = () => setActiveDemo(prev => (prev - 1 + totalDemos) % totalDemos);
+  const nextDemo = () => setActiveDemo(prev => (prev + 1) % totalDemos);
+
   return (
     <div style={{ perspective: 1200, position: 'relative' }}>
       <motion.div
@@ -378,7 +381,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
         transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
       >
         <CheckCircle2 size={15} color="#059669" />
-        <span>All Engines Working Automatically</span>
+        <span>All 6 Engines Sweeping Live</span>
       </motion.div>
 
       <motion.div
@@ -387,11 +390,11 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
         transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
       >
         <FileSpreadsheet size={15} color="#7c3aed" />
-        <span>1-Click Excel &amp; CSV Ready</span>
+        <span>Satellite Radar · 1-Click Excel</span>
       </motion.div>
 
       <motion.div
-        className="lx-showcase"
+        className="lx-showcase lx-gba-console"
         style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
         onMouseMove={handleMove}
         onMouseLeave={handleLeave}
@@ -399,93 +402,133 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo }) {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="lx-showcase-top">
-          <div className="lx-showcase-pills">
-            {DEMO_SCENARIOS.map((item, idx) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`lx-demo-pill ${activeDemo === idx ? 'is-active' : ''}`}
-                onClick={() => setActiveDemo(idx)}
-              >
-                {item.pill}
-              </button>
-            ))}
-          </div>
-          <div className="lx-gbc-hardware-bar" aria-hidden="true">
-            <span className="lx-gbc-jewel is-kiwi" />
-            <span className="lx-gbc-jewel is-atomic" />
-            <span className="lx-gbc-jewel is-berry" />
-          </div>
-        </div>
-
-        <div className="lx-showcase-bar">
-          <Search size={17} color="#7c3aed" />
-          <span className="lx-showcase-query">
-            {typedText}
-            <span className="lx-typing-caret" />
+        {/* Top GBA-Color Cartridge Slot Bar */}
+        <div className="lx-gba-cartridge-slot">
+          <span>◄ CARTRIDGE: SCRAPER.CO.IN · 11-COUNTRY LIVE SATELLITE EDITION ►</span>
+          <span className="lx-gba-power-led">
+            <i /> POWER
           </span>
-          <motion.span
-            key={demo.count}
-            initial={{ scale: 0.85, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="lx-showcase-badge"
-          >
-            {demo.count}
-          </motion.span>
         </div>
 
-        <div className="lx-mini-map">
-          <div className="lx-radar-sweep" />
-          <div className="lx-map-ring" />
-          {demo.pins.map((pos, i) => (
-            <motion.div
-              key={`${demo.id}-pin-${i}`}
-              className="lx-map-pin"
-              style={{ top: pos.top, left: pos.left }}
-              initial={{ scale: 0, opacity: 0, y: -10 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              transition={{ delay: 0.06 * i, type: 'spring', stiffness: 460, damping: 20 }}
+        {/* Illuminated GBA IPS Console Screen Bezel */}
+        <div className="lx-gba-screen-bezel">
+          <div className="lx-showcase-top">
+            <div className="lx-showcase-pills">
+              {DEMO_SCENARIOS.map((item, idx) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`lx-demo-pill ${activeDemo === idx ? 'is-active' : ''}`}
+                  onClick={() => setActiveDemo(idx)}
+                >
+                  {item.pill}
+                </button>
+              ))}
+            </div>
+            <div className="lx-gbc-hardware-bar" aria-hidden="true">
+              <span className="lx-gbc-jewel is-kiwi" />
+              <span className="lx-gbc-jewel is-atomic" />
+              <span className="lx-gbc-jewel is-berry" />
+            </div>
+          </div>
+
+          <div className="lx-showcase-bar">
+            <Search size={17} color="#7c3aed" />
+            <span className="lx-showcase-query">
+              {typedText}
+              <span className="lx-typing-caret" />
+            </span>
+            <motion.span
+              key={demo.count}
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="lx-showcase-badge"
             >
-              <MapPin size={12} />
-            </motion.div>
-          ))}
-          <span className="lx-map-label">📍 {demo.areaLabel}</span>
-        </div>
+              {demo.count}
+            </motion.span>
+          </div>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={demo.id}
-            className="lx-demo-leads"
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18 }}
-          >
-            {demo.leads.map((lead, idx) => (
+          <div className="lx-mini-map is-satellite">
+            <div className="lx-radar-sweep" />
+            <div className="lx-map-ring" />
+            {demo.pins.map((pos, i) => (
               <motion.div
-                key={lead.name}
-                className="lx-demo-row"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.05 * idx, type: 'spring', stiffness: 380, damping: 26 }}
+                key={`${demo.id}-pin-${i}`}
+                className="lx-map-pin"
+                style={{ top: pos.top, left: pos.left }}
+                initial={{ scale: 0, opacity: 0, y: -10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                transition={{ delay: 0.06 * i, type: 'spring', stiffness: 460, damping: 20 }}
               >
-                <div className="lx-demo-row-left">
-                  <span className="lx-demo-avatar">{lead.name.charAt(0)}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <b>{lead.name}</b>
-                    <small>{lead.area} · ★ {lead.rating} ({lead.reviews})</small>
-                  </div>
-                </div>
-                <span className="lx-demo-phone">{lead.phone}</span>
+                <MapPin size={12} />
               </motion.div>
             ))}
-          </motion.div>
-        </AnimatePresence>
+            <span className="lx-gba-sat-beacon" style={{ top: '16%', right: '14%' }}>⚡ LIVE ZONE</span>
+            <span className="lx-map-label">🛰️ {demo.areaLabel}</span>
+          </div>
 
-        <div className="lx-showcase-foot">
-          <span>Verified phones, addresses &amp; GPS pins · 3 Built-In Engines on Your RAM</span>
-          <strong>Instant Excel &amp; Map →</strong>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={demo.id}
+              className="lx-demo-leads"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.18 }}
+            >
+              {demo.leads.map((lead, idx) => (
+                <motion.div
+                  key={lead.name}
+                  className="lx-demo-row"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.05 * idx, type: 'spring', stiffness: 380, damping: 26 }}
+                >
+                  <div className="lx-demo-row-left">
+                    <span className="lx-demo-avatar">{lead.name.charAt(0)}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <b>{lead.name}</b>
+                      <small>{lead.area} · ★ {lead.rating} ({lead.reviews})</small>
+                    </div>
+                  </div>
+                  <span className="lx-demo-phone">{lead.phone}</span>
+                </motion.div>
+              ))}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Bottom Physical GBA-Color Console Controls Deck */}
+        <div className="lx-gba-controls-deck">
+          <div className="lx-gba-dpad-wrap">
+            <div className="lx-gba-dpad" role="group" aria-label="Cycle country cartridge demos">
+              <button type="button" className="lx-gba-dpad-btn is-up" onClick={prevDemo} aria-label="Previous demo">▲</button>
+              <button type="button" className="lx-gba-dpad-btn is-left" onClick={prevDemo} aria-label="Previous country">◀</button>
+              <span className="lx-gba-dpad-center" aria-hidden="true" />
+              <button type="button" className="lx-gba-dpad-btn is-right" onClick={nextDemo} aria-label="Next country">▶</button>
+              <button type="button" className="lx-gba-dpad-btn is-down" onClick={nextDemo} aria-label="Next demo">▼</button>
+            </div>
+            <div className="lx-gba-brand-plate">
+              <b>SCRAPER.CO.IN</b>
+              <small>GBA-COLOR 3D</small>
+            </div>
+          </div>
+
+          <div className="lx-gba-center-pills">
+            <button type="button" className="lx-gba-pill-btn" onClick={nextDemo} title="Switch Demo Cartridge">SELECT</button>
+            <button type="button" className="lx-gba-pill-btn is-start" onClick={onLaunch} title="Launch Active Search in Workspace">START</button>
+          </div>
+
+          <div className="lx-gba-ab-cluster">
+            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 6 Engines">
+              <span>B</span>
+              <small>ENGINES</small>
+            </a>
+            <button type="button" className="lx-gba-round-btn is-a" onClick={onLaunch} title="Launch Live Search">
+              <span>A</span>
+              <small>LAUNCH</small>
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
@@ -608,7 +651,7 @@ export default function LandingV2() {
               <div className="lx-hero-badges">
                 <span className="lx-eyebrow">
                   <Sparkles size={13} />
-                  3 Built-In Engines · Runs on Your Hardware RAM · 0 API Keys
+                  SCRAPER.CO.IN · ALL 6 LEAD ENGINES BUILT IN · 11 COUNTRIES · LIVE 3D SATELLITE RADAR
                 </span>
                 <span className="lx-india-pill">
                   <Country3DFlag code="IN" size={18} isHome />
@@ -617,19 +660,18 @@ export default function LandingV2() {
               </div>
 
               <h1 className="lx-h1">
-                Just pay for our 3 engines. Your RAM powers{' '}
-                <span className="lx-h1-accent">blazing-fast leads</span>{' '}
-                anywhere across 11 countries.
+                Type any business &amp; place. Every lead engine captures{' '}
+                <span className="lx-h1-accent">every verified contact</span>{' '}
+                live across 11 countries.
               </h1>
 
               <p className="lx-lead-copy">
-                Zero external tools or slow shared server queues. Search any business and any
-                city, mandal, county, or neighborhood across all 11 countries — and watch our 3 built-in
-                engines use your computer&apos;s own RAM ({hardware.ramGb} GB · {hardware.parallelZones}x parallel zones)
-                to gather every verified phone, address, and website into a clean Excel sheet.
+                Search any city, town, mandal, county, or neighborhood worldwide on Scraper.co.in.
+                All 6 built-in lead discovery engines sweep every street pocket simultaneously on a live
+                3D Satellite Map — giving you verified mobile numbers, websites, emails, and a clean Excel file in one click.
               </p>
 
-              {/* Interactive Game Boy Color 3D Hero Search Bar (11 Countries · Search Anywhere) */}
+              {/* Interactive Game Boy Advance Color 3D Hero Search Bar (11 Countries · Search Anywhere) */}
               <form
                 className="lx-hero-search-gbc lx-gbc-cartridge-card"
                 role="search"
@@ -644,7 +686,7 @@ export default function LandingV2() {
                   <span className="lx-precision-pill is-scope">
                     🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES
                   </span>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9' }}>GAME BOY COLOR × 3D ENGINE</span>
+                  <span style={{ fontSize: 11, fontWeight: 850, color: '#6d28d9' }}>SCRAPER.CO.IN · ALL 6 ENGINES</span>
                 </div>
                 <div className="lx-hero-search-bar">
                   <Search size={18} color="#7c3aed" aria-hidden="true" />
@@ -684,11 +726,11 @@ export default function LandingV2() {
 
               <div className="lx-hero-mode-split">
                 <div>
-                  <b>Self-Serve Client Workspace</b>
-                  <span>Any city, town, mandal or county · Instant Excel export powered by your RAM</span>
+                  <b>Two Dedicated Editions: Client Workspace vs. Master Territory Intelligence</b>
+                  <span>Run self-serve searches on any City, Mandal, or County — or ask our Master Desk for entire Districts, States &amp; every website on the internet</span>
                 </div>
                 <a href="#master-concierge" className="lx-hero-master-link">
-                  Need entire District, State or every website on the internet? Ask Master Intelligence →
+                  Compare Client Edition vs. Master Territory Intelligence →
                 </a>
               </div>
 
@@ -714,9 +756,9 @@ export default function LandingV2() {
               </div>
 
               <div className="lx-trust-row">
-                <span className="lx-trust-pill"><Check size={14} /> Runs on Your Hardware RAM (4 GB+ Ready)</span>
-                <span className="lx-trust-pill"><Check size={14} /> Hyderabad &amp; 619k Indian Towns/Mandals</span>
-                <span className="lx-trust-pill"><Check size={14} /> Only 3 Built-In Engines Included</span>
+                <span className="lx-trust-pill"><Check size={14} /> 100% HD Satellite Live Zone Radar</span>
+                <span className="lx-trust-pill"><Check size={14} /> All 6 Built-In Lead Engines Included</span>
+                <span className="lx-trust-pill"><Check size={14} /> 11 Countries · 619k+ Indian Towns/Mandals</span>
               </div>
             </motion.div>
 
@@ -724,6 +766,8 @@ export default function LandingV2() {
               demo={demo}
               activeDemo={activeDemo}
               setActiveDemo={setActiveDemo}
+              totalDemos={DEMO_SCENARIOS.length}
+              onLaunch={() => openWorkspace(demo.country, demo.query)}
             />
           </div>
         </section>
@@ -826,75 +870,60 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* ANIMATED STORY 2: ONLY 3 BUILT-IN ENGINES + YOUR DEVICE RAM SPEED */}
+        {/* ANIMATED STORY 2: ALL 6 BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
         <section className="lx-section" id="engines">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Cpu size={13} /> Pay Only for Our 3 Built-In Engines</span>
-              <h2>3 specialized discovery engines run together — accelerated by your own RAM.</h2>
-              <p>Zero browser extensions to configure, zero shared cloud waiting queues, and no server compute markup. Your device hardware powers maximum speed while our 3 engines deliver verified contacts.</p>
+              <span className="lx-kicker"><Cpu size={13} /> All 6 Lead Engines Included Automatically</span>
+              <h2>All 6 specialized discovery engines sweep every zone live together.</h2>
+              <p>Zero browser extensions to configure, zero external subscriptions, and zero spreadsheets to clean by hand. Type once — every built-in engine connects automatically.</p>
             </div>
 
             <motion.div
-              className="lx-engine-story"
+              className="lx-engine-story lx-gbc-cartridge-card"
               initial={{ opacity: 0, y: 18 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45 }}
             >
-              <div className="lx-engine-flow">
-                <div className="lx-engine-inputs">
-                  {THREE_BUILTIN_ENGINES.map((eng, idx) => (
-                    <motion.div
-                      key={eng.id}
-                      className="lx-engine-node"
-                      animate={{ x: [0, 4, 0] }}
-                      transition={{ duration: 2.6, repeat: Infinity, delay: idx * 0.35 }}
-                    >
-                      <span className="lx-flow-step-orb tone-atomic" style={{ margin: 0, width: 38, height: 38, borderRadius: 11, flexShrink: 0 }}>
-                        <Zap size={17} />
+              <div className="lx-engines-6-grid">
+                {ALL_BUILTIN_ENGINES.map((eng, idx) => (
+                  <motion.div
+                    key={eng.id}
+                    className="lx-engine-cart-card"
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, amount: 0.15 }}
+                    transition={{ delay: idx * 0.05 }}
+                    whileHover={{ y: -3 }}
+                  >
+                    <div className="lx-engine-cart-head">
+                      <span className="lx-flow-step-orb tone-atomic" style={{ margin: 0, width: 34, height: 34, borderRadius: 10, flexShrink: 0 }}>
+                        <Zap size={15} />
                       </span>
-                      <div>
-                        <b style={{ display: 'block', fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{eng.number}: {eng.name}</b>
-                        <small style={{ fontSize: 12.5, color: '#475569', lineHeight: 1.45, display: 'block' }}>{eng.shortDesc}</small>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+                      <span className="lx-engine-live-dot">LIVE · {eng.number.toUpperCase()}</span>
+                    </div>
+                    <b>{eng.name}</b>
+                    <small>{eng.shortDesc}</small>
+                  </motion.div>
+                ))}
+              </div>
 
-                <motion.div
-                  className="lx-engine-core"
-                  animate={{ scale: [1, 1.03, 1] }}
-                  transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-                >
-                  <Sparkles size={26} color="#34d399" />
-                  <b style={{ fontSize: 15, fontWeight: 850, letterSpacing: '0.02em' }}>YOUR RAM · {hardware.parallelZones}X SWARM</b>
-                  <span style={{ fontSize: 12.5, color: '#cbd5e1', maxWidth: 215, lineHeight: 1.5 }}>
-                    Detected on your device: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU Cores → {hardware.expectedSpeed}
-                  </span>
-                </motion.div>
-
-                <div className="lx-engine-output">
-                  <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.07em', color: '#047857' }}>WHAT YOU PAY FOR</span>
-                  <h3 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0f172a' }}>Just 3 Engines. Zero server markups.</h3>
-                  <p style={{ margin: 0, fontSize: 13.5, color: '#334155', lineHeight: 1.55 }}>
-                    Your browser&apos;s own Web Worker RAM handles zone discovery, phone formatting, and duplicate removal — keeping software fast and pricing flat.
-                  </p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                    <span className="lx-trust-pill"><Check size={13} /> 3 Built-In Engines</span>
-                    <span className="lx-trust-pill"><Check size={13} /> Offline 3D Maps</span>
-                    <span className="lx-trust-pill"><Check size={13} /> Clean Excel (.xlsx)</span>
-                  </div>
+              <div className="lx-engine-live-bar">
+                <div className="lx-engine-live-badge">
+                  <Sparkles size={18} color="#34d399" />
+                  <b>ALL 6 ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
                 </div>
+                <span>Every zone streams live onto the 3D Satellite Map with verified mobile numbers, websites &amp; emails.</span>
               </div>
 
               <div className="lx-ram-banner">
                 <div className="lx-ram-banner-head">
                   <div>
-                    <b style={{ fontSize: 15, color: '#0f172a' }}>Hardware Requirements for User-RAM Acceleration</b>
-                    <div style={{ fontSize: 12.5, color: '#475569' }}>Works smoothly on any modern Windows, Mac, or Linux computer with Chrome — speed automatically scales with your hardware:</div>
+                    <b style={{ fontSize: 15, color: '#0f172a' }}>Hardware-Accelerated Parallel Zones</b>
+                    <div style={{ fontSize: 12.5, color: '#475569' }}>Runs smoothly on any Windows, Mac, or Linux machine — parallel sweep speed scales automatically:</div>
                   </div>
-                  <span className="lx-precision-pill is-service">💻 Your PC: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.tierLabel}</span>
+                  <span className="lx-precision-pill is-service">💻 Your Device: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Zones</span>
                 </div>
                 <div className="lx-req-grid">
                   {DEVICE_REQUIREMENTS.map(req => (
@@ -1218,44 +1247,74 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* MASTER TERRITORY INTELLIGENCE CONCIERGE (WHOLE DISTRICT, STATE & ALL-INTERNET SOURCES) */}
+        {/* DUAL-CARTRIDGE ARCHITECTURE: CLIENT WORKSPACE VS MASTER TERRITORY INTELLIGENCE */}
         <section className="lx-section" id="master-concierge">
           <div className="lx-wrap">
-            <motion.div
-              className="lx-master-concierge"
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.4 }}
-            >
-              <div>
-                <span className="lx-kicker"><Globe2 size={13} /> Master Territory Intelligence Service</span>
-                <h2>Need an entire District, County, State, or every business listed across the internet?</h2>
+            <div className="lx-sec-head">
+              <span className="lx-kicker"><Layers size={13} /> Client Edition &amp; Master Territory Intelligence</span>
+              <h2>Two tailored editions built for single cities or full states.</h2>
+              <p>Run instant self-serve searches across any neighborhood or county in the Client Workspace, or let our Master Team deliver entire Districts, States, and nationwide data.</p>
+            </div>
+
+            <div className="lx-dual-cartridge-grid">
+              {/* Cartridge 01: Client Workspace Edition */}
+              <motion.article
+                className="lx-cartridge-panel is-client lx-gbc-cartridge-card"
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+              >
+                <span className="lx-cartridge-tag is-client">CARTRIDGE 01 · CLIENT WORKSPACE EDITION</span>
+                <h3>Instant City, Town, Mandal &amp; County Leads</h3>
                 <p>
-                  Our Client Workspace gives you instant self-serve leads for any city, town, mandal, or county on your own computer RAM.
-                  When your organization wants complete datasets covering an entire District, State, or Nationwide territory — automatically gathered
-                  from every public website, business directory, map, and online registry across the internet — our Master Team prepares and delivers the complete verified list for you.
+                  Built for startups, agencies, and local sales teams. Pick any of the 11 countries,
+                  type a service and neighborhood/mandal/county, watch all 6 built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
                 </p>
-              </div>
-              <div className="lx-contact-slots">
-                {/* TODO: Replace "Adding Soon" with live mobile number when ready */}
-                <div className="lx-contact-slot">
-                  <Phone size={18} color="#059669" />
-                  <div>
-                    <small>DIRECT MOBILE &amp; WHATSAPP DESK</small>
-                    <b>Adding Soon</b>
+                <ul className="lx-story-bullets">
+                  <li><CheckCircle2 size={15} color="#059669" /> All 6 Built-In Lead Engines running automatically</li>
+                  <li><CheckCircle2 size={15} color="#059669" /> 100% HD Satellite Live Zone Radar across 11 countries</li>
+                  <li><CheckCircle2 size={15} color="#059669" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
+                </ul>
+                <button type="button" className="lx-btn lx-btn-primary" style={{ marginTop: 'auto' }} onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}>
+                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">START</span>
+                  Launch Client Workspace <ArrowRight size={15} />
+                </button>
+              </motion.article>
+
+              {/* Cartridge 02: Master Territory Intelligence Edition */}
+              <motion.article
+                className="lx-cartridge-panel is-master lx-gbc-cartridge-card"
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ delay: 0.08 }}
+              >
+                <span className="lx-cartridge-tag is-master">CARTRIDGE 02 · MASTER TERRITORY INTELLIGENCE EDITION</span>
+                <h3>Entire Districts, Full States &amp; Complete Web Coverage</h3>
+                <p>
+                  Need every business across an entire District, County, State, or Nationwide rollout?
+                  Our Master Edition gathers verified datasets from every public website, business directory, map, and online registry across the entire internet and delivers organized Excel workbooks.
+                </p>
+                <div className="lx-contact-slots" style={{ marginTop: 'auto' }}>
+                  {/* TODO: Replace "Adding Soon" with live mobile number when ready */}
+                  <div className="lx-contact-slot">
+                    <Phone size={18} color="#059669" />
+                    <div>
+                      <small>DIRECT MOBILE &amp; WHATSAPP DESK</small>
+                      <b>Adding Soon</b>
+                    </div>
+                  </div>
+                  {/* TODO: Replace "Adding Soon" with live support email when ready */}
+                  <div className="lx-contact-slot">
+                    <Mail size={18} color="#7c3aed" />
+                    <div>
+                      <small>PRIORITY SUPPORT EMAIL</small>
+                      <b>Adding Soon</b>
+                    </div>
                   </div>
                 </div>
-                {/* TODO: Replace "Adding Soon" with live support email when ready */}
-                <div className="lx-contact-slot">
-                  <Mail size={18} color="#7c3aed" />
-                  <div>
-                    <small>PRIORITY SUPPORT EMAIL</small>
-                    <b>Adding Soon</b>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+              </motion.article>
+            </div>
           </div>
         </section>
 
