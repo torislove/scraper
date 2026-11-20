@@ -1163,25 +1163,21 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
         const d = distanceKm(point, a);
         return d < best.d ? { d, a } : best;
       }, { d: Infinity, a: null });
-      if (nearest.a && nearest.d < 1.2) continue;
+      if (nearest.a && nearest.d < 1.8) continue;
 
-      const area = nearest.a && nearest.d < 3.5
-        ? nearest.a.name || nearest.a.locality || ''
-        : '';
       const dir = compassLabel(point.lat, point.lng, minLat, maxLat, minLng, maxLng);
-      let zoneName = area ? `${area} Area` : `${city} ${dir}`;
-      if (usedNames.has(zoneName.toLowerCase())) zoneName = `${city} ${dir} ${cells.length + 1}`;
+      let zoneName = `${city} ${dir} Sector ${cells.length + 1}`;
+      if (usedNames.has(zoneName.toLowerCase())) zoneName = `${city} ${dir} Grid ${cells.length + 1}`;
       usedNames.add(zoneName.toLowerCase());
 
       cells.push({
         zoneName,
-        // Google Maps ignores the @viewport for result selection, but it does
-        // understand coordinates in the query text: "Restaurants near
-        // 16.36,80.38" returns that pocket of the city. This is what makes a
-        // grid cell a genuinely different search instead of a duplicate feed.
+        // Google Maps understands coordinates in the query text: "Restaurants near
+        // 16.36,80.38" plus tight 2.2 km viewport zoom makes each grid cell unique.
         queryText: `${prefix}near ${point.lat.toFixed(4)},${point.lng.toFixed(4)}`,
         lat: point.lat,
         lng: point.lng,
+        radiusKm: 2.2,
         engines: ['maps'],
         coverageKind: 'grid',
         isVectorQuery: true,
@@ -1221,7 +1217,8 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
       queryText: `${prefix}${name}, ${locationLabel}`,
       lat: coord ? coord.lat : null,
       lng: coord ? coord.lng : null,
-      engines: ['local_finder', 'maps'],
+      radiusKm: 2.0,
+      engines: ['maps'],
       coverageKind: 'locality',
       isVectorQuery: true,
       isSingle: false
@@ -1232,10 +1229,22 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
     .filter(z => z.lat && z.lng)
     .map(z => ({ lat: z.lat, lng: z.lng, name: z.zoneName }));
   const cityLabel = locationLabel || cityName;
-  const subVectors = buildCategorySubVectorZones(category, cityLabel);
+  const subVectors = buildCategorySubVectorZones(category, cityLabel, 8).map(z => ({
+    ...z,
+    radiusKm: 3.5,
+    coverageKind: 'vector',
+    engines: ['maps']
+  }));
   const grid = buildCityGridZones(cityName || locationLabel, category, anchors);
   const mustKeep = [...named, ...subVectors];
-  const merged = [...mustKeep, ...grid];
+  const rawMerged = [...mustKeep, ...grid];
+  const seenKeys = new Set();
+  const merged = rawMerged.filter(z => {
+    const key = `${Math.round(Number(z.lat || 0) * 1000)}:${Math.round(Number(z.lng || 0) * 1000)}:${String(z.queryText || '').toLowerCase().trim()}`;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
+    return true;
+  });
 
   if (merged.length <= maxZones) return merged;
 

@@ -8,6 +8,7 @@ const { getBrowser, chromium, applyAdvancedStealth, optimizePageForSpeed } = req
 const { verifyWithAI } = require('../utils/aiParser');
 const { normalizePhone, extractPhones } = require('../utils/phoneUtils');
 const fidelity = require('../services/categoryFidelity');
+const { isSessionAborted } = require('../utils/queue');
 
 /**
  * Zone context pool.
@@ -477,7 +478,8 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
     // A locality inside a city is still inside that city. If the run's parent
     // city matches the hub, listings anywhere in the hub are in-bounds even when
     // they do not repeat the locality name.
-    const parentToken = String(parentCity || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const parentToken = String(parentCity || district || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mentionsParentCity = parentToken.length >= 3 && (fullText.includes(parentToken) || addrLower.includes(parentToken));
     for (const hub of majorMetros) {
       // Twin Cities Conurbation Exception:
       // Hyderabad & Secunderabad are the same Greater Hyderabad (GHMC) twin city.
@@ -495,16 +497,16 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
       // If target town is NOT the metro hub itself (e.g. target is 'narasaraopet', hub is 'guntur')
       if (townToken !== hub && !townToken.includes(hub)) {
         if (addrLower.includes(hub)) {
-          // Check if it's merely a road name (e.g., "Guntur Road, Narasaraopet")
-          const isRoadName = new RegExp(`\\b${hub}\\s+(road|rd|highway|hwy|main\\s+road|bypass|way|street|cross)\\b`, 'i').test(addrLower);
+          // Check if it's merely a road/highway name (e.g., "Guntur Road", "Chennai - Kolkata Hwy, Guntur")
+          const isRoadName = new RegExp(`\\b${hub}\\s*[-–]?\\s*(road|rd|highway|hwy|nh|main\\s+road|bypass|way|street|cross|kolkata|vijayawada|bangalore|hyderabad|chennai)\\b`, 'i').test(addrLower);
           const mentionsTown = fullText.includes(townToken) || (cleanTargetTown.length > 2 && fullText.includes(cleanTargetTown));
           
-          if (!mentionsTown && !isRoadName && !insideParentCity) {
+          if (!mentionsTown && !mentionsParentCity && !isRoadName && !insideParentCity) {
             return { relevant: false, reason: `Listing belongs to metropolitan hub "${hub}" with no reference to target town "${cleanTargetTown}"` };
           }
 
-          // Even if road name, check for urban center localities of that metro (e.g. Brodipet, Arundelpet, Lakshmipuram for Guntur)
-          if (hub === 'vijayawada') {
+          // Even if road name, check for urban center localities of that metro only when NOT sweeping inside that parent metro
+          if (!insideParentCity && !mentionsParentCity && hub === 'vijayawada') {
             const vjaLocalities = ['benz circle', 'governorpet', 'patamata', 'moghalrajpuram', 'bhavanipuram', 'auto nagar', 'machavaram', 'one town vijayawada', 'satyanarayanapuram'];
             for (const loc of vjaLocalities) {
               if (addrLower.includes(loc) && !fullText.includes(townToken)) {
@@ -513,7 +515,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
             }
           }
 
-          if (hub === 'tenali') {
+          if (!insideParentCity && !mentionsParentCity && hub === 'tenali') {
             const tenaliLocalities = ['morrispet', 'chenchupet', 'ganga mandiram', 'chinaravuru', 'nazarpet'];
             for (const loc of tenaliLocalities) {
               if (addrLower.includes(loc) && !fullText.includes(townToken)) {
@@ -522,7 +524,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
             }
           }
 
-          if (hub === 'guntur') {
+          if (!insideParentCity && !mentionsParentCity && hub === 'guntur') {
             const gunturUrbanLocalities = ['brodipet', 'arundelpet', 'lakshmipuram', 'kothapet', 'old guntur', 'patabasti', 'nallapadu', 'collector office guntur', 'guvvalagutta', 'svn colony'];
             for (const loc of gunturUrbanLocalities) {
               if (addrLower.includes(loc) && !fullText.includes(townToken)) {
@@ -744,6 +746,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     : (detected ? detected.code : 'IN');
   const countryGl = String(countryCode).toLowerCase();
   const resolvedMandal = mandal || (scope === 'mandal' ? location : '') || (location && !location.toLowerCase().includes('district') ? location.replace(/\b(mandal|taluk|tehsil|block)\b/gi, '').trim() : '');
+  const isAborted = () => Boolean(globalAbortSignal.aborted || isSessionAborted(sessionId));
   addLog(`[Cyber Core] Dispatching autonomous stealth crawler for query: "${exactQuery}"`);
 
   // If Playwright not available (production/Render), skip browser scraping
@@ -777,14 +780,15 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     const searchUrl = exactQuery.startsWith('http')
       ? exactQuery
       : `https://www.google.com/maps/search/${encodeURIComponent(exactQuery)}${(() => {
-          // Area-bias the search. Without a viewport every zone with the same
-          // text query returns the identical Google feed, which is exactly why
-          // a city run could never see more than the first ~120 places.
+          // Local neighborhood viewport zoom (13z-16z) so each zone extracts distinct
+          // local businesses instead of repeating the city-wide 11z top-20 list.
           const lat = Number(centerLat);
           const lng = Number(centerLng);
           if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return '';
-          const km = Number(radiusKm) || 5;
-          const zoom = Math.max(11, Math.min(16, Math.round(14 - Math.log2(Math.max(0.5, km / 2)))));
+          const viewportKm = (Number(radiusKm) > 0 && Number(radiusKm) <= 8)
+            ? Number(radiusKm)
+            : (scope === 'district' || scope === 'state' ? 4.5 : 2.2);
+          const zoom = Math.max(13, Math.min(16, Math.round(15.2 - Math.log2(Math.max(0.6, viewportKm)))));
           return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
         })()}?hl=en&gl=${countryGl}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
@@ -1011,7 +1015,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         const processedCardKeys = new Set();
 
         const processLiveCard = (rawItem) => {
-          if (!rawItem || !rawItem.name || globalAbortSignal.aborted) return null;
+          if (!rawItem || !rawItem.name || isAborted()) return null;
           const key = (rawItem.mapsLink || '').split('&')[0] || `name:${String(rawItem.name || '').trim().toLowerCase()}`;
           if (processedCardKeys.has(key)) return null;
           processedCardKeys.add(key);
@@ -1321,7 +1325,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         // Continuous Scroll Harvester: Relentlessly scroll the feed to extract ALL listings in the zone
         let staleTicks = 0;
         for (let i = 0; i < 120; i++) {
-          if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
+          if (isAborted()) throw new Error('Master Stop Aborted');
 
           const beforeScroll = await page.evaluate(() => {
             const feed = document.querySelector('div[role="feed"]');
@@ -1334,8 +1338,12 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           await page.evaluate(() => {
             const feed = document.querySelector('div[role="feed"]');
             if (feed) {
-              feed.scrollTop = feed.scrollHeight;
-              feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 2500, bubbles: true }));
+              const cards = feed.querySelectorAll('div.Nv2PK');
+              if (cards.length > 0) {
+                try { cards[cards.length - 1].scrollIntoView({ block: 'end', behavior: 'instant' }); } catch {}
+              }
+              feed.scrollTop = feed.scrollHeight + 1200;
+              feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 2800, bubbles: true }));
             }
           });
 
@@ -1395,7 +1403,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         let insertedInBatch = 0;
 
         for (let i = 0; i < extractedCards.length; i++) {
-          if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
+          if (isAborted()) throw new Error('Master Stop Aborted');
           
           try {
             const rawItem = extractedCards[i];

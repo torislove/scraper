@@ -76,6 +76,7 @@ import MergeModal from './components/modals/MergeModal';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
+import SystemCheckPill from './components/SystemCheckPill';
 import LeadsTableView from './components/views/LeadsTableView';
 import MapViewTab from './components/views/MapViewTab';
 import FoldersGridView from './components/views/FoldersGridView';
@@ -2468,6 +2469,7 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
 
+          <SystemCheckPill variant="master" />
           <DesktopBadge />
           <AccountMenu variant="master" />
           <div className="v2-tools" ref={toolsRef}>
@@ -2725,6 +2727,7 @@ export default function CommandCenter() {
                 mapCenter={mapCenter}
                 mapZoom={mapZoom}
                 estimate={estimate}
+                cellStates={progress?.cellStates || {}}
                 setSelectedVendor={setSelectedVendor}
               />
             )}

@@ -19,6 +19,35 @@ let globalDeps = {
 let inMemoryQueue = [];
 let queueWriteTimeout = null;
 let queueLoaded = false;
+const abortedSessions = new Set();
+
+function markSessionAborted(sessionId) {
+  if (!sessionId) return 0;
+  const sid = String(sessionId);
+  abortedSessions.add(sid);
+  const t = setTimeout(() => abortedSessions.delete(sid), 10 * 60_000);
+  if (typeof t.unref === 'function') t.unref();
+
+  const before = inMemoryQueue.length;
+  inMemoryQueue = inMemoryQueue.filter(job => job?.meta?.sessionId !== sid);
+  const removed = before - inMemoryQueue.length;
+  if (removed) {
+    savePersistentQueue();
+    publishDiscoveryQueued();
+  }
+  return removed;
+}
+
+function clearSessionAborted(sessionId) {
+  if (!sessionId) return;
+  abortedSessions.delete(String(sessionId));
+}
+
+function isSessionAborted(sessionId) {
+  if (globalDeps.abortSignal && globalDeps.abortSignal.aborted) return true;
+  if (sessionId && abortedSessions.has(String(sessionId))) return true;
+  return false;
+}
 
 function loadQueue() {
   if (fs.existsSync(JOBS_FILE)) {
@@ -231,6 +260,14 @@ async function processQueue() {
         const candidate = inMemoryQueue[i];
         if (!candidate) continue;
 
+        const candSession = candidate?.meta?.sessionId;
+        if (candSession && abortedSessions.has(String(candSession))) {
+          inMemoryQueue.splice(i, 1);
+          i -= 1;
+          skipped += 1;
+          continue;
+        }
+
         if (candidate.notBefore && candidate.notBefore > Date.now()) {
           deferredWait = Math.min(deferredWait, candidate.notBefore - Date.now());
           continue;
@@ -361,8 +398,9 @@ async function processJob(job, instanceId) {
 }
 
 async function addScrapeJob(taskName, args, priority = 10, meta = null) {
-  if (globalDeps.abortSignal && globalDeps.abortSignal.aborted) {
-    globalDeps.abortSignal.aborted = false;
+  const sid = meta?.sessionId ? String(meta.sessionId) : null;
+  if (sid && abortedSessions.has(sid)) {
+    return;
   }
   inMemoryQueue.push({ taskName, args, priority, meta });
   inMemoryQueue.sort((a, b) => b.priority - a.priority);
@@ -434,6 +472,9 @@ module.exports = {
   clearQueue,
   clearQueueForSession,
   clearStaleQueue,
+  markSessionAborted,
+  clearSessionAborted,
+  isSessionAborted,
   getPersistentQueue,
   getActiveJobs,
   getConcurrencyMetrics

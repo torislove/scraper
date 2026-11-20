@@ -23,7 +23,7 @@ const { streamingEnricher, backfillPhones, hasValidMobile, countryForLead } = re
 const { resolveUniversalZones, zoneCoordinates, ZONE_COORDINATES, buildCityGridZones, classifyLocation, mandalIndex } = require('../utils/universalGeoCluster');
 const { resolveInternationalZones } = require('../utils/internationalGeo');
 const { geocodeLocation, getCache: getGeoCache } = require('../utils/olaMaps');
-const { clearStaleQueue, getPersistentQueue, getActiveJobs, addScrapeJob: queueAddScrapeJob, getConcurrencyMetrics } = require('../utils/queue');
+const { clearStaleQueue, getPersistentQueue, getActiveJobs, addScrapeJob: queueAddScrapeJob, getConcurrencyMetrics, isSessionAborted } = require('../utils/queue');
 const etaModel = require('../utils/etaModel');
 const { normalizePhone: parsePhone } = require('../utils/phoneUtils');
 const { planScopeEngines } = require('./scopeEngines');
@@ -32,6 +32,7 @@ const brain = require('./localBrain');
 const sources = require('./sources/registry');
 const { scrapeWebContact } = require('../scrapers/engine-web-contact');
 const { isListingRelevantToQuery, warmZoneContextPool } = require('../scrapers/engine-google-places');
+const serpBreaker = require('./serpBreaker');
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth's radius in km
@@ -382,6 +383,7 @@ async function runOmniSearchOrchestrator(
   const isAborted = () => Boolean(
     sessionAbortSignal.aborted
     || (sessionId && sessionAbortSignals.get(sessionId)?.aborted)
+    || (sessionId && isSessionAborted(sessionId))
     || activeSessions[sessionId]?.aborted
     || activeSessions[sessionId]?.status === 'aborted'
     || (globalAbortSignal.aborted && !sessionId)
@@ -632,10 +634,16 @@ async function runOmniSearchOrchestrator(
             suffix = `, ${baseLocation}`;
           }
 
-          const coords = zoneCoordinates(zoneName, targetDistrict, index, plan.zones.length, {
-            center,
-            spread: scopeSpread
-          });
+          const explicitLat = Number(z.lat ?? z.latitude);
+          const explicitLng = Number(z.lng ?? z.longitude);
+          const hasExplicitCoords = Number.isFinite(explicitLat) && Number.isFinite(explicitLng) && !(explicitLat === 0 && explicitLng === 0);
+          const coords = hasExplicitCoords
+            ? { lat: explicitLat, lng: explicitLng, isApproximate: Boolean(z.isApproximate || z.approx) }
+            : zoneCoordinates(zoneName, targetDistrict, index, plan.zones.length, {
+                center,
+                spread: scopeSpread
+              });
+          const covKind = z.coverageKind || (z.kind === 'grid' ? 'grid' : 'locality');
           return {
             zoneName,
             queryText: z.queryText || `${searchPhrase} in ${zoneName}${suffix}`,
@@ -644,9 +652,11 @@ async function runOmniSearchOrchestrator(
             lat: coords?.lat || null,
             lng: coords?.lng || null,
             isApproximate: Boolean(coords?.isApproximate),
-            kind: z.kind || 'zone',
+            kind: z.kind || covKind,
+            coverageKind: covKind,
+            engines: Array.isArray(z.engines) ? z.engines : null,
             mandal: z.mandal || null,
-            radiusKm: z.radiusKm || null,
+            radiusKm: Number(z.radiusKm) || (covKind === 'grid' ? 2.2 : 2.0),
             typology: z.typology || null,
             scope: plan.resolvedScope || (isMaster ? 'district' : null),
             isVectorQuery: true,
@@ -876,9 +886,13 @@ async function runOmniSearchOrchestrator(
       } catch (e) {}
     }
 
-    const totalZones = plan?.resumed ? (plan.originalTotalZones || activeZones.length) : activeZones.length;
+    let totalZones = plan?.resumed ? (plan.originalTotalZones || activeZones.length) : activeZones.length;
     let completedZones = plan?.resumed ? (plan.initialCompletedCount || 0) : 0;
     const startTime = Date.now();
+    const adaptiveSplitDone = new Set();
+    let adaptiveSplitsUsed = 0;
+    const MAX_ADAPTIVE_SPLITS = 16;
+    const cellStates = {};
 
     // Honest ETA: measured browser-seconds per zone divided by the slots the
     // budget is actually allowing right now (not a fixed 5, not zones × 6 s).
@@ -1159,8 +1173,11 @@ async function runOmniSearchOrchestrator(
 
       const coverageKind = z.coverageKind || (z.kind === 'grid' ? 'grid' : 'vector');
       const zoneRadius = coverageKind === 'grid'
-        ? (Number(z.radiusKm) > 0 ? Number(z.radiusKm) : 2.6) + 1.5
+        ? (Number(z.radiusKm) > 0 ? Number(z.radiusKm) : 2.2) + 1.5
         : (Number(z.radiusKm) >= 20 ? Number(z.radiusKm) : vectorBoundaryKm);
+      const cellViewportKm = (Number(z.radiusKm) > 0 && Number(z.radiusKm) <= 8)
+        ? Number(z.radiusKm)
+        : (coverageKind === 'grid' ? 2.2 : 2.5);
 
       const meta = {
         lat: zoneGeo?.lat || null,
@@ -1181,8 +1198,10 @@ async function runOmniSearchOrchestrator(
       activeSessions[sessionId].completedTargetsMap[String(zoneLabel).toLowerCase().trim()] = 'queued';
 
       const zoneEngines = Array.isArray(z.engines) ? z.engines : null;
-      const allowLocalFinder = hasEngine('local_finder') && (!zoneEngines || zoneEngines.includes('local_finder'));
       const allowMaps = hasEngine('maps') && (!zoneEngines || zoneEngines.includes('maps'));
+      const allowLocalFinder = hasEngine('local_finder')
+        && (!zoneEngines || zoneEngines.includes('local_finder'))
+        && (!allowMaps || (zi < 2 && !serpBreaker.isBlocked()));
 
       const zoneScope = z.scope || plan?.resolvedScope || (isMaster ? 'district' : null);
       const zoneAlreadyCovered = repeatCoveredZones.has(zoneKey(z));
@@ -1198,7 +1217,7 @@ async function runOmniSearchOrchestrator(
       if (allowMaps) {
         await addScrapeJob(
           'scrapeGooglePlaces',
-          [zoneQuery, category, z.zoneName, sessionId, zoneGeo?.lat || null, zoneGeo?.lng || null, zoneRadius, 'broad', targetDistrict, targetState, zoneGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, z.mandal || (zoneScope === 'mandal' ? z.zoneName : null), countryCode],
+          [zoneQuery, category, z.zoneName, sessionId, zoneGeo?.lat || null, zoneGeo?.lng || null, cellViewportKm, 'broad', targetDistrict, targetState, zoneGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, z.mandal || (zoneScope === 'mandal' ? z.zoneName : null), countryCode],
           zonePriority,
           meta
         );
@@ -1206,7 +1225,7 @@ async function runOmniSearchOrchestrator(
       if (allowLocalFinder) {
         await addScrapeJob(
           'scrapeGoogleLocalFinder',
-          [zoneQuery, category, z.zoneName, sessionId, 6, targetDistrict, targetState, zoneGeo, baseLocation, false, isMaster, zoneScope, countryCode],
+          [zoneQuery, category, z.zoneName, sessionId, 6, targetDistrict, targetState, zoneGeo, baseLocation, Boolean(allowMaps), isMaster, zoneScope, countryCode],
           Math.max(2, zonePriority - 1),
           meta
         );
@@ -1296,6 +1315,114 @@ async function runOmniSearchOrchestrator(
       const nextZone = activeZones.find(zone => targetMap[zoneKey(zone)] !== 'completed');
       const activeZoneName = activeRunningJob?.meta?.locationName || nextZone?.zoneName || 'Finalizing';
 
+      // Tally live per-zone lead yields & trigger adaptive micro-splits on saturated zones
+      try {
+        const sessionLeadsNow = dbAdapter.getVendorsBySession(sessionId) || [];
+        const zoneTallies = new Map();
+        for (const lead of sessionLeadsNow) {
+          if (!lead) continue;
+          const rawZ = String(lead.mandal || lead.zone || lead.locality || lead.locationName || '').toLowerCase().trim();
+          let matchedKey = rawZ && targetMap[rawZ] !== undefined ? rawZ : '';
+          if (!matchedKey && Number.isFinite(Number(lead.latitude)) && Number.isFinite(Number(lead.longitude))) {
+            let bestDist = 3.5;
+            for (const az of activeZones) {
+              const aLat = Number(az.lat ?? az.latitude);
+              const aLng = Number(az.lng ?? az.longitude);
+              if (!Number.isFinite(aLat) || !Number.isFinite(aLng)) continue;
+              const dk = getDistanceKm(aLat, aLng, Number(lead.latitude), Number(lead.longitude));
+              if (dk < bestDist) { bestDist = dk; matchedKey = zoneKey(az); }
+            }
+          }
+          if (!matchedKey) continue;
+          const t = zoneTallies.get(matchedKey) || { total: 0, mobiles: 0 };
+          t.total += 1;
+          if (hasValidMobile(lead.phone, countryCode)) t.mobiles += 1;
+          zoneTallies.set(matchedKey, t);
+        }
+
+        const runningNames = new Set(runningForSession.map(j => String(j?.meta?.zoneName || j?.meta?.locationName || '').toLowerCase().trim()));
+        for (let zi = 0; zi < activeZones.length; zi++) {
+          const az = activeZones[zi];
+          const zK = zoneKey(az);
+          const tState = targetMap[zK];
+          const tally = zoneTallies.get(zK) || { total: 0, mobiles: 0 };
+          let statusLabel = 'queued';
+          if (runningNames.has(zK) || (zK && zK === String(activeZoneName).toLowerCase().trim() && !tState)) {
+            statusLabel = 'scanning';
+          } else if (tState === 'completed') {
+            statusLabel = tally.total >= 18 ? 'saturated' : tally.total === 0 ? 'dry' : 'done';
+          } else if (tState === 'failed' || tState === 'error') {
+            statusLabel = 'resting';
+          }
+          cellStates[az.zoneName || az.name || `Zone ${zi + 1}`] = {
+            state: statusLabel,
+            leads: tally.total,
+            mobiles: tally.mobiles,
+            splitDepth: az._splitDepth || 0
+          };
+
+          // Adaptive quad-split: when a cell hits >=18 leads, subdivide into 4 tighter 1.2km micro-cells
+          const azLat = Number(az.lat ?? az.latitude);
+          const azLng = Number(az.lng ?? az.longitude);
+          if (
+            tState === 'completed'
+            && tally.total >= 18
+            && !az._splitDepth
+            && !adaptiveSplitDone.has(zK)
+            && adaptiveSplitsUsed < MAX_ADAPTIVE_SPLITS
+            && Number.isFinite(azLat) && Number.isFinite(azLng)
+            && hasEngine('maps')
+            && !isAborted()
+          ) {
+            adaptiveSplitDone.add(zK);
+            const offsets = [
+              { tag: 'NE', dLat: 0.0075, dLng: 0.0075 },
+              { tag: 'NW', dLat: 0.0075, dLng: -0.0075 },
+              { tag: 'SE', dLat: -0.0075, dLng: 0.0075 },
+              { tag: 'SW', dLat: -0.0075, dLng: -0.0075 }
+            ];
+            for (const off of offsets) {
+              if (adaptiveSplitsUsed >= MAX_ADAPTIVE_SPLITS) break;
+              const subLat = Number((azLat + off.dLat).toFixed(5));
+              const subLng = Number((azLng + off.dLng).toFixed(5));
+              const subName = `${az.zoneName || az.name} · ${off.tag}`;
+              const subKey = String(subName).toLowerCase().trim();
+              const subQuery = `${searchPhrase} near ${subLat},${subLng}`;
+              const subZone = {
+                zoneName: subName,
+                queryText: subQuery,
+                district: az.district || baseLocation,
+                state: az.state || regionLabel,
+                lat: subLat,
+                lng: subLng,
+                radiusKm: 1.2,
+                coverageKind: 'split',
+                _splitDepth: 1,
+                index: activeZones.length + 1
+              };
+              activeZones.push(subZone);
+              zones.push(subZone);
+              targetMap[subKey] = 'queued';
+              cellStates[subName] = { state: 'queued', leads: 0, mobiles: 0, splitDepth: 1 };
+              totalZones += 1;
+              adaptiveSplitsUsed += 1;
+              await addScrapeJob(
+                'scrapeGooglePlaces',
+                [subQuery, category, subName, sessionId, subLat, subLng, 1.2, 'broad', az.district || baseLocation, az.state || regionLabel, null, baseLocation, isMaster, az.scope || null, az.mandal || null, countryCode],
+                18,
+                { lat: subLat, lng: subLng, zoneName: subName, locationName: subName, district: az.district || baseLocation, state: az.state || regionLabel, country: countryCode, sessionId, userId, isMaster, active: true, coverageKind: 'split', boundaryKm: 3 }
+              );
+            }
+            if (activeSessions[sessionId]) {
+              activeSessions[sessionId].totalMandals = totalZones;
+              activeSessions[sessionId].totalMandalsAcrossAll = totalZones;
+              activeSessions[sessionId].overallTotalMandals = totalZones;
+            }
+            addLog(`[Adaptive Radar] ⚡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
+          }
+        }
+      } catch (adaptiveErr) { /* best-effort adaptive split */ }
+
       // Keep the session snapshot as truthful as the SSE event. Before this,
       // `overallCompletedMandals` was written once at start and never updated,
       // so /api/scrape/active (and anything that reconnects) saw 0/28 for the
@@ -1348,6 +1475,8 @@ async function runOmniSearchOrchestrator(
           activeZone: activeZonePayload,
           totalMandalsAcrossAll: totalZones,
           overallCompletedMandals: completedZones,
+          cellStates: { ...cellStates },
+          splitZonesCount: adaptiveSplitsUsed,
           eta: etaStr,
           etaText: etaStr,
           sessionActive: true

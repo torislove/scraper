@@ -182,8 +182,9 @@ async function optimizePageForSpeed(page) {
       const resourceType = req.resourceType();
       const url = req.url().toLowerCase();
 
-      // Tier 2 Playwright: Aggressive resource blocking (strips 90% page weight, <400ms loads)
-      if (['image', 'media', 'font', 'stylesheet', 'other'].includes(resourceType)) {
+      // Tier 2 Playwright: Abort heavy binary/font assets only; preserve stylesheet & other
+      // so Google Maps' virtualized feed keeps its scrollable layout and pagination XHRs.
+      if (['image', 'media', 'font'].includes(resourceType)) {
         return route.abort();
       }
       if (

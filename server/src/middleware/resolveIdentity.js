@@ -10,7 +10,7 @@
 
 const { readToken, verifyLiveSession } = require('../routes/auth');
 
-const PUBLIC_PATHS = /^\/(auth\/(config|login|register|google|forgot-password|reset-password|logout|me)|health|ready|app\/info|public\/)/;
+const PUBLIC_PATHS = /^\/(auth\/(config|login|register|google|forgot-password|reset-password|logout|me)|health|ready|app\/info|diagnostics\/selftest|public\/)/;
 
 module.exports = function resolveIdentity(req, res, next) {
   const claims = readToken(req);

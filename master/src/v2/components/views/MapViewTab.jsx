@@ -18,7 +18,8 @@ export default function MapViewTab({
   mapCenter,
   mapZoom,
   estimate,
-  setSelectedVendor
+  setSelectedVendor,
+  cellStates = {}
 }) {
   const mapVendors = (run?.id || sessionFilter)
     ? filteredVendors.filter(v => v.sessionId === (run?.id || sessionFilter) || v.lastSessionId === (run?.id || sessionFilter))
@@ -53,6 +54,7 @@ export default function MapViewTab({
           height="100%"
           fitKey={run?.id || sessionFilter || 'map-tab'}
           scopeTitle={scopeTitle}
+          cellStates={cellStates}
           onSelect={vendor => setSelectedVendor(vendor)}
           onSelectZone={name => updateFilter('query', name)}
         />
@@ -65,11 +67,22 @@ export default function MapViewTab({
             {(mapZones || []).map(zone => {
               const name = zone.zoneName || zone.name || 'Zone';
               const isActive = scanning && activeZone?.name === name;
+              const cs = cellStates?.[name] || null;
               return (
                 <div key={`${zone.index}-${name}`} className={cx(isActive && 'is-active')}>
                   <span>{String(zone.index || 0).padStart(2, '0')}</span>
                   <b>{name}</b>
-                  <small>{isActive ? 'SCANNING' : zone.lat ? 'ANCHORED' : 'GEOCODE'}</small>
+                  <small>
+                    {isActive
+                      ? 'SCANNING'
+                      : cs?.state === 'saturated'
+                        ? `SPLIT ↗ (${cs.leads})`
+                        : cs?.state === 'done'
+                          ? `DONE (${cs.leads})`
+                          : zone.lat
+                            ? 'ANCHORED'
+                            : 'GEOCODE'}
+                  </small>
                 </div>
               );
             })}

@@ -319,7 +319,7 @@ router.get('/search', async (req, res) => {
     const q = req.query.q || '';
     if (!q || q.trim().length === 0) return res.json([]);
     const { autocompleteLocation, geocodeLocation } = require('../utils/olaMaps');
-    const autoList = await autocompleteLocation(q);
+    const autoList = await autocompleteLocation(q, { countryCode: String(req.query.country || req.headers['x-country'] || 'IN').toUpperCase() });
     const results = autoList.map(text => ({
       display: text,
       name: text
@@ -336,7 +336,7 @@ router.get('/autocomplete', async (req, res) => {
     const q = req.query.q || '';
     if (!q || q.trim().length === 0) return res.json([]);
     const { autocompleteLocation } = require('../utils/olaMaps');
-    const results = await autocompleteLocation(q);
+    const results = await autocompleteLocation(q, { countryCode: String(req.query.country || req.headers['x-country'] || 'IN').toUpperCase() });
     res.json(results);
   } catch (err) {
     res.status(500).json({ error: err.message });

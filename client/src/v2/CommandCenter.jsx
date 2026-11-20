@@ -48,6 +48,7 @@ import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
 import LeadsTableView from './components/views/LeadsTableView';
 import AccountMenu from './components/AccountMenu';
+import SystemCheckPill from './components/SystemCheckPill';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
@@ -1792,6 +1793,7 @@ export default function CommandCenter() {
             {sseStatus === 'open' ? 'READY' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
           </StatusPill>
 
+          <SystemCheckPill variant="client" />
           <NotificationBell />
           <DesktopBadge />
           <AccountMenu variant="client" />
@@ -2012,6 +2014,7 @@ export default function CommandCenter() {
                     zoom={mapZoom}
                     height="100%"
                     fitKey={run?.id || 'live'}
+                    cellStates={progress?.cellStates || {}}
                     onSelect={vendor => setSelectedVendor(vendor)}
                     onSelectZone={name => updateFilter('query', name)}
                   />

@@ -29,16 +29,13 @@ function OdometerDigit({ char }) {
 }
 
 export default function OdometerCounter({ value = 0, className = '' }) {
-  const chars = useMemo(() => {
-    const formatted = typeof value === 'number' ? value.toLocaleString() : String(value || '0');
-    return formatted.split('');
-  }, [value]);
+  const formatted = useMemo(() => (
+    typeof value === 'number' ? value.toLocaleString() : String(value || '0')
+  ), [value]);
 
   return (
-    <span className={`odometer-wrapper ${className}`}>
-      {chars.map((char, index) => (
-        <OdometerDigit key={index} char={char} />
-      ))}
+    <span className={className} style={{ fontVariantNumeric: 'tabular-nums', display: 'inline-block' }}>
+      {formatted}
     </span>
   );
 }

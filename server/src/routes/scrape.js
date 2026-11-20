@@ -28,7 +28,7 @@ const { scrapeGoldenPagesIE, setDeps: setGoldenPagesDeps } = require('../scraper
 const { scrapeCylex, setDeps: setCylexDeps } = require('../scrapers/engine-cylex');
 const { scrapeTrustpilot, setDeps: setTrustpilotDeps } = require('../scrapers/engine-trustpilot');
 
-const { initQueue, registerTask, addScrapeJob, clearQueue, clearQueueForSession, getActiveJobs, getConcurrencyMetrics } = require('../utils/queue');
+const { initQueue, registerTask, addScrapeJob, clearQueue, clearQueueForSession, markSessionAborted, clearSessionAborted, getActiveJobs, getConcurrencyMetrics } = require('../utils/queue');
 const { geocodeLocation } = require('../utils/olaMaps');
 const { getKeywordSynonyms } = require('../utils/aiParser');
 const intelligentExtractor = require('../utils/intelligentExtractor');
@@ -808,6 +808,7 @@ router.post('/omni', async (req, res) => {
   }
 
   const finalSessionId = sessionId || makeSessionId('omni');
+  clearSessionAborted(finalSessionId);
   const classification = categoryRouter.classifyCategory(matchedCategory);
 
   // If explicit engines are provided by the user/UI, honor them; otherwise route automatically.
@@ -1013,6 +1014,7 @@ router.post('/auto', async (req, res) => {
 
     const finalSessionId = sessionId || makeSessionId(isMaster ? 'master_sweep' : 'client_auto');
     globalAbortSignal.aborted = false;
+    clearSessionAborted(finalSessionId);
     sessionAbortSignals.set(finalSessionId, { aborted: false });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
@@ -1235,6 +1237,7 @@ router.post('/master-sweep', async (req, res) => {
 
     // Reset abort signals for fresh master sweep
     globalAbortSignal.aborted = false;
+    clearSessionAborted(sessionId);
     sessionAbortSignals.set(sessionId, { aborted: false });
     if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync();
 
@@ -1660,37 +1663,27 @@ const handleMasterStopAll = async (req, res) => {
     targets = runningSessions;
   }
 
-  // Only trigger global abort if no specific session targeted and master invoked
-  if (!bodySessionId && workspaceScope === 'master') {
-    globalAbortSignal.aborted = true;
-  }
+  const otherRunning = runningSessions.filter(session => !targets.includes(session));
 
-  // 2. Mark targets as aborted and signal per-session abort controllers
+  // 2. Mark targets as aborted immediately and clear queue BEFORE closing browsers
+  // so processJob().finally() never pops another queued zone during shutdown.
+  if (bodySessionId) {
+    markSessionAborted(bodySessionId);
+  }
   for (const session of targets) {
     session.aborted = true;
     session.status = 'aborted';
     session.sessionActive = false;
+    markSessionAborted(session.sessionId);
     const sig = sessionAbortSignals.get(session.sessionId);
     if (sig) sig.aborted = true;
   }
 
-  // 3. Stop streaming enricher and deep jobs only if no other sessions are active
-  const otherRunning = runningSessions.filter(session => !targets.includes(session));
   if (!bodySessionId || otherRunning.length === 0) {
-    try {
-      const { streamingEnricher } = require('../services/phoneBackfillService');
-      await streamingEnricher.stop();
-    } catch (e) { }
-    try {
-      require('../services/deepProfileService').stopAll('user pressed stop');
-    } catch (e) { }
-    try {
-      const { closeAllBrowsers } = require('../scrapers/browserFactory');
-      await closeAllBrowsers();
-    } catch (e) { }
+    globalAbortSignal.aborted = true;
   }
 
-  // 4. Snappy queue clearing & browser cleanup
+  // 3. Immediately purge pending queue items
   if (bodySessionId) {
     await clearQueueForSession(bodySessionId).catch(() => { });
   } else if (targets.length > 0 && targets.length < runningSessions.length) {
@@ -1701,6 +1694,27 @@ const handleMasterStopAll = async (req, res) => {
     await clearQueue().catch(() => { });
     batchProgress.isActive = false;
     batchProgress.currentTask = 'Aborted';
+  }
+
+  // 4. Stop streaming enricher, deep jobs, and close active browsers in parallel
+  if (!bodySessionId || otherRunning.length === 0) {
+    await Promise.allSettled([
+      (async () => {
+        try {
+          const { streamingEnricher } = require('../services/phoneBackfillService');
+          await streamingEnricher.stop();
+        } catch (e) { }
+      })(),
+      Promise.resolve().then(() => {
+        try { require('../services/deepProfileService').stopAll('user pressed stop'); } catch (e) { }
+      }),
+      (async () => {
+        try {
+          const { closeAllBrowsers } = require('../scrapers/browserFactory');
+          await closeAllBrowsers();
+        } catch (e) { }
+      })()
+    ]);
   }
 
   // 5. Flush the atomic store before persisting
@@ -1913,6 +1927,9 @@ router.post('/resume', async (req, res) => {
 
     // 6. Enqueue the orchestrator for remaining zones. Resuming keeps the
     // folder's original coverage mode instead of forcing a full grid sweep.
+    globalAbortSignal.aborted = false;
+    clearSessionAborted(sessionId);
+    sessionAbortSignals.set(sessionId, { aborted: false });
     addScrapeJob('scrapeOmniOrchestrator', [
       category,
       location,

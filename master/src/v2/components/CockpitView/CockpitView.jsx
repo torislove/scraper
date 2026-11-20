@@ -376,6 +376,7 @@ export default function CockpitView({
             height="100%"
             compact={false}
             hoveredLeadId={hoveredLeadId}
+            cellStates={progress?.cellStates || {}}
             fitKey={run?.id || sessionFilter || 'master-workspace-map'}
             scopeTitle={run?.category ? `${run.category} (${run.location || 'Area'})` : 'Live Map'}
             onSelect={vendor => {

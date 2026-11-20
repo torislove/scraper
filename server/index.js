@@ -84,6 +84,8 @@ const sessionRoutes = require('./src/routes/sessionRoutes');
 const deepProfileRoutes = require('./src/routes/deepProfile');
 const searchRoutes = require('./src/routes/search');
 const openApiV2Routes = require('./src/routes/openApiV2');
+const diagnosticsRoutes = require('./src/routes/diagnostics');
+const { sanitizeLogForUi } = require('./src/utils/engineErrors');
 
 const app = express();
 app.disable('x-powered-by');
@@ -204,10 +206,13 @@ function sendSse(msg) {
 }
 
 function addLog(msg) {
-  console.log(msg);
-  systemLogs.push(msg);
+  if (process.env.SCRAPER_DEBUG === '1') console.log(msg);
+  const cleanMsg = sanitizeLogForUi(msg);
+  if (!cleanMsg) return;
+  if (process.env.SCRAPER_DEBUG !== '1') console.log(cleanMsg);
+  systemLogs.push(cleanMsg);
   if (systemLogs.length > 50) systemLogs.shift();
-  sendSse(msg);
+  sendSse(cleanMsg);
 }
 
 /* Surface politeness decisions in the live log so the customer sees why a
@@ -317,6 +322,7 @@ app.use('/api/automations', automationsRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/deep-profile', deepProfileRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/v2', openApiV2Routes);
 
 // Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)

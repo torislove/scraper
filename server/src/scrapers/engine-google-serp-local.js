@@ -346,6 +346,10 @@ async function scrapeGoogleLocalFinder(
   };
 
   if (serpBreaker.isBlocked()) {
+    if (mapsBackup) {
+      addLog(`[Auto Router] ⚡ Search surface resting — zone "${location || query}" handled directly by Google Maps.`);
+      return [];
+    }
     return await fallbackToMaps('Local Finder is in a cooldown window.');
   }
 
@@ -546,13 +550,14 @@ async function scrapeGoogleLocalFinder(
 
       if (page0Result.captcha) {
         const tripped = serpBreaker.recordCaptcha();
-        addLog(`[Local Finder Core] 🛡️ Google Search CAPTCHA on Page 1. Pivoting to Maps...`);
-        if (tripped && mapsBackup) return scrapedResults;
+        addLog(`[Auto Router] ⚡ Search surface resting — routed zone "${location || query}" directly to Google Maps engine.`);
+        if (mapsBackup || tripped) return scrapedResults;
         return await fallbackToMaps('CAPTCHA pivot.');
       }
 
       if (!page0Result.leads || page0Result.leads.length === 0) {
         if (scrapedResults.length === 0) {
+          if (mapsBackup) return scrapedResults;
           addLog(`[Local Finder Core] 0 leads on Page 1 for "${query}". Pivoting to Google Maps...`);
           return await fallbackToMaps('Empty Local Finder page.');
         }

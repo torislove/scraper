@@ -240,11 +240,31 @@ export default function CommandMap({
   compact = false,
   fitKey = 'default',
   scopeTitle = 'Current Search',
-  hoveredLeadId = null
+  hoveredLeadId = null,
+  cellStates = {}
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
   const [tileMode, setTileMode] = useState('voyager'); // Crisp vibrant 3D natural basemap by default
+  const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
+  const TILE_FAILOVER_ORDER = ['voyager', 'osm', 'streets', 'light'];
+  const handleTileError = useMemo(() => () => {
+    const now = Date.now();
+    const tracker = tileErrorTrackerRef.current;
+    if (now - tracker.since > 10000) {
+      tracker.count = 1;
+      tracker.since = now;
+    } else {
+      tracker.count += 1;
+    }
+    if (tracker.count >= 4) {
+      tracker.count = 0;
+      setTileMode(prev => {
+        const idx = TILE_FAILOVER_ORDER.indexOf(prev);
+        return TILE_FAILOVER_ORDER[(idx + 1) % TILE_FAILOVER_ORDER.length];
+      });
+    }
+  }, []);
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -406,6 +426,9 @@ export default function CommandMap({
           <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
             <b style={{ color: '#059669' }}>{formatNumber(validVendors.length)}</b> pinned
           </span>
+          <span style={{ fontSize: 9.5, fontWeight: 850, letterSpacing: '0.04em', color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 999 }}>
+            KEYLESS · 0 API KEYS
+          </span>
         </div>
       </div>
       <MapContainer
@@ -435,6 +458,7 @@ export default function CommandMap({
             maxNativeZoom={19}
             maxZoom={20}
             subdomains={['a', 'b', 'c', 'd']}
+            eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
@@ -446,6 +470,7 @@ export default function CommandMap({
               attribution={TILE_ATTRIBUTION}
               maxNativeZoom={16}
               maxZoom={19}
+              eventHandlers={{ tileerror: handleTileError }}
             />
             <TileLayer
               url={TILE_LIGHT_LABELS}
@@ -453,6 +478,7 @@ export default function CommandMap({
               maxNativeZoom={16}
               maxZoom={19}
               opacity={0.92}
+              eventHandlers={{ tileerror: handleTileError }}
             />
           </>
         )}
@@ -464,6 +490,7 @@ export default function CommandMap({
             attribution={TILE_ATTRIBUTION}
             maxNativeZoom={19}
             maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
@@ -474,6 +501,7 @@ export default function CommandMap({
             attribution={TILE_ATTRIBUTION}
             maxNativeZoom={18}
             maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
@@ -484,6 +512,7 @@ export default function CommandMap({
             attribution={TILE_ATTRIBUTION}
             maxNativeZoom={18}
             maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
@@ -494,6 +523,7 @@ export default function CommandMap({
             attribution={TILE_ATTRIBUTION}
             maxNativeZoom={16}
             maxZoom={19}
+            eventHandlers={{ tileerror: handleTileError }}
           />
         )}
 
@@ -506,7 +536,7 @@ export default function CommandMap({
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
 
-        {/* Territory Regions & Active Scraping Scanning Circles */}
+        {/* Territory Regions & 3D GBC Coverage Radar Cells */}
         {coverage.map((zone, index) => {
           const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const cleanZoneName = norm(zone.name);
@@ -514,32 +544,50 @@ export default function CommandMap({
           const isNameMatch = cleanActiveName && (cleanActiveName === cleanZoneName || cleanZoneName.includes(cleanActiveName) || cleanActiveName.includes(cleanZoneName));
           const isCoordMatch = Boolean(activePoint && Math.abs(zone.lat - activePoint[0]) < 0.005 && Math.abs(zone.lng - activePoint[1]) < 0.005);
           const isActive = scanning && (isNameMatch || isCoordMatch);
-          const tone = isActive ? '#10b981' : zone.approximate ? '#f59e0b' : '#6366f1';
+          const cellInfo = cellStates?.[zone.name] || null;
+          const cellState = isActive ? 'scanning' : (cellInfo?.state || (zone.approximate ? 'approx' : 'queued'));
+          const tone = cellState === 'scanning'
+            ? '#06b6d4'
+            : (cellState === 'saturated' || cellInfo?.splitDepth > 0)
+              ? '#7c3aed'
+              : cellState === 'done'
+                ? '#10b981'
+                : (cellState === 'dry' || cellState === 'approx')
+                  ? '#f59e0b'
+                  : cellState === 'resting'
+                    ? '#e11d48'
+                    : '#6366f1';
 
           return (
             <Circle
               key={`zone-${zone.index || index}-${zone.name}`}
               center={[zone.lat, zone.lng]}
-              radius={Math.max(1200, Math.min(8000, (zone.radiusKm || (zone.approximate ? 5 : 3.5)) * 1000))}
+              radius={Math.max(850, Math.min(8000, (zone.radiusKm || (zone.approximate ? 5 : 2.5)) * 1000))}
               eventHandlers={{
                 click: () => onSelectZone?.(zone.name)
               }}
               pathOptions={{
                 color: tone,
-                weight: isActive ? 3 : 1.5,
-                opacity: isActive ? 1 : zone.approximate ? 0.6 : 0.5,
+                weight: cellState === 'scanning' ? 3 : cellState === 'saturated' || cellState === 'done' ? 2.2 : 1.5,
+                opacity: cellState === 'scanning' ? 1 : cellState === 'done' || cellState === 'saturated' ? 0.85 : 0.5,
                 fillColor: tone,
-                fillOpacity: isActive ? 0.22 : 0.06,
-                dashArray: isActive ? undefined : zone.approximate ? '3 6' : '6 8'
+                fillOpacity: cellState === 'scanning' ? 0.24 : cellState === 'saturated' ? 0.16 : cellState === 'done' ? 0.11 : 0.05,
+                dashArray: cellState === 'scanning' || cellState === 'done' ? undefined : cellState === 'dry' || cellState === 'approx' ? '3 6' : '6 8'
               }}
             >
-              <Tooltip direction="top" opacity={0.92}>
+              <Tooltip direction="top" opacity={0.95}>
                 <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
-                  {isActive
-                    ? `Searching area · ${zone.name}`
-                    : zone.approximate
-                      ? `Area · ${zone.name}`
-                      : `Covered Area · ${zone.name}`}
+                  {cellState === 'scanning'
+                    ? `⚡ SCANNING · ${zone.name}`
+                    : cellState === 'saturated'
+                      ? `🟣 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                      : cellState === 'done'
+                        ? `✅ DONE · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                        : cellState === 'dry'
+                          ? `🟡 LOW DENSITY · ${zone.name}`
+                          : zone.approximate
+                            ? `Area · ${zone.name}`
+                            : `Covered Area · ${zone.name}`}
                 </div>
               </Tooltip>
             </Circle>

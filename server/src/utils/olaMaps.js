@@ -68,7 +68,7 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-const USER_AGENT = `GomandapScraperApp/3.0_${Math.random().toString(36).substring(7)} (contact@gomandap.com)`;
+const USER_AGENT = 'LeadHarvestAutonomousGeo/3.2 (+https://leadharvest.local/geo-policy)';
 
 async function nominatim(query, countryCode) {
   const params = {
@@ -313,34 +313,94 @@ async function geocodeLocation(locationQuery, opts = {}) {
   }
 }
 
+const COUNTRY_DISPLAY_NAMES = {
+  IN: 'India',
+  US: 'United States',
+  GB: 'United Kingdom',
+  CA: 'Canada',
+  AU: 'Australia',
+  AE: 'United Arab Emirates',
+  SG: 'Singapore',
+  NZ: 'New Zealand',
+  IE: 'Ireland',
+  ZA: 'South Africa',
+  DE: 'Germany'
+};
+
 /**
- * Autocomplete using the free Photon service (no key).
+ * Autocomplete using free Photon service + local geo bias (no API key).
  */
-async function autocompleteLocation(text) {
-  if (!text || text.trim().length === 0) return [];
+async function autocompleteLocation(text, opts = {}) {
+  if (!text || String(text).trim().length === 0) return [];
+  const raw = String(text).trim();
+  const rawCountry = typeof opts === 'string' ? opts : (opts?.countryCode || opts?.country || '');
+  const countryCode = String(rawCountry || '').toUpperCase().trim();
+  const countryName = COUNTRY_DISPLAY_NAMES[countryCode] || '';
+  const localMatches = [];
+
+  if (!countryCode || countryCode === 'IN') {
+    try {
+      const geoCluster = require('./universalGeoCluster');
+      const needle = raw.toLowerCase();
+      for (const key of Object.keys(geoCluster.AUTHORITATIVE_CLUSTERS || {})) {
+        if (key.includes(needle)) {
+          localMatches.push(`${key.replace(/\b\w/g, c => c.toUpperCase())}, India`);
+        }
+      }
+      if (geoCluster.districtIndex) {
+        for (const [, entry] of geoCluster.districtIndex) {
+          if (String(entry.district || '').toLowerCase().startsWith(needle)) {
+            localMatches.push(`${entry.district}, ${entry.state}, India`);
+          }
+          if (localMatches.length >= 6) break;
+        }
+      }
+    } catch (e) { /* local match optional */ }
+  }
 
   try {
+    const queryStr = countryName && !raw.toLowerCase().includes(countryName.toLowerCase())
+      ? `${raw} ${countryName}`
+      : raw;
     const response = await axios.get('https://photon.komoot.io/api/', {
-      params: { q: text, limit: 6 },
-      headers: { Accept: 'application/json' },
+      params: { q: queryStr, limit: 8, lang: 'en' },
+      headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
       timeout: 5000
     });
 
-    if (response.data && response.data.features) {
-      return response.data.features.map(f => {
-        const props = f.properties;
-        const parts = [];
-        if (props.name) parts.push(props.name);
-        if (props.city) parts.push(props.city);
-        if (props.state) parts.push(props.state);
-        if (props.country) parts.push(props.country);
-        return parts.join(', ');
-      });
+    const features = Array.isArray(response.data?.features) ? response.data.features : [];
+    const mapped = features.map(f => {
+      const props = f.properties || {};
+      const parts = [];
+      if (props.name) parts.push(props.name);
+      if (props.city && props.city !== props.name) parts.push(props.city);
+      if (props.state) parts.push(props.state);
+      if (props.country) parts.push(props.country);
+      return {
+        label: parts.join(', '),
+        cc: String(props.countrycode || '').toUpperCase()
+      };
+    }).filter(item => item.label);
+
+    // Prioritize exact country matches before international homonyms (e.g. Guntur, India over Guntur, Indonesia)
+    if (countryCode) {
+      mapped.sort((a, b) => (a.cc === countryCode ? -1 : 1) - (b.cc === countryCode ? -1 : 1));
     }
-    return [];
+
+    const merged = [];
+    const seen = new Set();
+    for (const label of [...localMatches, ...mapped.map(m => m.label)]) {
+      const k = label.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        merged.push(label);
+      }
+      if (merged.length >= 8) break;
+    }
+    return merged;
   } catch (error) {
     console.error('[Autocomplete Error]:', error.message);
-    return [];
+    return localMatches.slice(0, 6);
   }
 }
 
