@@ -335,5 +335,123 @@ export function startBrowserRamAssist({
     }
   })();
 
-  return cleanup;
+  // Zero-Knowledge Blind Ticket Relay Loop (runs while extension is connected)
+  let relayTimer = null;
+  const runRelayPoll = async () => {
+    if (stopped) return;
+    try {
+      const extInfo = await detectRamExtension(250);
+      if (!extInfo.installed || stopped) return;
+      const hbRes = await fetch(`${base}/api/scrape/extension-heartbeat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-scraper-extension': extInfo.version || '1.0.0',
+          ...headers
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          installed: true,
+          version: extInfo.version || '1.0.0',
+          ramGb: hardware.ramGb,
+          cpuCores: hardware.cpuCores
+        })
+      });
+      if (!hbRes.ok || stopped) return;
+      const hbData = await hbRes.json();
+      const tickets = Array.isArray(hbData?.tickets) ? hbData.tickets : [];
+      for (const ticket of tickets) {
+        if (stopped) break;
+        const result = await executeBlindTicketInExtension(ticket);
+        await fetch(`${base}/api/scrape/relay-result`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...headers },
+          signal: controller.signal,
+          body: JSON.stringify({
+            ticketId: ticket.ticketId,
+            signature: ticket.signature,
+            ...result
+          })
+        }).catch(() => {});
+      }
+    } catch (e) {}
+  };
+  runRelayPoll();
+  relayTimer = setInterval(runRelayPoll, 2500);
+
+  return () => {
+    if (relayTimer) clearInterval(relayTimer);
+    cleanup();
+  };
+}
+
+export const EXTENSION_DOWNLOAD_URL = '/api/scrape/extension-download';
+
+export function detectRamExtension(timeoutMs = 500) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve({ installed: false, version: '' });
+  }
+  const datasetVer = document.documentElement?.dataset?.scraperExtension;
+  if (datasetVer) {
+    return Promise.resolve({ installed: true, version: String(datasetVer) });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMsg);
+      clearTimeout(timer);
+      resolve(val);
+    };
+    const onMsg = (event) => {
+      if (event.source !== window || !event.data) return;
+      if (event.data.source === 'SCRAPER_RAM_EXTENSION' && event.data.type === 'SCRAPER_EXT_PONG') {
+        finish({ installed: true, version: String(event.data.version || '1.0.0') });
+      }
+    };
+    const timer = setTimeout(() => {
+      const retryVer = document.documentElement?.dataset?.scraperExtension;
+      finish(retryVer ? { installed: true, version: String(retryVer) } : { installed: false, version: '' });
+    }, timeoutMs);
+    window.addEventListener('message', onMsg);
+    try {
+      window.postMessage({ type: 'SCRAPER_EXT_PING' }, '*');
+    } catch (e) {
+      finish({ installed: false, version: '' });
+    }
+  });
+}
+
+export function executeBlindTicketInExtension(ticket, timeoutMs = 15000) {
+  if (typeof window === 'undefined' || !ticket?.ticketId) {
+    return Promise.resolve({ ok: false, error: 'Extension bridge unavailable' });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (res) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMsg);
+      clearTimeout(timer);
+      resolve(res);
+    };
+    const onMsg = (event) => {
+      if (event.source !== window || !event.data) return;
+      if (
+        event.data.source === 'SCRAPER_RAM_EXTENSION' &&
+        event.data.type === 'SCRAPER_EXT_TICKET_RESULT' &&
+        event.data.ticketId === ticket.ticketId
+      ) {
+        finish(event.data.result || { ok: false, error: 'Empty extension result' });
+      }
+    };
+    const timer = setTimeout(() => finish({ ok: false, ticketId: ticket.ticketId, error: 'Extension timeout' }), timeoutMs);
+    window.addEventListener('message', onMsg);
+    try {
+      window.postMessage({ type: 'SCRAPER_EXT_EXECUTE_TICKET', ticket }, '*');
+    } catch (e) {
+      finish({ ok: false, ticketId: ticket.ticketId, error: e?.message || 'PostMessage failed' });
+    }
+  });
 }

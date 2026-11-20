@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Scraper.co.in — RAM Turbo Bridge (Zero-Knowledge Relay)",
+  "version": "1.0.0",
+  "description": "Connects your device RAM to Scraper.co.in cloud engines for instant parallel lead delivery across 11 countries.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scraper.co.in RAM Turbo Bridge"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://scraper.co.in/*",
+        "https://*.scraper.co.in/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "contentBridge.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

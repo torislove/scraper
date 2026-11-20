@@ -10,12 +10,13 @@ services:
     environment:
       - PORT=5002
       - NODE_ENV=production
-      - COMPUTE_MODE=user_ram_hybrid
+      - COMPUTE_MODE=extension_only
+      - SCRAPER_EXTENSION_ONLY=true
       - USER_RAM_OFFLOAD_ENABLED=1
       - SCRAPER_ALLOW_REMOTE=1
-      - SCRAPER_BROWSER_SLOTS=auto
-      - PLAYWRIGHT_CONCURRENCY=auto
-      - NODE_OPTIONS=--max-old-space-size=2560
+      - SCRAPER_BROWSER_SLOTS=0
+      - PLAYWRIGHT_CONCURRENCY=0
+      - NODE_OPTIONS=--max-old-space-size=1536
       - AUTH_REQUIRED=1
       - SESSION_SECRET=${SESSION_SECRET:-scraper-super-secure-session-secret-change-me}
       - MASTER_KEY=${MASTER_KEY:-master-admin-secret-key-change-me}

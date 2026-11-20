@@ -337,3 +337,41 @@ export function startBrowserRamAssist({
 
   return cleanup;
 }
+
+export const EXTENSION_DOWNLOAD_URL = '/api/scrape/extension-download';
+
+export function detectRamExtension(timeoutMs = 500) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve({ installed: false, version: '' });
+  }
+  const datasetVer = document.documentElement?.dataset?.scraperExtension;
+  if (datasetVer) {
+    return Promise.resolve({ installed: true, version: String(datasetVer) });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (val) => {
+      if (settled) return;
+      settled = true;
+      window.removeEventListener('message', onMsg);
+      clearTimeout(timer);
+      resolve(val);
+    };
+    const onMsg = (event) => {
+      if (event.source !== window || !event.data) return;
+      if (event.data.source === 'SCRAPER_RAM_EXTENSION' && event.data.type === 'SCRAPER_EXT_PONG') {
+        finish({ installed: true, version: String(event.data.version || '1.0.0') });
+      }
+    };
+    const timer = setTimeout(() => {
+      const retryVer = document.documentElement?.dataset?.scraperExtension;
+      finish(retryVer ? { installed: true, version: String(retryVer) } : { installed: false, version: '' });
+    }, timeoutMs);
+    window.addEventListener('message', onMsg);
+    try {
+      window.postMessage({ type: 'SCRAPER_EXT_PING' }, '*');
+    } catch (e) {
+      finish({ installed: false, version: '' });
+    }
+  });
+}

@@ -12,7 +12,7 @@ import Country3DFlag from './components/Country3DFlag';
 import { POPULAR_COUNTRIES } from './data/countries';
 import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL
 } from './utils/deviceRamEngine';
 import { pingHealth } from './api';
 import './landingExecutive.css';
@@ -934,6 +934,54 @@ export default function LandingV2() {
                       <p>{req.note}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="lx-ext-shield-card">
+                <div className="lx-ext-shield-head">
+                  <div>
+                    <span className="lx-kicker" style={{ marginBottom: 8 }}><ShieldCheck size={13} /> Cloud-Protected Engines · Extension-Only Speed</span>
+                    <h3>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
+                    <p>
+                      Install our ultra-lightweight Chrome / Edge extension in 30 seconds to unlock instant parallel sweeps with zero waiting queues.
+                    </p>
+                  </div>
+                  <div className="lx-ext-cta-group">
+                    <a
+                      href={EXTENSION_DOWNLOAD_URL}
+                      download="scraper-co-in-ram-turbo-extension.zip"
+                      className="lx-btn lx-btn-primary"
+                    >
+                      <Download size={15} /> Download RAM Extension (.zip)
+                    </a>
+                    <button type="button" className="lx-btn lx-btn-ghost" onClick={() => openWorkspace('IN')}>
+                      Open Command Center <ArrowRight size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lx-ext-3grid">
+                  <div className="lx-ext-pillar">
+                    <span className="lx-ext-badge is-cloud">01 · SERVER CLOUD BRAIN</span>
+                    <b>100% Proprietary 6-Engine Intelligence</b>
+                    <small>
+                      All smart search routing, 619,287 Indian town/village mapping, Store vs. Service AI, phone validation, and Excel cleaning run safely on our cloud servers—never exposed or stale.
+                    </small>
+                  </div>
+                  <div className="lx-ext-pillar">
+                    <span className="lx-ext-badge is-ram">02 · USER RAM EXTENSION</span>
+                    <b>Zero-Queue Parallel Zones on Your Hardware</b>
+                    <small>
+                      The lightweight browser bridge uses your idle RAM (4GB = 3 zones, 8GB = 5 zones, 16GB+ = 8 zones simultaneously) and home connection—no crowded server queues or shared datacenter blocks.
+                    </small>
+                  </div>
+                  <div className="lx-ext-pillar">
+                    <span className="lx-ext-badge is-safe">03 · 30-SECOND PRIVATE SETUP</span>
+                    <b>Runs Only When You Click Search</b>
+                    <small>
+                      1. Download &amp; unzip · 2. Open chrome://extensions (Developer Mode ON) → Load unpacked · 3. Search any business in 11 countries and download clean Excel. Never touches personal tabs.
+                    </small>
+                  </div>
                 </div>
               </div>
             </motion.div>

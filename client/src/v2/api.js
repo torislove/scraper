@@ -19,6 +19,9 @@ client.interceptors.request.use(config => {
     // the token and overwrites the headers above from its claims.
     const token = getToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (typeof document !== 'undefined' && document.documentElement?.dataset?.scraperExtension) {
+      config.headers['x-scraper-extension'] = document.documentElement.dataset.scraperExtension;
+    }
   } catch (e) {}
   return config;
 });

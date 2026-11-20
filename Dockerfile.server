@@ -46,7 +46,8 @@ WORKDIR /app/server
 RUN npm ci --omit=dev
 RUN npx playwright install chromium
 
-# Copy server application source code
+# Copy server application source code and Zero-Knowledge Browser Extension package
+COPY --chown=node:node extension/ ./extension/
 COPY --chown=node:node server/ ./
 
 # Create data directories with appropriate permissions
@@ -55,15 +56,16 @@ RUN mkdir -p /app/server/data /app/server/db/user_sessions && chown -R node:node
 # Switch to non-root node user for security
 USER node
 
-# Production environment defaults (User-RAM Hybrid Compute + Hardware Auto-Scale)
+# Production environment defaults (Zero-Knowledge Extension-Only Cloud Compute)
 ENV PORT=5002
 ENV NODE_ENV=production
-ENV COMPUTE_MODE=user_ram_hybrid
+ENV COMPUTE_MODE=extension_only
+ENV SCRAPER_EXTENSION_ONLY=true
 ENV USER_RAM_OFFLOAD_ENABLED=1
 ENV SCRAPER_ALLOW_REMOTE=1
-ENV SCRAPER_BROWSER_SLOTS=auto
-ENV PLAYWRIGHT_CONCURRENCY=auto
-ENV NODE_OPTIONS="--max-old-space-size=2560"
+ENV SCRAPER_BROWSER_SLOTS=0
+ENV PLAYWRIGHT_CONCURRENCY=0
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 EXPOSE 5002
 

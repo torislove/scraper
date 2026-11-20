@@ -692,6 +692,44 @@ export default function LandingV2() {
                 </div>
               </div>
             </div>
+
+            <div className="lx-ext-shield-card" style={{ marginTop: 28 }}>
+              <div className="lx-ext-shield-head">
+                <div>
+                  <span className="lx-kicker" style={{ marginBottom: 8 }}><ShieldCheck size={13} /> Zero-Knowledge Extension-Only Architecture</span>
+                  <h3>All 6 Engines Protected on Server. Customer Extension Powers User-RAM Speed.</h3>
+                  <p>
+                    Proprietary parsers and geo-databases remain 100% server-side; the blind Chrome/Edge extension relays signed fetch tickets using each client&apos;s own RAM &amp; IP.
+                  </p>
+                </div>
+                <div className="lx-ext-cta-group">
+                  <a
+                    href="/api/scrape/extension-download"
+                    download="scraper-co-in-ram-turbo-extension.zip"
+                    className="lx-btn lx-btn-primary"
+                  >
+                    <Download size={15} /> Download RAM Extension (.zip)
+                  </a>
+                </div>
+              </div>
+              <div className="lx-ext-3grid">
+                <div className="lx-ext-pillar">
+                  <span className="lx-ext-badge is-cloud">01 · SERVER-ONLY BRAIN</span>
+                  <b>6 Proprietary Engines Never Leave Server</b>
+                  <small>Zero CSS selectors, regexes, or category logic inside client/extension bundles—Zero reverse-engineering risk.</small>
+                </div>
+                <div className="lx-ext-pillar">
+                  <span className="lx-ext-badge is-ram">02 · BLIND EXTENSION RELAY</span>
+                  <b>User RAM &amp; Residential IP Execution</b>
+                  <small>Runs parallel fetch tickets directly in customer browser memory (3x / 5x / 8x) with zero server Chromium load.</small>
+                </div>
+                <div className="lx-ext-pillar">
+                  <span className="lx-ext-badge is-safe">03 · EXTENSION-ONLY DEPLOY</span>
+                  <b>95% Lower Cloud Infra Cost</b>
+                  <small>Lightweight Express pods stay lean (`SCRAPER_EXTENSION_ONLY=true`) while streaming full Excel &amp; Satellite Map leads.</small>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 

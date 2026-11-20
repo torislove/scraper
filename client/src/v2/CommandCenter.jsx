@@ -52,7 +52,10 @@ import SystemCheckPill from './components/SystemCheckPill';
 import { API_URL } from '../apiConfig';
 import { getUserId } from '../utils/sessionManager';
 import { getToken } from './auth';
-import { startBrowserRamAssist, detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES } from './utils/deviceRamEngine';
+import {
+  startBrowserRamAssist, detectDeviceHardware, detectRamExtension,
+  DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL
+} from './utils/deviceRamEngine';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm } from './utils/leadHelpers';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
@@ -206,6 +209,40 @@ export default function CommandCenter() {
   const [hwPopupOpen, setHwPopupOpen] = useState(() => {
     try { return localStorage.getItem('scraper_hw_popup_seen_v2') !== 'true'; } catch (e) { return true; }
   });
+  const [extState, setExtState] = useState({ installed: false, version: '', extensionOnly: false });
+
+  useEffect(() => {
+    let active = true;
+    const syncExt = async () => {
+      const local = await detectRamExtension(450);
+      if (!active) return;
+      let extOnly = false;
+      try {
+        const res = await fetch(`${API_URL}/scrape/extension-status`);
+        if (res.ok) {
+          const data = await res.json();
+          extOnly = Boolean(data?.extensionOnly);
+        }
+      } catch (e) {}
+      if (!active) return;
+      setExtState({ installed: local.installed, version: local.version, extensionOnly: extOnly });
+      if (local.installed) {
+        fetch(`${API_URL}/scrape/extension-heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(getUserId() ? { 'x-user-id': getUserId() } : {}) },
+          body: JSON.stringify({
+            installed: true,
+            version: local.version || '1.0.0',
+            ramGb: hardware.ramGb,
+            cpuCores: hardware.cpuCores
+          })
+        }).catch(() => {});
+      }
+    };
+    syncExt();
+    const timer = setInterval(syncExt, hwPopupOpen ? 3000 : 25000);
+    return () => { active = false; clearInterval(timer); };
+  }, [hwPopupOpen, hardware.ramGb, hardware.cpuCores]);
   const enableLocalHardwareTurbo = useCallback(() => {
     setHwTurboEnabled(true);
     setHwPopupOpen(false);
@@ -1098,7 +1135,12 @@ export default function CommandCenter() {
       setScanning(false);
       setRun(null);
       activeSessionIdRef.current = '';
-      toast.error(error?.response?.data?.error || 'Search could not be started.');
+      if (error?.response?.status === 428 || error?.response?.data?.extensionRequired) {
+        setHwPopupOpen(true);
+        toast.error('Extension-Only Deployment: Install & connect the Scraper.co.in RAM Extension to run searches on your RAM.');
+      } else {
+        toast.error(error?.response?.data?.error || 'Search could not be started.');
+      }
       setMascotAlert({ id: Date.now(), text: 'That search did not start. Check the engine board, then try again.' });
       setLogs(prev => [...prev, `[ERROR] ${error?.response?.data?.error || error.message}`]);
     } finally {
@@ -2405,6 +2447,53 @@ export default function CommandCenter() {
                     <span>{req.parallelZones} Parallel Zones · {req.speed}</span>
                   </div>
                 ))}
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: 14,
+                  marginBottom: 14,
+                  background: extState.installed ? '#ecfdf5' : '#f5f3ff',
+                  border: extState.installed ? '1.5px solid rgba(16,185,129,0.4)' : '1.5px solid rgba(124,58,237,0.28)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap'
+                }}
+              >
+                <div style={{ minWidth: 220, flex: 1 }}>
+                  <b style={{ display: 'block', fontSize: 12.5, color: extState.installed ? '#065f46' : '#5b21b6' }}>
+                    {extState.installed
+                      ? `🟢 Zero-Knowledge RAM Extension Connected (v${extState.version || '1.0.0'})`
+                      : `🔌 Cloud Extension-Only Bridge ${extState.extensionOnly ? '(Required in Cloud Deploy)' : '(Recommended)'}`}
+                  </b>
+                  <span style={{ fontSize: 11.5, color: '#475569' }}>
+                    All 6 engines stay 100% protected on our server; the extension only borrows your idle RAM for instant speed.
+                    {!extState.installed && ' 1. Download ZIP & unzip → 2. chrome://extensions (Dev Mode ON) → 3. Load unpacked.'}
+                  </span>
+                </div>
+                <a
+                  href={EXTENSION_DOWNLOAD_URL}
+                  download="scraper-co-in-ram-turbo-extension.zip"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '8px 13px',
+                    borderRadius: 999,
+                    background: extState.installed ? '#059669' : '#6d28d9',
+                    color: '#ffffff',
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    textDecoration: 'none',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <Download size={13} />
+                  <span>{extState.installed ? 'Re-Download Extension' : 'Download RAM Extension (.zip)'}</span>
+                </a>
               </div>
 
               <div className="v2-gbc-hw-actions">

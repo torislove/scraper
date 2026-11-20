@@ -6,14 +6,15 @@ metadata:
 data:
   PORT: "5002"
   NODE_ENV: "production"
-  COMPUTE_MODE: "user_ram_hybrid"
+  COMPUTE_MODE: "extension_only"
+  SCRAPER_EXTENSION_ONLY: "true"
   USER_RAM_OFFLOAD_ENABLED: "1"
   SCRAPER_ALLOW_REMOTE: "1"
-  # Auto-scales concurrency by host/pod memory when running coordinator or local worker,
-  # while client browser Web Workers offload discovery & dedupe onto user RAM.
-  SCRAPER_BROWSER_SLOTS: "auto"
+  # Zero-Knowledge Extension-Only cloud deployment: all 6 engines stay on server while user
+  # browser extensions run network fetches on user RAM/IP (0 server Chromium instances needed).
+  SCRAPER_BROWSER_SLOTS: "0"
   SCRAPER_ENRICH_RESERVE: "1"
-  PLAYWRIGHT_CONCURRENCY: "auto"
+  PLAYWRIGHT_CONCURRENCY: "0"
   NODE_OPTIONS: "--max-old-space-size=1536"
   AUTH_REQUIRED: "1"
   SESSION_TTL_SECONDS: "604800"

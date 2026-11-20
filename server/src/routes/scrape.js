@@ -51,6 +51,7 @@ const leadArchive = require('../services/leadArchive');
 const outOfBoundsVault = require('../services/outOfBoundsVault');
 const { SESSIONS_DIR } = require('../config/paths');
 const etaModel = require('../utils/etaModel');
+const extensionRelayHub = require('../services/extensionRelayHub');
 
 /**
  * The country the operator selected in the UI. This is authoritative for the
@@ -764,6 +765,18 @@ router.post('/omni', async (req, res) => {
 
   // Client Restriction: Client can ONLY scrape individual cities and mandals!
   const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+  const extVer = String(req.headers['x-scraper-extension'] || req.body?.extensionVersion || '').trim();
+  if (extVer) {
+    extensionRelayHub.registerHeartbeat({ userId, version: extVer, installed: true });
+  }
+  if (!isMaster && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
+    return res.status(428).json({
+      ok: false,
+      extensionRequired: true,
+      downloadUrl: '/api/scrape/extension-download',
+      error: 'Extension-Only Mode: Install & connect the Scraper.co.in RAM Turbo Extension (30s setup) to run searches on your local hardware.'
+    });
+  }
   const requestedCode = requestedCountry(req);
   const detectedCountry = require('../services/localBrain/countries').detectCountry(parsed.location || '');
   const runCountry = requestedCode || (detectedCountry && detectedCountry.code) || 'IN';
@@ -902,6 +915,18 @@ router.post('/auto', async (req, res) => {
     // Client Restriction: Whole-district (18+ mandals) & state sweeps are restricted to Master!
     // Individual mandals (and their constituent villages), cities, towns, and localities are fully supported in Client.
     const isMaster = req.headers['x-workspace-scope'] === 'master' || req.body.isMaster === true;
+    const extVer = String(req.headers['x-scraper-extension'] || req.body?.extensionVersion || '').trim();
+    if (extVer) {
+      extensionRelayHub.registerHeartbeat({ userId, version: extVer, installed: true });
+    }
+    if (!isMaster && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
+      return res.status(428).json({
+        ok: false,
+        extensionRequired: true,
+        downloadUrl: '/api/scrape/extension-download',
+        error: 'Extension-Only Mode: Install & connect the Scraper.co.in RAM Turbo Extension (30s setup) to run searches on your local hardware.'
+      });
+    }
     const detectedCountry = require('../services/localBrain/countries').detectCountry(plan.location || '');
     const country = requestedCountry(req) || (detectedCountry && detectedCountry.code) || 'IN';
     const { classifyLocation } = require('../utils/universalGeoCluster');
@@ -2086,6 +2111,62 @@ router.post('/client-ingest', async (req, res) => {
       ingested: savedList.length,
       leads: savedList
     });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Zero-Knowledge Extension-Only Status, Heartbeat, Blind Relay Ticket Result & ZIP Download
+router.get('/extension-status', (req, res) => {
+  const userId = String(req.headers['x-user-id'] || req.query.userId || 'anonymous').trim() || 'anonymous';
+  return res.json({
+    ok: true,
+    ...extensionRelayHub.getStats(userId),
+    downloadUrl: '/api/scrape/extension-download'
+  });
+});
+
+router.post('/extension-heartbeat', (req, res) => {
+  try {
+    const userId = String(req.headers['x-user-id'] || req.body?.userId || 'anonymous').trim() || 'anonymous';
+    const record = extensionRelayHub.registerHeartbeat({
+      userId,
+      version: req.body?.version || req.headers['x-scraper-extension'] || '1.0.0',
+      ramGb: req.body?.ramGb,
+      cpuCores: req.body?.cpuCores,
+      installed: req.body?.installed !== false
+    });
+    const tickets = record.installed ? extensionRelayHub.pullPendingTickets(userId, 4) : [];
+    return res.json({
+      ok: true,
+      connected: extensionRelayHub.hasActiveExtension(userId),
+      extensionOnly: extensionRelayHub.isExtensionOnlyMode(),
+      tickets
+    });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.post('/relay-result', (req, res) => {
+  try {
+    const outcome = extensionRelayHub.resolveTicketResult(req.body || {});
+    if (outcome.matched && !outcome.verified) {
+      return res.status(403).json({ ok: false, error: outcome.error || 'Invalid ticket signature' });
+    }
+    return res.json({ ok: true, ...outcome });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+router.get('/extension-download', (_req, res) => {
+  try {
+    const zipBuffer = extensionRelayHub.buildExtensionZipBuffer();
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="scraper-co-in-ram-turbo-extension.zip"');
+    res.setHeader('Cache-Control', 'no-cache');
+    return res.send(zipBuffer);
   } catch (err) {
     return res.status(500).json({ ok: false, error: err.message });
   }
