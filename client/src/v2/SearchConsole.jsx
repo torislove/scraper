@@ -79,7 +79,7 @@ function saveRecent(country, query) {
     const next = [clean, ...prev.filter(item => item.toLowerCase() !== clean.toLowerCase())].slice(0, 5);
     raw[code] = next;
     localStorage.setItem(RECENT_KEY, JSON.stringify(raw));
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // Google-style match highlighting inside dropdown rows
@@ -217,8 +217,8 @@ function SearchConsole({
   useEffect(() => {
     const handleGlobalKey = (e) => {
       if ((e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) &&
-          document.activeElement?.tagName !== 'INPUT' &&
-          document.activeElement?.tagName !== 'TEXTAREA') {
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();

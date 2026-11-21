@@ -7,7 +7,7 @@ import {
   ExternalLink, FileSpreadsheet, FileText, Filter, Folder, FolderArchive, Globe2, Layers, LayoutDashboard,
   Loader2, MapPin, MessageSquare, Phone, PhoneCall, Play, Radar as RadarIcon,
   RefreshCw, Search, SlidersHorizontal, Smartphone, Sparkles, Square, Star, Settings,
-  Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Edit3, GitMerge, RotateCcw, Plus,
+  Table2, Tag, Terminal, Trash2, Users, Wifi, WifiOff, X, Zap, Cpu, Edit3, GitMerge, RotateCcw, Plus,
   Volume2, VolumeX, Eye
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -193,9 +193,11 @@ export default function CommandCenter() {
     ready: extReady,
     relayed: extRelayed,
     hardware,
+    ensureConnected,
     openTelemetry,
     openSetup
   } = useExtension();
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -2839,6 +2841,39 @@ export default function CommandCenter() {
           </div>
         </div>
       </header>
+
+      {!extReady && !bannerDismissed && (
+        <div className="v2-ext-top-banner">
+          <div className="v2-ext-top-banner-main">
+            <span className="v2-ext-top-pulse" />
+            <div className="v2-ext-top-icon">
+              <Cpu size={16} color="#059669" />
+            </div>
+            <div className="v2-ext-top-copy">
+              <b>Connect RAM Turbo Extension (1.2.0)</b>
+              <span>Run searches via your own machine’s RAM &amp; IP for 8x speed with zero server queues.</span>
+            </div>
+          </div>
+          <div className="v2-ext-top-actions">
+            <button
+              type="button"
+              className="v2-btn v2-btn-emerald v2-btn-sm"
+              onClick={() => openSetup({ country: searchCountry })}
+            >
+              <Zap size={13} /> Setup Extension (30s)
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm"
+              onClick={() => setBannerDismissed(true)}
+              aria-label="Dismiss setup banner"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>

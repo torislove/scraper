@@ -272,7 +272,7 @@ const LEAD_ANATOMY = [
 const PROOF_STATS = [
   { value: '11', label: 'Core Countries Locked & Tuned' },
   { value: '619,287', label: 'Indian Towns & Villages Covered' },
-  { value: '20+', label: 'Built-In Lead Discovery Engines' },
+  { value: '6', label: 'Built-In Lead Discovery Engines' },
   { value: '1-Click', label: 'Live Satellite Radar & Excel Export' }
 ];
 
@@ -282,8 +282,8 @@ const FAQ = [
     a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Scraper.co.in automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps all of them in parallel on a live Satellite Radar map, and exports a clean Excel spreadsheet in minutes.'
   },
   {
-    q: 'Do I get all 20+ built-in lead discovery engines automatically?',
-    a: 'Yes! Our platform orchestrates 20+ specialized lead extraction engines across satellite maps, local business directories, B2B wholesale portals, official websites, and social indices. For India, 11 dedicated engines run simultaneously (including Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar & GoMandap). For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland) run in parallel — with zero extra API keys or proxy bills.'
+    q: 'Do I get all 6 built-in lead discovery engines automatically?',
+    a: 'Yes! Our platform orchestrates 6 specialized lead extraction engines across satellite maps, local business directories, B2B wholesale portals, official websites, and social indices. For India, 11 dedicated engines run simultaneously (including Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar & GoMandap). For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland) run in parallel — with zero extra API keys or proxy bills.'
   },
   {
     q: 'What if I want leads from an entire District, State, or every website across the internet?',
@@ -343,7 +343,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
         transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
       >
         <CheckCircle2 size={15} color="#059669" />
-        <span>20+ Engines Sweeping Live</span>
+        <span>6 Engines Sweeping Live</span>
       </motion.div>
 
       <motion.div
@@ -488,7 +488,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
           </div>
 
           <div className="lx-gba-ab-cluster">
-            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 20+ Engines">
+            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 6 Engines">
               <span>B</span>
               <small>ENGINES</small>
             </a>
@@ -581,7 +581,7 @@ export default function LandingV2() {
 
           <nav className="lx-nav-links" aria-label="Primary">
             <a href="#story">Why It Works</a>
-            <a href="#engines">20+ Engines &amp; RAM</a>
+            <a href="#engines">6 Engines &amp; RAM</a>
             <a href="#playbooks">For Teams</a>
             <a href="#markets">11 Countries</a>
             <a href="#master-concierge">Master Service</a>
@@ -632,7 +632,7 @@ export default function LandingV2() {
               </h1>
 
               <p className="lx-lead-copy">
-                Type a business and a place. 20+ specialized engines sweep every street, mandal, district and
+                Type a business and a place. 6 specialized engines sweep every street, mandal, district and
                 state on a live map — and give you verified mobile numbers, emails and websites in
                 one clean Excel file.
               </p>
@@ -672,7 +672,7 @@ export default function LandingV2() {
                 <div className="lx-hcs-item">
                   <span className="lx-hcs-icon"><Cpu size={16} /></span>
                   <div>
-                    <b>20+ engines on our cloud</b>
+                    <b>6 engines on our cloud</b>
                     <small>Search brain, geo data, phone checks</small>
                   </div>
                 </div>
@@ -764,7 +764,7 @@ export default function LandingV2() {
           <div className="lx-wrap">
             <div className="lx-sec-head">
               <span className="lx-kicker"><ShieldCheck size={13} /> How Scraper.co.in is built</span>
-              <h2>Our 20+ engines stay on our secure cloud. Our extension powers your speed.</h2>
+              <h2>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h2>
               <p>
                 Nothing heavy runs on your computer. The search brain, geo data and phone
                 validation live on our servers. A tiny extension borrows your connection — and
@@ -776,7 +776,7 @@ export default function LandingV2() {
               <article className="lx-cloud-card">
                 <span className="lx-cloud-num">01</span>
                 <div className="lx-cloud-icon"><Cpu size={20} /></div>
-                <h3>20+ engines on our secure cloud</h3>
+                <h3>6 engines on our secure cloud</h3>
                 <p>
                   Maps, local directories, official websites, B2B suppliers, public registries
                   and a smart dedupe engine all run server-side. For India, 11 dedicated engines
@@ -931,12 +931,12 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* ANIMATED STORY 2: ALL 20+ BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
+        {/* ANIMATED STORY 2: ALL 6 BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
         <section className="lx-section" id="engines">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Cpu size={13} /> 20+ Lead Extraction Engines Included Automatically</span>
-              <h2>20+ specialized discovery engines sweep every zone live together.</h2>
+              <span className="lx-kicker"><Cpu size={13} /> 6 Lead Engines Included Automatically</span>
+              <h2>6 specialized discovery engines sweep every zone live together.</h2>
               <p>
                 Zero browser extensions to configure manually, zero external API keys, and zero spreadsheets to clean by hand.
                 For India, 11 dedicated engines (Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar, GoMandap...) sweep simultaneously.
@@ -1008,7 +1008,7 @@ export default function LandingV2() {
               <div className="lx-engine-live-bar">
                 <div className="lx-engine-live-badge">
                   <Sparkles size={18} color="#34d399" />
-                  <b>20+ ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
+                  <b>6 ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
                 </div>
                 <span>Every zone streams live onto the 3D Satellite Map with verified mobile numbers, websites &amp; emails.</span>
               </div>
@@ -1037,7 +1037,7 @@ export default function LandingV2() {
                 <div className="lx-ext-shield-head">
                   <div>
                     <span className="lx-kicker" style={{ marginBottom: 8 }}><ShieldCheck size={13} /> Cloud-Protected Engines · Extension-Only Speed</span>
-                    <h3>Our 20+ Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
+                    <h3>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
                     <p>
                       Install our ultra-lightweight Chrome / Edge extension in 30 seconds to unlock instant parallel sweeps with zero waiting queues.
                     </p>
@@ -1061,7 +1061,7 @@ export default function LandingV2() {
                 <div className="lx-ext-3grid">
                   <div className="lx-ext-pillar">
                     <span className="lx-ext-badge is-cloud">01 · SERVER CLOUD BRAIN</span>
-                    <b>100% Proprietary 20+ Engine Intelligence</b>
+                    <b>100% Proprietary 6-Engine Intelligence</b>
                     <small>
                       All smart search routing, 619,287 Indian town/village mapping, Store vs. Service AI, phone validation, and Excel cleaning run safely on our cloud servers—never exposed or stale.
                     </small>
@@ -1371,10 +1371,10 @@ export default function LandingV2() {
                 <h3>Instant City, Town, Mandal &amp; County Leads</h3>
                 <p>
                   Built for startups, agencies, and local sales teams. Pick any of the 11 countries,
-                  type a service and neighborhood/mandal/county, watch our 20+ built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
+                  type a service and neighborhood/mandal/county, watch our 6 built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
                 </p>
                 <ul className="lx-story-bullets">
-                  <li><CheckCircle2 size={15} color="#059669" /> All 20+ Built-In Lead Engines running automatically</li>
+                  <li><CheckCircle2 size={15} color="#059669" /> All 6 Built-In Lead Engines running automatically</li>
                   <li><CheckCircle2 size={15} color="#059669" /> 100% HD Satellite Live Zone Radar across 11 countries</li>
                   <li><CheckCircle2 size={15} color="#059669" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
                 </ul>

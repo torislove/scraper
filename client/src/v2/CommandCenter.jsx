@@ -225,6 +225,7 @@ export default function CommandCenter() {
     openSetup
   } = useExtension();
   const [hwTurboEnabled] = useState(true);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Country context for the flag bar. India is home; every other country runs
   // the keyless global engines. The choice only pre-fills an empty location box,
@@ -1067,8 +1068,8 @@ export default function CommandCenter() {
       return;
     }
 
-    // Enforce Extension-Only connection when required before dispatching a run
-    if (extExtensionOnly && !extReady) {
+    // Enforce Extension connection before dispatching a run
+    if (!extReady) {
       ensureConnected(
         () => startRun(overrides),
         { country: searchCountry, query: runQuery || `${runCategory} in ${runLocation}`.trim() }
@@ -2151,6 +2152,39 @@ export default function CommandCenter() {
           </div>
         </div>
       </header>
+
+      {!extReady && !bannerDismissed && (
+        <div className="v2-ext-top-banner">
+          <div className="v2-ext-top-banner-main">
+            <span className="v2-ext-top-pulse" />
+            <div className="v2-ext-top-icon">
+              <Cpu size={16} color="#059669" />
+            </div>
+            <div className="v2-ext-top-copy">
+              <b>Connect RAM Turbo Extension (1.2.0)</b>
+              <span>Run searches via your own machine’s RAM &amp; IP for 8x speed with zero server queues.</span>
+            </div>
+          </div>
+          <div className="v2-ext-top-actions">
+            <button
+              type="button"
+              className="v2-btn v2-btn-emerald v2-btn-sm"
+              onClick={() => openSetup({ country: searchCountry })}
+            >
+              <Zap size={13} /> Setup Extension (30s)
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm"
+              onClick={() => setBannerDismissed(true)}
+              aria-label="Dismiss setup banner"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>

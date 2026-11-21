@@ -66,6 +66,7 @@ const EXTENSION_FILES = [
   'popup.html',
   'popup.js',
   'popup.css',
+  'HOW-TO-INSTALL.txt',
   'icons/icon16.png',
   'icons/icon32.png',
   'icons/icon48.png',
@@ -601,7 +602,9 @@ function buildExtensionZipBuffer() {
   let offset = 0;
 
   for (const filename of files) {
-    const zipEntryName = filename.replace(/\\/g, '/');
+    // Everything lives inside one unmistakable folder, so opening the ZIP in
+    // Explorer/WinRAR shows the whole extension, never a loose manifest.json.
+    const zipEntryName = `Scraper-RAM-Turbo-Extension/${filename.replace(/\\/g, '/')}`;
     const raw = fs.readFileSync(path.join(dir, ...filename.split('/')));
     const compressed = zlib.deflateRawSync(raw, { level: 9 });
     const nameBuf = Buffer.from(zipEntryName, 'utf8');

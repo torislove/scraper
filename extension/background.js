@@ -21,7 +21,7 @@
  * ============================================================================
  */
 
-const EXTENSION_VERSION = '1.1.0';
+const EXTENSION_VERSION = '1.2.0';
 const HEARTBEAT_ALARM = 'scraper-heartbeat';
 const HEARTBEAT_MINUTES = 0.5; // 30 s — the server TTL is 90 s
 const MAX_BODY_BYTES = 750_000;
@@ -88,16 +88,73 @@ function resolvePairings(settings) {
   return [];
 }
 
-function hardware() {
+// MV3 service workers often report navigator.deviceMemory as undefined and cap
+// it at 8 GB. chrome.system.* gives the real totals; we hydrate this cache at
+// startup and on every state read so the popup never sits on "Detecting…".
+let HARDWARE = {
+  ramGb: 0,
+  freeRamGb: 0,
+  cpuCores: 0,
+  cpuModel: '',
+  source: 'navigator'
+};
+
+function navHardware() {
   return {
-    ramGb: Number(navigator.deviceMemory) > 0 ? Number(navigator.deviceMemory) : 8,
-    cpuCores: Number(navigator.hardwareConcurrency) > 0 ? Number(navigator.hardwareConcurrency) : 6
+    ramGb: Number(navigator.deviceMemory) > 0 ? Number(navigator.deviceMemory) : 0,
+    cpuCores: Number(navigator.hardwareConcurrency) > 0 ? Number(navigator.hardwareConcurrency) : 0
+  };
+}
+
+async function hydrateHardware() {
+  const nav = navHardware();
+  let ramGb = nav.ramGb;
+  let freeRamGb = 0;
+  let cpuCores = nav.cpuCores;
+  let cpuModel = '';
+  let source = 'navigator';
+  try {
+    if (chrome.system?.memory?.getInfo) {
+      const info = await chrome.system.memory.getInfo();
+      const gb = (bytes) => Math.round((Number(bytes) || 0) / (1024 * 1024 * 1024));
+      ramGb = gb(info?.capacity) || ramGb;
+      freeRamGb = gb(info?.availableCapacity);
+      source = 'system';
+    }
+  } catch (e) {
+    // system.memory can be unavailable on managed browsers; keep the estimate.
+  }
+  try {
+    if (chrome.system?.cpu?.getInfo) {
+      const info = await chrome.system.cpu.getInfo();
+      cpuCores = Number(info?.numOfProcessors) || cpuCores;
+      cpuModel = String(info?.modelName || '').trim();
+      source = 'system';
+    }
+  } catch (e) {}
+  HARDWARE = {
+    ramGb: ramGb > 0 ? ramGb : 8,
+    freeRamGb,
+    cpuCores: cpuCores > 0 ? cpuCores : 6,
+    cpuModel,
+    source
+  };
+  return HARDWARE;
+}
+
+function hardware() {
+  const nav = navHardware();
+  return {
+    ramGb: HARDWARE.ramGb || nav.ramGb || 8,
+    freeRamGb: HARDWARE.freeRamGb || 0,
+    cpuCores: HARDWARE.cpuCores || nav.cpuCores || 6,
+    cpuModel: HARDWARE.cpuModel || ''
   };
 }
 
 function capabilities() {
   const { ramGb } = hardware();
-  const lanes = ramGb >= 16 ? 3 : ramGb >= 8 ? 2 : 1;
+  const lanes = ramGb >= 16 ? 8 : ramGb >= 8 ? 5 : ramGb >= 4 ? 3 : 1;
   const caps = ['fetch'];
   if (chrome.scripting && chrome.tabs) caps.push('render');
   return { caps, lanes };
@@ -548,17 +605,23 @@ async function ensureAlarm() {
   }
 }
 
+// Warm the real-hardware cache as soon as the worker starts, so the first popup
+// open already has totals instead of showing "Detecting…".
+void hydrateHardware();
+
 chrome.runtime.onInstalled.addListener(async (details) => {
   await ensureAlarm();
   if (details.reason === 'install') {
     await patchSettings({ relayedCount: 0 });
   }
+  await hydrateHardware();
   await injectIntoOpenScraperTabs();
   await heartbeat({ force: true });
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureAlarm();
+  await hydrateHardware();
   await injectIntoOpenScraperTabs();
   await heartbeat({ force: true });
 });
@@ -613,7 +676,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case 'SCRAPER_EXT_STATE':
-      Promise.all([getSettings(), siteAccessState()]).then(([settings, sites]) => {
+      (async () => {
+        const [settings, sites] = await Promise.all([getSettings(), siteAccessState()]);
+        if (!HARDWARE.cpuCores) {
+          await hydrateHardware();
+        }
         const pairings = resolvePairings(settings);
         sendResponse({
           ok: true,
@@ -629,6 +696,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           paused: Boolean(settings.paused),
           sites
         });
+      })().catch((err) => {
+        // Always answer the popup, even if permissions or storage throw.
+        try {
+          sendResponse({ ok: false, error: err?.message || 'state_failed' });
+        } catch (e) {}
       });
       return true;
 

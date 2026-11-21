@@ -2,24 +2,25 @@
   "manifest_version": 3,
   "name": "Scraper.co.in — RAM Turbo",
   "short_name": "RAM Turbo",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Lets Scraper.co.in find local businesses faster by fetching pages from your own connection. No passwords, no history, no personal data.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
     "alarms",
-    "scripting"
+    "scripting",
+    "system.memory",
+    "system.cpu",
+    "tabs"
   ],
   "host_permissions": [
     "https://scraper.co.in/*",
     "https://*.scraper.co.in/*",
     "http://localhost/*",
     "http://127.0.0.1/*",
-
     "https://*.bing.com/*",
     "https://*.duckduckgo.com/*",
     "https://*.search.brave.com/*",
-
     "https://*.google.com/*",
     "https://*.google.co.in/*",
     "https://*.google.co.uk/*",
@@ -31,7 +32,6 @@
     "https://*.google.co.za/*",
     "https://*.google.ie/*",
     "https://*.google.de/*",
-
     "https://*.justdial.com/*",
     "https://*.indiamart.com/*",
     "https://*.yelp.com/*",
@@ -58,10 +58,11 @@
     "https://*.weddingwire.in/*",
     "https://*.weddingbazaar.com/*",
     "https://*.mandap.com/*",
-
     "https://*.openstreetmap.org/*",
     "https://*.overpass-api.de/*",
-    "https://*.wikidata.org/*"
+    "https://*.wikidata.org/*",
+    "http://localhost:5002/*",
+    "http://127.0.0.1:5002/*"
   ],
   "optional_host_permissions": [
     "https://*/*"

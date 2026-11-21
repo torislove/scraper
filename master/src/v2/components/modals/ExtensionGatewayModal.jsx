@@ -8,6 +8,8 @@ import {
   Copy,
   Cpu,
   Download,
+  Folder,
+  FolderInput,
   Layers,
   RefreshCw,
   ShieldCheck,
@@ -37,8 +39,10 @@ import {
  */
 export default function ExtensionGatewayModal() {
   const ctx = useExtension();
-  const [copied, setCopied] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedPath, setCopiedPath] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [demoToggle, setDemoToggle] = useState(true);
 
   if (!ctx || !ctx.gatewayOpen) return null;
 
@@ -56,11 +60,21 @@ export default function ExtensionGatewayModal() {
     completeProceed
   } = ctx;
 
+  const localExtPath = 'c:\\Users\\manoj\\Desktop\\gomandap-scraper\\extension';
+
   const copyChromeUrl = () => {
     try {
       navigator.clipboard.writeText('chrome://extensions');
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 2500);
+    } catch (e) {}
+  };
+
+  const copyLocalPath = () => {
+    try {
+      navigator.clipboard.writeText(localExtPath);
+      setCopiedPath(true);
+      setTimeout(() => setCopiedPath(false), 2500);
     } catch (e) {}
   };
 
@@ -120,7 +134,7 @@ export default function ExtensionGatewayModal() {
             <span className={`cb-led ${ready ? 'is-live' : 'is-warn'}`} />
             <b>
               {ready
-                ? `RAM Turbo Active · v${version || '1.1.0'} · ${connected ? 'Heartbeat Live' : 'Bridge Ready'}`
+                ? `RAM Turbo Active · v${version || '1.2.0'} · ${connected ? 'Heartbeat Live' : 'Bridge Ready'}`
                 : checking
                   ? 'Detecting Extension Bridge…'
                   : 'Extension Not Installed Yet'}
@@ -131,7 +145,7 @@ export default function ExtensionGatewayModal() {
               <CheckCircle2 size={13} /> Always On · {relayed || 0} relayed
             </span>
           ) : (
-            <span className="lx-ext-badge-amber">One-Time Setup</span>
+            <span className="lx-ext-badge-amber">One-Time Setup (30s)</span>
           )}
         </div>
 
@@ -199,8 +213,8 @@ export default function ExtensionGatewayModal() {
               <div>
                 <h3>Extension Connected! Launching Workspace…</h3>
                 <p>
-                  Your browser extension is verified and locked in. It stays connected across reloads,
-                  new tabs, and restarts so you will never be asked again.
+                  Your browser extension is verified and locked in ({hardware.ramGb} GB RAM · {hardware.parallelZones} Parallel Lanes).
+                  It stays permanently connected across reloads, new tabs, and browser restarts.
                 </p>
               </div>
             </div>
@@ -231,11 +245,19 @@ export default function ExtensionGatewayModal() {
               </div>
             </div>
 
+            {/* Step 1: Download & Extract */}
             <div className="lx-ext-step-card">
               <div className="lx-ext-step-number">01</div>
               <div className="lx-ext-step-content">
-                <b>Download the Extension Package</b>
-                <p>One lightweight, verified ZIP package containing Chrome manifest, icons, and bridge.</p>
+                <b>Download &amp; Extract the Extension Folder</b>
+                <p>One lightweight ZIP package containing the complete extension folder:</p>
+                <div className="lx-ext-folder-pill">
+                  <Folder size={14} color="#059669" />
+                  <span>Folder: <b>Scraper-RAM-Turbo-Extension</b></span>
+                </div>
+                <div className="lx-ext-warn-note">
+                  <span>💡 <b>No .exe or setup program needed!</b> Chrome extensions load directly from this folder. Do NOT double-click <code>manifest.json</code>.</span>
+                </div>
                 <div className="lx-ext-step-actions">
                   {EXTENSION_STORE_URL ? (
                     <a
@@ -245,7 +267,7 @@ export default function ExtensionGatewayModal() {
                       className="lx-btn lx-btn-primary lx-ext-dl-btn"
                     >
                       <Download size={15} />
-                      <span>Add to Chrome</span>
+                      <span>Add to Chrome (Free)</span>
                     </a>
                   ) : (
                     <button
@@ -259,41 +281,74 @@ export default function ExtensionGatewayModal() {
                     </button>
                   )}
                 </div>
-              </div>
-            </div>
-
-            <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">02</div>
-              <div className="lx-ext-step-content">
-                <b>Extract ZIP &amp; Open Chrome Extensions</b>
-                <p>Unzip the downloaded folder, then paste this URL in a new browser tab:</p>
-                <div className="lx-ext-url-box">
-                  <code>chrome://extensions</code>
-                  <button type="button" className="lx-ext-copy-btn" onClick={copyChromeUrl}>
-                    {copied ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                    <span>{copied ? 'Copied!' : 'Copy URL'}</span>
+                <div className="lx-ext-path-box">
+                  <code>{localExtPath}</code>
+                  <button type="button" className="lx-ext-copy-btn" onClick={copyLocalPath}>
+                    {copiedPath ? <Check size={12} color="#059669" /> : <Copy size={12} />}
+                    <span>{copiedPath ? 'Copied Path!' : 'Copy Folder Path'}</span>
                   </button>
                 </div>
               </div>
             </div>
 
+            {/* Step 2: Open Chrome Extensions */}
             <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">03</div>
+              <div className="lx-ext-step-number">02</div>
               <div className="lx-ext-step-content">
-                <b>Enable &ldquo;Developer mode&rdquo; &amp; Click &ldquo;Load unpacked&rdquo;</b>
-                <p>
-                  1. Turn ON <b>Developer mode</b> (top-right switch on <code>chrome://extensions</code>).<br />
-                  2. Click <b>Load unpacked</b> (top-left) and pick the extracted folder.
-                </p>
+                <b>Open Chrome Extensions in a New Tab</b>
+                <p>Paste this URL into Google Chrome, Microsoft Edge, or Brave:</p>
+                <div className="lx-ext-url-box">
+                  <code>chrome://extensions</code>
+                  <button type="button" className="lx-ext-copy-btn" onClick={copyChromeUrl}>
+                    {copiedUrl ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                    <span>{copiedUrl ? 'Copied!' : 'Copy URL'}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
+            {/* Step 3: Developer Mode & Load Unpacked */}
+            <div className="lx-ext-step-card">
+              <div className="lx-ext-step-number">03</div>
+              <div className="lx-ext-step-content">
+                <b>Turn ON &ldquo;Developer mode&rdquo; &amp; Click &ldquo;Load unpacked&rdquo;</b>
+                <p>
+                  1. Turn ON <b>Developer mode</b> (top-right switch on <code>chrome://extensions</code>).<br />
+                  2. Click <b>Load unpacked</b> (top-left) and select the unzipped <b>Scraper-RAM-Turbo-Extension</b> folder.
+                </p>
+                <div className="lx-ext-interactive-demo">
+                  <div className="lx-ext-demo-toggle">
+                    <span>Developer mode:</span>
+                    <div
+                      className={`lx-ext-switch ${demoToggle ? 'is-on' : ''}`}
+                      onClick={() => setDemoToggle(!demoToggle)}
+                      title="Click to toggle demo"
+                    >
+                      <div className="lx-ext-switch-knob" />
+                    </div>
+                    <small>{demoToggle ? '✓ ON (Ready for Unpacked)' : 'OFF (Click to toggle)'}</small>
+                  </div>
+                  <div className="lx-ext-demo-load">
+                    <div className="lx-ext-demo-btn">
+                      <FolderInput size={13} color="#059669" />
+                      <span>Load unpacked</span>
+                    </div>
+                    <span className="lx-ext-arrow-hint">← Pick the <b>Scraper-RAM-Turbo-Extension</b> folder</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Auto-detect Live Radar Footer */}
             <div className="lx-ext-auto-detect-footer">
-              <RefreshCw size={14} className="lx-ext-spin" />
-              <span>
-                Waiting silently for your extension… As soon as you select the folder, this window connects
-                and launches automatically with no refresh needed.
-              </span>
+              <div className="lx-ext-radar-orb">
+                <span className="lx-ext-radar-ping" />
+                <RefreshCw size={14} className="lx-ext-spin" color="#059669" />
+              </div>
+              <div className="lx-ext-radar-text">
+                <b>Silently listening for your extension…</b>
+                <span>As soon as you select the folder in Chrome, this window detects it automatically and starts your search.</span>
+              </div>
             </div>
           </div>
         )}

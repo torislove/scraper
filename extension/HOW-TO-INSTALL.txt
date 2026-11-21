@@ -1,0 +1,30 @@
+Scraper.co.in — RAM Turbo extension
+===================================
+
+This ZIP is only for local development. Public users install the extension
+from the Chrome Web Store with one click.
+
+Local development (3 steps)
+---------------------------
+1. Unzip this file. Keep the whole folder named:
+   Scraper-RAM-Turbo-Extension
+   Do NOT open manifest.json.
+
+2. Open chrome://extensions in Chrome and turn on "Developer mode" (top right).
+
+3. Click "Load unpacked" (top left) and choose the whole
+   Scraper-RAM-Turbo-Extension folder — not a file inside it.
+
+Then open http://localhost:5173/command and refresh once. The extension
+connects itself and shows your real RAM and CPU cores.
+
+What it can read
+----------------
+Only the page the server asks for, from the 47 named search, maps and
+directory sites for your 11 countries. It never reads your other tabs,
+history, passwords or personal data.
+
+What lives where
+----------------
+- Our 6 engines, geo data and phone checks stay on our secure cloud.
+- The extension only adds your connection and spare RAM for speed.
