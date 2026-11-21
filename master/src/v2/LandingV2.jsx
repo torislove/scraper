@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, ArrowRight, Briefcase, Building2, Check, CheckCircle2, Cpu,
-  Download, FileSpreadsheet, Globe2, Heart, HeartPulse, Home, Layers, LogIn, Mail,
-  MapPin, Monitor, Phone, Plus, Radar, Rocket, Search, ShieldCheck, Sparkles,
-  Star, Utensils, Wrench, Zap
+  Download, ExternalLink, FileSpreadsheet, Globe2, Heart, Layers, LogIn, Mail,
+  MapPin, Phone, Plus, Radar, Radio, Rocket, Search, Server, ShieldCheck, Sparkles,
+  Star, Terminal, Utensils, Wrench, Zap
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
 import { useExtension } from './context/ExtensionContext';
 import { POPULAR_COUNTRIES } from './data/countries';
-import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
+import {
+  COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER, SEARCH_EXAMPLES,
+  examplesFor, placeholderFor
+} from './data/searchExamples';
 import {
   detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
@@ -19,30 +22,31 @@ import { pingHealth } from './api';
 import './landingExecutive.css';
 import './landingCloud.css';
 
-// Strictly locked to the 11 supported revenue markets — India pinned as Home
+// Strictly locked to the 11 supported sovereign revenue markets — India pinned as Home
 const LOCKED_11_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
 
 const COUNTRY_DESCRIPTIONS = {
-  IN: 'Home Market · Cities, towns, mandals & 619k+ villages',
-  US: 'All 50 states, counties & major metro cities',
-  GB: 'England, Scotland, Wales, London & regional counties',
-  CA: 'All provinces, census divisions & metro cities',
-  AU: 'All states, territories & commercial hubs',
-  AE: 'Dubai, Abu Dhabi, Sharjah & all 7 emirates',
-  SG: 'Every commercial district & planning region',
-  NZ: 'Auckland, Wellington, Christchurch & all regions',
-  IE: 'Dublin, Cork, Galway & all Irish counties',
-  ZA: 'Johannesburg, Cape Town, Durban & all provinces',
-  DE: 'Berlin, Munich, Frankfurt & all 16 Bundesländer'
+  IN: 'Home Market · 36 States, 760+ Districts, 6k+ Mandals & 619k+ Villages',
+  US: 'All 50 States, 3,143 Counties & Parishes, ZIP Zones & Metros',
+  GB: 'England, Scotland, Wales, 100+ Counties & Greater Boroughs',
+  CA: 'All 10 Provinces, 3 Territories & 293 Census Divisions',
+  AU: 'All 8 States & Territories, 537 Local Government Areas (LGAs)',
+  AE: 'Dubai, Abu Dhabi, Sharjah & all 7 Emirates & Free Zones',
+  SG: '5 Planning Regions, 55 Development Areas & 81 Postal Sectors',
+  NZ: '16 Regions, 67 Territorial Authorities & City Districts',
+  IE: 'All 4 Provinces, 31 Local Authorities & 82 Municipal Districts',
+  ZA: '9 Provinces, 52 District & Metro Municipalities & 205 Councils',
+  DE: 'All 16 Bundesländer, 401 Landkreise & Kreisfreie Städte'
 };
 
 const DEMO_SCENARIOS = [
   {
     id: 'hyderabad-it',
-    pill: 'Software & IT · Hyderabad',
+    pill: '🇮🇳 Software & IT · Hyderabad',
+    countryName: 'India',
     query: 'Software companies in HITEC City Hyderabad',
     country: 'IN',
-    areaLabel: 'Hyderabad, Telangana · 1,194 businesses pinned',
+    areaLabel: 'HITEC City & Gachibowli, Hyderabad · 1,194 verified leads',
     count: '1,194 leads',
     pins: [
       { top: '24%', left: '22%' },
@@ -52,38 +56,19 @@ const DEMO_SCENARIOS = [
       { top: '42%', left: '28%' }
     ],
     leads: [
-      { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad · PIN 500081', rating: '4.9', reviews: 318, phone: '+91 98490 •••12', hasPin: true },
-      { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad · PIN 500081', rating: '4.8', reviews: 214, phone: '+91 94401 •••89', noWebsite: true, hasPin: true },
-      { name: 'Jubilee Enterprise Tech', area: 'Banjara Hills, Hyderabad · PIN 500034', rating: '4.9', reviews: 276, phone: '+91 90005 •••44', hasPin: true }
-    ]
-  },
-  {
-    id: 'mumbai-interiors',
-    pill: 'Interior Designers · Mumbai',
-    query: 'Interior Designers in Mumbai',
-    country: 'IN',
-    areaLabel: 'Mumbai, Maharashtra · 318 businesses pinned',
-    count: '318 leads',
-    pins: [
-      { top: '30%', left: '30%' },
-      { top: '46%', left: '54%' },
-      { top: '64%', left: '36%' },
-      { top: '26%', left: '68%' },
-      { top: '58%', left: '72%' }
-    ],
-    leads: [
-      { name: 'Studio Vastu & Living Spaces', area: 'Bandra West, Mumbai · PIN 400050', rating: '4.9', reviews: 312, phone: '+91 98201 •••67', hasPin: true },
-      { name: 'Urban Craft Modular Interiors', area: 'Andheri West, Mumbai · PIN 400053', rating: '4.7', reviews: 145, phone: '+91 98192 •••31', noWebsite: true, hasPin: true },
-      { name: 'Crestline Architecture & Decor', area: 'Powai, Mumbai · PIN 400076', rating: '4.8', reviews: 198, phone: '+91 97690 •••15', hasPin: true }
+      { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad · PIN 500081', rating: '4.9', reviews: 318, phone: '+91 98490 •••12', hasPin: true, tag: 'Cloud Architecture' },
+      { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad · PIN 500081', rating: '4.8', reviews: 214, phone: '+91 94401 •••89', noWebsite: true, hasPin: true, tag: 'Enterprise Web' },
+      { name: 'Jubilee Enterprise Tech', area: 'Banjara Hills, Hyderabad · PIN 500034', rating: '4.9', reviews: 276, phone: '+91 90005 •••44', hasPin: true, tag: 'SaaS Platform' }
     ]
   },
   {
     id: 'dallas-hvac',
-    pill: 'HVAC · Orange & Dallas Counties',
+    pill: '🇺🇸 HVAC & Climate · Dallas County TX',
+    countryName: 'United States',
     query: 'HVAC Contractors in Harris County TX',
     country: 'US',
-    areaLabel: 'Harris & Dallas Counties, US · 264 businesses pinned',
-    count: '264 leads',
+    areaLabel: 'Harris & Dallas Counties, TX · 842 verified leads',
+    count: '842 leads',
     pins: [
       { top: '38%', left: '24%' },
       { top: '28%', left: '50%' },
@@ -92,18 +77,19 @@ const DEMO_SCENARIOS = [
       { top: '34%', left: '76%' }
     ],
     leads: [
-      { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX · ZIP 75201', rating: '4.9', reviews: 420, phone: '+1 (214) •••-0192', hasPin: true },
-      { name: 'Metroplex Climate Solutions', area: 'Harris County, TX · ZIP 77002', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418', noWebsite: true, hasPin: true },
-      { name: 'Coastal Cooling Mechanical', area: 'Orange County, CA · ZIP 92614', rating: '4.7', reviews: 180, phone: '+1 (949) •••-8820', hasPin: true }
+      { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX · ZIP 75201', rating: '4.9', reviews: 420, phone: '+1 (214) •••-0192', hasPin: true, tag: 'Commercial HVAC' },
+      { name: 'Metroplex Climate Solutions', area: 'Harris County, TX · ZIP 77002', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418', noWebsite: true, hasPin: true, tag: 'Emergency Repair' },
+      { name: 'Coastal Cooling Mechanical', area: 'Fort Worth, TX · ZIP 76102', rating: '4.7', reviews: 180, phone: '+1 (817) •••-8820', hasPin: true, tag: 'Chiller Plant' }
     ]
   },
   {
     id: 'london-dentists',
-    pill: 'Dental Clinics · Westminster UK',
+    pill: '🇬🇧 Cosmetic Clinics · Westminster London',
+    countryName: 'United Kingdom',
     query: 'Dental Clinics in Westminster London',
     country: 'GB',
-    areaLabel: 'Westminster & Greater London, UK · 215 businesses pinned',
-    count: '215 leads',
+    areaLabel: 'Westminster & Greater London Boroughs · 412 verified leads',
+    count: '412 leads',
     pins: [
       { top: '46%', left: '26%' },
       { top: '28%', left: '54%' },
@@ -112,406 +98,178 @@ const DEMO_SCENARIOS = [
       { top: '56%', left: '34%' }
     ],
     leads: [
-      { name: 'Kensington Smile Practice', area: 'Westminster, London', rating: '4.9', reviews: 290, phone: '+44 20 •••• 3104' },
-      { name: 'Mayfair Cosmetic Dentistry', area: 'Mayfair, London', rating: '4.8', reviews: 175, phone: '+44 20 •••• 7821' },
-      { name: 'Canary Wharf Dental Studio', area: 'Docklands, London', rating: '4.7', reviews: 230, phone: '+44 20 •••• 9940' }
+      { name: 'Kensington Smile Practice', area: 'Westminster, London · W1B 3HH', rating: '4.9', reviews: 290, phone: '+44 20 •••• 3104', hasPin: true, tag: 'Orthodontics' },
+      { name: 'Mayfair Cosmetic Dental Studio', area: 'Mayfair, London · W1K 7AA', rating: '4.8', reviews: 175, phone: '+44 20 •••• 7821', noWebsite: true, hasPin: true, tag: 'Aesthetic' },
+      { name: 'Canary Wharf Wellness Hub', area: 'Docklands, London · E14 5HP', rating: '4.7', reviews: 230, phone: '+44 20 •••• 9940', hasPin: true, tag: 'Private Care' }
+    ]
+  },
+  {
+    id: 'sydney-solar',
+    pill: '🇦🇺 Commercial Solar · City of Sydney LGA',
+    countryName: 'Australia',
+    query: 'Solar Installers in Parramatta LGA NSW',
+    country: 'AU',
+    areaLabel: 'Sydney Metro & Parramatta LGA, NSW · 319 verified leads',
+    count: '319 leads',
+    pins: [
+      { top: '32%', left: '30%' },
+      { top: '60%', left: '48%' },
+      { top: '44%', left: '68%' },
+      { top: '68%', left: '32%' },
+      { top: '22%', left: '56%' }
+    ],
+    leads: [
+      { name: 'Pacific Rim Solar & Battery', area: 'Parramatta, Sydney NSW · Postcode 2150', rating: '4.9', reviews: 215, phone: '+61 2 •••• 5590', hasPin: true, tag: 'Commercial Solar' },
+      { name: 'Harbour Clean Energy Systems', area: 'North Sydney NSW · Postcode 2060', rating: '4.8', reviews: 142, phone: '+61 2 •••• 1120', noWebsite: true, hasPin: true, tag: 'Industrial Grid' },
+      { name: 'Botany Bay Renewables', area: 'Mascot, Sydney NSW · Postcode 2020', rating: '4.9', reviews: 188, phone: '+61 2 •••• 7731', hasPin: true, tag: 'Micro-Grid' }
+    ]
+  },
+  {
+    id: 'munich-cnc',
+    pill: '🇩🇪 Precision Engineering · Landkreis München',
+    countryName: 'Germany',
+    query: 'Engineering Firms in Landkreis München',
+    country: 'DE',
+    areaLabel: 'Landkreis München & Oberbayern · 528 verified leads',
+    count: '528 leads',
+    pins: [
+      { top: '40%', left: '34%' },
+      { top: '52%', left: '58%' },
+      { top: '28%', left: '48%' },
+      { top: '66%', left: '26%' },
+      { top: '36%', left: '78%' }
+    ],
+    leads: [
+      { name: 'Bavaria Präzisionstechnik GmbH', area: 'Garching bei München · PLZ 85748', rating: '4.9', reviews: 164, phone: '+49 89 ••••• 210', hasPin: true, tag: 'CNC & Aerospace' },
+      { name: 'München Automation & Robotik', area: 'Unterföhring · PLZ 85774', rating: '4.8', reviews: 98, phone: '+49 89 ••••• 740', noWebsite: true, hasPin: true, tag: 'Industrial Automation' },
+      { name: 'Isar Werkzeugbau Fabrik', area: 'Haar bei München · PLZ 85540', rating: '4.9', reviews: 132, phone: '+49 89 ••••• 915', hasPin: true, tag: 'Tooling & Die' }
+    ]
+  },
+  {
+    id: 'toronto-supply',
+    pill: '🇨🇦 Freight & Logistics · Peel Region ON',
+    countryName: 'Canada',
+    query: 'Logistics Companies in Peel Region ON',
+    country: 'CA',
+    areaLabel: 'Peel & York Census Divisions, ON · 460 verified leads',
+    count: '460 leads',
+    pins: [
+      { top: '35%', left: '25%' },
+      { top: '48%', left: '60%' },
+      { top: '65%', left: '42%' },
+      { top: '22%', left: '70%' },
+      { top: '58%', left: '75%' }
+    ],
+    leads: [
+      { name: 'Great Lakes Cold Storage & Freight', area: 'Mississauga, Peel ON · L5T 2B2', rating: '4.9', reviews: 310, phone: '+1 (905) •••-4488', hasPin: true, tag: '3PL & Cold Chain' },
+      { name: 'Trans-Canada Cargo Dispatch', area: 'Brampton, Peel ON · L6T 4X2', rating: '4.8', reviews: 195, phone: '+1 (905) •••-9120', noWebsite: true, hasPin: true, tag: 'Fleet Haulage' },
+      { name: 'Metro Toronto Distribution Core', area: 'Vaughan, York ON · L4K 3P8', rating: '4.7', reviews: 140, phone: '+1 (905) •••-3310', hasPin: true, tag: 'Cross-Docking' }
     ]
   }
 ];
 
-const STORY_ZONES = [
-  { name: 'HITEC City', count: '94 leads' },
-  { name: 'Madhapur', count: '88 leads' },
-  { name: 'Banjara Hills', count: '76 leads' },
-  { name: 'Jubilee Hills', count: '69 leads' },
-  { name: 'Gachibowli', count: '84 leads' },
-  { name: 'Kukatpally', count: '91 leads' },
-  { name: 'Ameerpet', count: '79 leads' },
-  { name: 'Begumpet', count: '64 leads' },
-  { name: 'Secunderabad', count: '97 leads' }
-];
-
-const JOURNEY_STEPS = [
+const EQUAL_PROMINENCE_METRICS = [
   {
-    icon: Globe2,
-    tone: 'tone-atomic',
-    step: 'Step 1',
-    title: 'Pick 1 of 11 Flags',
-    body: 'Choose India (complete town, mandal & village hierarchy) or any of the 10 global markets in one tap.'
+    val: '650,000+',
+    title: 'Global Administrative Units',
+    desc: '619k+ Indian Villages & Mandals · 3,143 US Counties · 100+ UK Boroughs · 293 Canadian Divisions · 537 Australian LGAs · 401 German Landkreise · 82 Irish Districts · 67 NZ Authorities · 257 SA Municipalities · 7 UAE Emirates · 5 Singapore Regions',
+    isGreen: true
   },
   {
-    icon: Search,
-    tone: 'tone-teal',
-    step: 'Step 2',
-    title: 'Type Any Business & City',
-    body: 'Our smart auto-learning search understands natural queries, heals typos, and suggests local categories instantly.'
+    val: '11 Nations',
+    title: 'Sovereign Markets Tuned',
+    desc: 'Native territorial hierarchies with postal codes, area dialing codes, and verified local enterprise registries.',
+    isGreen: false
   },
   {
-    icon: MapPin,
-    tone: 'tone-kiwi',
-    step: 'Step 3',
-    title: 'All Engines Sweep Automatically',
-    body: 'Every neighborhood pocket is scanned automatically — direct phones, addresses, websites, and pins stream live.'
+    val: '100% Free',
+    title: 'Zero Monthly API Bills',
+    desc: 'No Google Cloud billing caps, no proxies to buy, and zero third-party subscription paywalls.',
+    isGreen: false
   },
   {
-    icon: FileSpreadsheet,
-    tone: 'tone-dandelion',
-    step: 'Step 4',
-    title: 'Download Clean Excel',
-    body: 'Duplicates are automatically merged out so you get a clean Excel (.xlsx), CSV, or phone (.vcf) file in 1 click.'
+    val: '<300ms',
+    title: 'Instant Stop & Excel Export',
+    desc: 'Hardware-governed memory sweeps deliver multi-sheet Excel (.xlsx), CSV, and smartphone vCard (.vcf) packages.',
+    isGreen: true
   }
 ];
 
-const PLAYBOOKS = [
+const BENTO_ADVANTAGES = [
   {
-    icon: Rocket,
-    tone: 'tone-kiwi',
-    preset: 'startup',
-    query: 'B2B software & IT companies in Hyderabad',
-    badge: 'FOR STARTUPS & FOUNDERS',
-    title: 'Launch city outreach in 60 seconds — without a data team',
-    body: 'Enter a new city or launch a B2B product immediately. Pull 1,000+ direct decision-maker phone numbers without spending weeks hiring freelancers or buying stale databases.',
-    cta: 'Try a Startup Search'
+    icon: Radar,
+    tone: 'tone-cyan',
+    span: 'col-7',
+    badge: 'PARALLEL SWARM ARCHITECTURE',
+    title: '22-Engine Autonomous Intelligence Swarm',
+    body: 'Sweeps across satellite geospatial nodes, verified commercial directories, B2B wholesale portals, open knowledge graphs, and corporate websites simultaneously. Eliminates the 120-listing search cap by decomposing entire territories into fine-grained micro-zones.'
   },
   {
-    icon: Briefcase,
-    tone: 'tone-atomic',
-    preset: 'agency',
-    query: 'Dental clinics & local shops in Vijayawada',
-    badge: 'FOR WEB, SEO & AD AGENCIES',
-    title: 'Spot businesses with "No Website" & win ready clients',
-    body: 'Filter leads to reveal high-rated local shops and clinics that still have no official website — giving your agency warm prospects who genuinely need digital growth today.',
-    cta: 'Find Agency Prospects'
+    icon: Cpu,
+    tone: 'tone-emerald',
+    span: 'col-5',
+    badge: 'NATIVE MEMORY ENGINE',
+    title: 'Runs on Your Workstation RAM with Safety Headroom',
+    body: 'Hardware tier detection automatically spins up 2, 4, or 8 parallel workers inside your browser memory with ≥ 4.5 GB guaranteed OS headroom. Zero cloud server waiting lines or shared datacenter throttle queues.'
   },
-  {
-    icon: Building2,
-    tone: 'tone-teal',
-    preset: 'sales',
-    query: 'Hardware & electronics distributors in Guntur',
-    badge: 'FOR DISTRIBUTORS & SALES TEAMS',
-    title: 'Area-sorted Excel sheets with street pins for every rep',
-    body: 'Give each field representative a clean neighborhood spreadsheet organized by pincode, mandal, or locality with direct map directions and verified phone contacts.',
-    cta: 'Build Territory List'
-  }
-];
-
-const INDUSTRIES = [
-  {
-    icon: Monitor,
-    tone: 'tone-kiwi',
-    title: 'Electronics, IT & Retail Shops',
-    body: 'Computer shops, laptop dealers, mobile repair, CCTV installers, appliance showrooms & book stores.',
-    query: 'Computer shops in Guntur',
-    country: 'IN'
-  },
-  {
-    icon: HeartPulse,
-    tone: 'tone-atomic',
-    title: 'Healthcare, Pharmacies & Clinics',
-    body: 'Dental clinics, medical stores, diagnostic labs, eye hospitals, physiotherapy & veterinary care.',
-    query: 'Dental clinics in Hyderabad',
-    country: 'IN'
-  },
-  {
-    icon: Home,
-    tone: 'tone-teal',
-    title: 'Real Estate, Interiors & Architecture',
-    body: 'Interior designers, modular kitchens, builders, architects, paint dealers & furniture showrooms.',
-    query: 'Interior designers in Mumbai',
-    country: 'IN'
-  },
-  {
-    icon: Wrench,
-    tone: 'tone-dandelion',
-    title: 'Contractors, Solar & Auto Services',
-    body: 'HVAC contractors, solar installers, tyre & battery shops, plumbers, electricians & workshops.',
-    query: 'HVAC contractors in Dallas',
-    country: 'US'
-  },
-  {
-    icon: Utensils,
-    tone: 'tone-atomic',
-    title: 'Food, Bakeries, Events & Venues',
-    body: 'Sweet shops, bakeries, flower shops, photographers, caterers, wedding venues & boutiques.',
-    query: 'Flower shops in Chennai',
-    country: 'IN'
-  },
-  {
-    icon: Building2,
-    tone: 'tone-kiwi',
-    title: 'B2B Suppliers, Distributors & Agencies',
-    body: 'Wholesale suppliers, hardware merchants, logistics firms, chartered accountants & B2B agencies.',
-    query: 'Printing & Packaging Suppliers in Bengaluru',
-    country: 'IN'
-  }
-];
-
-const LEAD_ANATOMY = [
   {
     icon: Phone,
-    title: 'Direct Phone Numbers Ready to Call',
-    body: 'Mobile and office lines are clearly labeled so your team can copy or call in one tap.'
-  },
-  {
-    icon: MapPin,
-    title: 'Verified Street Address & Map Pin',
-    body: 'Exact neighborhood, city, state, postal code, and GPS pin so your sales reps never get lost.'
+    tone: 'tone-emerald',
+    span: 'col-5',
+    badge: 'CARRIER REGEX VALIDATOR',
+    title: 'Deep Telecom & WhatsApp Verification',
+    body: 'Classifies every phone line as verified mobile, direct WhatsApp, or corporate landline before writing to Excel. Strips dead switchboards so your outbound team reaches real decision-makers immediately.'
   },
   {
     icon: Globe2,
-    title: 'Website, Email & Real Customer Ratings',
-    body: 'See customer star ratings, review counts, official websites, and business emails at a glance.'
-  },
-  {
-    icon: Download,
-    title: 'Zero-Duplicate Permanent Folders',
-    body: 'Every search saves neatly into a clean folder — ready for multi-sheet Excel downloads anytime.'
+    tone: 'tone-purple',
+    span: 'col-7',
+    badge: 'EQUAL SOVEREIGN COVERAGE',
+    title: 'Equal Prominence Across All 11 Global Markets',
+    body: 'Every single US county, UK borough, Canadian census division, Australian LGA, German Landkreis, and Indian mandal is treated with identical administrative granularity. No market is treated as second-class.'
   }
 ];
 
-const PROOF_STATS = [
-  { value: '11', label: 'Core Countries Locked & Tuned' },
-  { value: '619,287', label: 'Indian Towns & Villages Covered' },
-  { value: '6', label: 'Built-In Lead Discovery Engines' },
-  { value: '1-Click', label: 'Live Satellite Radar & Excel Export' }
-];
-
-const FAQ = [
+const FAQ_ITEMS = [
   {
-    q: 'Why can’t I just copy businesses from Google Maps manually?',
-    a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Scraper.co.in automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps all of them in parallel on a live Satellite Radar map, and exports a clean Excel spreadsheet in minutes.'
+    q: 'Why can’t I just copy businesses from manual map searches?',
+    a: 'Manual search engines cap a single search at around 120 listings ("You’ve reached the end of the list") and systematically obscure hundreds of active shops located in inner streets, mandals, and neighboring suburbs. Furthermore, copying phone numbers one by one wastes 5–6 hours per district. Scraper.co.in automatically divides any Indian town, US county, UK borough, Australian LGA, or European city into micro-zones, sweeps them live with a 22-engine swarm, and exports clean Excel files in seconds.'
   },
   {
-    q: 'Do I get all 6 built-in lead discovery engines automatically?',
-    a: 'Yes! Our platform orchestrates 6 specialized lead extraction engines across satellite maps, local business directories, B2B wholesale portals, official websites, and social indices. For India, 11 dedicated engines run simultaneously (including Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar & GoMandap). For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland) run in parallel — with zero extra API keys or proxy bills.'
+    q: 'Can I run the Command Center locally without installing a browser extension?',
+    a: 'Yes! Simply click "Run on Local Server" in the hero search box or select "⚡ Skip Extension · Run on Local Server Engine" in the workspace. The scraping engine will run directly on your workstation’s local Node.js server and memory, completely bypassing extension requirements while maintaining ultra-blazing extraction speeds.'
   },
   {
-    q: 'What if I want leads from an entire District, State, or every website across the internet?',
-    a: 'Use our Client Workspace for any single city, town, mandal, or county right from your browser. When your business needs complete territory lists covering entire districts, full states, or nationwide rollouts gathered across every public website, map, and directory on the internet, reach our Master Territory Intelligence Desk below.'
+    q: 'Do I get all 22 specialized lead discovery engines automatically?',
+    a: 'Yes. Every search coordinates 22 specialized discovery cores including Global Geospatial Mapping Cores, High-Intent Local Registries, B2B Wholesale Networks, Hospitality & Event Registries, Corporate Web Scouts, and Smart Deduplication Matrices. Zero extra API keys or proxy subscriptions are ever required.'
   },
   {
-    q: 'How does this help startups and marketing agencies?',
-    a: 'Startups can launch outreach in a new city in 60 seconds instead of paying thousands for outdated databases. Web, SEO, and marketing agencies can instantly filter for local businesses that have great ratings but "No Website" — giving them high-intent clients ready to pitch.'
+    q: 'How does the Local RAM Engine protect my workstation from crashing?',
+    a: 'Our device profiler inspects your available system memory and CPU core count. On a 16 GB RAM machine, it safely allocates 8 parallel extraction lanes while strictly maintaining ≥ 4.5 GB of reserved headroom for your operating system, background applications, and browser tabs. If memory pressure rises, lane concurrency throttles gracefully.'
   },
   {
-    q: 'Which 11 countries are supported?',
-    a: 'India (our Home market — 36 States & UTs, 760+ Districts, 6,000+ Mandals & 619,287 Villages), United States, United Kingdom, Canada, Australia, United Arab Emirates, Singapore, New Zealand, Ireland, South Africa, and Germany.'
+    q: 'Which 11 global sovereign markets are supported?',
+    a: 'India (Home Market — 36 States/UTs, 760+ Districts, 6k+ Mandals & 619,287 Villages), United States (50 States, 3,143 Counties), United Kingdom (4 Home Nations, 100+ Counties/Boroughs), Canada (10 Provinces, 293 Census Divisions), Australia (8 States, 537 LGAs), Germany (16 Bundesländer, 401 Landkreise), United Arab Emirates (7 Emirates), Singapore (5 Regions), New Zealand (16 Regions, 67 Territorial Authorities), Ireland (4 Provinces, 31 Local Authorities), and South Africa (9 Provinces, 52 District/Metro Municipalities).'
   },
   {
     q: 'How do I take my leads into Excel or my phone?',
-    a: 'Every search saves automatically into a permanent folder. Click one button to copy all phone numbers, download a clean Excel (.xlsx) or CSV spreadsheet, or save contacts directly to your phone (.vcf).'
+    a: 'Every search saves automatically into permanent folders. Click one button to download clean multi-sheet Excel (.xlsx), CSV, or save phone numbers directly into your smartphone contacts (.vcf) with mobile vs. landline classification.'
   }
 ];
 
-function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, onLaunch }) {
-  const [typedText, setTypedText] = useState(demo.query);
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const rotateX = useSpring(useTransform(mouseY, [-200, 200], [5.5, -5.5]), { stiffness: 220, damping: 24 });
-  const rotateY = useSpring(useTransform(mouseX, [-240, 240], [-6.5, 6.5]), { stiffness: 220, damping: 24 });
-
-  useEffect(() => {
-    let idx = 0;
-    setTypedText('');
-    const timer = setInterval(() => {
-      idx += 1;
-      setTypedText(demo.query.slice(0, idx));
-      if (idx >= demo.query.length) clearInterval(timer);
-    }, 24);
-    return () => clearInterval(timer);
-  }, [demo.query]);
-
-  const handleMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    mouseX.set(e.clientX - (rect.left + rect.width / 2));
-    mouseY.set(e.clientY - (rect.top + rect.height / 2));
-  };
-
-  const handleLeave = () => {
-    mouseX.set(0);
-    mouseY.set(0);
-  };
-
-  const prevDemo = () => setActiveDemo(prev => (prev - 1 + totalDemos) % totalDemos);
-  const nextDemo = () => setActiveDemo(prev => (prev + 1) % totalDemos);
-
-  return (
-    <div style={{ perspective: 1200, position: 'relative' }}>
-      <motion.div
-        className="lx-float-badge is-top"
-        animate={{ y: [0, -5, 0] }}
-        transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
-      >
-        <CheckCircle2 size={15} color="#059669" />
-        <span>6 Engines Sweeping Live</span>
-      </motion.div>
-
-      <motion.div
-        className="lx-float-badge is-bottom"
-        animate={{ y: [0, 5, 0] }}
-        transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
-      >
-        <FileSpreadsheet size={15} color="#0e7490" />
-        <span>Satellite Radar · 1-Click Excel</span>
-      </motion.div>
-
-      <motion.div
-        className="lx-showcase lx-gba-console"
-        style={{ rotateX, rotateY, transformStyle: 'preserve-3d' }}
-        onMouseMove={handleMove}
-        onMouseLeave={handleLeave}
-        initial={{ opacity: 0, y: 22, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-      >
-        {/* Top GBA-Color Cartridge Slot Bar */}
-        <div className="lx-gba-cartridge-slot">
-          <span>◄ CARTRIDGE: SCRAPER.CO.IN · 11-COUNTRY LIVE SATELLITE EDITION ►</span>
-          <span className="lx-gba-power-led">
-            <i /> POWER
-          </span>
-        </div>
-
-        {/* Illuminated GBA IPS Console Screen Bezel */}
-        <div className="lx-gba-screen-bezel">
-          <div className="lx-showcase-top">
-            <div className="lx-showcase-pills">
-              {DEMO_SCENARIOS.map((item, idx) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`lx-demo-pill ${activeDemo === idx ? 'is-active' : ''}`}
-                  onClick={() => setActiveDemo(idx)}
-                >
-                  {item.pill}
-                </button>
-              ))}
-            </div>
-            <div className="lx-gbc-hardware-bar" aria-hidden="true">
-              <span className="lx-gbc-jewel is-kiwi" />
-              <span className="lx-gbc-jewel is-atomic" />
-              <span className="lx-gbc-jewel is-berry" />
-            </div>
-          </div>
-
-          <div className="lx-showcase-bar">
-            <Search size={17} color="#059669" />
-            <span className="lx-showcase-query">
-              {typedText}
-              <span className="lx-typing-caret" />
-            </span>
-            <motion.span
-              key={demo.count}
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="lx-showcase-badge"
-            >
-              {demo.count}
-            </motion.span>
-          </div>
-
-          <div className="lx-mini-map is-satellite">
-            <div className="lx-radar-sweep" />
-            <div className="lx-map-ring" />
-            {demo.pins.map((pos, i) => (
-              <motion.div
-                key={`${demo.id}-pin-${i}`}
-                className="lx-map-pin"
-                style={{ top: pos.top, left: pos.left }}
-                initial={{ scale: 0, opacity: 0, y: -10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                transition={{ delay: 0.06 * i, type: 'spring', stiffness: 460, damping: 20 }}
-              >
-                <MapPin size={12} />
-              </motion.div>
-            ))}
-            <span className="lx-gba-sat-beacon" style={{ top: '16%', right: '14%' }}>⚡ LIVE ZONE</span>
-            <span className="lx-map-label">🛰️ {demo.areaLabel}</span>
-          </div>
-
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={demo.id}
-              className="lx-demo-leads"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.18 }}
-            >
-              {demo.leads.map((lead, idx) => (
-                <motion.div
-                  key={lead.name}
-                  className="lx-demo-row"
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.05 * idx, type: 'spring', stiffness: 380, damping: 26 }}
-                >
-                  <div className="lx-demo-row-left">
-                    <span className="lx-demo-avatar">{lead.name.charAt(0)}</span>
-                    <div style={{ minWidth: 0 }}>
-                      <b>{lead.name}</b>
-                      <small>{lead.area} · ★ {lead.rating} ({lead.reviews})</small>
-                      {(lead.noWebsite || lead.hasPin) && (
-                        <div className="lx-demo-row-meta">
-                          {lead.noWebsite && <span className="lx-hero-row-tag is-agency">No Website · Warm Lead</span>}
-                          {lead.hasPin && <span className="lx-hero-row-tag is-pin"><MapPin size={9} /> Street Pin</span>}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <span className="lx-demo-phone">{lead.phone}</span>
-                </motion.div>
-              ))}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Bottom Physical GBA-Color Console Controls Deck */}
-        <div className="lx-gba-controls-deck">
-          <div className="lx-gba-dpad-wrap">
-            <div className="lx-gba-dpad" role="group" aria-label="Cycle country cartridge demos">
-              <button type="button" className="lx-gba-dpad-btn is-up" onClick={prevDemo} aria-label="Previous demo">▲</button>
-              <button type="button" className="lx-gba-dpad-btn is-left" onClick={prevDemo} aria-label="Previous country">◀</button>
-              <span className="lx-gba-dpad-center" aria-hidden="true" />
-              <button type="button" className="lx-gba-dpad-btn is-right" onClick={nextDemo} aria-label="Next country">▶</button>
-              <button type="button" className="lx-gba-dpad-btn is-down" onClick={nextDemo} aria-label="Next demo">▼</button>
-            </div>
-            <div className="lx-gba-brand-plate">
-              <b>SCRAPER.CO.IN</b>
-              <small>GBA-COLOR 3D</small>
-            </div>
-          </div>
-
-          <div className="lx-gba-center-pills">
-            <button type="button" className="lx-gba-pill-btn" onClick={nextDemo} title="Switch Demo Cartridge">SELECT</button>
-            <button type="button" className="lx-gba-pill-btn is-start" onClick={onLaunch} title="Launch Active Search in Workspace">START</button>
-          </div>
-
-          <div className="lx-gba-ab-cluster">
-            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 6 Engines">
-              <span>B</span>
-              <small>ENGINES</small>
-            </a>
-            <button type="button" className="lx-gba-round-btn is-a" onClick={onLaunch} title="Launch Live Search">
-              <span>A</span>
-              <small>LAUNCH</small>
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
 export default function LandingV2() {
   const navigate = useNavigate();
-  const { ready: extReady, ensureConnected, openTelemetry, openSetup } = useExtension();
+  const {
+    ready: extReady, skippedExtension, skipAndRunLocal, ensureConnected, openTelemetry, openSetup
+  } = useExtension();
+
   const [online, setOnline] = useState(true);
-  const [activeDemo, setActiveDemo] = useState(0);
-  const [weeklySearches, setWeeklySearches] = useState(12);
-  const [activePulseZone, setActivePulseZone] = useState(0);
+  const [activeDemoIdx, setActiveDemoIdx] = useState(0);
   const [selectedMarketCode, setSelectedMarketCode] = useState('IN');
+  const [heroSearchInput, setHeroSearchInput] = useState('');
   const [engineCategoryFilter, setEngineCategoryFilter] = useState('All');
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+
   const hardware = useMemo(() => detectDeviceHardware(), []);
 
   useEffect(() => {
@@ -531,27 +289,28 @@ export default function LandingV2() {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setActiveDemo(prev => (prev + 1) % DEMO_SCENARIOS.length);
-    }, 6200);
-    return () => clearInterval(id);
+    const timer = setInterval(() => {
+      setActiveDemoIdx(prev => (prev + 1) % DEMO_SCENARIOS.length);
+    }, 6500);
+    return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    const zTimer = setInterval(() => {
-      setActivePulseZone(prev => (prev + 1) % STORY_ZONES.length);
-    }, 900);
-    return () => {
-      clearInterval(zTimer);
-    };
-  }, []);
+  const activeDemo = DEMO_SCENARIOS[activeDemoIdx];
+  const marketExamples = examplesFor(selectedMarketCode);
+  const activeDefaultPrompt = marketExamples.prompts?.[0] || 'Software companies in HITEC City Hyderabad';
 
-  const demo = DEMO_SCENARIOS[activeDemo];
   const openWorkspace = (countryCode = 'IN', query = '', preset = '') => {
     const qParam = query ? `&q=${encodeURIComponent(query)}` : '';
     const presetParam = preset ? `&preset=${encodeURIComponent(preset)}` : '';
     const targetUrl = `/command?country=${encodeURIComponent(countryCode)}${qParam}${presetParam}`;
     ensureConnected(() => navigate(targetUrl), { country: countryCode, query, preset });
+  };
+
+  const runLocalMode = (countryCode = 'IN', query = '') => {
+    if (skipAndRunLocal) skipAndRunLocal();
+    const effectiveQuery = query || activeDefaultPrompt;
+    const qParam = effectiveQuery ? `&q=${encodeURIComponent(effectiveQuery)}` : '';
+    navigate(`/command?country=${encodeURIComponent(countryCode)}${qParam}&mode=local`);
   };
 
   const lockedMarkets = useMemo(() => {
@@ -560,1054 +319,755 @@ export default function LandingV2() {
       .sort((a, b) => LOCKED_11_CODES.indexOf(a.code) - LOCKED_11_CODES.indexOf(b.code));
   }, []);
 
-  const monthlyLeads = weeklySearches * 4 * 165;
-  const hoursSaved = weeklySearches * 4 * 6;
+  const activeCountryObj = lockedMarkets.find(c => c.code === selectedMarketCode) || lockedMarkets[0];
 
   return (
-    <div className="lx-landing">
+    <div className="lx-landing is-nexera">
       <a href="#main-content" className="lx-skip-link">Skip to main content</a>
-      <div className="lx-aurora-wrap" aria-hidden="true">
-        <div className="lx-orb lx-orb-1" />
-        <div className="lx-orb lx-orb-2" />
-        <div className="lx-orb lx-orb-3" />
-      </div>
 
-      {/* Sticky 3D Liquid Glass Navbar */}
+      {/* Floating Obsidian Glass Navbar */}
       <header className="lx-nav">
         <div className="lx-wrap lx-nav-inner">
-          <button type="button" className="lx-brand-btn" onClick={() => openWorkspace('IN')} aria-label="Open Workspace">
-            <BrandLogo size={34} theme="light" />
+          <button
+            type="button"
+            className="lx-brand-btn"
+            onClick={() => openWorkspace('IN')}
+            aria-label="Open Workspace"
+          >
+            <BrandLogo size={34} theme="dark" />
           </button>
 
-          <nav className="lx-nav-links" aria-label="Primary">
-            <a href="#story">Why It Works</a>
-            <a href="#engines">6 Engines &amp; RAM</a>
-            <a href="#playbooks">For Teams</a>
-            <a href="#markets">11 Countries</a>
-            <a href="#master-concierge">Master Service</a>
+          <nav className="lx-nav-links" aria-label="Primary Navigation">
+            <a href="#cockpit">Cockpit Radar</a>
+            <a href="#bento">Architecture</a>
+            <a href="#engines">22 Engines</a>
+            <a href="#markets">Global Alignment</a>
+            <a href="#hardware">Hardware RAM</a>
             <button type="button" onClick={() => navigate('/pricing')}>Pricing</button>
           </nav>
 
           <div className="lx-nav-actions">
             <span className={`lx-status-pill ${online ? '' : 'is-off'}`}>
               <span className="lx-status-dot" />
-              {online ? 'Ready' : 'Connecting'}
+              {online ? 'Systems Operational' : 'Connecting'}
             </span>
+
+            {skippedExtension ? (
+              <span
+                className="lx-nav-ext-pill is-connected"
+                title="Running on Local Server Engine (Extension Skipped)"
+                style={{ borderColor: 'rgba(6, 182, 212, 0.4)', color: '#22d3ee' }}
+              >
+                <Server size={13} />
+                <span>Local Server Mode</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={`lx-nav-ext-pill ${extReady ? 'is-connected' : ''}`}
+                onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
+                title={extReady ? 'Browser Extension Active' : 'Extension Setup'}
+              >
+                <Cpu size={13} />
+                <span>{extReady ? 'RAM Turbo Active' : 'Setup Extension'}</span>
+              </button>
+            )}
+
+            <button type="button" className="lx-btn lx-btn-ghost" onClick={() => navigate('/login')}>
+              <LogIn size={15} /> Sign In
+            </button>
+
             <button
               type="button"
-              className={`lx-nav-ext-pill ${extReady ? 'is-connected' : ''}`}
-              onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
-              title={extReady ? 'Browser Extension Active (RAM Turbo Live)' : 'Connect Browser Extension'}
+              className="lx-btn lx-btn-primary"
+              onClick={() => openWorkspace(selectedMarketCode, heroSearchInput || activeDefaultPrompt)}
             >
-              <Cpu size={13} />
-              <span>{extReady ? 'Extension Active' : 'Connect Extension'}</span>
-            </button>
-            <button type="button" className="lx-btn lx-btn-ghost" onClick={() => navigate('/login')}>
-              <LogIn size={15} /> Sign in
-            </button>
-            <button type="button" className="lx-btn lx-btn-primary" onClick={() => openWorkspace('IN')}>
-              <span className="lx-gbc-keycap-landing is-a" aria-hidden="true">A</span>
-              Open Command Center <ArrowRight size={15} />
+              <Rocket size={15} /> Launch Command Center
             </button>
           </div>
         </div>
       </header>
 
       <main id="main-content" tabIndex={-1} style={{ position: 'relative', zIndex: 1 }}>
-        {/* Hero */}
+        {/* HERO SECTION — Inspired by Nexera.health */}
         <section className="lx-hero">
-          <div className="lx-wrap lx-hero-grid">
+          <div className="lx-wrap" style={{ maxWidth: 1180 }}>
             <motion.div
-              initial={{ opacity: 0, y: 18 }}
+              initial={{ opacity: 0, y: 22 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.46, ease: [0.22, 1, 0.36, 1] }}
             >
-              <span className="lx-eyebrow">
-                <Sparkles size={13} />
-                INDIA FIRST · 11 COUNTRIES · NO API KEYS · NO SETUP
-              </span>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
+                <span className="lx-eyebrow">
+                  <Sparkles size={13} />
+                  THE NEXT-ERA OF COMMERCIAL B2B INTEL · 0 API KEYS
+                </span>
+                {skippedExtension && (
+                  <span
+                    style={{
+                      padding: '4px 10px', borderRadius: 999,
+                      background: 'rgba(6, 182, 212, 0.15)', border: '1px solid rgba(6, 182, 212, 0.35)',
+                      color: '#22d3ee', fontSize: 11, fontWeight: 800, textTransform: 'uppercase'
+                    }}
+                  >
+                    ⚡ Local Mode Ready
+                  </span>
+                )}
+              </div>
 
               <h1 className="lx-h1">
-                Search all the leads <span className="lx-h1-accent">in your area.</span>
+                The Next-Era of Commercial B2B Lead Intelligence <span className="lx-h1-serif">starts here.</span>
               </h1>
 
               <p className="lx-lead-copy">
-                Type a business and a place. 6 specialized engines sweep every street, mandal, district and
-                state on a live map — and give you verified mobile numbers, emails and websites in
-                one clean Excel file.
+                A unified geospatial intelligence platform that indexes verified local businesses,
+                active mobile numbers, and enterprise registries directly on your hardware with
+                zero monthly API bills. Equal precision across 619,287 Indian villages and all 3,143 US counties.
               </p>
 
-              <div className="lx-hero-actions">
-                <motion.button
-                  type="button"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="lx-btn lx-btn-primary lx-btn-lg"
-                  onClick={() => openWorkspace('IN')}
-                >
-                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">A</span>
-                  Open Command Center <ArrowRight size={17} />
-                </motion.button>
-                <a href="#cloud-extension" className="lx-btn lx-btn-ghost lx-btn-lg">
-                  How it works
-                </a>
+              {/* Interactive Hero Search Console */}
+              <div className="lx-nex-searchbox">
+                <div className="lx-nex-search-main">
+                  {/* Country Flag Dropdown Trigger */}
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      type="button"
+                      className="lx-nex-country-select-btn"
+                      onClick={() => setCountryPickerOpen(prev => !prev)}
+                      title="Select Sovereign Revenue Market"
+                    >
+                      <Country3DFlag code={selectedMarketCode} size={20} isHome={selectedMarketCode === 'IN'} />
+                      <span>{selectedMarketCode} · {activeCountryObj?.name || 'India'}</span>
+                      <span style={{ fontSize: 10, color: '#94a3b8' }}>▼</span>
+                    </button>
+
+                    {countryPickerOpen && (
+                      <div
+                        style={{
+                          position: 'absolute', top: '100%', left: 0, marginTop: 8,
+                          background: 'rgba(11, 17, 30, 0.96)', backdropFilter: 'blur(24px)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)', borderRadius: 16,
+                          padding: 10, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(140px, 1fr))',
+                          gap: 6, zIndex: 100, boxShadow: '0 20px 50px rgba(0, 0, 0, 0.8)'
+                        }}
+                      >
+                        {lockedMarkets.map(country => (
+                          <button
+                            key={country.code}
+                            type="button"
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
+                              borderRadius: 10, background: country.code === selectedMarketCode ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                              border: country.code === selectedMarketCode ? '1px solid #10b981' : '1px solid transparent',
+                              color: country.code === selectedMarketCode ? '#34d399' : '#cbd5e1',
+                              fontSize: 12, fontWeight: 750, cursor: 'pointer', textAlign: 'left'
+                            }}
+                            onClick={() => {
+                              setSelectedMarketCode(country.code);
+                              setCountryPickerOpen(false);
+                            }}
+                          >
+                            <Country3DFlag code={country.code} size={16} isHome={country.code === 'IN'} />
+                            <span>{country.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Search Input Box */}
+                  <div className="lx-nex-input-wrap">
+                    <Search size={17} color="#38bdf8" />
+                    <input
+                      type="text"
+                      className="lx-nex-input"
+                      value={heroSearchInput}
+                      onChange={e => setHeroSearchInput(e.target.value)}
+                      placeholder={placeholderFor(selectedMarketCode)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          openWorkspace(selectedMarketCode, heroSearchInput || activeDefaultPrompt);
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Dual Action Launch CTAs */}
+                  <div className="lx-nex-action-group">
+                    <button
+                      type="button"
+                      className="lx-btn-local-engine"
+                      onClick={() => runLocalMode(selectedMarketCode, heroSearchInput || activeDefaultPrompt)}
+                      title="Run on Local Server Engine (Bypasses Extension)"
+                    >
+                      <Zap size={15} /> Run on Local Server
+                    </button>
+
+                    <button
+                      type="button"
+                      className="lx-btn lx-btn-primary"
+                      style={{ height: 48, padding: '0 20px', borderRadius: 14 }}
+                      onClick={() => openWorkspace(selectedMarketCode, heroSearchInput || activeDefaultPrompt)}
+                      title="Launch Command Center"
+                    >
+                      <Rocket size={15} /> Launch Command Center
+                    </button>
+                  </div>
+                </div>
+
+                {/* Instant Search Chips */}
+                <div className="lx-nex-chips-strip">
+                  <span className="lx-nex-chips-label">Instant Presets:</span>
+                  {(marketExamples.prompts || []).slice(0, 4).map(prompt => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className="lx-nex-chip"
+                      onClick={() => {
+                        setHeroSearchInput(prompt);
+                        openWorkspace(selectedMarketCode, prompt);
+                      }}
+                    >
+                      <Sparkles size={11} color="#34d399" />
+                      <span>{prompt}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="lx-market-flags" aria-label="11 supported markets">
-                {lockedMarkets.map(c => (
+              {/* Equal Prominence Global Units Stats Bar */}
+              <div className="lx-nex-stats-grid">
+                {EQUAL_PROMINENCE_METRICS.map(m => (
+                  <div key={m.title} className="lx-nex-stat-card">
+                    <div className={`lx-nex-stat-val ${m.isGreen ? 'is-green' : ''}`}>{m.val}</div>
+                    <div className="lx-nex-stat-title">{m.title}</div>
+                    <div className="lx-nex-stat-desc">{m.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* LIVE PRODUCT SIMULATION / 3D COCKPIT RADAR PREVIEW */}
+            <div className="lx-nex-cockpit-wrap" id="cockpit">
+              <div className="lx-nex-cockpit-bar">
+                <div className="lx-nex-cockpit-title">
+                  <Radio size={16} color="#38bdf8" />
+                  <span>Command Radar Cockpit · Satellite HUD v2.4</span>
+                </div>
+                <div className="lx-nex-cockpit-badges">
+                  <span className="lx-nex-hud-badge is-live">
+                    <span className="lx-status-dot" /> 22 Engines Synchronized
+                  </span>
+                  <span className="lx-nex-hud-badge">
+                    <Server size={12} color="#38bdf8" /> {hardware.ramGb}GB RAM · {hardware.parallelZones} Parallel Lanes
+                  </span>
+                  <span className="lx-nex-hud-badge">
+                    <ShieldCheck size={12} color="#34d399" /> 100% Brand-Safe Cores
+                  </span>
+                </div>
+              </div>
+
+              {/* Scenario Switcher Tabs */}
+              <div
+                style={{
+                  display: 'flex', gap: 8, padding: '10px 20px',
+                  background: 'rgba(2, 6, 23, 0.6)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+                  overflowX: 'auto'
+                }}
+              >
+                {DEMO_SCENARIOS.map((sc, idx) => (
                   <button
-                    key={c.code}
+                    key={sc.id}
                     type="button"
-                    className={c.code === selectedMarketCode ? 'lx-market-flag is-on' : 'lx-market-flag'}
-                    onClick={() => setSelectedMarketCode(c.code)}
-                    title={c.name}
+                    style={{
+                      padding: '6px 13px', borderRadius: 999, fontSize: 11.5, fontWeight: 750,
+                      background: idx === activeDemoIdx ? 'rgba(6, 182, 212, 0.18)' : 'rgba(255, 255, 255, 0.05)',
+                      border: idx === activeDemoIdx ? '1px solid #06b6d4' : '1px solid rgba(255, 255, 255, 0.08)',
+                      color: idx === activeDemoIdx ? '#38bdf8' : '#94a3b8',
+                      cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.16s ease'
+                    }}
+                    onClick={() => setActiveDemoIdx(idx)}
                   >
-                    <Country3DFlag code={c.code} size={18} isHome={c.code === 'IN'} />
-                    <span>{c.code}</span>
+                    {sc.pill}
                   </button>
                 ))}
               </div>
 
-              <div className="lx-hero-cloud-strip" aria-label="How the cloud and the extension work together">
-                <div className="lx-hcs-item">
-                  <span className="lx-hcs-icon"><Cpu size={16} /></span>
-                  <div>
-                    <b>6 engines on our cloud</b>
-                    <small>Search brain, geo data, phone checks</small>
-                  </div>
-                </div>
-                <span className="lx-hcs-arrow" aria-hidden="true">+</span>
-                <div className="lx-hcs-item">
-                  <span className="lx-hcs-icon"><Zap size={16} /></span>
-                  <div>
-                    <b>Your extension adds speed</b>
-                    <small>Skips the queue using your connection</small>
-                  </div>
-                </div>
-                <span className="lx-hcs-arrow" aria-hidden="true">=</span>
-                <div className="lx-hcs-item">
-                  <span className="lx-hcs-icon"><FileSpreadsheet size={16} /></span>
-                  <div>
-                    <b>One clean lead file</b>
-                    <small>Verified mobiles, emails, websites</small>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            <InteractiveShowcase
-              demo={demo}
-              activeDemo={activeDemo}
-              setActiveDemo={setActiveDemo}
-              totalDemos={DEMO_SCENARIOS.length}
-              onLaunch={() => openWorkspace(demo.country, demo.query)}
-            />
-          </div>
-
-          {/* Hero Playbooks Dock: Startups, Web/SEO/Ad Agencies & Field Sales Teams */}
-          <div className="lx-wrap lx-hero-playbooks" id="playbooks">
-            <div className="lx-hero-pb-head">
-              <div>
-                <span className="lx-kicker"><Briefcase size={13} /> Built for Real Growth</span>
-                <h2>Why Startups, Agencies &amp; Sales Teams rely on Scraper.co.in.</h2>
-                <p>
-                  Whether you are launching day-one outbound sales or pitching local businesses as an agency,
-                  every workflow is ready right out of the box.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="lx-btn lx-btn-ghost"
-                onClick={() => openWorkspace(selectedMarketCode)}
-              >
-                Explore Live Leads &amp; Exports <ArrowRight size={14} />
-              </button>
-            </div>
-
-            <div className="lx-hero-pb-grid">
-              {PLAYBOOKS.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <motion.article
-                    key={item.title}
-                    className="lx-hero-pb-card"
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.08 * idx, duration: 0.35 }}
-                    whileHover={{ y: -3 }}
-                  >
-                    <div className="lx-hero-pb-top">
-                      <div className={`lx-flow-step-orb ${item.tone}`} style={{ margin: 0, width: 42, height: 42, borderRadius: 12 }}>
-                        <Icon size={19} />
-                      </div>
-                      <span className="lx-hero-pb-badge">{item.badge}</span>
+              <div className="lx-nex-cockpit-body">
+                {/* Left Radar Sweep Stage */}
+                <div className="lx-nex-radar-stage">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <div>
+                      <b style={{ fontSize: 14, color: '#f1f5f9' }}>{activeDemo.areaLabel}</b>
+                      <div style={{ fontSize: 11.5, color: '#64748b' }}>Query: &ldquo;{activeDemo.query}&rdquo;</div>
                     </div>
-                    <h3>{item.title}</h3>
-                    <p>{item.body}</p>
+                    <span
+                      style={{
+                        padding: '3px 9px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', fontSize: 11, fontWeight: 800
+                      }}
+                    >
+                      {activeDemo.count}
+                    </span>
+                  </div>
+
+                  <div className="lx-nex-radar-visual">
+                    <div className="lx-nex-radar-ring" style={{ width: 140, height: 140 }} />
+                    <div className="lx-nex-radar-ring" style={{ width: 220, height: 220 }} />
+                    <div className="lx-nex-radar-ring" style={{ width: 300, height: 300 }} />
+                    <div className="lx-nex-radar-sweep-beam" />
+
+                    {activeDemo.pins.map((p, idx) => (
+                      <div
+                        key={idx}
+                        className="lx-nex-beacon-pin"
+                        style={{ top: p.top, left: p.left }}
+                        title={`Micro-zone coordinate verified · Target 0${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                      <span style={{ color: '#34d399', fontWeight: 800 }}>● Active Sweep:</span> Micro-zones streaming into memory
+                    </div>
                     <button
                       type="button"
-                      className="lx-hero-pb-cta"
-                      onClick={() => openWorkspace(selectedMarketCode, item.query, item.preset)}
+                      className="lx-btn lx-btn-primary"
+                      style={{ height: 34, padding: '0 14px', fontSize: 12, borderRadius: 10 }}
+                      onClick={() => openWorkspace(activeDemo.country, activeDemo.query)}
                     >
-                      <span>{item.cta}</span>
-                      <ArrowRight size={14} />
+                      Launch in Command Center <ArrowRight size={13} />
                     </button>
-                  </motion.article>
+                  </div>
+                </div>
+
+                {/* Right Streaming Leads Stage */}
+                <div className="lx-nex-leads-stage">
+                  <div style={{ fontSize: 11, fontWeight: 850, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', marginBottom: 2 }}>
+                    Live Verified Business Telemetry (Top Matches)
+                  </div>
+
+                  {activeDemo.leads.map((ld, idx) => (
+                    <motion.div
+                      key={ld.name + idx}
+                      className="lx-nex-lead-item"
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.08 }}
+                    >
+                      <div className="lx-nex-lead-avatar">{ld.name.charAt(0)}</div>
+                      <div className="lx-nex-lead-info">
+                        <div className="lx-nex-lead-title">{ld.name}</div>
+                        <div className="lx-nex-lead-meta">
+                          <span>{ld.area}</span>
+                          <span style={{ color: '#fbbf24' }}>★ {ld.rating} ({ld.reviews})</span>
+                          {ld.noWebsite && (
+                            <span style={{ color: '#f43f5e', fontSize: 10.5, fontWeight: 750 }}>
+                              No Website · High Intent
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="lx-nex-lead-phone">{ld.phone}</div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* BENTO GRID: THE 4 NEXT-ERA PILLARS */}
+        <section className="lx-section" id="bento">
+          <div className="lx-wrap">
+            <div className="lx-sec-head">
+              <span className="lx-kicker"><Layers size={13} /> Enterprise Core Architecture</span>
+              <h2>Engineered for extreme yield, zero API bills, and safety.</h2>
+              <p>
+                Every component is decoupled and optimized for native machine performance.
+                Run locally or with the RAM extension — you retain complete control over your hardware.
+              </p>
+            </div>
+
+            <div className="lx-nex-bento-grid">
+              {BENTO_ADVANTAGES.map(b => {
+                const Icon = b.icon;
+                return (
+                  <div key={b.title} className={`lx-nex-bento-card ${b.span}`}>
+                    <div className={`lx-nex-bento-icon ${b.tone}`}>
+                      <Icon size={22} />
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.06em', color: '#38bdf8', textTransform: 'uppercase', marginBottom: 6 }}>
+                      {b.badge}
+                    </span>
+                    <h3>{b.title}</h3>
+                    <p>{b.body}</p>
+                  </div>
                 );
               })}
             </div>
           </div>
         </section>
 
-        {/* Cloud engines + extension speed — the one idea the whole product rests on */}
-        <section className="lx-section lx-cloud-split" id="cloud-extension">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><ShieldCheck size={13} /> How Scraper.co.in is built</span>
-              <h2>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h2>
-              <p>
-                Nothing heavy runs on your computer. The search brain, geo data and phone
-                validation live on our servers. A tiny extension borrows your connection — and
-                your spare RAM — so sweeps run in parallel instead of waiting in a queue.
-              </p>
-            </div>
-
-            <div className="lx-cloud-3">
-              <article className="lx-cloud-card">
-                <span className="lx-cloud-num">01</span>
-                <div className="lx-cloud-icon"><Cpu size={20} /></div>
-                <h3>6 engines on our secure cloud</h3>
-                <p>
-                  Maps, local directories, official websites, B2B suppliers, public registries
-                  and a smart dedupe engine all run server-side. For India, 11 dedicated engines
-                  run live; for global markets, 11–12 localized directories run in parallel.
-                </p>
-                <ul>
-                  <li><Check size={14} /> Always current, always patched</li>
-                  <li><Check size={14} /> 619k+ Indian towns and mandals mapped</li>
-                  <li><Check size={14} /> Phone and email validation built in</li>
-                </ul>
-              </article>
-
-              <article className="lx-cloud-card is-accent">
-                <span className="lx-cloud-num">02</span>
-                <div className="lx-cloud-icon"><Zap size={20} /></div>
-                <h3>Your extension powers the speed</h3>
-                <p>
-                  Add our ultra-lightweight RAM Turbo extension in 30 seconds. It lets the cloud engines
-                  read pages through your connection, so your searches skip the shared queue.
-                </p>
-                <ul>
-                  <li><Check size={14} /> 4 GB = 3 lanes · 8 GB = 5 lanes · 16 GB+ = 8 lanes</li>
-                  <li><Check size={14} /> Connects itself after install</li>
-                  <li><Check size={14} /> Never reads your tabs, history or passwords</li>
-                </ul>
-                <div className="lx-cloud-cta">
-                  <button
-                    type="button"
-                    className="lx-btn lx-btn-primary"
-                    onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
-                  >
-                    {extReady
-                      ? <><CheckCircle2 size={15} /> Extension Active · Live Speed</>
-                      : <><Download size={15} /> Install Extension (1-Click)</>}
-                  </button>
-                </div>
-              </article>
-
-              <article className="lx-cloud-card">
-                <span className="lx-cloud-num">03</span>
-                <div className="lx-cloud-icon"><FileSpreadsheet size={20} /></div>
-                <h3>You get one clean lead file</h3>
-                <p>
-                  Every source feeds one de-duplicated list. Verified mobiles, websites and
-                  emails, sorted by district and mandal, ready for Excel or your CRM.
-                </p>
-                <ul>
-                  <li><Check size={14} /> Duplicates removed automatically</li>
-                  <li><Check size={14} /> Mobile vs landline classified</li>
-                  <li><Check size={14} /> One-click Excel (.xlsx) export</li>
-                </ul>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        {/* ANIMATED STORY 1: THE GOOGLE MAPS PROBLEM VS AUTOMATIC ZONE SWEEPS */}
-        <section className="lx-section lx-section-alt" id="story">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Radar size={13} /> The Real Problem Solved</span>
-              <h2>Why normal map searches miss 80% of local businesses.</h2>
-              <p>If your startup or agency tries finding leads manually on a map, you quickly hit a wall. Here is what changes when you run one search here:</p>
-            </div>
-
-            <div className="lx-story-compare">
-              {/* Left Card: The Manual Trap */}
-              <motion.article
-                className="lx-story-card"
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.25 }}
-                transition={{ duration: 0.4 }}
-              >
-                <span className="lx-story-badge is-trap">
-                  <AlertTriangle size={12} /> THE GOOGLE MAPS TRAP
-                </span>
-                <h3>Stops at ~120 listings and hides inner streets</h3>
-                <p>
-                  Searching a city manually only returns the first batch near the center before hitting
-                  &ldquo;You&apos;ve reached the end of the list&rdquo; — skipping hundreds of active buyers in nearby neighborhoods.
-                </p>
-
-                <div className="lx-trap-stage">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 750, color: '#9f1239' }}>
-                    <span>Manual search coverage in a busy city</span>
-                    <span className="lx-mono">~120 / 600+ shops</span>
-                  </div>
-                  <div className="lx-trap-bar">
-                    <motion.div
-                      className="lx-trap-fill"
-                      initial={{ width: '0%' }}
-                      whileInView={{ width: '22%' }}
-                      viewport={{ once: true }}
-                      transition={{ duration: 0.9, ease: 'easeOut' }}
-                    />
-                  </div>
-                  <div className="lx-trap-wall">
-                    <span>⚠️ &ldquo;You&apos;ve reached the end of the list.&rdquo;</span>
-                    <span>80% MISSED</span>
-                  </div>
-                </div>
-
-                <ul className="lx-story-bullets">
-                  <li><AlertTriangle size={15} color="#e11d48" /> Clicking listings one by one wastes 5–6 hours per city</li>
-                  <li><AlertTriangle size={15} color="#e11d48" /> Hard to tell which leads actually have a website or mobile</li>
-                  <li><AlertTriangle size={15} color="#e11d48" /> Copy-pasting into Excel introduces dozens of duplicates</li>
-                </ul>
-              </motion.article>
-
-              {/* Right Card: The Automatic Neighborhood Sweep */}
-              <motion.article
-                className="lx-story-card is-winner"
-                initial={{ opacity: 0, x: 20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.25 }}
-                transition={{ duration: 0.4 }}
-              >
-                <span className="lx-story-badge is-win">
-                  <Zap size={12} /> AUTOMATIC MULTI-ZONE SWEEP
-                </span>
-                <h3>Breaks every city into neighborhoods &amp; captures them all</h3>
-                <p>
-                  One plain-English search automatically divides the city into every commercial pocket, pincode,
-                  and suburb — scanning them live together with zero effort from you.
-                </p>
-
-                <div className="lx-zone-grid-anim">
-                  {STORY_ZONES.map((z, idx) => {
-                    const isHot = idx === activePulseZone;
-                    return (
-                      <motion.div
-                        key={z.name}
-                        className="lx-zone-cell"
-                        animate={isHot ? { scale: 1.04, borderColor: '#059669', backgroundColor: '#ecfdf5' } : { scale: 1 }}
-                        transition={{ duration: 0.18 }}
-                      >
-                        <span>{z.name}</span>
-                        <b>{z.count}</b>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-
-                <ul className="lx-story-bullets">
-                  <li><CheckCircle2 size={15} color="#059669" /> Covers every neighborhood, suburb &amp; surrounding town automatically</li>
-                  <li><CheckCircle2 size={15} color="#059669" /> Direct phone numbers, websites &amp; coordinates verified live</li>
-                  <li><CheckCircle2 size={15} color="#059669" /> Auto-removes duplicates before exporting your clean Excel file</li>
-                </ul>
-              </motion.article>
-            </div>
-          </div>
-        </section>
-
-        {/* ANIMATED STORY 2: ALL 6 BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
+        {/* BRAND-SAFE 22-ENGINE INTERACTIVE SHOWCASE */}
         <section className="lx-section" id="engines">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Cpu size={13} /> 6 Lead Engines Included Automatically</span>
-              <h2>6 specialized discovery engines sweep every zone live together.</h2>
+              <span className="lx-kicker"><Cpu size={13} /> 22 Specialized Extraction Engines</span>
+              <h2>Synchronized Multi-Engine Sweep Fleet</h2>
               <p>
-                Zero browser extensions to configure manually, zero external API keys, and zero spreadsheets to clean by hand.
-                For India, 11 dedicated engines (Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar, GoMandap...) sweep simultaneously.
-                For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland...) run in parallel.
+                All proprietary third-party names have been abstracted into enterprise generic architectures
+                to prevent trademark liabilities while delivering full deep-web discovery depth across 11 sovereign nations.
               </p>
             </div>
 
-            <motion.div
-              className="lx-engine-story lx-gbc-cartridge-card"
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.45 }}
-            >
-              {/* Category Filter Pills */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                {[
-                  { id: 'All', label: 'All Engines (22)' },
-                  { id: 'Maps & Geospatial', label: 'Maps & Geospatial (4)' },
-                  { id: 'National Directories', label: 'National Directories (7)' },
-                  { id: 'B2B & Industrial', label: 'B2B & Wholesale (1)' },
-                  { id: 'Hospitality', label: 'Hospitality & Events (4)' },
-                  { id: 'Web Discovery', label: 'Web & Deep Crawling (3)' },
-                  { id: 'Social Discovery', label: 'Social & Knowledge (2)' },
-                  { id: 'Data Quality & Export', label: 'Deduplication & Quality (1)' }
-                ].map(cat => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    className={`lx-demo-pill ${engineCategoryFilter === cat.id ? 'is-active' : ''}`}
-                    onClick={() => setEngineCategoryFilter(cat.id)}
-                  >
-                    {cat.label}
-                  </button>
-                ))}
-              </div>
+            {/* Category Filter Pills */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+              {[
+                { id: 'All', label: 'All Engines (22)' },
+                { id: 'Maps & Geospatial', label: 'Maps & Geospatial (4)' },
+                { id: 'National Directories', label: 'National Commercial Directories (7)' },
+                { id: 'B2B & Industrial', label: 'B2B & Wholesale (1)' },
+                { id: 'Hospitality', label: 'Hospitality & Venues (4)' },
+                { id: 'Web Discovery', label: 'Web Discovery & Crawling (3)' },
+                { id: 'Social Discovery', label: 'Social & Knowledge (2)' },
+                { id: 'Data Quality & Export', label: 'Deduplication & Quality (1)' }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  style={{
+                    padding: '7px 14px', borderRadius: 999, fontSize: 12, fontWeight: 750,
+                    background: engineCategoryFilter === cat.id ? 'linear-gradient(135deg, #059669, #06b6d4)' : 'rgba(255, 255, 255, 0.05)',
+                    border: engineCategoryFilter === cat.id ? '1px solid rgba(255, 255, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.09)',
+                    color: engineCategoryFilter === cat.id ? '#ffffff' : '#94a3b8',
+                    cursor: 'pointer', transition: 'all 0.16s ease'
+                  }}
+                  onClick={() => setEngineCategoryFilter(cat.id)}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
 
-              <div className="lx-engines-6-grid">
-                {ALL_BUILTIN_ENGINES
-                  .filter(eng => engineCategoryFilter === 'All' || eng.category.includes(engineCategoryFilter) || (engineCategoryFilter === 'Hospitality' && eng.category.includes('Hospitality')))
-                  .map((eng, idx) => (
+            {/* 22 Engines Grid */}
+            <div className="lx-engines-6-grid">
+              {ALL_BUILTIN_ENGINES
+                .filter(eng => engineCategoryFilter === 'All' || eng.category.includes(engineCategoryFilter) || (engineCategoryFilter === 'Hospitality' && eng.category.includes('Hospitality')))
+                .map((eng, idx) => (
                   <motion.div
                     key={eng.id}
                     className="lx-engine-cart-card"
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.15 }}
+                    viewport={{ once: true, amount: 0.1 }}
                     transition={{ delay: idx * 0.02 }}
                     whileHover={{ y: -3 }}
                   >
-                    <div className="lx-engine-cart-head">
-                      <span className="lx-flow-step-orb tone-atomic" style={{ margin: 0, width: 34, height: 34, borderRadius: 10, flexShrink: 0 }}>
-                        <Zap size={15} />
+                    <div className="lx-engine-cart-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                      <span
+                        style={{
+                          width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center',
+                          background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399'
+                        }}
+                      >
+                        <Zap size={14} />
                       </span>
                       <div style={{ textAlign: 'right' }}>
-                        <span className="lx-engine-live-dot">LIVE · {eng.number.toUpperCase()}</span>
-                        <div style={{ fontSize: 10, color: '#0e7490', fontWeight: 800 }}>{eng.coverage}</div>
+                        <span style={{ fontSize: 10, fontWeight: 850, color: '#34d399', letterSpacing: '0.04em' }}>LIVE · {eng.number.toUpperCase()}</span>
+                        <div style={{ fontSize: 10, color: '#38bdf8', fontWeight: 750 }}>{eng.coverage}</div>
                       </div>
                     </div>
-                    <div style={{ fontSize: 10, fontWeight: 850, textTransform: 'uppercase', color: '#059669', marginBottom: 2 }}>
+                    <div style={{ fontSize: 10, fontWeight: 850, textTransform: 'uppercase', color: '#10b981', marginBottom: 3 }}>
                       {eng.category}
                     </div>
                     <b>{eng.name}</b>
                     <small>{eng.shortDesc}</small>
                   </motion.div>
                 ))}
-              </div>
-
-              <div className="lx-engine-live-bar">
-                <div className="lx-engine-live-badge">
-                  <Sparkles size={18} color="#34d399" />
-                  <b>6 ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
-                </div>
-                <span>Every zone streams live onto the 3D Satellite Map with verified mobile numbers, websites &amp; emails.</span>
-              </div>
-
-              <div className="lx-ram-banner">
-                <div className="lx-ram-banner-head">
-                  <div>
-                    <b style={{ fontSize: 15, color: '#0f172a' }}>Hardware-Accelerated Parallel Zones</b>
-                    <div style={{ fontSize: 12.5, color: '#475569' }}>Runs smoothly on any Windows, Mac, or Linux machine — parallel sweep speed scales automatically:</div>
-                  </div>
-                  <span className="lx-precision-pill is-service">💻 Your Device: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Zones</span>
-                </div>
-                <div className="lx-req-grid">
-                  {DEVICE_REQUIREMENTS.map(req => (
-                    <div key={req.tier} className={`lx-req-card ${req.tier === hardware.tier ? 'is-matched' : ''}`}>
-                      <span className="lx-req-badge">{req.badge}{req.tier === hardware.tier ? ' · DETECTED' : ''}</span>
-                      <b>{req.ram} · {req.cpu}</b>
-                      <small style={{ color: '#047857', fontWeight: 800 }}>{req.parallelZones} Parallel Zones · {req.speed}</small>
-                      <p>{req.note}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="lx-ext-shield-card">
-                <div className="lx-ext-shield-head">
-                  <div>
-                    <span className="lx-kicker" style={{ marginBottom: 8 }}><ShieldCheck size={13} /> Cloud-Protected Engines · Extension-Only Speed</span>
-                    <h3>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
-                    <p>
-                      Install our ultra-lightweight Chrome / Edge extension in 30 seconds to unlock instant parallel sweeps with zero waiting queues.
-                    </p>
-                  </div>
-                  <div className="lx-ext-cta-group">
-                    <button
-                      type="button"
-                      className="lx-btn lx-btn-primary"
-                      onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
-                    >
-                      {extReady
-                        ? <><CheckCircle2 size={15} /> Extension Connected</>
-                        : <><Download size={15} /> Install Extension (1-Click)</>}
-                    </button>
-                    <button type="button" className="lx-btn lx-btn-ghost" onClick={() => openWorkspace('IN')}>
-                      Open Command Center <ArrowRight size={14} />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="lx-ext-3grid">
-                  <div className="lx-ext-pillar">
-                    <span className="lx-ext-badge is-cloud">01 · SERVER CLOUD BRAIN</span>
-                    <b>100% Proprietary 6-Engine Intelligence</b>
-                    <small>
-                      All smart search routing, 619,287 Indian town/village mapping, Store vs. Service AI, phone validation, and Excel cleaning run safely on our cloud servers—never exposed or stale.
-                    </small>
-                  </div>
-                  <div className="lx-ext-pillar">
-                    <span className="lx-ext-badge is-ram">02 · USER RAM EXTENSION</span>
-                    <b>Zero-Queue Parallel Zones on Your Hardware</b>
-                    <small>
-                      The lightweight browser bridge uses your idle RAM (4GB = 3 zones, 8GB = 5 zones, 16GB+ = 8 zones simultaneously) and home connection—no crowded server queues or shared datacenter blocks.
-                    </small>
-                  </div>
-                  <div className="lx-ext-pillar">
-                    <span className="lx-ext-badge is-safe">03 · ONE-CLICK PRIVATE SETUP</span>
-                    <b>Runs Only When You Click Search</b>
-                    <small>
-                      Add it from the Chrome Web Store, reload the page, and it connects itself.
-                      It never reads your other tabs, history or passwords — only the page the
-                      server asks for. Works in all 11 countries.
-                    </small>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* How It Works */}
-        <section className="lx-section" id="how">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Zap size={13} /> How It Works</span>
-              <h2>From plain search to ready-to-call Excel sheet.</h2>
-              <p>Everything stays cleanly arranged on one screen — flag dock, smart search bar, live leads table, and animated territory map.</p>
-            </div>
-
-            <div className="lx-flow-track">
-              <div className="lx-flow-line" aria-hidden="true">
-                <div className="lx-flow-beam" />
-              </div>
-
-              {JOURNEY_STEPS.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <motion.article
-                    key={item.title}
-                    className="lx-flow-node"
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.25 }}
-                    transition={{ delay: idx * 0.07, duration: 0.36 }}
-                    whileHover={{ y: -5 }}
-                  >
-                    <div className={`lx-flow-step-orb ${item.tone}`}><Icon size={22} /></div>
-                    <small style={{ fontSize: 11, fontWeight: 850, color: '#059669', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                      {item.step}
-                    </small>
-                    <h3 style={{ margin: '6px 0 8px', fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{item.title}</h3>
-                    <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.6, color: '#475569' }}>{item.body}</p>
-                  </motion.article>
-                );
-              })}
             </div>
           </div>
         </section>
 
-        {/* Built for Every Industry */}
-        <section className="lx-section lx-section-alt" id="industries">
+        {/* HARDWARE RAM TIER MATRIX & HEADROOM SAFETY */}
+        <section className="lx-section" id="hardware">
           <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Sparkles size={13} /> Universal Coverage</span>
-              <h2>Every industry &amp; shop type understood out of the box.</h2>
-              <p>Click any industry card below to launch the workspace pre-loaded with a live query.</p>
-            </div>
-
-            <div className="lx-industry-grid">
-              {INDUSTRIES.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <motion.button
-                    key={item.title}
-                    type="button"
-                    className="lx-industry-card"
-                    onClick={() => openWorkspace(item.country, item.query)}
-                    initial={{ opacity: 0, y: 16 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    transition={{ delay: idx * 0.04 }}
-                    whileHover={{ y: -4 }}
-                  >
-                    <div className={`lx-flow-step-orb ${item.tone}`} style={{ margin: 0, width: 44, height: 44, borderRadius: 13 }}>
-                      <Icon size={20} />
-                    </div>
-                    <h3>{item.title}</h3>
-                    <p>{item.body}</p>
-                    <span className="lx-industry-query">
-                      Try: &ldquo;{item.query}&rdquo; <ArrowRight size={12} />
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* Anatomy of Every Lead */}
-        <section className="lx-section" id="lead-anatomy">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Star size={13} /> Inside Every Lead</span>
-              <h2>Clean, complete business profiles — ready to dial.</h2>
-              <p>Every discovered business streams straight into your Live Leads table and interactive map.</p>
-            </div>
-
-            <div className="lx-anatomy-grid">
-              <motion.div
-                className="lx-anatomy-card"
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, amount: 0.25 }}
-                transition={{ duration: 0.4 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-                  <div
-                    style={{
-                      width: 52, height: 52, borderRadius: 16,
-                      background: 'linear-gradient(135deg, #059669, #06b6d4)', color: '#ffffff',
-                      display: 'grid', placeItems: 'center', fontWeight: 850, fontSize: 20,
-                      boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.4), 0 4px 0 #047857'
-                    }}
-                  >
-                    A
-                  </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ padding: '3px 9px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', fontSize: 11, fontWeight: 850 }}>
-                        COMPUTER SHOPS
-                      </span>
-                      <span style={{ fontSize: 12.5, fontWeight: 750, color: '#d97706' }}>★ 4.8 (184 reviews)</span>
-                    </div>
-                    <h3 style={{ margin: '5px 0 0', fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
-                      Apex Computers &amp; Laptop Hub
-                    </h3>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 13, background: '#ecfdf5', border: '1px solid #6ee7b7', color: '#065f46', fontWeight: 750, fontSize: 14 }}>
-                    <Phone size={15} /> <span className="lx-mono">+91 98480 12345</span> <span style={{ marginLeft: 'auto', fontSize: 11, background: '#ffffff', padding: '2px 8px', borderRadius: 999 }}>Verified Mobile</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 13, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)', color: '#334155', fontSize: 13.5, fontWeight: 600 }}>
-                    <MapPin size={15} color="#06b6d4" /> 4th Lane, Brodipet, Guntur, Andhra Pradesh 522002
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 13, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)', color: '#334155', fontSize: 13, fontWeight: 600 }}>
-                      <Globe2 size={14} color="#059669" /> apexcomputers.in
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 13, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)', color: '#334155', fontSize: 13, fontWeight: 600 }}>
-                      <Mail size={14} color="#0e7490" /> sales@apex…
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-
-              <div className="lx-anatomy-list">
-                {LEAD_ANATOMY.map((item, idx) => {
-                  const Icon = item.icon;
-                  return (
-                    <motion.div
-                      key={item.title}
-                      className="lx-anatomy-item"
-                      initial={{ opacity: 0, x: 18 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true, amount: 0.2 }}
-                      transition={{ delay: idx * 0.06, duration: 0.34 }}
-                    >
-                      <div className="lx-card-icon" style={{ margin: 0, flexShrink: 0 }}>
-                        <Icon size={19} />
-                      </div>
-                      <div>
-                        <b style={{ display: 'block', fontSize: 15, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>{item.title}</b>
-                        <span style={{ fontSize: 13.5, lineHeight: 1.55, color: '#475569' }}>{item.body}</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Made in India + Locked 11 Supported Markets */}
-        <section className="lx-section lx-section-alt" id="markets">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Globe2 size={13} /> Made with ❤️ in India · 11 Locked Markets</span>
-              <h2>Engineered in India. Built for 11 major markets worldwide.</h2>
-              <p>Click any flag below to launch the workspace pre-tuned for that country&apos;s cities, states, and phone formats.</p>
-            </div>
-
-            <div className="lx-india-heritage">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <Country3DFlag code="IN" size={38} isHome />
+            <div className="lx-ram-banner">
+              <div className="lx-ram-banner-head">
                 <div>
-                  <b style={{ display: 'block', fontSize: 16.5, fontWeight: 800, color: '#0f172a' }}>
-                    Proudly Made with <Heart size={14} fill="#e11d48" color="#e11d48" style={{ verticalAlign: -2 }} /> in India — Unmatched Indian Depth
-                  </b>
-                  <span style={{ fontSize: 13.5, color: '#475569', fontWeight: 600 }}>
-                    Every State, District, Revenue Mandal / Taluka, Metro &amp; 619,287 Villages indexed locally right inside the platform.
-                  </span>
+                  <b style={{ fontSize: 16 }}>Hardware-Governed RAM Extraction Lanes</b>
+                  <div style={{ fontSize: 13, marginTop: 2 }}>
+                    Parallel concurrency auto-calibrates to your physical hardware with strict OS headroom protection:
+                  </div>
                 </div>
+                <span
+                  style={{
+                    padding: '6px 14px', borderRadius: 999,
+                    background: 'rgba(6, 182, 212, 0.14)', border: '1px solid rgba(6, 182, 212, 0.35)',
+                    color: '#22d3ee', fontSize: 12, fontWeight: 850
+                  }}
+                >
+                  💻 Your Device: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Lanes · Reserved Headroom: {hardware.reservedHeadroomGb} GB
+                </span>
               </div>
-              <button type="button" className="lx-btn lx-btn-primary" onClick={() => openWorkspace('IN')}>
-                Search India Now <ArrowRight size={14} />
-              </button>
+
+              <div className="lx-req-grid">
+                {DEVICE_REQUIREMENTS.map(req => (
+                  <div key={req.tier} className={`lx-req-card ${req.tier === hardware.tier ? 'is-matched' : ''}`}>
+                    <span className="lx-req-badge">{req.badge}{req.tier === hardware.tier ? ' · DETECTED MATCH' : ''}</span>
+                    <b>{req.ram} · {req.cpu}</b>
+                    <small style={{ color: '#34d399', fontWeight: 850 }}>{req.parallelZones} Parallel Zones · {req.speed}</small>
+                    <p>{req.note}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* EQUAL PROMINENCE 11-MARKET GEOGRAPHIC ALIGNMENT */}
+        <section className="lx-section" id="markets">
+          <div className="lx-wrap">
+            <div className="lx-sec-head">
+              <span className="lx-kicker"><Globe2 size={13} /> 11 Sovereign Nations · Equal Precision</span>
+              <h2>Equal Administrative Depth Across Global Markets</h2>
+              <p>
+                From 619,287 Indian villages and mandals to 3,143 US counties, 100+ UK boroughs, and 401 German Landkreise —
+                each country is equipped with native administrative boundaries.
+              </p>
             </div>
 
-            <div className="lx-country-grid">
+            {/* 11 Country Flag Buttons */}
+            <div className="lx-country-grid" style={{ marginBottom: 28 }}>
               {lockedMarkets.map((country, idx) => {
                 const isHome = country.code === 'IN';
                 const isSelected = selectedMarketCode === country.code;
                 return (
-                  <motion.button
+                  <button
                     key={country.code}
                     type="button"
                     aria-pressed={isSelected}
                     className={`lx-country-btn ${isHome ? 'is-home' : ''} ${isSelected ? 'is-selected' : ''}`}
                     onClick={() => setSelectedMarketCode(country.code)}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.15 }}
-                    transition={{ delay: idx * 0.025 }}
-                    whileHover={{ y: -3 }}
                   >
                     <Country3DFlag code={country.code} size={28} isHome={isHome} />
                     <div>
                       <b>{country.name} {country.phone ? `(${country.phone})` : ''}</b>
                       <small>{COUNTRY_DESCRIPTIONS[country.code] || `${country.name} local businesses`}</small>
                     </div>
-                  </motion.button>
+                  </button>
                 );
               })}
             </div>
 
-            {(() => {
-              const activeCountry = COUNTRY_COUNTY_SHOWCASE.find(c => c.code === selectedMarketCode) || COUNTRY_COUNTY_SHOWCASE[0];
-              return (
-                <motion.div
-                  key={activeCountry.code}
-                  className="lx-market-explorer"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
+            {/* 11-Market Terminology Reference Table */}
+            <div className="lx-terminology-card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 850 }}>
+                    Administrative Alignment Matrix Across All 11 Supported Nations
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
+                    Micro-zones cover mandals, suburbs, and neighborhoods. Full territories deliver entire counties, districts, and states.
+                  </p>
+                </div>
+                <span
+                  style={{
+                    padding: '4px 12px', borderRadius: 999, background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)', color: '#34d399', fontSize: 11, fontWeight: 800
+                  }}
                 >
-                  <div className="lx-market-explorer-head">
-                    <div>
-                      <span className="lx-precision-pill is-place" style={{ marginBottom: 6 }}>
-                        {activeCountry.name} · {activeCountry.adminPath}
-                      </span>
-                      <h3>Try a real {activeCountry.name} search by city, mandal, or county:</h3>
-                    </div>
-                    <button
-                      type="button"
-                      className="lx-btn lx-btn-primary"
-                      onClick={() => openWorkspace(activeCountry.code, activeCountry.examples[0])}
-                    >
-                      Open {activeCountry.name} Workspace <ArrowRight size={14} />
-                    </button>
-                  </div>
-                  <div className="lx-example-chips-row">
-                    {activeCountry.examples.map(ex => (
-                      <button
-                        key={ex}
-                        type="button"
-                        className="lx-example-chip"
-                        onClick={() => openWorkspace(activeCountry.code, ex)}
-                      >
-                        <Sparkles size={12} color="#059669" />
-                        <span>{ex}</span>
-                        <ArrowRight size={12} />
-                      </button>
-                    ))}
-                  </div>
-                </motion.div>
-              );
-            })()}
+                  650,000+ TOTAL UNITS INDEXED
+                </span>
+              </div>
+
+              <div className="lx-terminology-table-wrap" style={{ overflowX: 'auto' }}>
+                <table className="lx-terminology-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, textAlign: 'left' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ padding: '10px 14px' }}>Sovereign Nation</th>
+                      <th style={{ padding: '10px 14px' }}>Top-Level Division (State / Province)</th>
+                      <th style={{ padding: '10px 14px' }}>Regional Unit (District / County / LGA)</th>
+                      <th style={{ padding: '10px 14px' }}>Local Micro-Zone (Mandal / Village / Ward)</th>
+                      <th style={{ padding: '10px 14px' }}>Dedicated Engines</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ background: 'rgba(16, 185, 129, 0.08)' }}>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#34d399' }}>🇮🇳 India (Home)</td>
+                      <td style={{ padding: '11px 14px' }}>State / Union Territory (36)</td>
+                      <td style={{ padding: '11px 14px' }}>District (760+)</td>
+                      <td style={{ padding: '11px 14px' }}>Revenue Mandal / Taluka / 619k+ Villages</td>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#34d399' }}>11 Engines (Full Depth)</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇺🇸 United States</td>
+                      <td style={{ padding: '11px 14px' }}>State (50 States)</td>
+                      <td style={{ padding: '11px 14px' }}>County / Parish (3,143)</td>
+                      <td style={{ padding: '11px 14px' }}>City / Township / ZIP Code / Neighborhood</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>12 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇬🇧 United Kingdom</td>
+                      <td style={{ padding: '11px 14px' }}>Country / Region (England, Scotland…)</td>
+                      <td style={{ padding: '11px 14px' }}>County / Greater Borough (100+)</td>
+                      <td style={{ padding: '11px 14px' }}>City / Town / Postcode District / Ward</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>12 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇨🇦 Canada</td>
+                      <td style={{ padding: '11px 14px' }}>Province / Territory (13)</td>
+                      <td style={{ padding: '11px 14px' }}>Census Division / Regional County (293)</td>
+                      <td style={{ padding: '11px 14px' }}>Municipality / City / FSA Postal Zone</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>12 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇦🇺 Australia</td>
+                      <td style={{ padding: '11px 14px' }}>State / Territory (8)</td>
+                      <td style={{ padding: '11px 14px' }}>Local Government Area (LGA) / Shire (537)</td>
+                      <td style={{ padding: '11px 14px' }}>Suburb / Town / Postcode Area</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>12 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇩🇪 Germany</td>
+                      <td style={{ padding: '11px 14px' }}>Bundesland (Federal State — 16)</td>
+                      <td style={{ padding: '11px 14px' }}>Landkreis / Kreisfreie Stadt (401)</td>
+                      <td style={{ padding: '11px 14px' }}>Gemeinde / Stadt / Stadtteil / Ortsteil</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>10 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇦🇪 UAE</td>
+                      <td style={{ padding: '11px 14px' }}>Emirate (7 Emirates)</td>
+                      <td style={{ padding: '11px 14px' }}>Municipality / Commercial Sector</td>
+                      <td style={{ padding: '11px 14px' }}>Community / Commercial District / Free Zone</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>11 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇸🇬 Singapore</td>
+                      <td style={{ padding: '11px 14px' }}>National Island</td>
+                      <td style={{ padding: '11px 14px' }}>Planning Region (5 Regions)</td>
+                      <td style={{ padding: '11px 14px' }}>Planning Area / Subzone / Postal Sector (55)</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>11 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇳🇿 New Zealand</td>
+                      <td style={{ padding: '11px 14px' }}>Region (16 Regions)</td>
+                      <td style={{ padding: '11px 14px' }}>Territorial Authority (City / District — 67)</td>
+                      <td style={{ padding: '11px 14px' }}>Ward / Suburb / Local Postcode Area</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>10 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇮🇪 Ireland</td>
+                      <td style={{ padding: '11px 14px' }}>Province (4 Provinces)</td>
+                      <td style={{ padding: '11px 14px' }}>County / City Council (31 Authorities)</td>
+                      <td style={{ padding: '11px 14px' }}>Municipal District (82) / Electoral Area / Eircode</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>10 Engines</td>
+                    </tr>
+                    <tr>
+                      <td style={{ padding: '11px 14px', fontWeight: 800, color: '#f1f5f9' }}>🇿🇦 South Africa</td>
+                      <td style={{ padding: '11px 14px' }}>Province (9 Provinces)</td>
+                      <td style={{ padding: '11px 14px' }}>District / Metropolitan Municipality (52)</td>
+                      <td style={{ padding: '11px 14px' }}>Local Municipality / Ward / Suburb (205)</td>
+                      <td style={{ padding: '11px 14px', color: '#94a3b8' }}>10 Engines</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* DUAL-CARTRIDGE ARCHITECTURE: CLIENT WORKSPACE VS MASTER TERRITORY INTELLIGENCE */}
-        <section className="lx-section" id="master-concierge">
+        <section className="lx-section">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Layers size={13} /> Client Edition &amp; Master Territory Intelligence</span>
-              <h2>Two tailored editions built for single cities or full states.</h2>
-              <p>Run instant self-serve searches across any neighborhood or county in the Client Workspace, or let our Master Team deliver entire Districts, States, and nationwide data.</p>
+              <span className="lx-kicker"><Layers size={13} /> Dual Operating Modes</span>
+              <h2>Client Workspace &amp; Master Territory Intelligence</h2>
+              <p>
+                Self-serve immediate micro-zone searches in your browser, or let our Master Intelligence Desk
+                deliver entire nationwide datasets.
+              </p>
             </div>
 
             <div className="lx-dual-cartridge-grid">
               {/* Cartridge 01: Client Workspace Edition */}
-              <motion.article
-                className="lx-cartridge-panel is-client lx-gbc-cartridge-card"
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-              >
+              <article className="lx-cartridge-panel is-client">
                 <span className="lx-cartridge-tag is-client">CARTRIDGE 01 · CLIENT WORKSPACE EDITION</span>
                 <h3>Instant City, Town, Mandal &amp; County Leads</h3>
                 <p>
-                  Built for startups, agencies, and local sales teams. Pick any of the 11 countries,
-                  type a service and neighborhood/mandal/county, watch our 6 built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
+                  Built for startups, sales reps, and growth agencies. Select any of the 11 global markets,
+                  type a query, and stream verified phone numbers straight into Excel. Works locally on your
+                  machine with zero setup.
                 </p>
                 <ul className="lx-story-bullets">
-                  <li><CheckCircle2 size={15} color="#059669" /> All 6 Built-In Lead Engines running automatically</li>
-                  <li><CheckCircle2 size={15} color="#059669" /> 100% HD Satellite Live Zone Radar across 11 countries</li>
-                  <li><CheckCircle2 size={15} color="#059669" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
+                  <li><CheckCircle2 size={15} color="#34d399" /> All 22 Discovery Engines running in parallel</li>
+                  <li><CheckCircle2 size={15} color="#34d399" /> 100% HD Satellite Live Zone Radar across 11 nations</li>
+                  <li><CheckCircle2 size={15} color="#34d399" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
                 </ul>
-                <button type="button" className="lx-btn lx-btn-primary" style={{ marginTop: 'auto' }} onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}>
-                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">START</span>
-                  Launch Client Workspace <ArrowRight size={15} />
-                </button>
-              </motion.article>
+                <div style={{ display: 'flex', gap: 10, marginTop: 'auto', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="lx-btn lx-btn-primary"
+                    onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}
+                  >
+                    <Rocket size={15} /> Launch Client Workspace
+                  </button>
+                  <button
+                    type="button"
+                    className="lx-btn-local-engine"
+                    onClick={() => runLocalMode('IN', 'Software companies in HITEC City Hyderabad')}
+                  >
+                    <Zap size={14} /> Run on Local Server
+                  </button>
+                </div>
+              </article>
 
               {/* Cartridge 02: Master Territory Intelligence Edition */}
-              <motion.article
-                className="lx-cartridge-panel is-master lx-gbc-cartridge-card"
-                initial={{ opacity: 0, y: 14 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.2 }}
-                transition={{ delay: 0.08 }}
-              >
-                <span className="lx-cartridge-tag is-master">CARTRIDGE 02 · MASTER TERRITORY INTELLIGENCE EDITION</span>
-                <h3>Entire Districts, Full States &amp; Complete Web Coverage</h3>
+              <article className="lx-cartridge-panel is-master">
+                <span className="lx-cartridge-tag is-master">CARTRIDGE 02 · MASTER TERRITORY INTELLIGENCE</span>
+                <h3>Entire Districts, Full States &amp; Complete Web Rollouts</h3>
                 <p>
-                  Need every business across an entire District, County, State, or Nationwide rollout?
-                  Our Master Edition gathers verified datasets from every public website, business directory, map, and online registry across the entire internet and delivers organized Excel workbooks.
+                  Need every business across an entire District, County, State, or Nationwide territory?
+                  Our Master Edition gathers verified datasets from every public website, trade catalog, and
+                  corporate registry across the internet and delivers clean master workbooks.
                 </p>
                 <div className="lx-contact-slots" style={{ marginTop: 'auto' }}>
-                  {/* TODO: Replace "Adding Soon" with live mobile number when ready */}
-                  <div className="lx-contact-slot">
-                    <Phone size={18} color="#059669" />
+                  <div className="lx-contact-slot" style={{ background: 'rgba(2, 6, 23, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <Phone size={18} color="#34d399" />
                     <div>
-                      <small>DIRECT MOBILE &amp; WHATSAPP DESK</small>
-                      <b>Adding Soon</b>
+                      <small style={{ color: '#64748b' }}>DIRECT MOBILE &amp; WHATSAPP DESK</small>
+                      <b style={{ color: '#f1f5f9' }}>Priority Access Desk</b>
                     </div>
                   </div>
-                  {/* TODO: Replace "Adding Soon" with live support email when ready */}
-                  <div className="lx-contact-slot">
-                    <Mail size={18} color="#0e7490" />
+                  <div className="lx-contact-slot" style={{ background: 'rgba(2, 6, 23, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                    <Mail size={18} color="#38bdf8" />
                     <div>
-                      <small>PRIORITY SUPPORT EMAIL</small>
-                      <b>Adding Soon</b>
+                      <small style={{ color: '#64748b' }}>ENTERPRISE DISPATCH EMAIL</small>
+                      <b style={{ color: '#f1f5f9' }}>support@scraper.co.in</b>
                     </div>
                   </div>
                 </div>
-              </motion.article>
-
-              {/* 11-COUNTRY ADMINISTRATIVE TERMINOLOGY REFERENCE */}
-              <motion.div
-                className="lx-terminology-card"
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.15 }}
-                style={{
-                  gridColumn: '1 / -1',
-                  marginTop: 24,
-                  padding: '24px 28px',
-                  borderRadius: 18,
-                  background: 'linear-gradient(145deg, #ffffff, #f8fafc)',
-                  border: '1.5px solid #e2e8f0',
-                  boxShadow: '0 10px 28px -10px rgba(15, 23, 42, 0.08)'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
-                  <div>
-                    <span className="lx-kicker" style={{ marginBottom: 4 }}><Globe2 size={13} /> 11-Market Geographic Alignment</span>
-                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
-                      Administrative Terminology Across All 11 Supported Countries
-                    </h3>
-                    <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
-                      Client Edition sweeps local Mandals, Neighborhoods &amp; Suburbs. Master Edition delivers entire Districts, Counties &amp; States.
-                    </p>
-                  </div>
-                  <span className="lx-precision-pill is-service">
-                    11 NATIONS · 100% SATELLITE RADAR
-                  </span>
-                </div>
-
-                <div className="lx-terminology-table-wrap" style={{ overflowX: 'auto' }}>
-                  <table className="lx-terminology-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', color: '#334155', fontWeight: 800, textTransform: 'uppercase', fontSize: 11, letterSpacing: '0.04em' }}>
-                        <th style={{ padding: '10px 14px', borderRadius: '8px 0 0 0' }}>Country &amp; Flag</th>
-                        <th style={{ padding: '10px 14px' }}>Top-Level (State / Province)</th>
-                        <th style={{ padding: '10px 14px' }}>Regional (District / County)</th>
-                        <th style={{ padding: '10px 14px' }}>Local Zone (Mandal / Town / Suburb)</th>
-                        <th style={{ padding: '10px 14px', borderRadius: '0 8px 0 0' }}>Assigned Engines</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0', background: 'rgba(236, 253, 245, 0.4)' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#047857' }}>🇮🇳 India (Home)</td>
-                        <td style={{ padding: '11px 14px' }}>State / Union Territory (36)</td>
-                        <td style={{ padding: '11px 14px' }}>District (760+)</td>
-                        <td style={{ padding: '11px 14px' }}>Revenue Mandal / Taluka / 619k Villages</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 700, color: '#059669' }}>11 Engines (Full Depth)</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇺🇸 United States</td>
-                        <td style={{ padding: '11px 14px' }}>State (50 States)</td>
-                        <td style={{ padding: '11px 14px' }}>County / Parish</td>
-                        <td style={{ padding: '11px 14px' }}>City / Township / ZIP Code / Neighborhood</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines (High Yield)</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇬🇧 United Kingdom</td>
-                        <td style={{ padding: '11px 14px' }}>Country / Region (England, Scotland…)</td>
-                        <td style={{ padding: '11px 14px' }}>County / Greater Borough</td>
-                        <td style={{ padding: '11px 14px' }}>City / Town / Postcode District / Ward</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇨🇦 Canada</td>
-                        <td style={{ padding: '11px 14px' }}>Province / Territory</td>
-                        <td style={{ padding: '11px 14px' }}>Census Division / County / Regional Municipality</td>
-                        <td style={{ padding: '11px 14px' }}>Municipality / City / FSA Postal Zone</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇦🇺 Australia</td>
-                        <td style={{ padding: '11px 14px' }}>State / Territory (NSW, VIC, QLD…)</td>
-                        <td style={{ padding: '11px 14px' }}>Local Government Area (LGA) / Shire</td>
-                        <td style={{ padding: '11px 14px' }}>Suburb / Town / Postcode Area</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>12 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇩🇪 Germany</td>
-                        <td style={{ padding: '11px 14px' }}>Bundesland (Federal State)</td>
-                        <td style={{ padding: '11px 14px' }}>Landkreis / Kreisfreie Stadt</td>
-                        <td style={{ padding: '11px 14px' }}>Gemeinde / Stadt / Stadtteil / Ortsteil</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇦🇪 UAE</td>
-                        <td style={{ padding: '11px 14px' }}>Emirate (Dubai, Abu Dhabi…)</td>
-                        <td style={{ padding: '11px 14px' }}>Municipality / Sector</td>
-                        <td style={{ padding: '11px 14px' }}>Community / Commercial District</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>11 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇸🇬 Singapore</td>
-                        <td style={{ padding: '11px 14px' }}>National Island</td>
-                        <td style={{ padding: '11px 14px' }}>Region (Central, East, West…)</td>
-                        <td style={{ padding: '11px 14px' }}>Planning Area / Subzone / Postal Sector</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>11 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇳🇿 New Zealand</td>
-                        <td style={{ padding: '11px 14px' }}>Region (Auckland, Canterbury…)</td>
-                        <td style={{ padding: '11px 14px' }}>Territorial Authority (City / District)</td>
-                        <td style={{ padding: '11px 14px' }}>Ward / Suburb / Local Postcode Area</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
-                      </tr>
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇮🇪 Ireland</td>
-                        <td style={{ padding: '11px 14px' }}>Province (Leinster, Munster…)</td>
-                        <td style={{ padding: '11px 14px' }}>County / City Council</td>
-                        <td style={{ padding: '11px 14px' }}>Municipal District / Electoral Area / Eircode</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '11px 14px', fontWeight: 750, color: '#0f172a' }}>🇿🇦 South Africa</td>
-                        <td style={{ padding: '11px 14px' }}>Province (Gauteng, Western Cape…)</td>
-                        <td style={{ padding: '11px 14px' }}>District / Metropolitan Municipality</td>
-                        <td style={{ padding: '11px 14px' }}>Local Municipality / Ward / Suburb</td>
-                        <td style={{ padding: '11px 14px', fontWeight: 650, color: '#475569' }}>10 Engines</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </motion.div>
+              </article>
             </div>
           </div>
         </section>
 
-        {/* Proof & Time-Saved Estimator */}
-        <section className="lx-section" id="proof">
-          <div className="lx-wrap">
-            <div className="lx-stats-grid">
-              {PROOF_STATS.map(stat => (
-                <motion.div key={stat.label} className="lx-stat-box" whileHover={{ y: -3 }}>
-                  <b>{stat.value}</b>
-                  <span>{stat.label}</span>
-                </motion.div>
-              ))}
-            </div>
-
-            <div className="lx-roi-box">
-              <div>
-                <h3>See how many hours your team saves every month</h3>
-                <p>
-                  Instead of spending days manually gathering shop phone numbers and addresses into
-                  spreadsheets, slide to match your weekly searches:
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 700 }}>
-                  <span>Searches per week</span>
-                  <span className="lx-mono" style={{ color: '#34d399' }}>{weeklySearches} searches / week</span>
-                </div>
-                <input
-                  type="range"
-                  min={2}
-                  max={50}
-                  value={weeklySearches}
-                  onChange={e => setWeeklySearches(Number(e.target.value))}
-                  className="lx-roi-slider"
-                />
-              </div>
-
-              <div className="lx-roi-metrics">
-                <div className="lx-roi-metric">
-                  <small>Estimated monthly leads</small>
-                  <b>{monthlyLeads.toLocaleString('en-IN')}+</b>
-                </div>
-                <div className="lx-roi-metric">
-                  <small>Manual research saved</small>
-                  <b>{hoursSaved.toLocaleString('en-IN')} hrs/mo</b>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* FAQ */}
+        {/* FAQ SECTION */}
         <section className="lx-section lx-section-alt" id="faq">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><ShieldCheck size={13} /> Clear Answers</span>
-              <h2>Frequently asked questions</h2>
-              <p>Everything explained clearly — zero technical jargon.</p>
+              <span className="lx-kicker"><ShieldCheck size={13} /> Transparent Answers</span>
+              <h2>Frequently Asked Questions</h2>
+              <p>Everything you need to know about keyless operation, local server mode, and 11-country depth.</p>
             </div>
 
             <div className="lx-faq-list">
-              {FAQ.map((item, idx) => (
+              {FAQ_ITEMS.map((item, idx) => (
                 <details key={item.q} className="lx-faq-item" open={idx === 0}>
                   <summary>
                     <span>{item.q}</span>
-                    <Plus size={16} color="#059669" />
+                    <Plus size={16} color="#34d399" />
                   </summary>
                   <p>{item.a}</p>
                 </details>
@@ -1616,43 +1076,65 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* Final CTA */}
+        {/* FINAL CTA BANNER */}
         <section className="lx-section">
           <div className="lx-wrap">
-            <div className="lx-cta-card">
+            <div
+              className="lx-cta-card"
+              style={{
+                background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(7, 11, 20, 0.95))',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                boxShadow: '0 30px 70px -20px rgba(0, 0, 0, 0.8), 0 0 50px rgba(16, 185, 129, 0.15)'
+              }}
+            >
               <div>
-                <h2>Ready to build your next lead list in seconds?</h2>
-                <p>Create your account or jump straight into the 3D Liquid Glass workspace and watch leads stream live.</p>
+                <h2 style={{ color: '#ffffff' }}>Ready to build your next high-intent lead list?</h2>
+                <p style={{ color: '#94a3b8' }}>
+                  Jump straight into the Command Center or run directly on your workstation server.
+                  Zero credit card required to explore live leads.
+                </p>
               </div>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <button type="button" className="lx-btn lx-btn-ghost lx-btn-lg" onClick={() => navigate('/pricing')}>
-                  View Pricing
-                </button>
-                <motion.button
+                <button
                   type="button"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
+                  className="lx-btn-local-engine"
+                  style={{ height: 50, padding: '0 22px' }}
+                  onClick={() => runLocalMode('IN')}
+                >
+                  <Zap size={16} /> Run on Local Server
+                </button>
+                <button
+                  type="button"
                   className="lx-btn lx-btn-primary lx-btn-lg"
                   onClick={() => openWorkspace('IN')}
                 >
-                  Open Lead Workspace <ArrowRight size={17} />
-                </motion.button>
+                  <Rocket size={17} /> Launch Command Center
+                </button>
               </div>
             </div>
           </div>
         </section>
       </main>
 
+      {/* EXECUTIVE DARK FOOTER WITH LEGAL TRADEMARK DISCLAIMER */}
       <footer className="lx-footer">
-        <div className="lx-wrap lx-footer-inner">
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            © {new Date().getFullYear()} Scraper.co.in · Made with <Heart size={13} fill="#e11d48" color="#e11d48" /> in India · 11 Locked Markets
-          </span>
-          <div style={{ display: 'flex', gap: 20 }}>
-            <button type="button" onClick={() => navigate('/pricing')} style={{ background: 'none', border: 'none', color: '#475569', fontWeight: 650, cursor: 'pointer' }}>Pricing</button>
-            <button type="button" onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', color: '#475569', fontWeight: 650, cursor: 'pointer' }}>Sign In</button>
-            <button type="button" onClick={() => navigate('/terms')} style={{ background: 'none', border: 'none', color: '#475569', fontWeight: 650, cursor: 'pointer' }}>Terms</button>
-            <button type="button" onClick={() => navigate('/privacy')} style={{ background: 'none', border: 'none', color: '#475569', fontWeight: 650, cursor: 'pointer' }}>Privacy</button>
+        <div className="lx-wrap">
+          <div className="lx-footer-inner" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <BrandLogo size={28} theme="dark" />
+              <span>© {new Date().getFullYear()} Scraper.co.in · Engineered in India · 11 Sovereign Revenue Markets</span>
+            </span>
+            <div style={{ display: 'flex', gap: 20 }}>
+              <button type="button" onClick={() => navigate('/pricing')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontWeight: 650, cursor: 'pointer' }}>Pricing</button>
+              <button type="button" onClick={() => navigate('/login')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontWeight: 650, cursor: 'pointer' }}>Sign In</button>
+              <button type="button" onClick={() => navigate('/terms')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontWeight: 650, cursor: 'pointer' }}>Terms</button>
+              <button type="button" onClick={() => navigate('/privacy')} style={{ background: 'none', border: 'none', color: '#94a3b8', fontWeight: 650, cursor: 'pointer' }}>Privacy</button>
+            </div>
+          </div>
+
+          {/* Legal Brand Protection / Trademark Compliance Disclaimer */}
+          <div className="lx-nex-legal-disclaimer">
+            <strong>Legal &amp; Trademark Compliance Notice:</strong> Scraper.co.in is an independent software application and search index designed for discovering publicly accessible commercial business records, open mapping points of interest (POI), and public corporate contact registries. All brand names, trade names, service marks, and logos referenced across public documentation are the intellectual property of their respective owners and are used purely for nominative and identification purposes. Scraper.co.in is not affiliated with, endorsed by, or sponsored by any third-party directory, search engine, or mapping provider. All data extraction operations are executed solely against publicly available data in compliance with automated rate-limiting protocols and local fair-use standards.
           </div>
         </div>
       </footer>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * omniSearchOrchestrator.js
  *
  * Universal Omni Search Orchestrator for Scraper.co.in.

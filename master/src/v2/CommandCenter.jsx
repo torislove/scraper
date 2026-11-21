@@ -194,6 +194,8 @@ export default function CommandCenter() {
     ready: extReady,
     relayed: extRelayed,
     hardware,
+    skippedExtension,
+    skipAndRunLocal,
     ensureConnected,
     openTelemetry,
     openSetup
@@ -2756,12 +2758,16 @@ export default function CommandCenter() {
             type="button"
             className={cx('cb-relay-pill', extReady && 'is-live')}
             onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
-            title={extReady
+            title={skippedExtension ? 'Running on Local Node.js Server Engine' : extReady
               ? `RAM Turbo connected · ${extRelayed || 0} pages relayed · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`
               : 'Add the RAM Turbo extension in Chrome to use your own hardware'}
           >
             <span className={cx('cb-led', extReady ? 'is-live' : 'is-warn')} />
-            {extReady ? `RAM TURBO · ${extRelayed || 0}` : 'CONNECT RAM TURBO'}
+            {skippedExtension
+              ? `LOCAL SERVER · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
+              : extReady
+                ? `RAM TURBO · ${extRelayed || 0}`
+                : 'CONNECT RAM TURBO'}
           </button>
 
           <SystemCheckPill variant="master" />
@@ -2865,6 +2871,15 @@ export default function CommandCenter() {
               onClick={() => openSetup({ country: searchCountry })}
             >
               <Zap size={13} /> Setup Extension (30s)
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm"
+              style={{ color: '#047857', border: '1px solid rgba(5, 150, 105, 0.4)', background: '#ecfdf5', fontWeight: 700 }}
+              onClick={skipAndRunLocal}
+              title="Run searches directly on the local server without requiring the Chrome extension"
+            >
+              <Zap size={13} color="#059669" /> ⚡ Skip &amp; Run Local
             </button>
             <button
               type="button"

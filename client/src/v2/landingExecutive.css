@@ -2278,3 +2278,795 @@
   align-self: center;
 }
 .lx-ext-dev-link:hover { color: #0d9488; }
+
+/* ============================================================================
+   NEXERA EXECUTIVE DESIGN TOKENS & ARCHITECTURE (DARK GLASS × RADIAL GLOW)
+   Inspired by Nexera.health: obsidian canvas, frosted crystal glass surfaces,
+   ambient radial emerald/cyan glow, bento grid, interactive radar cockpit simulation,
+   and equal prominence across all 11 global sovereign markets.
+   ============================================================================ */
+
+.lx-landing.is-nexera {
+  background:
+    radial-gradient(1100px 600px at 15% 5%, rgba(16, 185, 129, 0.13), transparent 60%),
+    radial-gradient(1000px 550px at 85% 12%, rgba(6, 182, 212, 0.14), transparent 60%),
+    radial-gradient(900px 520px at 50% 65%, rgba(139, 92, 246, 0.09), transparent 70%),
+    radial-gradient(700px 400px at 20% 90%, rgba(16, 185, 129, 0.08), transparent 60%),
+    #070b14 !important;
+  color: #f8fafc !important;
+}
+
+.lx-landing.is-nexera::before {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) !important;
+  background-size: 32px 32px !important;
+  opacity: 0.8 !important;
+  mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 85%) !important;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 85%) !important;
+}
+
+/* --- Nexera Floating Obsidian Glass Navbar --- */
+.lx-landing.is-nexera .lx-nav {
+  background: rgba(7, 11, 20, 0.82) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+}
+
+.lx-landing.is-nexera .lx-nav-links a,
+.lx-landing.is-nexera .lx-nav-links button {
+  color: #94a3b8 !important;
+  font-weight: 650 !important;
+  transition: color 0.16s ease !important;
+}
+
+.lx-landing.is-nexera .lx-nav-links a:hover,
+.lx-landing.is-nexera .lx-nav-links button:hover {
+  color: #34d399 !important;
+}
+
+.lx-landing.is-nexera .lx-status-pill {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border: 1px solid rgba(16, 185, 129, 0.28) !important;
+  color: #34d399 !important;
+}
+
+.lx-landing.is-nexera .lx-status-dot {
+  background: #34d399 !important;
+  box-shadow: 0 0 10px #34d399 !important;
+}
+
+.lx-landing.is-nexera .lx-nav-ext-pill {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #e2e8f0 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.lx-landing.is-nexera .lx-nav-ext-pill.is-connected {
+  background: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  color: #34d399 !important;
+}
+
+.lx-landing.is-nexera .lx-btn-primary {
+  background: linear-gradient(135deg, #059669 0%, #06b6d4 100%) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+  font-weight: 800 !important;
+}
+
+.lx-landing.is-nexera .lx-btn-ghost {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #cbd5e1 !important;
+}
+
+.lx-landing.is-nexera .lx-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* --- Hero Section & Typography --- */
+.lx-landing.is-nexera .lx-eyebrow {
+  background: rgba(16, 185, 129, 0.09) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #34d399 !important;
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.15) !important;
+}
+
+.lx-landing.is-nexera .lx-h1 {
+  color: #ffffff !important;
+  letter-spacing: -0.04em !important;
+  max-width: 24ch !important;
+  line-height: 1.12 !important;
+}
+
+.lx-h1-serif {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  font-weight: 700;
+  background: linear-gradient(135deg, #34d399 20%, #38bdf8 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding-right: 4px;
+}
+
+.lx-landing.is-nexera .lx-lead-copy {
+  color: #94a3b8 !important;
+  max-width: 68ch !important;
+  font-size: 16.5px !important;
+  line-height: 1.65 !important;
+}
+
+/* --- Interactive Hero Search Console Card (Nexera Style) --- */
+.lx-nex-searchbox {
+  margin: 32px 0 24px;
+  max-width: 860px;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 24px 60px -15px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 10;
+}
+
+.lx-nex-search-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lx-nex-country-select-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f1f5f9;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  flex-shrink: 0;
+}
+
+.lx-nex-country-select-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.lx-nex-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  background: rgba(2, 6, 23, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 0 16px;
+  height: 48px;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.lx-nex-input-wrap:focus-within {
+  border-color: rgba(6, 182, 212, 0.6);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+}
+
+.lx-nex-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #ffffff;
+  font-size: 14.5px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.lx-nex-input::placeholder {
+  color: #64748b;
+}
+
+.lx-nex-action-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lx-btn-local-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  color: #22d3ee;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 0 18px rgba(6, 182, 212, 0.18);
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.lx-btn-local-engine:hover {
+  background: rgba(6, 182, 212, 0.2);
+  border-color: #38bdf8;
+  color: #ffffff;
+  box-shadow: 0 0 26px rgba(6, 182, 212, 0.35);
+  transform: translateY(-1px);
+}
+
+.lx-nex-chips-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.lx-nex-chips-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.lx-nex-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #cbd5e1;
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.lx-nex-chip:hover {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #34d399;
+}
+
+/* --- Equal Prominence Global Units Stats Bar --- */
+.lx-nex-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 36px 0 24px;
+}
+
+@media (max-width: 900px) {
+  .lx-nex-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .lx-nex-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lx-nex-stat-card {
+  padding: 22px 24px;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.lx-nex-stat-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(52, 211, 153, 0.35);
+}
+
+.lx-nex-stat-val {
+  font-size: clamp(26px, 2.8vw, 36px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.1;
+}
+
+.lx-nex-stat-val.is-green {
+  background: linear-gradient(135deg, #34d399 20%, #38bdf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.lx-nex-stat-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.lx-nex-stat-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+/* --- Live Product Simulation / Cockpit Radar Frame --- */
+.lx-nex-cockpit-wrap {
+  margin: 32px 0;
+  border-radius: 26px;
+  background: rgba(11, 17, 30, 0.85);
+  backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 30px 80px -20px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    0 0 40px rgba(6, 182, 212, 0.12);
+  overflow: hidden;
+  position: relative;
+}
+
+.lx-nex-cockpit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  background: rgba(2, 6, 23, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.lx-nex-cockpit-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  color: #38bdf8;
+  text-transform: uppercase;
+}
+
+.lx-nex-cockpit-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lx-nex-hud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+}
+
+.lx-nex-hud-badge.is-live {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.lx-nex-cockpit-body {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  min-height: 420px;
+}
+
+@media (max-width: 960px) {
+  .lx-nex-cockpit-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lx-nex-radar-stage {
+  padding: 24px;
+  position: relative;
+  background:
+    radial-gradient(circle at center, rgba(6, 182, 212, 0.06) 0%, transparent 70%),
+    rgba(7, 11, 20, 0.5);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (max-width: 960px) {
+  .lx-nex-radar-stage {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+.lx-nex-radar-visual {
+  flex: 1;
+  position: relative;
+  min-height: 280px;
+  border-radius: 18px;
+  background: rgba(2, 6, 23, 0.8);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  overflow: hidden;
+}
+
+.lx-nex-radar-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1px dashed rgba(6, 182, 212, 0.22);
+  pointer-events: none;
+}
+
+.lx-nex-radar-sweep-beam {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 140%;
+  height: 140%;
+  transform-origin: 0 0;
+  background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.35) 0deg, rgba(6, 182, 212, 0.05) 45deg, transparent 60deg);
+  animation: nexRadarSpin 4.5s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes nexRadarSpin {
+  from { transform: translate(0, 0) rotate(0deg); }
+  to { transform: translate(0, 0) rotate(360deg); }
+}
+
+.lx-nex-beacon-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 12px #34d399;
+  z-index: 5;
+}
+
+.lx-nex-beacon-pin::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1.5px solid #34d399;
+  opacity: 0.6;
+  animation: nexPulsePing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes nexPulsePing {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+.lx-nex-leads-stage {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.lx-nex-lead-item {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.lx-nex-lead-item:hover {
+  transform: translateX(4px);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.lx-nex-lead-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
+  border: 1px solid rgba(52, 211, 153, 0.3);
+  color: #34d399;
+  display: grid;
+  place-items: center;
+  font-weight: 850;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.lx-nex-lead-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lx-nex-lead-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lx-nex-lead-meta {
+  font-size: 11.5px;
+  color: #94a3b8;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lx-nex-lead-phone {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 750;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  white-space: nowrap;
+}
+
+/* --- Bento Grid (4 Core Architecture Pillars) --- */
+.lx-nex-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 18px;
+  margin: 32px 0;
+}
+
+.lx-nex-bento-card {
+  padding: 28px;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.lx-nex-bento-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(6, 182, 212, 0.35);
+}
+
+.lx-nex-bento-card.col-7 { grid-column: span 7; }
+.lx-nex-bento-card.col-5 { grid-column: span 5; }
+.lx-nex-bento-card.col-6 { grid-column: span 6; }
+.lx-nex-bento-card.col-12 { grid-column: span 12; }
+
+@media (max-width: 900px) {
+  .lx-nex-bento-card.col-7,
+  .lx-nex-bento-card.col-5,
+  .lx-nex-bento-card.col-6 {
+    grid-column: span 12;
+  }
+}
+
+.lx-nex-bento-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 20px;
+}
+
+.lx-nex-bento-icon.tone-emerald {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+}
+
+.lx-nex-bento-icon.tone-cyan {
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #22d3ee;
+}
+
+.lx-nex-bento-icon.tone-purple {
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  color: #c084fc;
+}
+
+.lx-nex-bento-card h3 {
+  font-size: 20px;
+  font-weight: 850;
+  color: #ffffff;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+}
+
+.lx-nex-bento-card p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: #94a3b8;
+  margin: 0 0 18px;
+}
+
+/* --- Brand-Safe 22-Engine Grid (Dark Cards) --- */
+.lx-landing.is-nexera .lx-engine-cart-card {
+  background: rgba(15, 23, 42, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc !important;
+  box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.lx-landing.is-nexera .lx-engine-cart-card b {
+  color: #ffffff !important;
+  font-size: 14.5px !important;
+}
+
+.lx-landing.is-nexera .lx-engine-cart-card small {
+  color: #94a3b8 !important;
+  line-height: 1.55 !important;
+}
+
+.lx-landing.is-nexera .lx-engine-live-bar {
+  background: rgba(2, 6, 23, 0.8) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  color: #cbd5e1 !important;
+}
+
+/* --- Hardware Matrix Banner & Cards --- */
+.lx-landing.is-nexera .lx-ram-banner {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6) !important;
+}
+
+.lx-landing.is-nexera .lx-ram-banner-head b {
+  color: #ffffff !important;
+}
+
+.lx-landing.is-nexera .lx-ram-banner-head div {
+  color: #94a3b8 !important;
+}
+
+.lx-landing.is-nexera .lx-req-card {
+  background: rgba(2, 6, 23, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.lx-landing.is-nexera .lx-req-card.is-matched {
+  border-color: rgba(52, 211, 153, 0.5) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.2) !important;
+}
+
+.lx-landing.is-nexera .lx-req-card b {
+  color: #ffffff !important;
+}
+
+.lx-landing.is-nexera .lx-req-card p {
+  color: #94a3b8 !important;
+}
+
+/* --- Equal Prominence 11-Market Geographic Table (Dark) --- */
+.lx-landing.is-nexera .lx-terminology-card {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.6) !important;
+}
+
+.lx-landing.is-nexera .lx-terminology-card h3 {
+  color: #ffffff !important;
+}
+
+.lx-landing.is-nexera .lx-terminology-table thead tr {
+  background: rgba(2, 6, 23, 0.8) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #94a3b8 !important;
+}
+
+.lx-landing.is-nexera .lx-terminology-table tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.lx-landing.is-nexera .lx-terminology-table tbody td {
+  color: #cbd5e1 !important;
+}
+
+/* --- Dual Cartridge Panels (Dark) --- */
+.lx-landing.is-nexera .lx-cartridge-panel {
+  background: rgba(15, 23, 42, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6) !important;
+}
+
+.lx-landing.is-nexera .lx-cartridge-panel h3 {
+  color: #ffffff !important;
+}
+
+.lx-landing.is-nexera .lx-cartridge-panel p {
+  color: #94a3b8 !important;
+}
+
+.lx-landing.is-nexera .lx-story-bullets li {
+  color: #cbd5e1 !important;
+}
+
+/* --- FAQ & Accordion (Dark) --- */
+.lx-landing.is-nexera .lx-faq-item {
+  background: rgba(15, 23, 42, 0.65) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+.lx-landing.is-nexera .lx-faq-item summary {
+  color: #f1f5f9 !important;
+}
+
+.lx-landing.is-nexera .lx-faq-item p {
+  color: #94a3b8 !important;
+}
+
+/* --- Executive Footer & Legal Trademark Notice --- */
+.lx-landing.is-nexera .lx-footer {
+  background: #040810 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #64748b !important;
+  padding: 44px 0 36px !important;
+}
+
+.lx-nex-legal-disclaimer {
+  margin-top: 28px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  line-height: 1.6;
+  color: #64748b;
+  text-align: left;
+}
+

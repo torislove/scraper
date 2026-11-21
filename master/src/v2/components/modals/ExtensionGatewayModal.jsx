@@ -353,14 +353,16 @@ export default function ExtensionGatewayModal() {
           </div>
         )}
 
-        {isMaster && !ready && (
+        {!ready && (
           <footer className="lx-ext-gateway-footer">
             <button
               type="button"
               className="lx-ext-bypass-link"
-              onClick={completeProceed}
+              onClick={ctx.skipAndRunLocal || completeProceed}
+              title="Bypass extension requirement and run search directly on your local server"
             >
-              <span>Continue in Master Server Mode (No Extension)</span>
+              <Zap size={14} color="#10b981" />
+              <span>⚡ Skip Extension · Run on Local Server Engine</span>
               <ArrowRight size={13} />
             </button>
           </footer>

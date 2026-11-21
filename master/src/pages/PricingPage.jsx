@@ -176,7 +176,7 @@ export default function PricingPage() {
             All 20+ lead discovery engines included in every plan.
           </h1>
           <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
-            Every plan unlocks our fleet of 20+ specialized lead discovery engines — sweeping live Satellite Maps, National Directories (Justdial, IndiaMART, Yelp, YellowPages, Cylex), Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
+            Every plan unlocks our fleet of 20+ specialized lead discovery engines — sweeping live Satellite Maps, National Commercial Directories, Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
           </p>
 
           {/* Tactile 3D Liquid Glass Billing Toggle */}

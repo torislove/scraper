@@ -11,71 +11,71 @@ export const ALL_BUILTIN_ENGINES = [
   {
     id: 'google-places',
     number: 'Engine 01',
-    name: 'Google Places & Satellite Maps',
+    name: 'Global Geospatial & Satellite Mapping Core',
     category: 'Maps & Geospatial',
-    shortDesc: 'Divides cities, mandals & counties into micro-zones, capturing every shop, pin, street address & GPS coordinate.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Divides cities, mandals, counties & LGAs into micro-zones, capturing commercial storefronts, street addresses & GPS coordinates.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'google-local-finder',
     number: 'Engine 02',
-    name: 'Google Local Finder & SERP 3-Pack',
+    name: 'High-Intent Local Search & Business Registry',
     category: 'Maps & Geospatial',
-    shortDesc: 'Extracts top-ranking local businesses, verified phone numbers, star ratings and operational hours from search result packs.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Extracts top-ranking local businesses, verified direct phone lines, customer review scores, and operating hours.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'bing-places',
     number: 'Engine 03',
-    name: 'Bing Places & Microsoft Maps',
+    name: 'Enterprise Commercial Directory & Map Index',
     category: 'Maps & Geospatial',
-    shortDesc: 'Discovers verified Microsoft local business listings, alternate phone lines, and postal addresses.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Discovers verified commercial business listings, alternate corporate phone lines, and postal addresses.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'openstreetmap',
     number: 'Engine 04',
-    name: 'OpenStreetMap Overpass Engine',
+    name: 'Open Geospatial Node & POI Lattice',
     category: 'Maps & Geospatial',
-    shortDesc: 'Direct Overpass QL geo-queries for shops, commercial amenities, building outlines, and industrial corridors.',
-    coverage: 'Global Open-Data'
+    shortDesc: 'Direct Overpass QL geo-queries for retail shops, commercial amenities, building footprints, and industrial corridors.',
+    coverage: 'Global Open-Data Grid'
   },
   {
     id: 'justdial',
     number: 'Engine 05',
-    name: 'Justdial Pan-India Directory',
+    name: 'Pan-India Local Commercial Index',
     category: 'National Directories',
-    shortDesc: 'India’s premier local business directory covering verified mobile numbers, categories, and pincode-wise listings.',
+    shortDesc: 'Comprehensive local business registry covering verified mobile numbers, category trees, and pincode-wise trade listings.',
     coverage: 'India (Home Market)'
   },
   {
     id: 'indiamart',
     number: 'Engine 06',
-    name: 'IndiaMART B2B Wholesale & Manufacturers',
+    name: 'B2B Industrial & Wholesale Trade Network',
     category: 'B2B & Industrial',
-    shortDesc: 'Finds verified manufacturers, exporters, wholesale traders, and commercial industrial suppliers across India.',
+    shortDesc: 'Surfaces verified manufacturers, wholesale exporters, industrial suppliers, and trade distributors across India.',
     coverage: 'India (B2B Specialized)'
   },
   {
     id: 'yelp',
     number: 'Engine 07',
-    name: 'Yelp Commercial Business Engine',
+    name: 'North American Commercial Business Exchange',
     category: 'National Directories',
-    shortDesc: 'Extracts verified retail, dining, professional service, and trade contractor leads across global metros.',
+    shortDesc: 'Extracts verified retail, professional services, trade contractors, and commercial leads across North America & Oceania.',
     coverage: 'US, UK, CA, AU'
   },
   {
     id: 'yellowpages-global',
     number: 'Engine 08',
-    name: 'YellowPages Global & Yell UK',
+    name: 'Global Regional Commercial Directory Core',
     category: 'National Directories',
-    shortDesc: 'Enterprise directories covering commercial businesses in US, UK (Yell.com), Canada, Australia, NZ, UAE, SA & MY.',
-    coverage: 'US, UK, CA, AU, NZ, UAE, ZA, MY'
+    shortDesc: 'Enterprise directories covering commercial businesses across US, UK, Canada, Australia, NZ, UAE, SA & MY.',
+    coverage: 'US, UK, CA, AU, NZ, UAE, ZA'
   },
   {
     id: 'cylex',
     number: 'Engine 09',
-    name: 'Cylex International Business Directory',
+    name: 'Continental European Commercial Registry',
     category: 'National Directories',
     shortDesc: 'Comprehensive commercial directory across Germany (Deutschland), UK, US, Australia & Canada.',
     coverage: 'DE, UK, US, AU, CA'
@@ -83,79 +83,79 @@ export const ALL_BUILTIN_ENGINES = [
   {
     id: 'freeindex-uk',
     number: 'Engine 10',
-    name: 'FreeIndex UK Business Registry',
+    name: 'UK Independent Trade & Service Registry',
     category: 'National Directories',
-    shortDesc: 'Dedicated UK trade contractors, independent professionals, and commercial businesses.',
+    shortDesc: 'Dedicated UK trade contractors, independent professionals, and verified commercial businesses.',
     coverage: 'United Kingdom'
   },
   {
     id: 'goldenpages-ie',
     number: 'Engine 11',
-    name: 'GoldenPages Ireland Business Index',
+    name: 'Pan-European Commercial Directory Index',
     category: 'National Directories',
-    shortDesc: 'The definitive business directory for Dublin, Cork, Galway, and all 26 counties in the Republic of Ireland.',
+    shortDesc: 'Definitive commercial business directory covering Dublin, Cork, Galway, and all 26 Irish counties.',
     coverage: 'Ireland'
   },
   {
     id: 'tripadvisor',
     number: 'Engine 12',
-    name: 'TripAdvisor Hospitality & Tourism',
+    name: 'Global Hospitality & Tourism Directory',
     category: 'Hospitality & Leisure',
-    shortDesc: 'Hospitality venues, resorts, restaurants, tour operators, and entertainment businesses with authentic ratings.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Hospitality venues, resorts, boutique lodging, tour operators, and entertainment facilities with ratings.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'trustpilot',
     number: 'Engine 13',
-    name: 'Trustpilot Business Reputation Index',
+    name: 'Verified Customer Reputation & Trust Index',
     category: 'Reputation & Trust',
     shortDesc: 'Surfaces verified business domains, trust scores, customer care phone lines, and corporate headquarters.',
-    coverage: 'Global · 11 Countries'
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'web-discovery',
     number: 'Engine 14',
     name: 'Public Web Deep Discovery Engine',
     category: 'Web Discovery',
-    shortDesc: 'Hunts for unlisted local businesses, regional news mentions, trade registries, and chamber of commerce sites.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Hunts for unlisted local storefronts, regional trade announcements, commercial portals, and chamber of commerce rosters.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'web-contact',
     number: 'Engine 15',
-    name: 'Website Contact & Email Crawler',
+    name: 'Autonomous Corporate Website Contact Scout',
     category: 'Deep Crawling',
-    shortDesc: 'Visits listed company websites in parallel to extract owner emails, direct WhatsApp numbers, and key personnel.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Visits listed company websites in parallel to extract owner emails, direct WhatsApp numbers, and executive contacts.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'social-dork-intl',
     number: 'Engine 16',
-    name: 'Social Dork & Public Business Pages',
+    name: 'Public Social Registry & Business Profile Scout',
     category: 'Social Discovery',
-    shortDesc: 'Pinpoints public business Facebook pages, Instagram handles, LinkedIn company profiles, and WhatsApp links.',
-    coverage: 'Global · 11 Countries'
+    shortDesc: 'Pinpoints public corporate Facebook pages, Instagram handles, LinkedIn profiles, and verified WhatsApp links.',
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'wikidata-businesses',
     number: 'Engine 17',
-    name: 'Wikidata & Open Entity Graph Engine',
+    name: 'Open Knowledge Graph & Corporate Entity Registry',
     category: 'Knowledge Graph',
-    shortDesc: 'Queries structured SPARQL knowledge graphs for registered companies, institutions, landmarks, and brands.',
+    shortDesc: 'Queries structured SPARQL knowledge graphs for registered companies, institutions, landmarks, and brand entities.',
     coverage: 'Global · Open Data'
   },
   {
     id: 'brave-dork',
     number: 'Engine 18',
-    name: 'Brave Search & Unbiased Local Index',
+    name: 'Privacy-Preserving Public Web Index',
     category: 'Web Discovery',
     shortDesc: 'Independent search index dorking to surface hidden local service providers without advertising bias.',
-    coverage: 'Global · 11 Countries'
+    coverage: 'Global · 11 Sovereign Markets'
   },
   {
     id: 'weddingbazaar',
     number: 'Engine 19',
-    name: 'WeddingBazaar Event & Service Directory',
+    name: 'Premier Event & Hospitality Venue Registry',
     category: 'Hospitality & Events',
     shortDesc: 'Event halls, photographers, decorators, caterers, and entertainment planners across India.',
     coverage: 'India (Events Specialized)'
@@ -163,25 +163,25 @@ export const ALL_BUILTIN_ENGINES = [
   {
     id: 'weddingwire',
     number: 'Engine 20',
-    name: 'WeddingWire Hospitality & Venues',
+    name: 'Convention & Celebration Facility Registry',
     category: 'Hospitality & Events',
-    shortDesc: 'Luxury venues, banquet halls, event planners, and hospitality coordinators with direct contact details.',
+    shortDesc: 'Luxury banquet spaces, convention facilities, event coordinators, and hospitality providers with direct contacts.',
     coverage: 'India & Global'
   },
   {
     id: 'mandap',
     number: 'Engine 21',
-    name: 'GoMandap Convention & Facility Engine',
+    name: 'Regional Auditorium & Facility Index',
     category: 'Hospitality & Events',
-    shortDesc: 'Specialized registry of convention centers, kalyana mandapams, and community halls across South India.',
+    shortDesc: 'Specialized registry of convention centers, wedding auditoriums, and community facilities across South India.',
     coverage: 'India (Specialized)'
   },
   {
     id: 'dedupe_excel',
     number: 'Engine 22',
-    name: 'Smart Deduplication & Mobile Validator',
+    name: 'Smart Deduplication & Telecom Validator Matrix',
     category: 'Data Quality & Export',
-    shortDesc: 'Cross-engine fuzzy matching removes duplicates, tags mobile vs landline, and builds structured multi-sheet Excel workbooks.',
+    shortDesc: 'Cross-engine fuzzy matching removes duplicates, tags mobile vs landline, and formats structured Excel workbooks.',
     coverage: 'Universal System Core'
   }
 ];

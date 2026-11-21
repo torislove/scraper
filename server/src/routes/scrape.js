@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
@@ -803,7 +803,8 @@ router.post('/omni', async (req, res) => {
   if (extVer) {
     extensionRelayHub.registerHeartbeat({ userId, version: extVer, installed: true });
   }
-  if (!isMaster && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
+  const isLocalRun = req.headers['x-run-mode'] === 'local' || req.headers['x-skip-extension'] === 'true' || req.body?.runLocal === true;
+  if (!isMaster && !isLocalRun && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
     return res.status(428).json({
       ok: false,
       extensionRequired: true,
@@ -958,7 +959,8 @@ router.post('/auto', async (req, res) => {
     if (extVer) {
       extensionRelayHub.registerHeartbeat({ userId, version: extVer, installed: true });
     }
-    if (!isMaster && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
+    const isLocalRun = req.headers['x-run-mode'] === 'local' || req.headers['x-skip-extension'] === 'true' || req.body?.runLocal === true;
+    if (!isMaster && !isLocalRun && extensionRelayHub.isExtensionOnlyMode() && !extVer && !extensionRelayHub.hasActiveExtension(userId)) {
       return res.status(428).json({
         ok: false,
         extensionRequired: true,

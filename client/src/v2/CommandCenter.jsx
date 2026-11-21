@@ -220,6 +220,8 @@ export default function CommandCenter() {
     ready: extReady,
     extensionOnly: extExtensionOnly,
     hardware,
+    skippedExtension,
+    skipAndRunLocal,
     ensureConnected,
     openTelemetry,
     openSetup
@@ -1135,7 +1137,8 @@ export default function CommandCenter() {
           engines,
           country: searchCountry,
           sessionId,
-          hardware: currentHw
+          hardware: currentHw,
+          runLocal: Boolean(skippedExtension)
         });
         const plan = response?.plan || {};
         if (plan.category) resolvedCategory = plan.category;
@@ -1191,7 +1194,8 @@ export default function CommandCenter() {
           engines,
           country: searchCountry,
           sessionId,
-          hardware: currentHw
+          hardware: currentHw,
+          runLocal: Boolean(skippedExtension)
         });
         const plan = response?.plan || {};
         if (plan.category) resolvedCategory = plan.category;
@@ -1245,6 +1249,8 @@ export default function CommandCenter() {
         const headers = {
           ...(uid ? { 'x-user-id': uid } : {}),
           'x-workspace-scope': 'client',
+          'x-run-mode': skippedExtension ? 'local' : 'client',
+          'x-skip-extension': skippedExtension ? 'true' : 'false',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         };
         setLogs(prev => [
@@ -2087,13 +2093,15 @@ export default function CommandCenter() {
             type="button"
             className={cx('v2-gbc-cartridge-pill', extReady && 'is-on')}
             onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
-            title="RAM Turbo status and your hardware lanes"
+            title={skippedExtension ? 'Running on Local Node.js Server Engine' : 'RAM Turbo status and your hardware lanes'}
           >
             <Cpu size={12} />
             <span>
-              {extReady
-                ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-                : 'CONNECT RAM TURBO'}
+              {skippedExtension
+                ? `LOCAL SERVER · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
+                : extReady
+                  ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
+                  : 'CONNECT RAM TURBO'}
             </span>
           </button>
 
@@ -2176,6 +2184,15 @@ export default function CommandCenter() {
               onClick={() => openSetup({ country: searchCountry })}
             >
               <Zap size={13} /> Setup Extension (30s)
+            </button>
+            <button
+              type="button"
+              className="v2-btn v2-btn-ghost v2-btn-sm"
+              style={{ color: '#047857', border: '1px solid rgba(5, 150, 105, 0.4)', background: '#ecfdf5', fontWeight: 700 }}
+              onClick={skipAndRunLocal}
+              title="Run searches directly on the local server without requiring the Chrome extension"
+            >
+              <Zap size={13} color="#059669" /> ⚡ Skip &amp; Run Local
             </button>
             <button
               type="button"

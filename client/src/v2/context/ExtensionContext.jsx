@@ -9,6 +9,7 @@ import { detectExtension, pairExtension, startRelayAgent } from '../utils/relayA
 import ExtensionGatewayModal from '../components/modals/ExtensionGatewayModal';
 
 const VERIFIED_KEY = 'scraper_ext_verified_v1';
+const SKIP_EXTENSION_KEY = 'scraper_skip_extension';
 
 const ExtensionContext = createContext(null);
 
@@ -43,7 +44,10 @@ export function ExtensionProvider({ children }) {
 
   const relayRef = useRef(null);
   const pendingActionRef = useRef(null);
-  const ready = Boolean(ext.installed || ext.connected);
+  const [skippedExtension, setSkippedExtension] = useState(() => {
+    try { return localStorage.getItem(SKIP_EXTENSION_KEY) === '1'; } catch (e) { return false; }
+  });
+  const ready = Boolean(ext.installed || ext.connected || skippedExtension);
   const readyRef = useRef(ready);
   readyRef.current = ready;
 
@@ -172,6 +176,20 @@ export function ExtensionProvider({ children }) {
     setGatewayOpen(false);
   }, []);
 
+  const skipAndRunLocal = useCallback(() => {
+    try { localStorage.setItem(SKIP_EXTENSION_KEY, '1'); } catch (e) {}
+    setSkippedExtension(true);
+    setGatewayOpen(false);
+    const fn = pendingActionRef.current;
+    pendingActionRef.current = null;
+    if (typeof fn === 'function') fn();
+  }, []);
+
+  const resetLocalMode = useCallback(() => {
+    try { localStorage.removeItem(SKIP_EXTENSION_KEY); } catch (e) {}
+    setSkippedExtension(false);
+  }, []);
+
   /**
    * Ensures the extension is installed & active before continuing.
    * CRITICAL INVARIANT: If the extension is already installed OR connected,
@@ -226,6 +244,9 @@ export function ExtensionProvider({ children }) {
     gatewayOpen,
     gatewayMode,
     targetMeta,
+    skippedExtension,
+    skipAndRunLocal,
+    resetLocalMode,
     ensureConnected,
     openTelemetry,
     openSetup,
@@ -234,6 +255,7 @@ export function ExtensionProvider({ children }) {
     refreshStatus: fetchServerStatus
   }), [
     ext, ready, checking, hardware, gatewayOpen, gatewayMode, targetMeta,
+    skippedExtension, skipAndRunLocal, resetLocalMode,
     ensureConnected, openTelemetry, openSetup, closeGateway, completeProceed, fetchServerStatus
   ]);
 
