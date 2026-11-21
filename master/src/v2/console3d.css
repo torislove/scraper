@@ -1,5 +1,5 @@
-/* ==========================================================================
-   console3d.css — 3D glass ColourBoy shell on a white canvas
+﻿/* ==========================================================================
+   console3d.css â€” 3D glass ColourBoy shell on a white canvas
    --------------------------------------------------------------------------
    Imported LAST so it wins over v2.css / whiteTheme.css / designSystem.css.
 
@@ -123,7 +123,7 @@ body,
   overflow: hidden;
 }
 
-/* A thin glass sheen across the top edge — the "3D" part. */
+/* A thin glass sheen across the top edge â€” the "3D" part. */
 .cb-glass-card::before {
   content: "";
   position: absolute;
@@ -226,7 +226,7 @@ body,
   flex-wrap: wrap;
 }
 
-/* Embossed primary key — the Game Boy "A" button, but professional. */
+/* Embossed primary key â€” the Game Boy "A" button, but professional. */
 .cb-btn-primary {
   display: inline-flex;
   align-items: center;
@@ -516,4 +516,88 @@ code[class*="language-"] {
   .cb-chip { order: 3; }
   .cb-glass-card { padding: 12px 13px; }
   .cb-btn-primary { width: 100%; justify-content: center; }
+}
+
+/* ==========================================================================
+   Purple â†’ emerald: the ColourBoy shell has one accent. Any surviving
+   violet from the older build is pulled back to emerald/teal glass.
+   ========================================================================== */
+
+/* The command shell sets its own canvas with higher specificity than .v2-root. */
+.v2-root.v2-command,
+.v2-root.v2-workspace,
+.v2-root.v2-master {
+  background: var(--cb-canvas) !important;
+  background-image: none !important;
+}
+
+.lx-nav-chip.is-active,
+.lx-nav-chip.is-active span,
+.lx-nav-chip.is-active svg {
+  color: #065f46 !important;
+  border-color: rgba(5, 150, 105, 0.34) !important;
+  background: var(--cb-accent-soft) !important;
+}
+.lx-nav-chip.is-active svg { stroke: #059669 !important; }
+
+.lx-precision-pill.is-place,
+.lx-precision-pill.is-place b,
+.lx-precision-pill.is-place svg {
+  color: #065f46 !important;
+  border-color: rgba(5, 150, 105, 0.28) !important;
+}
+
+.lx-example-chip,
+.lx-example-chip span,
+.lx-example-chip svg {
+  color: #0f766e !important;
+  border-color: rgba(5, 150, 105, 0.3) !important;
+}
+
+.v2-vendor-avatar {
+  border-color: rgba(5, 150, 105, 0.22) !important;
+}
+
+.lx-map-mode-pill,
+.lx-map-mode-pill.is-active {
+  color: #065f46 !important;
+  border: 1px solid #a7f3d0 !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: var(--cb-inset-top), 0 6px 16px rgba(15, 23, 42, 0.12) !important;
+}
+.lx-map-mode-bar { background: transparent !important; }
+
+/* Panels that carried a violet left rail. */
+.v2-panel,
+.v2-leads-panel,
+.v2-map-panel {
+  border-left-color: #d1fae5 !important;
+}
+
+/* Kill the violet ambient glow that survived from the old shell. */
+html,
+body,
+#root,
+.v2-root,
+.v2-root.v2-command {
+  background-image: none !important;
+  background-color: #ffffff !important;
+}
+
+/* Scrollbars: glass grey, not violet. */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: #f8fafc; }
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+  border: 2px solid #f8fafc;
+}
+*::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* The leads view shipped with a near-black canvas that showed through as a
+   charcoal frame around the white table. Keep the shell cream/white. */
+.v2-leads-view {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
 }

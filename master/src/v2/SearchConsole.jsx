@@ -676,7 +676,7 @@ function SearchConsole({
             <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
             <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
             <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> All 6 Lead Engines Auto: Satellite Map · Directories · Websites · B2B · Open Web · Clean Excel</span>
+            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> 20+ Lead Engines Auto: Satellite Maps · Directories · Websites · B2B Wholesale · Clean Excel</span>
           </div>
 
           <button

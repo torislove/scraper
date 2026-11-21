@@ -1,0 +1,216 @@
+/* ==========================================================================
+   Landing: clean white hero — one button, 11 flags, cloud/extension story.
+   ========================================================================== */
+
+.lx-landing {
+  background: #ffffff;
+  color: #0f172a;
+}
+.lx-landing .lx-hero {
+  padding-top: 54px;
+  padding-bottom: 44px;
+}
+.lx-landing .lx-h1 {
+  font-size: clamp(38px, 4.6vw, 66px);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  max-width: 12ch;
+  margin: 16px 0 18px;
+}
+.lx-landing .lx-lead-copy {
+  max-width: 46ch;
+  color: #475569;
+  font-size: 17px;
+  line-height: 1.65;
+}
+/* Keep the top nav on exactly one line at every desktop width. */
+.lx-nav-inner { gap: 18px; }
+.lx-nav-links { flex-wrap: nowrap !important; gap: 15px !important; }
+.lx-nav-links a,
+.lx-nav-links button { white-space: nowrap; font-size: 13px; }
+.lx-nav-actions { flex-wrap: nowrap !important; }
+.lx-nav-actions .lx-btn { white-space: nowrap; }
+
+.lx-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 26px 0 22px;
+}
+.lx-hero-actions .lx-btn-lg { min-height: 50px; padding: 0 22px; }
+
+.lx-market-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 18px;
+}
+.lx-market-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px 6px 7px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04), inset 0 1px 0 #fff;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+.lx-market-flag:hover { transform: translateY(-1px); border-color: #a7f3d0; }
+.lx-market-flag.is-on {
+  border-color: #6ee7b7;
+  background: #ecfdf5;
+  color: #065f46;
+  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.14), inset 0 1px 0 #fff;
+}
+
+.lx-hero-cloud-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.lx-hero-cloud-note span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.lx-hero-cloud-note svg { color: #059669; }
+
+.lx-cloud-split { background: #ffffff; }
+.lx-cloud-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 30px;
+}
+.lx-cloud-card {
+  position: relative;
+  padding: 24px 22px 22px;
+  border-radius: 22px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 1px 0 #fff inset, 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+.lx-cloud-card.is-accent {
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ffffff, #ecfdf5);
+  box-shadow: 0 1px 0 #fff inset, 0 18px 40px rgba(5, 150, 105, 0.12);
+}
+.lx-cloud-num {
+  position: absolute;
+  top: 18px;
+  right: 20px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: #94a3b8;
+}
+.lx-cloud-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  box-shadow: inset 0 1px 0 #fff, 0 6px 16px rgba(5, 150, 105, 0.12);
+}
+.lx-cloud-card h3 {
+  margin: 16px 0 8px;
+  font-size: 18px;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+.lx-cloud-card p {
+  margin: 0 0 14px;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.lx-cloud-card ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.lx-cloud-card li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.lx-cloud-card li svg { color: #059669; flex: none; margin-top: 2px; }
+.lx-cloud-cta { margin-top: 18px; }
+
+/* --- The console stays a console, but in cream + emerald, never navy. --- */
+.lx-gba-console {
+  background: linear-gradient(145deg, #ffffff, #f1f5f9) !important;
+  border: 2px solid #ffffff !important;
+  box-shadow:
+    inset 0 2px 0 #ffffff,
+    0 10px 0 rgba(5, 150, 105, 0.16),
+    0 28px 60px -16px rgba(15, 23, 42, 0.2) !important;
+}
+.lx-gba-cartridge-slot {
+  background: linear-gradient(90deg, #047857, #059669 55%, #0e7490) !important;
+  color: #f0fdf4 !important;
+}
+.lx-gba-power-led { color: #ecfdf5 !important; }
+
+.lx-gba-screen-bezel {
+  background: linear-gradient(155deg, #ffffff, #eef2f7) !important;
+  border: 2px solid #d1fae5 !important;
+  box-shadow: inset 0 3px 12px rgba(15, 23, 42, 0.07) !important;
+}
+.lx-gba-screen-bezel .lx-demo-pill {
+  background: #ffffff !important;
+  color: #334155 !important;
+  border-color: #e2e8f0 !important;
+}
+.lx-gba-screen-bezel .lx-demo-pill.is-active {
+  background: linear-gradient(135deg, #10b981, #06b6d4) !important;
+  color: #ffffff !important;
+  border-color: #34d399 !important;
+}
+
+.lx-gba-dpad-btn {
+  background: linear-gradient(145deg, #ffffff, #e2e8f0) !important;
+  color: #475569 !important;
+  box-shadow: 0 2px 0 #cbd5e1 !important;
+}
+.lx-gba-dpad-btn:hover { color: #065f46 !important; }
+.lx-gba-dpad-center { background: #e2e8f0 !important; }
+.lx-gba-brand-plate b { color: #065f46 !important; }
+
+.lx-gba-pill-btn {
+  background: linear-gradient(180deg, #ffffff, #f1f5f9) !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+  box-shadow: 0 2px 0 #cbd5e1 !important;
+}
+.lx-gba-pill-btn.is-start {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  border-color: #047857 !important;
+  color: #ffffff !important;
+}
+.lx-gba-round-btn.is-b span { background: linear-gradient(145deg, #10b981, #047857) !important; }
+
+@media (max-width: 900px) {
+  .lx-cloud-3 { grid-template-columns: 1fr; }
+  .lx-landing .lx-hero-grid { grid-template-columns: 1fr; }
+  .lx-landing .lx-h1 { max-width: none; }
+}

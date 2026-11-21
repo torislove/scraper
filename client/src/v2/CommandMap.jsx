@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, Polyline, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -56,7 +56,7 @@ function hasCoords(vendor) {
   return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && (lat !== 0 || lng !== 0);
 }
 
-// Global Memoized Marker Icon Cache — Prevents creating thousands of L.divIcon instances
+// Global Memoized Marker Icon Cache â€” Prevents creating thousands of L.divIcon instances
 const ICON_CACHE = new Map();
 function getVendorIcon(vendor, isHovered = false) {
   const phone = vendor?.phone || (Array.isArray(vendor?.phones) && vendor.phones.length > 0 ? vendor.phones[0] : null);
@@ -75,7 +75,7 @@ function getVendorIcon(vendor, isHovered = false) {
         <span class="v2-map-pin-pulse ${isHovered ? 'is-super-pulse' : ''}"></span>
         <div class="v2-map-pin-gem">
           <span class="v2-map-pin-highlight"></span>
-          <span class="v2-map-pin-symbol">${isHovered ? '🎯' : tone === 'verified' ? '✓' : tone === 'prime' ? '★' : '●'}</span>
+          <span class="v2-map-pin-symbol">${isHovered ? 'ðŸŽ¯' : tone === 'verified' ? 'âœ“' : tone === 'prime' ? 'â˜…' : 'â—'}</span>
         </div>
         <span class="v2-map-pin-ground-shadow"></span>
       </div>
@@ -213,7 +213,7 @@ function scanTargetIcon(label = '') {
         <i class="ring r2"></i>
         <i class="ring r3"></i>
         <b></b>
-        ${safeLabel ? `<div class="v2-scan-target-badge"><span class="v2-scan-badge-dot"></span><span class="v2-scan-badge-text">📡 SCANNING: ${safeLabel}</span></div>` : ''}
+        ${safeLabel ? `<div class="v2-scan-target-badge"><span class="v2-scan-badge-dot"></span><span class="v2-scan-badge-text">ðŸ“¡ SCANNING: ${safeLabel}</span></div>` : ''}
       </div>
     `,
     iconSize: [160, 160],
@@ -223,13 +223,13 @@ function scanTargetIcon(label = '') {
 
 function zoneBeaconIcon(zoneName = '', cellState = 'queued', leadsCount = 0) {
   const safeName = String(zoneName || '').replace(/[<>&"]/g, '').slice(0, 24);
-  const countTag = leadsCount > 0 ? ` · ${leadsCount}` : '';
+  const countTag = leadsCount > 0 ? ` Â· ${leadsCount}` : '';
   const stateClass = cellState === 'scanning'
     ? 'is-scanning'
     : (cellState === 'done' || cellState === 'saturated')
       ? 'is-done'
       : 'is-queued';
-  const iconGlyph = cellState === 'scanning' ? '⚡' : (cellState === 'done' || cellState === 'saturated') ? '✅' : '🛰️';
+  const iconGlyph = cellState === 'scanning' ? 'âš¡' : (cellState === 'done' || cellState === 'saturated') ? 'âœ…' : 'ðŸ›°ï¸';
   return L.divIcon({
     className: 'v2-zone-beacon-wrap',
     html: `<div class="v2-zone-beacon-pill ${stateClass}"><i></i><span>${iconGlyph} ${safeName}${countTag}</span></div>`,
@@ -437,14 +437,14 @@ export default function CommandMap({
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', color: '#0f172a' }}>
             {scopeTitle.toUpperCase()}
           </span>
-          <span style={{ fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', border: '1px solid #ddd6fe', padding: '2px 7px', borderRadius: 999 }}>
-            {Math.abs(Number(safeCenter[0])).toFixed(2)}°{Number(safeCenter[0]) >= 0 ? 'N' : 'S'}, {Math.abs(Number(safeCenter[1])).toFixed(2)}°{Number(safeCenter[1]) >= 0 ? 'E' : 'W'}
+          <span style={{ fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 999 }}>
+            {Math.abs(Number(safeCenter[0])).toFixed(2)}Â°{Number(safeCenter[0]) >= 0 ? 'N' : 'S'}, {Math.abs(Number(safeCenter[1])).toFixed(2)}Â°{Number(safeCenter[1]) >= 0 ? 'E' : 'W'}
           </span>
           <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
             <b style={{ color: '#059669' }}>{formatNumber(validVendors.length)}</b> pinned
           </span>
           <span style={{ fontSize: 9.5, fontWeight: 850, letterSpacing: '0.04em', color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 999 }}>
-            KEYLESS · 0 API KEYS
+            KEYLESS Â· 0 API KEYS
           </span>
         </div>
       </div>
@@ -562,16 +562,16 @@ export default function CommandMap({
                 <Tooltip direction="top" opacity={0.95}>
                   <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
                     {cellState === 'scanning'
-                      ? `⚡ SCANNING · ${zone.name}`
+                      ? `âš¡ SCANNING Â· ${zone.name}`
                       : cellState === 'saturated'
-                        ? `🟣 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                        ? `ðŸŸ£ SPLIT â†— Â· ${zone.name} (${cellInfo?.leads || 0} leads)`
                         : cellState === 'done'
-                          ? `✅ DONE · ${zone.name} (${cellInfo?.leads || 0} leads)`
+                          ? `âœ… DONE Â· ${zone.name} (${cellInfo?.leads || 0} leads)`
                           : cellState === 'dry'
-                            ? `🟡 LOW DENSITY · ${zone.name}`
+                            ? `ðŸŸ¡ LOW DENSITY Â· ${zone.name}`
                             : zone.approximate
-                              ? `Area · ${zone.name}`
-                              : `Covered Area · ${zone.name}`}
+                              ? `Area Â· ${zone.name}`
+                              : `Covered Area Â· ${zone.name}`}
                   </div>
                 </Tooltip>
               </Circle>
@@ -737,11 +737,11 @@ export default function CommandMap({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: is3DMode ? 'linear-gradient(135deg, #6d28d9, #7c3aed)' : '#ffffff',
-            border: is3DMode ? '1px solid #4c1d95' : '1px solid rgba(15,23,42,0.1)',
-            boxShadow: is3DMode ? '0 2px 0 #4c1d95' : '0 2px 0 rgba(15,23,42,0.08)',
+            background: is3DMode ? 'linear-gradient(135deg, #10b981, #059669)' : '#ffffff',
+            border: is3DMode ? '1px solid #047857' : '1px solid rgba(15,23,42,0.1)',
+            boxShadow: is3DMode ? '0 2px 0 #047857' : '0 2px 0 rgba(15,23,42,0.08)',
             borderRadius: 9,
-            color: is3DMode ? '#FFFFFF' : '#6d28d9',
+            color: is3DMode ? '#FFFFFF' : '#059669',
             cursor: 'pointer'
           }}
         >
@@ -752,7 +752,7 @@ export default function CommandMap({
       {/* Live Satellite Zone Radar Telemetry Pill */}
       <div className="lx-map-mode-bar">
         <span className="lx-map-mode-pill is-active">
-          🛰️ HD SATELLITE LIVE RADAR · {formatNumber(coverage.length || 1)} ZONES
+          ðŸ›°ï¸ HD SATELLITE LIVE RADAR Â· {formatNumber(coverage.length || 1)} ZONES
         </span>
       </div>
 
@@ -761,7 +761,7 @@ export default function CommandMap({
           <span className="v2-map-scan-radar"><i style={{ background: '#059669' }} /></span>
           <span className="v2-map-scan-copy">
             <b style={{ color: '#047857', letterSpacing: '0.06em' }}>SEARCHING AREA</b>
-            <small style={{ color: '#475569', fontWeight: 600 }}>{activeZoneLabel || 'Finding nearby businesses…'}</small>
+            <small style={{ color: '#475569', fontWeight: 600 }}>{activeZoneLabel || 'Finding nearby businessesâ€¦'}</small>
           </span>
         </div>
       )}

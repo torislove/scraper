@@ -652,7 +652,7 @@ function SearchConsole({
             <span className="lx-precision-pill is-service">🎯 <b>{displayService}</b></span>
             <span className="lx-precision-pill is-place">📍 <b>{displayPlace}</b></span>
             <span className="lx-precision-pill is-scope">⚡ <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> All 6 Engines Auto On</span>
+            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> 20+ Engines Auto On</span>
           </div>
 
           <button

@@ -170,13 +170,13 @@ export default function PricingPage() {
               fontSize: 12, fontWeight: 850, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16
             }}
           >
-            <Sparkles size={13} /> All 6 Built-In Lead Engines Included
+            <Sparkles size={13} /> 20+ Built-In Lead Engines Included
           </span>
           <h1 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 850, letterSpacing: '-0.035em', margin: '0 0 14px', lineHeight: 1.08 }}>
-            All 6 lead discovery engines included in every plan.
+            All 20+ lead discovery engines included in every plan.
           </h1>
           <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
-            Every plan unlocks all 6 built-in lead discovery engines — sweeping live Satellite Maps, Business Directories, Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
+            Every plan unlocks our fleet of 20+ specialized lead discovery engines — sweeping live Satellite Maps, National Directories (Justdial, IndiaMART, Yelp, YellowPages, Cylex), Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
           </p>
 
           {/* Tactile 3D Liquid Glass Billing Toggle */}
@@ -233,7 +233,7 @@ export default function PricingPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 850 }}>
               <Cpu size={16} color="#7c3aed" />
-              <span>Included Automatically: All 6 Built-In Lead Engines Running in Parallel</span>
+              <span>Included Automatically: 20+ Specialized Lead Discovery Engines Running in Parallel</span>
             </div>
             <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 12, fontWeight: 800 }}>
               💻 Your Device Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Zones ({hardware.expectedSpeed})

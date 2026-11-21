@@ -9,59 +9,16 @@ import {
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
+import ExtensionGatewayModal from './components/modals/ExtensionGatewayModal';
 import { POPULAR_COUNTRIES } from './data/countries';
 import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL, EXTENSION_STORE_URL
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_STORE_URL
 } from './utils/deviceRamEngine';
+import { detectExtension } from './utils/relayAgent';
 import { pingHealth } from './api';
 import './landingExecutive.css';
-
-function useLandingTypewriter(items, active) {
-  const [text, setText] = useState('');
-  const listKey = useMemo(() => (items || []).map(i => i.query).join('|'), [items]);
-
-  useEffect(() => {
-    const list = Array.isArray(items) && items.length
-      ? items
-      : [{ country: 'India', query: 'Software companies in HITEC City Hyderabad' }];
-    if (!active) {
-      setText(`Search anywhere: ${list[0].query} (${list[0].country})`);
-      return undefined;
-    }
-    let idx = 0;
-    let char = 0;
-    let deleting = false;
-    let holdTicks = 0;
-    const timer = setInterval(() => {
-      const current = list[idx % list.length] || list[0];
-      const full = `${current.query} (${current.country})`;
-      if (holdTicks > 0) {
-        holdTicks -= 1;
-        return;
-      }
-      if (!deleting) {
-        char += 1;
-        setText(`Search anywhere: ${full.slice(0, char)}|`);
-        if (char >= full.length) {
-          deleting = true;
-          holdTicks = 24;
-        }
-      } else {
-        char -= 2;
-        if (char <= 0) {
-          char = 0;
-          deleting = false;
-          idx = (idx + 1) % list.length;
-        }
-        setText(`Search anywhere: ${full.slice(0, Math.max(0, char))}|`);
-      }
-    }, 46);
-    return () => clearInterval(timer);
-  }, [listKey, active]);
-
-  return text;
-}
+import './landingCloud.css';
 
 // Strictly locked to the 11 supported revenue markets — India pinned as Home
 const LOCKED_11_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
@@ -310,7 +267,7 @@ const LEAD_ANATOMY = [
 const PROOF_STATS = [
   { value: '11', label: 'Core Countries Locked & Tuned' },
   { value: '619,287', label: 'Indian Towns & Villages Covered' },
-  { value: 'All 6', label: 'Built-In Lead Discovery Engines' },
+  { value: '20+', label: 'Built-In Lead Discovery Engines' },
   { value: '1-Click', label: 'Live Satellite Radar & Excel Export' }
 ];
 
@@ -320,8 +277,8 @@ const FAQ = [
     a: 'Google Maps caps a single manual search at around 120 listings ("You’ve reached the end of the list") and hides hundreds of shops located in inner neighborhoods and nearby suburbs. Plus copying names and phone numbers one-by-one takes hours. Scraper.co.in automatically divides Hyderabad, any Indian town/mandal, or global county into every neighborhood zone, sweeps all of them in parallel on a live Satellite Radar map, and exports a clean Excel spreadsheet in minutes.'
   },
   {
-    q: 'Do I get all 6 built-in lead discovery engines automatically?',
-    a: 'Yes! Every search runs our Satellite & Street Map Engine, Business Directory Engine, Official Website & Email Finder Engine, B2B Trade Supplier Engine, Public Web Business Engine, and Smart Deduplication Engine together automatically — with zero extra extensions, proxy bills, or API keys.'
+    q: 'Do I get all 20+ built-in lead discovery engines automatically?',
+    a: 'Yes! Our platform orchestrates 20+ specialized lead extraction engines across satellite maps, local business directories, B2B wholesale portals, official websites, and social indices. For India, 11 dedicated engines run simultaneously (including Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar & GoMandap). For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland) run in parallel — with zero extra API keys or proxy bills.'
   },
   {
     q: 'What if I want leads from an entire District, State, or every website across the internet?',
@@ -381,7 +338,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
         transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
       >
         <CheckCircle2 size={15} color="#059669" />
-        <span>All 6 Engines Sweeping Live</span>
+        <span>20+ Engines Sweeping Live</span>
       </motion.div>
 
       <motion.div
@@ -520,7 +477,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
           </div>
 
           <div className="lx-gba-ab-cluster">
-            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 6 Engines">
+            <a href="#engines" className="lx-gba-round-btn is-b" title="Inspect All 20+ Engines">
               <span>B</span>
               <small>ENGINES</small>
             </a>
@@ -542,10 +499,11 @@ export default function LandingV2() {
   const [weeklySearches, setWeeklySearches] = useState(12);
   const [activePulseZone, setActivePulseZone] = useState(0);
   const [selectedMarketCode, setSelectedMarketCode] = useState('IN');
-  const [heroQuery, setHeroQuery] = useState('');
-  const [tickerOffset, setTickerOffset] = useState(0);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [extConnected, setExtConnected] = useState(false);
+  const [pendingLaunch, setPendingLaunch] = useState(null);
+  const [engineCategoryFilter, setEngineCategoryFilter] = useState('All');
   const hardware = useMemo(() => detectDeviceHardware(), []);
-  const heroPlaceholder = useLandingTypewriter(GLOBAL_11_COUNTRY_TICKER, !heroQuery);
 
   useEffect(() => {
     let cancelled = false;
@@ -563,6 +521,28 @@ export default function LandingV2() {
     };
   }, []);
 
+  // Probe extension presence and listen for bridge pongs
+  useEffect(() => {
+    let active = true;
+    const probe = async () => {
+      try {
+        const res = await detectExtension(250);
+        if (active && res?.installed) setExtConnected(true);
+      } catch (e) {}
+    };
+    probe();
+    const handleMsg = (ev) => {
+      if (ev.data?.source === 'SCRAPER_RAM_EXTENSION' && ev.data?.type === 'SCRAPER_EXT_PONG') {
+        if (active) setExtConnected(true);
+      }
+    };
+    window.addEventListener('message', handleMsg);
+    return () => {
+      active = false;
+      window.removeEventListener('message', handleMsg);
+    };
+  }, []);
+
   useEffect(() => {
     const id = setInterval(() => {
       setActiveDemo(prev => (prev + 1) % DEMO_SCENARIOS.length);
@@ -574,19 +554,32 @@ export default function LandingV2() {
     const zTimer = setInterval(() => {
       setActivePulseZone(prev => (prev + 1) % STORY_ZONES.length);
     }, 900);
-    const tTimer = setInterval(() => {
-      setTickerOffset(prev => (prev + 1) % GLOBAL_11_COUNTRY_TICKER.length);
-    }, 3200);
     return () => {
       clearInterval(zTimer);
-      clearInterval(tTimer);
     };
   }, []);
 
   const demo = DEMO_SCENARIOS[activeDemo];
-  const openWorkspace = (countryCode = 'IN', query = '') => {
-    const qParam = query ? `&q=${encodeURIComponent(query)}` : '';
-    navigate(`/command?country=${encodeURIComponent(countryCode)}${qParam}`);
+  const openWorkspace = async (countryCode = 'IN', query = '') => {
+    try {
+      const res = await detectExtension(250);
+      if (res?.installed) {
+        setExtConnected(true);
+        const qParam = query ? `&q=${encodeURIComponent(query)}` : '';
+        navigate(`/command?country=${encodeURIComponent(countryCode)}${qParam}`);
+        return;
+      }
+    } catch (e) {}
+    setPendingLaunch({ countryCode, query });
+    setShowExtensionModal(true);
+  };
+
+  const handleExtensionConnected = () => {
+    setExtConnected(true);
+    setShowExtensionModal(false);
+    const target = pendingLaunch || { countryCode: 'IN', query: '' };
+    const qParam = target.query ? `&q=${encodeURIComponent(target.query)}` : '';
+    navigate(`/command?country=${encodeURIComponent(target.countryCode || 'IN')}${qParam}`);
   };
 
   const lockedMarkets = useMemo(() => {
@@ -616,7 +609,7 @@ export default function LandingV2() {
 
           <nav className="lx-nav-links" aria-label="Primary">
             <a href="#story">Why It Works</a>
-            <a href="#engines">3 Engines &amp; RAM</a>
+            <a href="#engines">20+ Engines &amp; RAM</a>
             <a href="#playbooks">For Teams</a>
             <a href="#markets">11 Countries</a>
             <a href="#master-concierge">Master Service</a>
@@ -628,12 +621,21 @@ export default function LandingV2() {
               <span className="lx-status-dot" />
               {online ? 'Ready' : 'Connecting'}
             </span>
+            <button
+              type="button"
+              className={`lx-nav-ext-pill ${extConnected ? 'is-connected' : ''}`}
+              onClick={() => setShowExtensionModal(true)}
+              title={extConnected ? 'Browser Extension Connected (RAM Turbo Active)' : 'Connect Browser Extension'}
+            >
+              <Cpu size={13} />
+              <span>{extConnected ? 'Extension Active' : 'Connect Extension'}</span>
+            </button>
             <button type="button" className="lx-btn lx-btn-ghost" onClick={() => navigate('/login')}>
               <LogIn size={15} /> Sign in
             </button>
             <button type="button" className="lx-btn lx-btn-primary" onClick={() => openWorkspace('IN')}>
               <span className="lx-gbc-keycap-landing is-a" aria-hidden="true">A</span>
-              Find Leads Now <ArrowRight size={15} />
+              Open Command Center <ArrowRight size={15} />
             </button>
           </div>
         </div>
@@ -648,91 +650,20 @@ export default function LandingV2() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
             >
-              <div className="lx-hero-badges">
-                <span className="lx-eyebrow">
-                  <Sparkles size={13} />
-                  SCRAPER.CO.IN · ALL 6 LEAD ENGINES BUILT IN · 11 COUNTRIES · LIVE 3D SATELLITE RADAR
-                </span>
-                <span className="lx-india-pill">
-                  <Country3DFlag code="IN" size={18} isHome />
-                  Made with <Heart size={12} fill="#e11d48" color="#e11d48" /> in India
-                </span>
-              </div>
+              <span className="lx-eyebrow">
+                <Sparkles size={13} />
+                INDIA FIRST · 11 COUNTRIES · NO API KEYS · NO SETUP
+              </span>
 
               <h1 className="lx-h1">
-                Type any business &amp; place. Every lead engine captures{' '}
-                <span className="lx-h1-accent">every verified contact</span>{' '}
-                live across 11 countries.
+                Search all the leads <span className="lx-h1-accent">in your area.</span>
               </h1>
 
               <p className="lx-lead-copy">
-                Search any city, town, mandal, county, or neighborhood worldwide on Scraper.co.in.
-                All 6 built-in lead discovery engines sweep every street pocket simultaneously on a live
-                3D Satellite Map — giving you verified mobile numbers, websites, emails, and a clean Excel file in one click.
+                Type a business and a place. 20+ specialized engines sweep every street, mandal, district and
+                state on a live map — and give you verified mobile numbers, emails and websites in
+                one clean Excel file.
               </p>
-
-              {/* Interactive Game Boy Advance Color 3D Hero Search Bar (11 Countries · Search Anywhere) */}
-              <form
-                className="lx-hero-search-gbc lx-gbc-cartridge-card"
-                role="search"
-                aria-label="Search anywhere across all 11 countries"
-                onSubmit={e => {
-                  e.preventDefault();
-                  const q = heroQuery.trim() || GLOBAL_11_COUNTRY_TICKER[tickerOffset]?.query || 'Software companies in HITEC City Hyderabad';
-                  openWorkspace('IN', q);
-                }}
-              >
-                <div className="lx-hero-search-top">
-                  <span className="lx-precision-pill is-scope">
-                    🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 850, color: '#6d28d9' }}>SCRAPER.CO.IN · ALL 6 ENGINES</span>
-                </div>
-                <div className="lx-hero-search-bar">
-                  <Search size={18} color="#7c3aed" aria-hidden="true" />
-                  <label htmlFor="hero-gbc-search" className="lx-sr-only">
-                    Search any business and city, mandal, or county across 11 countries
-                  </label>
-                  <input
-                    id="hero-gbc-search"
-                    type="text"
-                    className="lx-hero-search-input"
-                    value={heroQuery}
-                    onChange={e => setHeroQuery(e.target.value)}
-                    placeholder={heroPlaceholder}
-                  />
-                  <button type="submit" className="lx-hero-search-btn">
-                    <span className="lx-gbc-keycap-landing is-a" aria-hidden="true">A</span>
-                    <span>FIND LEADS</span>
-                  </button>
-                </div>
-                <div className="lx-global-ticker-bar" aria-label="Sample searches across 11 countries">
-                  {Array.from({ length: 4 }, (_, offset) => {
-                    const item = GLOBAL_11_COUNTRY_TICKER[(tickerOffset + offset) % GLOBAL_11_COUNTRY_TICKER.length];
-                    return (
-                      <button
-                        key={`${item.code}-${item.query}`}
-                        type="button"
-                        className="lx-example-chip"
-                        onClick={() => openWorkspace(item.code, item.query)}
-                      >
-                        <b style={{ color: '#6d28d9' }}>{item.country}:</b>
-                        <span>{item.query}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </form>
-
-              <div className="lx-hero-mode-split">
-                <div>
-                  <b>Two Dedicated Editions: Client Workspace vs. Master Territory Intelligence</b>
-                  <span>Run self-serve searches on any City, Mandal, or County — or ask our Master Desk for entire Districts, States &amp; every website on the internet</span>
-                </div>
-                <a href="#master-concierge" className="lx-hero-master-link">
-                  Compare Client Edition vs. Master Territory Intelligence →
-                </a>
-              </div>
 
               <div className="lx-hero-actions">
                 <motion.button
@@ -740,25 +671,55 @@ export default function LandingV2() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   className="lx-btn lx-btn-primary lx-btn-lg"
-                  onClick={() => openWorkspace('IN', 'Software companies in HITEC City Hyderabad')}
+                  onClick={() => openWorkspace('IN')}
                 >
-                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">START</span>
-                  Open Lead Workspace <ArrowRight size={17} />
+                  <span className="lx-gbc-keycap-landing is-start" aria-hidden="true">A</span>
+                  Open Command Center <ArrowRight size={17} />
                 </motion.button>
-                <button
-                  type="button"
-                  className="lx-btn lx-btn-atomic lx-btn-lg"
-                  onClick={() => navigate('/signup')}
-                >
-                  <span className="lx-gbc-keycap-landing is-b" aria-hidden="true">B</span>
-                  Create Free Account
-                </button>
+                <a href="#cloud-extension" className="lx-btn lx-btn-ghost lx-btn-lg">
+                  How it works
+                </a>
               </div>
 
-              <div className="lx-trust-row">
-                <span className="lx-trust-pill"><Check size={14} /> 100% HD Satellite Live Zone Radar</span>
-                <span className="lx-trust-pill"><Check size={14} /> All 6 Built-In Lead Engines Included</span>
-                <span className="lx-trust-pill"><Check size={14} /> 11 Countries · 619k+ Indian Towns/Mandals</span>
+              <div className="lx-market-flags" aria-label="11 supported markets">
+                {lockedMarkets.map(c => (
+                  <button
+                    key={c.code}
+                    type="button"
+                    className={c.code === selectedMarketCode ? 'lx-market-flag is-on' : 'lx-market-flag'}
+                    onClick={() => setSelectedMarketCode(c.code)}
+                    title={c.name}
+                  >
+                    <Country3DFlag code={c.code} size={18} isHome={c.code === 'IN'} />
+                    <span>{c.code}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="lx-hero-cloud-strip" aria-label="How the cloud and the extension work together">
+                <div className="lx-hcs-item">
+                  <span className="lx-hcs-icon"><Cpu size={16} /></span>
+                  <div>
+                    <b>20+ engines on our cloud</b>
+                    <small>Search brain, geo data, phone checks</small>
+                  </div>
+                </div>
+                <span className="lx-hcs-arrow" aria-hidden="true">+</span>
+                <div className="lx-hcs-item">
+                  <span className="lx-hcs-icon"><Zap size={16} /></span>
+                  <div>
+                    <b>Your extension adds speed</b>
+                    <small>Skips the queue using your connection</small>
+                  </div>
+                </div>
+                <span className="lx-hcs-arrow" aria-hidden="true">=</span>
+                <div className="lx-hcs-item">
+                  <span className="lx-hcs-icon"><FileSpreadsheet size={16} /></span>
+                  <div>
+                    <b>One clean lead file</b>
+                    <small>Verified mobiles, emails, websites</small>
+                  </div>
+                </div>
               </div>
             </motion.div>
 
@@ -769,6 +730,78 @@ export default function LandingV2() {
               totalDemos={DEMO_SCENARIOS.length}
               onLaunch={() => openWorkspace(demo.country, demo.query)}
             />
+          </div>
+        </section>
+
+        {/* Cloud engines + extension speed — the one idea the whole product rests on */}
+        <section className="lx-section lx-cloud-split" id="cloud-extension">
+          <div className="lx-wrap">
+            <div className="lx-sec-head">
+              <span className="lx-kicker"><ShieldCheck size={13} /> How Scraper.co.in is built</span>
+              <h2>Our 20+ engines stay on our secure cloud. Our extension powers your speed.</h2>
+              <p>
+                Nothing heavy runs on your computer. The search brain, geo data and phone
+                validation live on our servers. A tiny extension borrows your connection — and
+                your spare RAM — so sweeps run in parallel instead of waiting in a queue.
+              </p>
+            </div>
+
+            <div className="lx-cloud-3">
+              <article className="lx-cloud-card">
+                <span className="lx-cloud-num">01</span>
+                <div className="lx-cloud-icon"><Cpu size={20} /></div>
+                <h3>20+ engines on our secure cloud</h3>
+                <p>
+                  Maps, local directories, official websites, B2B suppliers, public registries
+                  and a smart dedupe engine all run server-side. For India, 11 dedicated engines
+                  run live; for global markets, 11–12 localized directories run in parallel.
+                </p>
+                <ul>
+                  <li><Check size={14} /> Always current, always patched</li>
+                  <li><Check size={14} /> 619k+ Indian towns and mandals mapped</li>
+                  <li><Check size={14} /> Phone and email validation built in</li>
+                </ul>
+              </article>
+
+              <article className="lx-cloud-card is-accent">
+                <span className="lx-cloud-num">02</span>
+                <div className="lx-cloud-icon"><Zap size={20} /></div>
+                <h3>Your extension powers the speed</h3>
+                <p>
+                  Add our ultra-lightweight RAM Turbo extension in 30 seconds. It lets the cloud engines
+                  read pages through your connection, so your searches skip the shared queue.
+                </p>
+                <ul>
+                  <li><Check size={14} /> 4 GB = 3 lanes · 8 GB = 5 lanes · 16 GB+ = 8 lanes</li>
+                  <li><Check size={14} /> Connects itself after install</li>
+                  <li><Check size={14} /> Never reads your tabs, history or passwords</li>
+                </ul>
+                <div className="lx-cloud-cta">
+                  <button
+                    type="button"
+                    className="lx-btn lx-btn-primary"
+                    onClick={() => setShowExtensionModal(true)}
+                  >
+                    <Download size={15} /> Install Extension (1-Click)
+                  </button>
+                </div>
+              </article>
+
+              <article className="lx-cloud-card">
+                <span className="lx-cloud-num">03</span>
+                <div className="lx-cloud-icon"><FileSpreadsheet size={20} /></div>
+                <h3>You get one clean lead file</h3>
+                <p>
+                  Every source feeds one de-duplicated list. Verified mobiles, websites and
+                  emails, sorted by district and mandal, ready for Excel or your CRM.
+                </p>
+                <ul>
+                  <li><Check size={14} /> Duplicates removed automatically</li>
+                  <li><Check size={14} /> Mobile vs landline classified</li>
+                  <li><Check size={14} /> One-click Excel (.xlsx) export</li>
+                </ul>
+              </article>
+            </div>
           </div>
         </section>
 
@@ -870,13 +903,17 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* ANIMATED STORY 2: ALL 6 BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
+        {/* ANIMATED STORY 2: ALL 20+ BUILT-IN LEAD ENGINES SWEEPING LIVE TOGETHER */}
         <section className="lx-section" id="engines">
           <div className="lx-wrap">
             <div className="lx-sec-head">
-              <span className="lx-kicker"><Cpu size={13} /> All 6 Lead Engines Included Automatically</span>
-              <h2>All 6 specialized discovery engines sweep every zone live together.</h2>
-              <p>Zero browser extensions to configure, zero external subscriptions, and zero spreadsheets to clean by hand. Type once — every built-in engine connects automatically.</p>
+              <span className="lx-kicker"><Cpu size={13} /> 20+ Lead Extraction Engines Included Automatically</span>
+              <h2>20+ specialized discovery engines sweep every zone live together.</h2>
+              <p>
+                Zero browser extensions to configure manually, zero external API keys, and zero spreadsheets to clean by hand.
+                For India, 11 dedicated engines (Justdial, IndiaMART, Google Places, OpenStreetMap, WeddingBazaar, GoMandap...) sweep simultaneously.
+                For our 10 international markets, 11–12 localized commercial directories (Yelp, YellowPages Global, Cylex, FreeIndex UK, GoldenPages Ireland...) run in parallel.
+              </p>
             </div>
 
             <motion.div
@@ -886,22 +923,53 @@ export default function LandingV2() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45 }}
             >
+              {/* Category Filter Pills */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {[
+                  { id: 'All', label: 'All Engines (22)' },
+                  { id: 'Maps & Geospatial', label: 'Maps & Geospatial (4)' },
+                  { id: 'National Directories', label: 'National Directories (7)' },
+                  { id: 'B2B & Industrial', label: 'B2B & Wholesale (1)' },
+                  { id: 'Hospitality', label: 'Hospitality & Events (4)' },
+                  { id: 'Web Discovery', label: 'Web & Deep Crawling (3)' },
+                  { id: 'Social Discovery', label: 'Social & Knowledge (2)' },
+                  { id: 'Data Quality & Export', label: 'Deduplication & Quality (1)' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`lx-demo-pill ${engineCategoryFilter === cat.id ? 'is-active' : ''}`}
+                    onClick={() => setEngineCategoryFilter(cat.id)}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
               <div className="lx-engines-6-grid">
-                {ALL_BUILTIN_ENGINES.map((eng, idx) => (
+                {ALL_BUILTIN_ENGINES
+                  .filter(eng => engineCategoryFilter === 'All' || eng.category.includes(engineCategoryFilter) || (engineCategoryFilter === 'Hospitality' && eng.category.includes('Hospitality')))
+                  .map((eng, idx) => (
                   <motion.div
                     key={eng.id}
                     className="lx-engine-cart-card"
                     initial={{ opacity: 0, y: 10 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, amount: 0.15 }}
-                    transition={{ delay: idx * 0.05 }}
+                    transition={{ delay: idx * 0.02 }}
                     whileHover={{ y: -3 }}
                   >
                     <div className="lx-engine-cart-head">
                       <span className="lx-flow-step-orb tone-atomic" style={{ margin: 0, width: 34, height: 34, borderRadius: 10, flexShrink: 0 }}>
                         <Zap size={15} />
                       </span>
-                      <span className="lx-engine-live-dot">LIVE · {eng.number.toUpperCase()}</span>
+                      <div style={{ textAlign: 'right' }}>
+                        <span className="lx-engine-live-dot">LIVE · {eng.number.toUpperCase()}</span>
+                        <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 800 }}>{eng.coverage}</div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 850, textTransform: 'uppercase', color: '#059669', marginBottom: 2 }}>
+                      {eng.category}
                     </div>
                     <b>{eng.name}</b>
                     <small>{eng.shortDesc}</small>
@@ -912,7 +980,7 @@ export default function LandingV2() {
               <div className="lx-engine-live-bar">
                 <div className="lx-engine-live-badge">
                   <Sparkles size={18} color="#34d399" />
-                  <b>ALL 6 ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
+                  <b>20+ ENGINES → SMART DEDUPLICATION → 1-CLICK EXCEL</b>
                 </div>
                 <span>Every zone streams live onto the 3D Satellite Map with verified mobile numbers, websites &amp; emails.</span>
               </div>
@@ -941,41 +1009,29 @@ export default function LandingV2() {
                 <div className="lx-ext-shield-head">
                   <div>
                     <span className="lx-kicker" style={{ marginBottom: 8 }}><ShieldCheck size={13} /> Cloud-Protected Engines · Extension-Only Speed</span>
-                    <h3>Our 6 Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
+                    <h3>Our 20+ Engines Stay on Our Secure Cloud. Our Extension Powers Your Speed.</h3>
                     <p>
                       Install our ultra-lightweight Chrome / Edge extension in 30 seconds to unlock instant parallel sweeps with zero waiting queues.
                     </p>
                   </div>
                   <div className="lx-ext-cta-group">
-                    {EXTENSION_STORE_URL ? (
-                      <a
-                        href={EXTENSION_STORE_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="lx-btn lx-btn-primary"
-                      >
-                        <Download size={15} /> Add to Chrome
-                      </a>
-                    ) : (
-                      <span className="lx-btn lx-btn-primary is-muted" aria-disabled="true">
-                        <ShieldCheck size={15} /> Chrome Web Store · in review
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      className="lx-btn lx-btn-primary"
+                      onClick={() => setShowExtensionModal(true)}
+                    >
+                      <Download size={15} /> Install Extension (1-Click)
+                    </button>
                     <button type="button" className="lx-btn lx-btn-ghost" onClick={() => openWorkspace('IN')}>
                       Open Command Center <ArrowRight size={14} />
                     </button>
-                    {!EXTENSION_STORE_URL && import.meta.env.DEV && (
-                      <a href={EXTENSION_DOWNLOAD_URL} download className="lx-ext-dev-link">
-                        developer build
-                      </a>
-                    )}
                   </div>
                 </div>
 
                 <div className="lx-ext-3grid">
                   <div className="lx-ext-pillar">
                     <span className="lx-ext-badge is-cloud">01 · SERVER CLOUD BRAIN</span>
-                    <b>100% Proprietary 6-Engine Intelligence</b>
+                    <b>100% Proprietary 20+ Engine Intelligence</b>
                     <small>
                       All smart search routing, 619,287 Indian town/village mapping, Store vs. Service AI, phone validation, and Excel cleaning run safely on our cloud servers—never exposed or stale.
                     </small>
@@ -1330,10 +1386,10 @@ export default function LandingV2() {
                 <h3>Instant City, Town, Mandal &amp; County Leads</h3>
                 <p>
                   Built for startups, agencies, and local sales teams. Pick any of the 11 countries,
-                  type a service and neighborhood/mandal/county, watch all 6 built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
+                  type a service and neighborhood/mandal/county, watch our 20+ built-in engines illuminate the live 3D Satellite Radar Map, and download clean Excel in seconds.
                 </p>
                 <ul className="lx-story-bullets">
-                  <li><CheckCircle2 size={15} color="#059669" /> All 6 Built-In Lead Engines running automatically</li>
+                  <li><CheckCircle2 size={15} color="#059669" /> All 20+ Built-In Lead Engines running automatically</li>
                   <li><CheckCircle2 size={15} color="#059669" /> 100% HD Satellite Live Zone Radar across 11 countries</li>
                   <li><CheckCircle2 size={15} color="#059669" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
                 </ul>
@@ -1615,6 +1671,15 @@ export default function LandingV2() {
           </div>
         </div>
       </footer>
+
+      <ExtensionGatewayModal
+        isOpen={showExtensionModal}
+        onClose={() => setShowExtensionModal(false)}
+        onConnected={handleExtensionConnected}
+        targetQuery={pendingLaunch?.query || ''}
+        targetCountry={pendingLaunch?.countryCode || 'IN'}
+        allowBypass={true}
+      />
     </div>
   );
 }

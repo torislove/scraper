@@ -9,40 +9,180 @@
 
 export const ALL_BUILTIN_ENGINES = [
   {
-    id: 'maps_pins',
-    number: 'Engine 1',
-    name: 'Satellite & Street Map Pin Engine',
-    shortDesc: 'Divides any city, mandal, or county into every neighborhood pocket and captures every shop pin, address & GPS coordinate.'
+    id: 'google-places',
+    number: 'Engine 01',
+    name: 'Google Places & Satellite Maps',
+    category: 'Maps & Geospatial',
+    shortDesc: 'Divides cities, mandals & counties into micro-zones, capturing every shop, pin, street address & GPS coordinate.',
+    coverage: 'Global · 11 Countries'
   },
   {
-    id: 'directory_match',
-    number: 'Engine 2',
-    name: 'Local Business Directory Engine',
-    shortDesc: 'Cross-checks regional business directories in parallel for verified mobile numbers, categories, star ratings & review counts.'
+    id: 'google-local-finder',
+    number: 'Engine 02',
+    name: 'Google Local Finder & SERP 3-Pack',
+    category: 'Maps & Geospatial',
+    shortDesc: 'Extracts top-ranking local businesses, verified phone numbers, star ratings and operational hours from search result packs.',
+    coverage: 'Global · 11 Countries'
   },
   {
-    id: 'website_contact',
-    number: 'Engine 3',
-    name: 'Official Website & Email Finder Engine',
-    shortDesc: 'Checks listed business websites & contact pages to surface direct phone lines and official business emails.'
+    id: 'bing-places',
+    number: 'Engine 03',
+    name: 'Bing Places & Microsoft Maps',
+    category: 'Maps & Geospatial',
+    shortDesc: 'Discovers verified Microsoft local business listings, alternate phone lines, and postal addresses.',
+    coverage: 'Global · 11 Countries'
   },
   {
-    id: 'b2b_trade',
-    number: 'Engine 4',
-    name: 'B2B Trade & Wholesale Supplier Engine',
-    shortDesc: 'Finds manufacturers, wholesalers, distributors, and commercial vendors across industrial estates and trade corridors.'
+    id: 'openstreetmap',
+    number: 'Engine 04',
+    name: 'OpenStreetMap Overpass Engine',
+    category: 'Maps & Geospatial',
+    shortDesc: 'Direct Overpass QL geo-queries for shops, commercial amenities, building outlines, and industrial corridors.',
+    coverage: 'Global Open-Data'
   },
   {
-    id: 'open_web_social',
-    number: 'Engine 5',
-    name: 'Public Web & Social Business Engine',
-    shortDesc: 'Captures active local businesses from open web pages, public registries, and business profiles.'
+    id: 'justdial',
+    number: 'Engine 05',
+    name: 'Justdial Pan-India Directory',
+    category: 'National Directories',
+    shortDesc: 'India’s premier local business directory covering verified mobile numbers, categories, and pincode-wise listings.',
+    coverage: 'India (Home Market)'
+  },
+  {
+    id: 'indiamart',
+    number: 'Engine 06',
+    name: 'IndiaMART B2B Wholesale & Manufacturers',
+    category: 'B2B & Industrial',
+    shortDesc: 'Finds verified manufacturers, exporters, wholesale traders, and commercial industrial suppliers across India.',
+    coverage: 'India (B2B Specialized)'
+  },
+  {
+    id: 'yelp',
+    number: 'Engine 07',
+    name: 'Yelp Commercial Business Engine',
+    category: 'National Directories',
+    shortDesc: 'Extracts verified retail, dining, professional service, and trade contractor leads across global metros.',
+    coverage: 'US, UK, CA, AU'
+  },
+  {
+    id: 'yellowpages-global',
+    number: 'Engine 08',
+    name: 'YellowPages Global & Yell UK',
+    category: 'National Directories',
+    shortDesc: 'Enterprise directories covering commercial businesses in US, UK (Yell.com), Canada, Australia, NZ, UAE, SA & MY.',
+    coverage: 'US, UK, CA, AU, NZ, UAE, ZA, MY'
+  },
+  {
+    id: 'cylex',
+    number: 'Engine 09',
+    name: 'Cylex International Business Directory',
+    category: 'National Directories',
+    shortDesc: 'Comprehensive commercial directory across Germany (Deutschland), UK, US, Australia & Canada.',
+    coverage: 'DE, UK, US, AU, CA'
+  },
+  {
+    id: 'freeindex-uk',
+    number: 'Engine 10',
+    name: 'FreeIndex UK Business Registry',
+    category: 'National Directories',
+    shortDesc: 'Dedicated UK trade contractors, independent professionals, and commercial businesses.',
+    coverage: 'United Kingdom'
+  },
+  {
+    id: 'goldenpages-ie',
+    number: 'Engine 11',
+    name: 'GoldenPages Ireland Business Index',
+    category: 'National Directories',
+    shortDesc: 'The definitive business directory for Dublin, Cork, Galway, and all 26 counties in the Republic of Ireland.',
+    coverage: 'Ireland'
+  },
+  {
+    id: 'tripadvisor',
+    number: 'Engine 12',
+    name: 'TripAdvisor Hospitality & Tourism',
+    category: 'Hospitality & Leisure',
+    shortDesc: 'Hospitality venues, resorts, restaurants, tour operators, and entertainment businesses with authentic ratings.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'trustpilot',
+    number: 'Engine 13',
+    name: 'Trustpilot Business Reputation Index',
+    category: 'Reputation & Trust',
+    shortDesc: 'Surfaces verified business domains, trust scores, customer care phone lines, and corporate headquarters.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'web-discovery',
+    number: 'Engine 14',
+    name: 'Public Web Deep Discovery Engine',
+    category: 'Web Discovery',
+    shortDesc: 'Hunts for unlisted local businesses, regional news mentions, trade registries, and chamber of commerce sites.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'web-contact',
+    number: 'Engine 15',
+    name: 'Website Contact & Email Crawler',
+    category: 'Deep Crawling',
+    shortDesc: 'Visits listed company websites in parallel to extract owner emails, direct WhatsApp numbers, and key personnel.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'social-dork-intl',
+    number: 'Engine 16',
+    name: 'Social Dork & Public Business Pages',
+    category: 'Social Discovery',
+    shortDesc: 'Pinpoints public business Facebook pages, Instagram handles, LinkedIn company profiles, and WhatsApp links.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'wikidata-businesses',
+    number: 'Engine 17',
+    name: 'Wikidata & Open Entity Graph Engine',
+    category: 'Knowledge Graph',
+    shortDesc: 'Queries structured SPARQL knowledge graphs for registered companies, institutions, landmarks, and brands.',
+    coverage: 'Global · Open Data'
+  },
+  {
+    id: 'brave-dork',
+    number: 'Engine 18',
+    name: 'Brave Search & Unbiased Local Index',
+    category: 'Web Discovery',
+    shortDesc: 'Independent search index dorking to surface hidden local service providers without advertising bias.',
+    coverage: 'Global · 11 Countries'
+  },
+  {
+    id: 'weddingbazaar',
+    number: 'Engine 19',
+    name: 'WeddingBazaar Event & Service Directory',
+    category: 'Hospitality & Events',
+    shortDesc: 'Event halls, photographers, decorators, caterers, and entertainment planners across India.',
+    coverage: 'India (Events Specialized)'
+  },
+  {
+    id: 'weddingwire',
+    number: 'Engine 20',
+    name: 'WeddingWire Hospitality & Venues',
+    category: 'Hospitality & Events',
+    shortDesc: 'Luxury venues, banquet halls, event planners, and hospitality coordinators with direct contact details.',
+    coverage: 'India & Global'
+  },
+  {
+    id: 'mandap',
+    number: 'Engine 21',
+    name: 'GoMandap Convention & Facility Engine',
+    category: 'Hospitality & Events',
+    shortDesc: 'Specialized registry of convention centers, kalyana mandapams, and community halls across South India.',
+    coverage: 'India (Specialized)'
   },
   {
     id: 'dedupe_excel',
-    number: 'Engine 6',
-    name: 'Smart Deduplication & Area-Wise Excel Engine',
-    shortDesc: 'Automatically removes duplicate numbers, verifies contact quality, and exports a clean multi-sheet Excel workbook.'
+    number: 'Engine 22',
+    name: 'Smart Deduplication & Mobile Validator',
+    category: 'Data Quality & Export',
+    shortDesc: 'Cross-engine fuzzy matching removes duplicates, tags mobile vs landline, and builds structured multi-sheet Excel workbooks.',
+    coverage: 'Universal System Core'
   }
 ];
 

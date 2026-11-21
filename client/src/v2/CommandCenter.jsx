@@ -219,9 +219,7 @@ export default function CommandCenter() {
 
   const hardware = useMemo(() => detectDeviceHardware(), []);
   const [hwTurboEnabled, setHwTurboEnabled] = useState(true);
-  const [hwPopupOpen, setHwPopupOpen] = useState(() => {
-    try { return localStorage.getItem('scraper_hw_popup_seen_v2') !== 'true'; } catch (e) { return true; }
-  });
+  const [hwPopupOpen, setHwPopupOpen] = useState(false);
   const [extState, setExtState] = useState({
     installed: false,
     version: '',
@@ -284,16 +282,21 @@ export default function CommandCenter() {
   }, []);
   const enableLocalHardwareTurbo = useCallback(() => {
     setHwTurboEnabled(true);
-    setHwPopupOpen(false);
     try {
       localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
     } catch (e) {}
     if (extState.connected) {
+      setHwPopupOpen(false);
       toast.success(`RAM Turbo connected · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`, { icon: '⚡' });
-    } else {
-      toast.error('Add RAM Turbo to Chrome, then reload. It connects itself.', { icon: '🔌' });
+      return;
     }
-  }, [hardware.ramGb, hardware.parallelZones, extState.connected]);
+    if (extState.storeUrl) {
+      window.open(extState.storeUrl, '_blank', 'noopener,noreferrer');
+      toast.success('Opening the Chrome Web Store — press “Add to Chrome” there.', { icon: '🧩' });
+      return;
+    }
+    toast.success('RAM Turbo is in review. The Add to Chrome button appears here once it is live.', { icon: '🧩' });
+  }, [hardware.ramGb, hardware.parallelZones, extState.connected, extState.storeUrl]);
 
   // Country context for the flag bar. India is home; every other country runs
   // the keyless global engines. The choice only pre-fills an empty location box,
@@ -2661,8 +2664,8 @@ export default function CommandCenter() {
                 </div>
                 <div className="v2-gbc-spec-card">
                   <span>BACKGROUND ENGINES</span>
-                  <b>All 6 Active</b>
-                  <small>Maps · Directories · Websites · Auto-Dedup</small>
+                  <b>20+ Active</b>
+                  <small>Maps · Directories · B2B · Web · Dedup</small>
                 </div>
               </div>
 
@@ -2701,7 +2704,7 @@ export default function CommandCenter() {
                 </div>
 
                 <p className="cb-glass-copy">
-                  All 6 engines stay on our servers. RAM Turbo only lets them read pages through your
+                  Our 20+ engines stay on our servers. RAM Turbo only lets them read pages through your
                   connection, so your searches skip the queue and never share your browsing data.
                 </p>
 
@@ -2727,18 +2730,22 @@ export default function CommandCenter() {
                       <span>Add to Chrome</span>
                     </a>
                   ) : (
-                    <a className="cb-btn-primary" href={EXTENSION_DOWNLOAD_URL} download>
+                    <a
+                      className="cb-btn-primary"
+                      href={EXTENSION_DOWNLOAD_URL}
+                      download="scraper-co-in-ram-turbo-extension.zip"
+                    >
                       <Download size={14} />
-                      <span>Install (developer build)</span>
+                      <span>Download Extension (.zip)</span>
                     </a>
                   )}
                 </div>
 
-                {!extState.connected && !extState.storeUrl && (
+                {!extState.connected && (
                   <p className="cb-glass-fine">
-                    The Chrome Web Store listing is in review. Until it is live, use the developer
-                    build: unzip it, open <code>chrome://extensions</code>, turn on Developer mode,
-                    then choose Load unpacked.
+                    {extState.storeUrl
+                      ? 'Add RAM Turbo from the Chrome Web Store. Chrome shows the permissions before it installs, and it connects itself after that.'
+                      : 'Download the pre-configured zip package (11 KB), extract it, open chrome://extensions, toggle Developer mode, and click "Load unpacked". Auto-connects immediately.'}
                   </p>
                 )}
 
