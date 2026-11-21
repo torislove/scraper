@@ -253,6 +253,30 @@ const CATEGORY_TAGS = [
     ]
   },
   {
+    test: /turmeric|haldi|pasupu|spice|masala|chilli|mirchi|cotton|ginning|rice\s*mill|paddy|grain|pulses|dal\s*mill|oil\s*mill|jaggery|tobacco|agro|agricultural|apmc|mandi/i,
+    filters: [
+      '["shop"~"^(spices|agricultural_supplies|farm|greengrocer|agrarian)$"]',
+      '["craft"~"^(agricultural_engines|winery|brewery|mill|stonemason)$"]',
+      '["industrial"~"^(agricultural|food_processing|mill)$"]',
+      '["office"~"^(agricultural|government)$"]'
+    ]
+  },
+  {
+    test: /saree|sari|handloom|textile|cloth|garment|apparel|dress|fabric/i,
+    filters: [
+      '["shop"~"^(clothes|tailor|fabric|boutique)$"]',
+      '["craft"~"^(tailor|weaver)$"]'
+    ]
+  },
+  {
+    test: /steel|iron|tmt|metal|foundry|casting|fabrication/i,
+    filters: [
+      '["shop"~"^(metal|trade|hardware)$"]',
+      '["craft"~"^(metal_construction|welder|blacksmith)$"]',
+      '["industrial"~"^(metal|foundry|steel)$"]'
+    ]
+  },
+  {
     test: /shop|store|dealer|wholesale|distributor|supplier/i,
     filters: ['["shop"]', '["office"~"^(wholesale|company)$"]']
   }
@@ -686,6 +710,16 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
       vendor.whatsappLink = vendor.whatsapp;
       vendor.whatsappAvailable = true;
       if (!vendor.phone) vendor.phone = primaryMobile.e164;
+    }
+
+    const fidelity = require('../services/categoryFidelity');
+    if (!fidelity.isVendorRelevant(vendor, category)) {
+      // Divergent lead preservation: save valid commercial details to background archive quietly
+      try {
+        const { archiveDivergentLead } = require('../services/divergentLeadService');
+        archiveDivergentLead(vendor, category);
+      } catch (e) {}
+      continue;
     }
 
     const result = dv.saveDirectoryVendor(vendor, sessionId);

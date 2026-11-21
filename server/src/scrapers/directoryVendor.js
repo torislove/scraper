@@ -573,6 +573,21 @@ function saveDirectoryVendor(incoming, sessionId = incoming.sessionId || 'legacy
       }
     } catch (e) {}
   }
+
+  // Category Fidelity Guard: reject out-of-category listings before saving to active session
+  if (incoming.category) {
+    try {
+      const fidelity = require('../services/categoryFidelity');
+      if (!fidelity.isVendorRelevant(incoming, incoming.category)) {
+        // Silently preserve valid business details into proper category folder in database
+        try {
+          const { archiveDivergentLead } = require('../services/divergentLeadService');
+          archiveDivergentLead(incoming, incoming.category);
+        } catch (e) {}
+        return { vendor: null, created: false, updated: false, skipped: `category-mismatch: not a ${incoming.category} lead` };
+      }
+    } catch (e) {}
+  }
   // O(1) Instant Match lookup via indexed vendor store
   const owner = dbAdapter.getSessionOwner(sessionId) || incoming.userId || 'admin_1';
   const existing = dbAdapter.findMatch(incoming);

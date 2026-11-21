@@ -189,7 +189,7 @@ const COMMODITY_ENTITIES = [
   },
   {
     key: 'electrical_goods',
-    patterns: [/\b(electrical\s*goods|switchgear|cables\s*and\s*wires|industrial\s*lighting|electrical\s*switch)\b/i],
+    patterns: [/\b(electrical|electricals|electric|electronics|switchgear|cables?\s*and\s*wires?|industrial\s*lighting|electrical\s*switch|electrical\s*goods|electrical\s*store)\b/i],
     label: 'Electrical Goods',
     sectorKey: 'electrical_goods',
     subvectors: [
@@ -369,7 +369,7 @@ const SECTORS = {
     key: 'electrical_goods',
     label: 'Electrical Goods, Lighting, Cables & Switchgear',
     patterns: [
-      /\b(electrical\s*goods|cables?\s*and\s*wires?|switchgear|industrial\s*lighting|electrical\s*panel|transformers?|fans\s*and\s*switches|electrical\s*wholesal)\b/i
+      /\b(electrical|electricals|electric|electronics|switchgear|cables?\s*and\s*wires?|industrial\s*lighting|electrical\s*panel|transformers?|fans\s*and\s*switches|electrical\s*wholesal|electrical\s*goods|electrical\s*store)\b/i
     ],
     subvectors: [
       'Electrical Goods Wholesalers',
@@ -842,7 +842,7 @@ function isIndustryConflict(querySectorKey, haystack, subcategory = '') {
     const isSteel = /\b(iron\s*and\s*steel|iron\s*&\s*steel|tmt|tmt\s*bars?|steel\s*dealer|steel\s*corporation|railing|metal\s*store|metal\s*house|fabrication)\b/i.test(combined);
     const isTextile = /\b(saree|sari|sarees|handloom|handlooms|textile|textiles|cloth\s*store|readymade|garments?|silk\s*sarees?)\b/i.test(combined);
     const isBuildingMat = /\b(tiles?|sanitaryware|marbles?|granites?|cement|plywood|vox\s*ceiling|ceramic\s*showroom)\b/i.test(combined);
-    const isElectrical = /\b(electrical|electricals|spares|switchgear|lighting\s*fixtures)\b/i.test(combined);
+    const isElectrical = /\b(electrical|electricals|electric|electronics|electronic|switchgear|switch|switches|wire|wires|cable|cables|lighting|fixtures|fans|appliances|spares|power\s*tools|hardware|hardware\s*and\s*tools)\b/i.test(combined);
     const isHotel = /\b(hotel|grand|residency|lodge|banquet|mandapam|function\s*hall)\b/i.test(combined);
     const isHealth = /\b(hospital|clinic|dentist|dental|nursing\s*home|doctor)\b/i.test(combined);
 

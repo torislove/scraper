@@ -142,6 +142,23 @@ const FAMILY_DEFINITIONS = {
 // Weighted stems. Higher weight wins when two families match the same text.
 // These are stems, so "plumb" matches plumber/plumbing/plumbers.
 const FAMILY_KEYWORDS = {
+  agriculture_spices: [
+    ['turmeric', 16], ['haldi', 16], ['pasupu', 16], ['chilli', 16], ['chillies', 16],
+    ['mirchi', 16], ['spices', 15], ['spice', 15], ['masala', 15], ['cotton', 15],
+    ['ginning', 15], ['rice mill', 15], ['paddy', 15], ['grain', 14], ['grains', 14],
+    ['pulses', 14], ['dal mill', 14], ['oil mill', 14], ['groundnut', 14], ['jaggery', 14],
+    ['tobacco', 15], ['apmc', 15], ['mandi', 15], ['krishi', 13], ['cold storage', 14]
+  ],
+  textiles: [
+    ['saree', 16], ['sarees', 16], ['handloom', 16], ['handlooms', 16], ['silk', 15],
+    ['textile', 15], ['textiles', 15], ['cloth', 14], ['garment', 14], ['garments', 14],
+    ['readymade', 13], ['weaving', 15], ['spinning mill', 16]
+  ],
+  metals: [
+    ['iron and steel', 16], ['iron & steel', 16], ['tmt', 16], ['tmt bars', 16],
+    ['steel dealer', 15], ['structural steel', 15], ['sheet metal', 15], ['foundry', 15],
+    ['casting', 15], ['metal store', 14], ['steel', 13], ['iron', 13]
+  ],
   technology: [
     ['computer shop', 14], ['computer shops', 14], ['computer store', 14], ['computer stores', 14],
     ['computer dealer', 13], ['computer dealers', 13], ['computer hardware', 13], ['computer repair', 13],
@@ -417,11 +434,11 @@ function classifyCategory(category) {
     };
     const mappedFamily = sectorFamilyMap[tradeSector.key];
     if (mappedFamily && FAMILY_DEFINITIONS[mappedFamily]) {
-      if (bestScore < 8 || mappedFamily === 'photography') {
-        bestFamily = mappedFamily;
-        bestScore = 10;
-        bestMatched = ['trade_intelligence', tradeSector.key];
-      }
+      // Authoritative trade sector override: specific trade intelligence (e.g. agriculture_spices,
+      // textiles, metals) ALWAYS takes precedence over generic commercial qualifiers like "wholesale" or "supplier"
+      bestFamily = mappedFamily;
+      bestScore = Math.max(bestScore + 10, 20);
+      bestMatched = ['trade_intelligence', tradeSector.key, ...(bestMatched || [])];
     }
   }
 

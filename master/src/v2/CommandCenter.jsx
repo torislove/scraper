@@ -898,6 +898,22 @@ export default function CommandCenter() {
             return;
           }
 
+          // STRICT CROSS-INDUSTRY PURITY GUARD:
+          // Defend client stream and Leaflet map pins against off-category bleed
+          const activeCat = String(category || runRef.current?.category || '').toLowerCase();
+          const vName = String(vendor.name || '').toLowerCase();
+          const vSub = String(vendor.subcategory || vendor.category || '').toLowerCase();
+          const vComb = `${vName} ${vSub}`;
+
+          if (activeCat.includes('turmeric') || activeCat.includes('chilli') || activeCat.includes('spice') || activeCat.includes('agro') || activeCat.includes('haldi')) {
+            const isAgroConflict = /\b(electrical|electricals|electric|electronics|electronic|switchgear|switch|switches|wire|wires|cable|cables|lighting|fixtures|fans|appliances|spares|power\s*tools|hardware|steel|tmt|cement|tiles|sanitary|saree|textile|clothing|garment|hospital|clinic|dentist|hotel|lodge)\b/i.test(vComb);
+            if (isAgroConflict) return;
+          } else if (activeCat.includes('steel') || activeCat.includes('tmt')) {
+            if (/\b(turmeric|spices|chilli|grain|paddy|saree|handloom|cloth|textile|hotel|lodge|hospital|clinic|dentist|pharmacy)\b/i.test(vComb)) return;
+          } else if (activeCat.includes('saree') || activeCat.includes('textile') || activeCat.includes('handloom')) {
+            if (/\b(turmeric|spices|chilli|steel|iron|tmt|cement|tiles|sanitaryware|hardware|hospital|clinic|pharmacy|hotel|electrical)\b/i.test(vComb)) return;
+          }
+
           if (belongsToActive) {
             vendor.sessionId = activeSid;
             vendor.lastSessionId = activeSid;

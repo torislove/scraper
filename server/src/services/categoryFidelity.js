@@ -490,16 +490,17 @@ const ROLES = [
       'cold storage', 'spice wholesale', 'turmeric wholesale'
     ],
     wants: [
-      'turmeric', 'haldi', 'spices', 'spice', 'masala', 'chilli', 'mirchi', 'cotton',
+      'turmeric', 'haldi', 'pasupu', 'curcumin', 'spices', 'spice', 'masala', 'chilli', 'mirchi', 'cotton',
       'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses', 'dal mill', 'oil mill',
-      'jaggery', 'tobacco', 'agro', 'agricultural', 'mandi', 'apmc', 'commission agent',
-      'trader', 'traders', 'merchant', 'merchants', 'cold storage', 'produce', 'krishi',
-      'seeds', 'fertilizer', 'wholesaler', 'wholesalers', 'trading', 'processing unit', 'polishing'
+      'groundnut', 'jaggery', 'bellam', 'tobacco', 'agro', 'agricultural', 'mandi', 'apmc', 'market yard',
+      'cold storage', 'produce', 'krishi', 'seeds', 'fertilizer', 'processing unit', 'polishing unit'
     ],
     avoids: [
       'iron and steel', 'iron & steel', 'steel', 'tmt', 'railing', 'tiles', 'sanitaryware',
       'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles', 'cloth',
-      'garment', 'readymade', 'electrical', 'electricals', 'appliances', 'hotel', 'lodge',
+      'garment', 'readymade', 'electrical', 'electricals', 'electric', 'electronics', 'electronic',
+      'switchgear', 'switch', 'switches', 'wire', 'wires', 'cable', 'cables', 'lighting',
+      'fixtures', 'fans', 'appliances', 'spares', 'power tools', 'hardware', 'hotel', 'lodge',
       'banquet', 'mandapam', 'function hall', 'cement', 'hospital', 'clinic', 'dentist',
       'car repair', 'garage', 'photo studio', 'salon', 'parlour', 'vox ceiling', 'metal store',
       'metal house', 'marbles', 'granites'
@@ -709,7 +710,9 @@ function isVendorRelevant(vendor, requestedCategory) {
     if (hasAny(combined, [
       'iron and steel', 'iron & steel', 'steel', 'tmt', 'railing', 'tiles', 'sanitaryware',
       'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles', 'cloth',
-      'garment', 'readymade', 'electrical', 'electricals', 'appliances', 'hotel', 'lodge',
+      'garment', 'readymade', 'electrical', 'electricals', 'electric', 'electronics', 'electronic',
+      'switchgear', 'switch', 'switches', 'wire', 'wires', 'cable', 'cables', 'lighting',
+      'fixtures', 'fans', 'appliances', 'spares', 'power tools', 'hardware', 'hotel', 'lodge',
       'banquet', 'mandapam', 'function hall', 'cement', 'hospital', 'clinic', 'dentist',
       'car repair', 'garage', 'photo studio', 'salon', 'parlour', 'vox ceiling', 'metal store',
       'metal house', 'marbles', 'granites'
@@ -719,20 +722,22 @@ function isVendorRelevant(vendor, requestedCategory) {
 
     if (avoids) return false;
 
-    // Positive wants check: if business has positive agriculture/spices tokens
-    if (wants) return true;
-
     // Check specific commodity entity
     const commodity = indiaTradeIntelligence.extractSpecificCommodity(requestedCategory);
     if (commodity) {
+      // Mandatory Core Commodity Match:
+      // When searching for a specific commodity (e.g. Turmeric, Chilli, Cotton, Rice),
+      // the vendor MUST have positive evidence of that commodity or its immediate spices/agro sector.
+      // Generic commercial qualifiers ("trader", "wholesaler", "merchant") alone CANNOT satisfy relevance.
       const hasSpecificNoun = commodity.patterns.some(p => p.test(text));
-      const hasGeneralAgroNoun = /\b(agro|mandi|commission agent|market yard|apmc|processing unit|traders?|wholesal|merchant|merchants?|stockist|cold storage)\b/i.test(text);
-      if (hasSpecificNoun || hasGeneralAgroNoun) {
+      const hasImmediateSector = /\b(spices?|masala|mandi|market yard|apmc|processing unit|polishing unit|cold storage|agro\s*commodit|agricultural produce)\b/i.test(text);
+      if (hasSpecificNoun || hasImmediateSector) {
         return true;
       }
       return false;
     }
 
+    // Positive wants check: if business has positive agriculture/spices tokens
     return wants;
   }
 
@@ -908,6 +913,13 @@ function hasStrongCategorySignal(vendor, requestedCategory) {
 
   if (role) {
     if (!text) return false;
+
+    // Cross-industry conflict check
+    const tradeSector = indiaTradeIntelligence.detectTradeSector(requestedCategory);
+    if (tradeSector && indiaTradeIntelligence.isIndustryConflict(tradeSector.key, text, vendor.subcategory || '')) {
+      return false;
+    }
+
     if (role.id === 'doctor' && hasAny(text, ['pharmacy', 'chemist', 'druggist', 'medical store', 'medicals', 'medical shop', 'surgical', 'veterinary'])) {
       return false;
     }
@@ -916,10 +928,20 @@ function hasStrongCategorySignal(vendor, requestedCategory) {
     // even if some unrelated token appears in its URL or description.
     const storedRole = detectRole(vendor.category);
     if (storedRole && storedRole.id !== role.id) return false;
+
+    // Strict avoids check
+    if (role.avoids && hasAny(text, role.avoids.map(norm))) return false;
+
+    // Check specific commodity if applicable
+    const commodity = indiaTradeIntelligence.extractSpecificCommodity(requestedCategory);
+    if (commodity) {
+      const hasSpecificNoun = commodity.patterns.some(p => p.test(text));
+      const hasImmediateSector = /\b(spices?|masala|mandi|market yard|apmc|processing unit|polishing unit|cold storage|agro\s*commodit|agricultural produce)\b/i.test(text);
+      return Boolean(hasSpecificNoun || hasImmediateSector);
+    }
+
     const wants = hasAny(text, (role.strictWants || role.wants).map(norm));
     if (!wants) return false;
-    // A strong positive wins, same rule as isVendorRelevant(): "dental hospital"
-    // is dental even though "hospital" also appears in another role's avoids.
     return true;
   }
 

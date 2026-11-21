@@ -883,6 +883,20 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         return scrapedResults;
       }
 
+      // Category Fidelity Check in Case A (Direct Navigation)
+      if (!fidelity.isVendorRelevant({ name, address, website, subcategory: '', category }, category)) {
+        addLog(`[Category Guard] Skipped direct place "${name}" · not a ${category} match`);
+        try {
+          const { archiveDivergentLead } = require('../services/divergentLeadService');
+          archiveDivergentLead({
+            name, address, phone, website, mapsLink: page.url(),
+            latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
+            rating, source: 'Google Maps Direct'
+          }, category);
+        } catch (e) {}
+        return scrapedResults;
+      }
+
       // Strict Containment Guard Check
       const containment = isListingRelevantToQuery(name, address, district, stateName, location, location, coords, boundingbox, cityHint, isMaster, scope);
       if (!containment.relevant) {
@@ -1062,6 +1076,15 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             if (zoneReject) return null;
 
             if (!fidelity.isVendorRelevant({ name, address, website: websiteUrl, subcategory: rawItem.placeCategory, category: rawItem.placeCategory }, category)) {
+              // Silently preserve valid business details into proper category folder in database
+              try {
+                const { archiveDivergentLead } = require('../services/divergentLeadService');
+                archiveDivergentLead({
+                  name, address, phone, website: websiteUrl, mapsLink,
+                  latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
+                  rating, subcategory: rawItem.placeCategory, source: 'Google Maps Live'
+                }, category);
+              } catch (e) {}
               return null;
             }
 
@@ -1306,8 +1329,9 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             // Google Place Category detection
             let placeCategory = '';
             for (const line of textLines) {
-              if (!line.includes('·')) continue;
-              const parts = line.split('·').map(p => p.trim()).filter(Boolean);
+              const parts = line.includes('·')
+                ? line.split('·').map(p => p.trim()).filter(Boolean)
+                : [line.trim()];
               for (const part of parts) {
                 if (/^\d+(\.\d+)?$/.test(part)) continue;
                 if (/^\(?\d[\d,]*\)?$/.test(part)) continue;
@@ -1539,6 +1563,14 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           // that clearly belongs to a different role before it is stored.
           if (!fidelity.isVendorRelevant({ name, address, website: websiteUrl, subcategory: rawItem.placeCategory, category: rawItem.placeCategory }, category)) {
             addLog(`[Category Guard] Skipped "${name}" (${rawItem.placeCategory || 'unmatched'}) · not a ${category} match`);
+            try {
+              const { archiveDivergentLead } = require('../services/divergentLeadService');
+              archiveDivergentLead({
+                name, address, phone, website: websiteUrl, mapsLink,
+                latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
+                rating, subcategory: rawItem.placeCategory, source: 'Google Maps Harvester'
+              }, category);
+            } catch (e) {}
             continue;
           }
 
