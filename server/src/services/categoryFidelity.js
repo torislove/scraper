@@ -18,6 +18,7 @@
 const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me|top\s+\d+.*|best\s+\d+.*|\d+\s+best.*|list\s+of\s+.*)$/i;
 
 const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
+const naicsTaxonomy = require('../utils/naicsTaxonomy');
 
 function clean(value) {
   return String(value == null ? '' : value)
@@ -728,6 +729,16 @@ function isVendorRelevant(vendor, requestedCategory) {
     }
   }
 
+  // 2. Closed-World NAICS Sector Mutual Exclusion Check:
+  // Deterministically verify whether candidate vendor belongs to a mathematically incompatible sector
+  const queryNaics = naicsTaxonomy.classifyToNaics(requestedCategory);
+  const vendorNaics = naicsTaxonomy.classifyToNaics(vendor);
+  if (queryNaics && vendorNaics) {
+    if (naicsTaxonomy.isMutuallyExclusive(queryNaics.sectorCode, vendorNaics.sectorCode)) {
+      return false;
+    }
+  }
+
   const requestedRole = detectRole(requestedCategory);
   if (!requestedRole) {
     // Universal Category & Token Matching Guard for all vendor types
@@ -740,9 +751,9 @@ function isVendorRelevant(vendor, requestedCategory) {
       const vText = norm([vendor.name, vendor.subcategory, vendor.description, vendor.placeCategory].filter(Boolean).join(' '));
       // Cross-Industry Incompatibility Rejection:
       // If the vendor belongs to an obvious mismatched sector and shares ZERO substantive tokens with the requested category
-      const hasTokenMatch = reqTokens.some(t => vText.includes(t));
+      const hasTokenMatch = naicsTaxonomy.hasAnchorMatch(requestedCategory, vendor) || reqTokens.some(t => vText.includes(t));
       if (!hasTokenMatch) {
-        const isMismatchedSector = /\b(bakery|cupcake|cafe|restaurant|salon|barber|hairdresser|spa|massage|reflexology|dentist|dental|locksmith|safe co|tyre|tire|brake|clutch|bridal boutique|wedding dress)\b/i.test(vText);
+        const isMismatchedSector = /\b(bakery|cupcake|cafe|restaurant|gelato|gelateria|pastry|ice\s*cream|deli|bistro|salon|barber|hairdresser|spa|massage|reflexology|dentist|dental|orthodontic|locksmith|safe\s*co|tyre|tire|brake|clutch|auto\s*repair|car\s*repair|auto\s*body|paint\s*workshop|bodywork|garage|bicycle|bike\s*repair|fietsen|dry\s*clean|laundry|bridal\s*boutique|wedding\s*dress|florist|flower\s*shop|pet\s*clinic|veterinary|grooming)\b/i.test(vText);
         if (isMismatchedSector) {
           return false;
         }

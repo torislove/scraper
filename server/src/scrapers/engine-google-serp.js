@@ -206,6 +206,11 @@ async function scrapeGoogleSerp(query, category, location, sessionId = 'legacy')
             } catch (e) {}
           } catch (saveErr) {}
           addLog(`[Cyber Search Matrix] Extracted multi-page contacts from ${result.url}: ${vendorObj.phone || 'No Mobile'}, ${vendorObj.email || 'No Email'}`);
+        } else {
+          try {
+            const { archiveDivergentLead } = require('../services/divergentLeadService');
+            archiveDivergentLead(vendorObj, category);
+          } catch (e) {}
         }
       } catch (err) {
         // Skip failed site

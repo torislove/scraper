@@ -96,7 +96,13 @@ async function scrapeBraveDork(domain, query, category, location, sessionId = 'l
           createdAt: new Date().toISOString(),
           scrapedAt: new Date().toISOString()
         };
-        if (!fidelity.isVendorRelevant(created, category)) continue;
+        if (!fidelity.isVendorRelevant(created, category)) {
+          try {
+            const { archiveDivergentLead } = require('../services/divergentLeadService');
+            archiveDivergentLead(created, category);
+          } catch (e) {}
+          continue;
+        }
         dbAdapter.saveVendor('admin_1', created);
         try { deps.emitVendorEvent(created, 'inserted'); } catch (e) {}
         newCount++;

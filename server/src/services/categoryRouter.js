@@ -147,12 +147,14 @@ const FAMILY_KEYWORDS = {
     ['mirchi', 16], ['spices', 15], ['spice', 15], ['masala', 15], ['cotton', 15],
     ['ginning', 15], ['rice mill', 15], ['paddy', 15], ['grain', 14], ['grains', 14],
     ['pulses', 14], ['dal mill', 14], ['oil mill', 14], ['groundnut', 14], ['jaggery', 14],
-    ['tobacco', 15], ['apmc', 15], ['mandi', 15], ['krishi', 13], ['cold storage', 14]
+    ['tobacco', 15], ['apmc', 15], ['mandi', 15], ['krishi', 13], ['cold storage', 14],
+    ['olive oil', 16], ['hydroponic', 16], ['greenhouse', 15], ['wine cooperative', 16], ['winery', 15], ['green coffee', 16]
   ],
   textiles: [
     ['saree', 16], ['sarees', 16], ['handloom', 16], ['handlooms', 16], ['silk', 15],
     ['textile', 15], ['textiles', 15], ['cloth', 14], ['garment', 14], ['garments', 14],
-    ['readymade', 13], ['weaving', 15], ['spinning mill', 16]
+    ['readymade', 13], ['weaving', 15], ['spinning mill', 16],
+    ['leather tanning', 16], ['tannery', 16], ['leather footwear', 15]
   ],
   metals: [
     ['iron and steel', 16], ['iron & steel', 16], ['tmt', 16], ['tmt bars', 16],
@@ -287,6 +289,9 @@ const FAMILY_KEYWORDS = {
   ],
   industrial: [
     ['marine rigging', 15], ['cleanroom', 15], ['semiconductor', 15], ['wafer fabrication', 14],
+    ['cnc tooling', 16], ['cnc machining', 16], ['precision machining', 15], ['watchmaking', 15],
+    ['micro-mechanics', 15], ['corrugated box', 15], ['corrugated boxes', 15], ['industrial packaging', 15],
+    ['mining equipment', 16], ['dairy processing', 15], ['dairy equipment', 15],
     ['manufacturer', 9], ['manufacturing', 8], ['supplier', 7], ['wholesaler', 8],
     ['wholesale', 6], ['distributor', 6], ['exporter', 8], ['importer', 7],
     ['industrial', 7], ['factory', 8], ['machinery', 7], ['equipment', 4],

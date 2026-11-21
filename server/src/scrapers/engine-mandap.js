@@ -331,7 +331,13 @@ async function scrapeMandap(category, location, sessionId = 'legacy') {
             let cardName = dv.cleanText(card.name, 240);
             if (fidelity.isGenericName(cardName)) cardName = nameFromProfileUrl(profileUrl);
             if (!cardName) continue;
-            if (!fidelity.isVendorRelevant({ name: cardName, profileUrl }, category)) continue;
+            if (!fidelity.isVendorRelevant({ name: cardName, profileUrl }, category)) {
+              try {
+                const { archiveDivergentLead } = require('../services/divergentLeadService');
+                archiveDivergentLead({ name: cardName, profileUrl, address: card.address, phone: card.phone }, category);
+              } catch (e) {}
+              continue;
+            }
             const key = profileUrl || `${dv.normalizeName(cardName)}|${cityPart}`;
             if (cardsByProfile.has(key)) continue;
             cardsByProfile.set(key, { ...card, name: cardName, profileUrl, listUrl: url });

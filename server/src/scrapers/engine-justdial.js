@@ -652,7 +652,13 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
     });
 
     if (!vendor.name) return null;
-    if (!fidelity.isVendorRelevant(vendor, primaryCategory)) return null;
+    if (!fidelity.isVendorRelevant(vendor, primaryCategory)) {
+      try {
+        const { archiveDivergentLead } = require('../services/divergentLeadService');
+        archiveDivergentLead(vendor, primaryCategory);
+      } catch (e) {}
+      return null;
+    }
 
     const primaryMobile = (item.phones || []).find(phone => phone && phone.isMobile);
     if (primaryMobile) {

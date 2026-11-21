@@ -399,7 +399,13 @@ async function scrapeGoogleLocalFinder(
         if (!containment.relevant) continue;
 
         const cleanName = lead.name.toLowerCase().trim();
-        if (!fidelity.isVendorRelevant(lead, category)) continue;
+        if (!fidelity.isVendorRelevant(lead, category)) {
+          try {
+            const { archiveDivergentLead } = require('../services/divergentLeadService');
+            archiveDivergentLead(lead, category);
+          } catch (e) {}
+          continue;
+        }
 
         const parsedLeadPhone = lead.phone ? normalizePhone(lead.phone, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true }) : null;
         const isLandline = Boolean(parsedLeadPhone && parsedLeadPhone.isLandline);

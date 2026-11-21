@@ -1133,7 +1133,13 @@ async function runOmniSearchOrchestrator(
                 const owner = dbAdapter.getSessionOwner(sessionId) || userId || 'admin_1';
                 for (const item of httpRes.leads) {
                   if (isAborted() || !item || !item.name) continue;
-                  if (!isVendorRelevant({ name: item.name, address: item.address, category: item.category || category }, category)) continue;
+                  if (!isVendorRelevant({ name: item.name, address: item.address, category: item.category || category }, category)) {
+                    try {
+                      const { archiveDivergentLead } = require('./divergentLeadService');
+                      archiveDivergentLead(item, category);
+                    } catch (e) {}
+                    continue;
+                  }
                   if (!isMaster && cleanBaseCity) {
                     const containment = isListingRelevantToQuery(
                       item.name, item.address, '', regionLabel, cleanBaseCity, cleanBaseCity,
@@ -2184,6 +2190,10 @@ async function runOmniSearchOrchestrator(
       const ok = isVendorRelevant(lead, category);
       if (!ok) {
         addLog(`[Category Fidelity] Rejection: "${lead.name}" is not relevant to category "${category}".`);
+        try {
+          const { archiveDivergentLead } = require('./divergentLeadService');
+          archiveDivergentLead(lead, category);
+        } catch (e) {}
       }
       return ok;
     });

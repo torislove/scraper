@@ -2151,6 +2151,10 @@ router.post('/client-ingest', async (req, res) => {
       };
 
       if (category && !isVendorRelevant(vendor, category)) {
+        try {
+          const { archiveDivergentLead } = require('../services/divergentLeadService');
+          archiveDivergentLead(vendor, category);
+        } catch (e) {}
         continue;
       }
 
