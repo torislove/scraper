@@ -2280,145 +2280,215 @@
 .lx-ext-dev-link:hover { color: #0d9488; }
 
 /* ============================================================================
-   NEXERA EXECUTIVE DESIGN TOKENS & ARCHITECTURE (DARK GLASS × RADIAL GLOW)
-   Inspired by Nexera.health: obsidian canvas, frosted crystal glass surfaces,
-   ambient radial emerald/cyan glow, bento grid, interactive radar cockpit simulation,
+   NEXERA EXECUTIVE PURE WHITE DESIGN SYSTEM & ANIMATION ENGINE
+   Inspired by Nexera.health: Pure 100% white canvas, subtle atmospheric glows,
+   diffused drop shadows, pill capsules (border-radius: 50px), Framer Motion
+   viewport reveals, 360° light-mode radar sweep, live streaming lead tickers,
    and equal prominence across all 11 global sovereign markets.
    ============================================================================ */
 
 .lx-landing.is-nexera {
   background:
-    radial-gradient(1100px 600px at 15% 5%, rgba(16, 185, 129, 0.13), transparent 60%),
-    radial-gradient(1000px 550px at 85% 12%, rgba(6, 182, 212, 0.14), transparent 60%),
-    radial-gradient(900px 520px at 50% 65%, rgba(139, 92, 246, 0.09), transparent 70%),
-    radial-gradient(700px 400px at 20% 90%, rgba(16, 185, 129, 0.08), transparent 60%),
-    #070b14 !important;
-  color: #f8fafc !important;
+    radial-gradient(1200px 600px at 15% 0%, rgba(0, 122, 255, 0.04), transparent 60%),
+    radial-gradient(1000px 550px at 85% 6%, rgba(20, 184, 166, 0.04), transparent 60%),
+    radial-gradient(900px 520px at 50% 45%, rgba(99, 102, 241, 0.03), transparent 70%),
+    radial-gradient(800px 450px at 20% 90%, rgba(0, 122, 255, 0.03), transparent 60%),
+    #ffffff !important;
+  color: #0f172a !important;
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  overflow-x: hidden;
+  position: relative;
 }
 
 .lx-landing.is-nexera::before {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) !important;
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(100, 116, 139, 0.1) 1px, transparent 1px) !important;
   background-size: 32px 32px !important;
-  opacity: 0.8 !important;
-  mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 85%) !important;
-  -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 20%, transparent 85%) !important;
+  opacity: 0.65 !important;
+  mask-image: radial-gradient(ellipse at 50% 25%, #000 30%, transparent 85%) !important;
+  -webkit-mask-image: radial-gradient(ellipse at 50% 25%, #000 30%, transparent 85%) !important;
+  z-index: 0;
 }
 
-/* --- Nexera Floating Obsidian Glass Navbar --- */
+/* --- Floating Glassmorphic Pure White Navbar --- */
 .lx-landing.is-nexera .lx-nav {
-  background: rgba(7, 11, 20, 0.82) !important;
-  backdrop-filter: blur(24px) saturate(190%) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+  position: sticky;
+  top: 0;
+  z-index: 70;
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.9) !important;
+  box-shadow: 0 4px 20px -5px rgba(15, 23, 42, 0.06) !important;
 }
 
 .lx-landing.is-nexera .lx-nav-links a,
 .lx-landing.is-nexera .lx-nav-links button {
-  color: #94a3b8 !important;
+  color: #475569 !important;
   font-weight: 650 !important;
-  transition: color 0.16s ease !important;
+  font-size: 13.5px !important;
+  transition: all 0.16s ease !important;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
 }
 
 .lx-landing.is-nexera .lx-nav-links a:hover,
 .lx-landing.is-nexera .lx-nav-links button:hover {
-  color: #34d399 !important;
+  color: #007aff !important;
 }
 
 .lx-landing.is-nexera .lx-status-pill {
-  background: rgba(16, 185, 129, 0.1) !important;
-  border: 1px solid rgba(16, 185, 129, 0.28) !important;
-  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  border: 1px solid rgba(16, 185, 129, 0.25) !important;
+  color: #047857 !important;
+  font-weight: 750 !important;
+  box-shadow: inset 0 1px 0 #ffffff !important;
+}
+
+.lx-landing.is-nexera .lx-status-pill.is-off {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
 }
 
 .lx-landing.is-nexera .lx-status-dot {
-  background: #34d399 !important;
-  box-shadow: 0 0 10px #34d399 !important;
+  background: #10b981 !important;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6) !important;
+  animation: nexPulseDot 2s infinite ease-in-out !important;
 }
 
 .lx-landing.is-nexera .lx-nav-ext-pill {
-  background: rgba(15, 23, 42, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: #e2e8f0 !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
 }
 
 .lx-landing.is-nexera .lx-nav-ext-pill.is-connected {
-  background: rgba(16, 185, 129, 0.15) !important;
-  border-color: rgba(16, 185, 129, 0.4) !important;
-  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.35) !important;
+  color: #047857 !important;
 }
 
+/* --- Executive Nexera Buttons --- */
 .lx-landing.is-nexera .lx-btn-primary {
-  background: linear-gradient(135deg, #059669 0%, #06b6d4 100%) !important;
+  background: linear-gradient(135deg, #007aff 0%, #3355ff 100%) !important;
   color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+  border: none !important;
+  box-shadow: 0 10px 25px -6px rgba(0, 122, 255, 0.42), 0 2px 4px rgba(0, 122, 255, 0.2) !important;
   font-weight: 800 !important;
+  position: relative !important;
+  overflow: hidden !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  border-radius: 50px !important;
+}
+
+.lx-landing.is-nexera .lx-btn-primary:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 14px 30px -6px rgba(0, 122, 255, 0.52), 0 4px 8px rgba(0, 122, 255, 0.25) !important;
+}
+
+.lx-landing.is-nexera .lx-btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.28), transparent);
+  transform: translateX(-150%);
+}
+
+.lx-landing.is-nexera .lx-btn-primary:hover::after {
+  animation: nexButtonShimmer 0.9s ease forwards;
 }
 
 .lx-landing.is-nexera .lx-btn-ghost {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: #cbd5e1 !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  border-radius: 50px !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+  transition: all 0.16s ease !important;
 }
 
 .lx-landing.is-nexera .lx-btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.09) !important;
-  color: #ffffff !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+  transform: translateY(-1px) !important;
 }
 
 /* --- Hero Section & Typography --- */
 .lx-landing.is-nexera .lx-eyebrow {
-  background: rgba(16, 185, 129, 0.09) !important;
-  border: 1px solid rgba(16, 185, 129, 0.3) !important;
-  color: #34d399 !important;
-  box-shadow: 0 0 18px rgba(16, 185, 129, 0.15) !important;
+  background: #ffffff !important;
+  border: 1px solid #e8e6fa !important;
+  color: #3355ff !important;
+  box-shadow: 0 4px 16px -4px rgba(51, 85, 255, 0.12) !important;
+  animation: nexFloatBadge 3.2s ease-in-out infinite !important;
+  padding: 6px 16px !important;
+  border-radius: 50px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.06em !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 .lx-landing.is-nexera .lx-h1 {
-  color: #ffffff !important;
+  color: #0f172a !important;
   letter-spacing: -0.04em !important;
-  max-width: 24ch !important;
-  line-height: 1.12 !important;
+  font-size: clamp(34px, 4.4vw, 58px) !important;
+  line-height: 1.14 !important;
+  margin: 16px 0 18px !important;
+  font-weight: 850 !important;
 }
 
-.lx-h1-serif {
-  font-family: "Playfair Display", Georgia, serif;
-  font-style: italic;
-  font-weight: 700;
-  background: linear-gradient(135deg, #34d399 20%, #38bdf8 80%);
+.lx-h1-gradient {
+  background: linear-gradient(135deg, #007aff 0%, #3355ff 55%, #8b5cf6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   padding-right: 4px;
 }
 
 .lx-landing.is-nexera .lx-lead-copy {
-  color: #94a3b8 !important;
-  max-width: 68ch !important;
-  font-size: 16.5px !important;
+  color: #475569 !important;
+  font-size: 17.5px !important;
   line-height: 1.65 !important;
+  max-width: 68ch !important;
+  margin-bottom: 28px !important;
 }
 
-/* --- Interactive Hero Search Console Card (Nexera Style) --- */
+/* --- Interactive Hero Search Console Card (Nexera Pure White) --- */
 .lx-nex-searchbox {
-  margin: 32px 0 24px;
+  margin: 28px 0 24px;
   max-width: 860px;
-  border-radius: 24px;
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
   box-shadow:
-    0 24px 60px -15px rgba(0, 0, 0, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  padding: 16px 18px;
+    0 25px 50px -12px rgba(15, 23, 42, 0.08),
+    0 1px 3px rgba(15, 23, 42, 0.04) !important;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
   position: relative;
   z-index: 10;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.lx-nex-searchbox:focus-within {
+  border-color: #cbd5e1 !important;
+  box-shadow:
+    0 30px 60px -15px rgba(15, 23, 42, 0.12),
+    0 0 0 3px rgba(0, 122, 255, 0.1) !important;
 }
 
 .lx-nex-search-main {
@@ -2432,11 +2502,11 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #f1f5f9;
+  padding: 9px 15px;
+  border-radius: 12px;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
@@ -2445,8 +2515,8 @@
 }
 
 .lx-nex-country-select-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(52, 211, 153, 0.4);
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
 }
 
 .lx-nex-input-wrap {
@@ -2454,17 +2524,18 @@
   align-items: center;
   gap: 10px;
   flex: 1 1 260px;
-  background: rgba(2, 6, 23, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px;
   padding: 0 16px;
   height: 48px;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  transition: all 0.16s ease;
 }
 
 .lx-nex-input-wrap:focus-within {
-  border-color: rgba(6, 182, 212, 0.6);
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
+  background: #ffffff !important;
+  border-color: #007aff !important;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.14) !important;
 }
 
 .lx-nex-input {
@@ -2472,14 +2543,14 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: #0f172a !important;
   font-size: 14.5px;
   font-weight: 600;
   font-family: inherit;
 }
 
 .lx-nex-input::placeholder {
-  color: #64748b;
+  color: #94a3b8 !important;
 }
 
 .lx-nex-action-group {
@@ -2495,24 +2566,24 @@
   gap: 7px;
   height: 48px;
   padding: 0 18px;
-  border-radius: 14px;
-  background: rgba(6, 182, 212, 0.12);
-  border: 1px solid rgba(6, 182, 212, 0.35);
-  color: #22d3ee;
+  border-radius: 12px;
+  background: #f8fafc !important;
+  border: 1.5px solid #007aff !important;
+  color: #007aff !important;
   font-size: 13px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 0 18px rgba(6, 182, 212, 0.18);
-  transition: all 0.16s ease;
+  box-shadow: 0 2px 8px -2px rgba(0, 122, 255, 0.2) !important;
+  transition: all 0.16s ease !important;
   white-space: nowrap;
 }
 
 .lx-btn-local-engine:hover {
-  background: rgba(6, 182, 212, 0.2);
-  border-color: #38bdf8;
-  color: #ffffff;
-  box-shadow: 0 0 26px rgba(6, 182, 212, 0.35);
-  transform: translateY(-1px);
+  background: rgba(0, 122, 255, 0.08) !important;
+  border-color: #3355ff !important;
+  color: #3355ff !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 14px -2px rgba(0, 122, 255, 0.3) !important;
 }
 
 .lx-nex-chips-strip {
@@ -2535,11 +2606,11 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 11px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  color: #cbd5e1;
+  padding: 5px 12px;
+  border-radius: 50px;
+  background: #f1f5f9 !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #334155 !important;
   font-size: 11.5px;
   font-weight: 650;
   cursor: pointer;
@@ -2547,12 +2618,13 @@
 }
 
 .lx-nex-chip:hover {
-  background: rgba(16, 185, 129, 0.12);
-  border-color: rgba(52, 211, 153, 0.4);
-  color: #34d399;
+  background: #e8e6fa !important;
+  border-color: #c7d2fe !important;
+  color: #3355ff !important;
+  transform: translateY(-1px);
 }
 
-/* --- Equal Prominence Global Units Stats Bar --- */
+/* --- Equal Prominence Global Units Stats Bar (White Cards) --- */
 .lx-nex-stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2575,60 +2647,58 @@
 .lx-nex-stat-card {
   padding: 22px 24px;
   border-radius: 20px;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02) !important;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .lx-nex-stat-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(52, 211, 153, 0.35);
+  transform: translateY(-3px) !important;
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.08) !important;
 }
 
 .lx-nex-stat-val {
   font-size: clamp(26px, 2.8vw, 36px);
   font-weight: 900;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #ffffff 40%, #94a3b8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  background: linear-gradient(135deg, #0f172a 30%, #3355ff 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
   line-height: 1.1;
 }
 
 .lx-nex-stat-val.is-green {
-  background: linear-gradient(135deg, #34d399 20%, #38bdf8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  background: linear-gradient(135deg, #047857 20%, #007aff 100%) !important;
+  -webkit-background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
 }
 
 .lx-nex-stat-title {
   font-size: 13.5px;
   font-weight: 800;
-  color: #f1f5f9;
+  color: #0f172a !important;
 }
 
 .lx-nex-stat-desc {
   font-size: 11.5px;
   line-height: 1.5;
-  color: #64748b;
+  color: #64748b !important;
 }
 
-/* --- Live Product Simulation / Cockpit Radar Frame --- */
+/* --- STRICT PURE WHITE COCKPIT RADAR FRAME --- */
 .lx-nex-cockpit-wrap {
   margin: 32px 0;
-  border-radius: 26px;
-  background: rgba(11, 17, 30, 0.85);
-  backdrop-filter: blur(32px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
   box-shadow:
-    0 30px 80px -20px rgba(0, 0, 0, 0.85),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 0 40px rgba(6, 182, 212, 0.12);
+    0 30px 60px -15px rgba(15, 23, 42, 0.08),
+    0 4px 16px -4px rgba(15, 23, 42, 0.03) !important;
   overflow: hidden;
   position: relative;
 }
@@ -2638,8 +2708,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 14px 22px;
-  background: rgba(2, 6, 23, 0.7);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -2651,9 +2721,26 @@
   font-size: 12.5px;
   font-weight: 850;
   letter-spacing: 0.06em;
-  color: #38bdf8;
+  color: #007aff !important;
   text-transform: uppercase;
 }
+
+.lx-nex-cockpit-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+
+.lx-nex-cockpit-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.lx-nex-cockpit-dot.red { background: #ff5f56; }
+.lx-nex-cockpit-dot.yellow { background: #ffbd2e; }
+.lx-nex-cockpit-dot.green { background: #27c93f; }
 
 .lx-nex-cockpit-badges {
   display: flex;
@@ -2667,24 +2754,26 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: 50px;
   font-size: 11px;
   font-weight: 800;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #cbd5e1;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .lx-nex-hud-badge.is-live {
-  background: rgba(16, 185, 129, 0.12);
-  border-color: rgba(16, 185, 129, 0.35);
-  color: #34d399;
+  background: rgba(16, 185, 129, 0.08) !important;
+  border-color: rgba(16, 185, 129, 0.3) !important;
+  color: #047857 !important;
 }
 
 .lx-nex-cockpit-body {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
   min-height: 420px;
+  background: #ffffff !important;
 }
 
 @media (max-width: 960px) {
@@ -2696,10 +2785,8 @@
 .lx-nex-radar-stage {
   padding: 24px;
   position: relative;
-  background:
-    radial-gradient(circle at center, rgba(6, 182, 212, 0.06) 0%, transparent 70%),
-    rgba(7, 11, 20, 0.5);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff !important;
+  border-right: 1px solid #e2e8f0 !important;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2708,7 +2795,7 @@
 @media (max-width: 960px) {
   .lx-nex-radar-stage {
     border-right: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid #e2e8f0 !important;
   }
 }
 
@@ -2717,8 +2804,8 @@
   position: relative;
   min-height: 280px;
   border-radius: 18px;
-  background: rgba(2, 6, 23, 0.8);
-  border: 1px solid rgba(6, 182, 212, 0.2);
+  background: radial-gradient(circle at center, rgba(0, 122, 255, 0.04) 0%, #f8fafc 100%) !important;
+  border: 1px solid #e2e8f0 !important;
   overflow: hidden;
 }
 
@@ -2728,7 +2815,7 @@
   left: 50%;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  border: 1px dashed rgba(6, 182, 212, 0.22);
+  border: 1px dashed rgba(0, 122, 255, 0.22) !important;
   pointer-events: none;
 }
 
@@ -2739,8 +2826,8 @@
   width: 140%;
   height: 140%;
   transform-origin: 0 0;
-  background: conic-gradient(from 0deg, rgba(6, 182, 212, 0.35) 0deg, rgba(6, 182, 212, 0.05) 45deg, transparent 60deg);
-  animation: nexRadarSpin 4.5s linear infinite;
+  background: conic-gradient(from 0deg, rgba(0, 122, 255, 0.22) 0deg, rgba(0, 153, 255, 0.04) 45deg, transparent 60deg) !important;
+  animation: nexRadarSpin 4.5s linear infinite !important;
   pointer-events: none;
 }
 
@@ -2755,8 +2842,8 @@
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 12px #34d399;
+  background: #10b981 !important;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7) !important;
   z-index: 5;
 }
 
@@ -2765,14 +2852,14 @@
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 1.5px solid #34d399;
+  border: 1.5px solid #10b981 !important;
   opacity: 0.6;
-  animation: nexPulsePing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  animation: nexPulsePing 2s cubic-bezier(0, 0, 0.2, 1) infinite !important;
 }
 
 @keyframes nexPulsePing {
   75%, 100% {
-    transform: scale(2.2);
+    transform: scale(2.4);
     opacity: 0;
   }
 }
@@ -2782,33 +2869,35 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: rgba(2, 6, 23, 0.45);
+  background: #f8fafc !important;
 }
 
 .lx-nex-lead-item {
   padding: 14px 16px;
   border-radius: 16px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04) !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  transition: transform 0.16s ease, border-color 0.16s ease;
+  transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .lx-nex-lead-item:hover {
-  transform: translateX(4px);
-  border-color: rgba(52, 211, 153, 0.4);
+  transform: translateX(4px) !important;
+  border-color: #007aff !important;
+  box-shadow: 0 6px 16px -4px rgba(0, 122, 255, 0.12) !important;
 }
 
 .lx-nex-lead-avatar {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
-  border: 1px solid rgba(52, 211, 153, 0.3);
-  color: #34d399;
+  background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), rgba(20, 184, 166, 0.1)) !important;
+  border: 1px solid rgba(0, 122, 255, 0.25) !important;
+  color: #007aff !important;
   display: grid;
   place-items: center;
   font-weight: 850;
@@ -2824,7 +2913,7 @@
 .lx-nex-lead-title {
   font-size: 13.5px;
   font-weight: 800;
-  color: #f1f5f9;
+  color: #0f172a !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2832,7 +2921,7 @@
 
 .lx-nex-lead-meta {
   font-size: 11.5px;
-  color: #94a3b8;
+  color: #64748b !important;
   margin-top: 2px;
   display: flex;
   align-items: center;
@@ -2844,15 +2933,15 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 12px;
   font-weight: 750;
-  color: #34d399;
-  background: rgba(16, 185, 129, 0.1);
+  color: #047857 !important;
+  background: #ecfdf5 !important;
   padding: 3px 8px;
   border-radius: 8px;
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  border: 1px solid #a7f3d0 !important;
   white-space: nowrap;
 }
 
-/* --- Bento Grid (4 Core Architecture Pillars) --- */
+/* --- Bento Grid (6 Core Architecture Pillars on White) --- */
 .lx-nex-bento-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -2862,21 +2951,21 @@
 
 .lx-nex-bento-card {
   padding: 28px;
-  border-radius: 24px;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02) !important;
   display: flex;
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  transition: transform 0.2s ease, border-color 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 .lx-nex-bento-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(6, 182, 212, 0.35);
+  transform: translateY(-4px) !important;
+  border-color: rgba(0, 122, 255, 0.3) !important;
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.09) !important;
 }
 
 .lx-nex-bento-card.col-7 { grid-column: span 7; }
@@ -2902,27 +2991,27 @@
 }
 
 .lx-nex-bento-icon.tone-emerald {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  color: #34d399;
+  background: #ecfdf5 !important;
+  border: 1px solid #a7f3d0 !important;
+  color: #059669 !important;
 }
 
 .lx-nex-bento-icon.tone-cyan {
-  background: rgba(6, 182, 212, 0.12);
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  color: #22d3ee;
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #007aff !important;
 }
 
 .lx-nex-bento-icon.tone-purple {
-  background: rgba(168, 85, 247, 0.12);
-  border: 1px solid rgba(168, 85, 247, 0.3);
-  color: #c084fc;
+  background: #faf5ff !important;
+  border: 1px solid #e9d5ff !important;
+  color: #7c3aed !important;
 }
 
 .lx-nex-bento-card h3 {
   font-size: 20px;
   font-weight: 850;
-  color: #ffffff;
+  color: #0f172a !important;
   margin: 0 0 10px;
   letter-spacing: -0.02em;
 }
@@ -2930,143 +3019,339 @@
 .lx-nex-bento-card p {
   font-size: 14px;
   line-height: 1.65;
-  color: #94a3b8;
+  color: #475569 !important;
   margin: 0 0 18px;
 }
 
-/* --- Brand-Safe 22-Engine Grid (Dark Cards) --- */
+/* --- 3-Step Journey with Animated Marching Flow Connector --- */
+.lx-steps-wrap {
+  position: relative;
+  margin: 36px 0;
+}
+
+.lx-steps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 860px) {
+  .lx-steps-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lx-step-card {
+  padding: 28px 24px;
+  border-radius: 22px;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.04) !important;
+  position: relative;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.lx-step-card:hover {
+  transform: translateY(-3px);
+  border-color: #007aff !important;
+}
+
+.lx-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #eff6ff !important;
+  border: 1px solid #bfdbfe !important;
+  color: #007aff !important;
+  font-size: 15px;
+  font-weight: 850;
+  margin-bottom: 18px;
+}
+
+.lx-step-card h3 {
+  font-size: 18px;
+  font-weight: 850;
+  color: #0f172a !important;
+  margin: 0 0 8px;
+}
+
+.lx-step-card p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #475569 !important;
+  margin: 0;
+}
+
+.lx-steps-connector-bar {
+  position: absolute;
+  top: 48px;
+  left: 12%;
+  right: 12%;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #007aff, #007aff 12px, transparent 12px, transparent 24px);
+  background-size: 48px 2px;
+  animation: nexStepConnector 1.8s linear infinite;
+  z-index: 1;
+}
+
+@media (max-width: 860px) {
+  .lx-steps-connector-bar {
+    display: none;
+  }
+}
+
+@keyframes nexStepConnector {
+  0% { background-position: 0 0; }
+  100% { background-position: 48px 0; }
+}
+
+/* --- Brand-Safe 22-Engine Grid (White Cards) --- */
 .lx-landing.is-nexera .lx-engine-cart-card {
-  background: rgba(15, 23, 42, 0.65) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  color: #f8fafc !important;
-  box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 20px -6px rgba(15, 23, 42, 0.04) !important;
+  border-radius: 18px !important;
+  padding: 20px !important;
+  transition: all 0.2s ease !important;
+}
+
+.lx-landing.is-nexera .lx-engine-cart-card:hover {
+  transform: translateY(-3px) !important;
+  border-color: #007aff !important;
+  box-shadow: 0 14px 28px -6px rgba(0, 122, 255, 0.12) !important;
 }
 
 .lx-landing.is-nexera .lx-engine-cart-card b {
-  color: #ffffff !important;
-  font-size: 14.5px !important;
+  color: #0f172a !important;
+  font-size: 15px !important;
 }
 
 .lx-landing.is-nexera .lx-engine-cart-card small {
-  color: #94a3b8 !important;
+  color: #64748b !important;
   line-height: 1.55 !important;
 }
 
-.lx-landing.is-nexera .lx-engine-live-bar {
-  background: rgba(2, 6, 23, 0.8) !important;
-  border: 1px solid rgba(16, 185, 129, 0.3) !important;
-  color: #cbd5e1 !important;
-}
-
-/* --- Hardware Matrix Banner & Cards --- */
+/* --- Hardware Matrix Banner & Cards (White) --- */
 .lx-landing.is-nexera .lx-ram-banner {
-  background: rgba(15, 23, 42, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6) !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 45px -12px rgba(15, 23, 42, 0.06) !important;
+  border-radius: 24px !important;
+  padding: 32px !important;
 }
 
 .lx-landing.is-nexera .lx-ram-banner-head b {
-  color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 .lx-landing.is-nexera .lx-ram-banner-head div {
-  color: #94a3b8 !important;
+  color: #475569 !important;
 }
 
 .lx-landing.is-nexera .lx-req-card {
-  background: rgba(2, 6, 23, 0.65) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  padding: 20px !important;
+  transition: all 0.2s ease !important;
 }
 
 .lx-landing.is-nexera .lx-req-card.is-matched {
-  border-color: rgba(52, 211, 153, 0.5) !important;
-  background: rgba(16, 185, 129, 0.08) !important;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.2) !important;
+  border-color: #007aff !important;
+  background: #eff6ff !important;
+  box-shadow: 0 0 24px rgba(0, 122, 255, 0.14) !important;
 }
 
 .lx-landing.is-nexera .lx-req-card b {
-  color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 .lx-landing.is-nexera .lx-req-card p {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 
-/* --- Equal Prominence 11-Market Geographic Table (Dark) --- */
+/* Interactive RAM Safety Allocator Slider UI */
+.lx-ram-slider-box {
+  margin: 24px 0 16px;
+  padding: 20px 24px;
+  border-radius: 18px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.lx-ram-slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.lx-ram-slider-range {
+  width: 100%;
+  accent-color: #007aff;
+  height: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* --- Equal Prominence 11-Market Geographic Table (White) --- */
+.lx-landing.is-nexera .lx-country-btn {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.lx-landing.is-nexera .lx-country-btn:hover {
+  border-color: #007aff !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 20px -4px rgba(0, 122, 255, 0.12) !important;
+}
+
+.lx-landing.is-nexera .lx-country-btn.is-selected {
+  border-color: #007aff !important;
+  background: #eff6ff !important;
+}
+
 .lx-landing.is-nexera .lx-terminology-card {
-  background: rgba(15, 23, 42, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.6) !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 45px -12px rgba(15, 23, 42, 0.06) !important;
+  border-radius: 22px !important;
+  padding: 28px !important;
 }
 
 .lx-landing.is-nexera .lx-terminology-card h3 {
-  color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 .lx-landing.is-nexera .lx-terminology-table thead tr {
-  background: rgba(2, 6, 23, 0.8) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
-  color: #94a3b8 !important;
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #475569 !important;
 }
 
 .lx-landing.is-nexera .lx-terminology-table tbody tr {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.lx-landing.is-nexera .lx-terminology-table tbody tr:hover {
+  background: #f8fafc !important;
 }
 
 .lx-landing.is-nexera .lx-terminology-table tbody td {
-  color: #cbd5e1 !important;
+  color: #1e293b !important;
 }
 
-/* --- Dual Cartridge Panels (Dark) --- */
+/* --- Dual Cartridge Panels (White) --- */
 .lx-landing.is-nexera .lx-cartridge-panel {
-  background: rgba(15, 23, 42, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 20px 45px -15px rgba(0, 0, 0, 0.6) !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.06) !important;
+  border-radius: 22px !important;
 }
 
 .lx-landing.is-nexera .lx-cartridge-panel h3 {
-  color: #ffffff !important;
+  color: #0f172a !important;
 }
 
 .lx-landing.is-nexera .lx-cartridge-panel p {
-  color: #94a3b8 !important;
+  color: #475569 !important;
 }
 
 .lx-landing.is-nexera .lx-story-bullets li {
-  color: #cbd5e1 !important;
+  color: #334155 !important;
 }
 
-/* --- FAQ & Accordion (Dark) --- */
+/* --- FAQ & Accordion (White) --- */
 .lx-landing.is-nexera .lx-faq-item {
-  background: rgba(15, 23, 42, 0.65) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.03) !important;
 }
 
 .lx-landing.is-nexera .lx-faq-item summary {
-  color: #f1f5f9 !important;
+  color: #0f172a !important;
 }
 
 .lx-landing.is-nexera .lx-faq-item p {
-  color: #94a3b8 !important;
+  color: #475569 !important;
+}
+
+/* --- Executive White CTA Banner --- */
+.lx-landing.is-nexera .lx-cta-card {
+  background:
+    radial-gradient(circle at top right, rgba(0, 122, 255, 0.08) 0%, transparent 60%),
+    radial-gradient(circle at bottom left, rgba(20, 184, 166, 0.08) 0%, transparent 60%),
+    #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow:
+    0 30px 70px -20px rgba(15, 23, 42, 0.08),
+    0 0 40px rgba(0, 122, 255, 0.08) !important;
+  border-radius: 26px !important;
+  padding: 48px !important;
+}
+
+.lx-landing.is-nexera .lx-cta-card h2 {
+  color: #0f172a !important;
+}
+
+.lx-landing.is-nexera .lx-cta-card p {
+  color: #475569 !important;
 }
 
 /* --- Executive Footer & Legal Trademark Notice --- */
 .lx-landing.is-nexera .lx-footer {
-  background: #040810 !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
   color: #64748b !important;
-  padding: 44px 0 36px !important;
+  padding: 48px 0 40px !important;
 }
 
 .lx-nex-legal-disclaimer {
   margin-top: 28px;
-  padding: 16px 20px;
+  padding: 18px 22px;
   border-radius: 14px;
-  background: rgba(2, 6, 23, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 11px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 11.5px;
   line-height: 1.6;
   color: #64748b;
   text-align: left;
 }
 
+/* --- Nexera Animations Keyframes --- */
+@keyframes nexFloatBadge {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes nexPulseDot {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); }
+  70% { transform: scale(1); box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+@keyframes nexButtonShimmer {
+  0% { transform: translateX(-150%); }
+  100% { transform: translateX(250%); }
+}
+
+@keyframes nexBorderGlow {
+  0%, 100% { border-color: rgba(0, 122, 255, 0.2); }
+  50% { border-color: rgba(20, 184, 166, 0.4); }
+}
+
+@keyframes nexRamGaugePulse {
+  0%, 100% { opacity: 0.92; }
+  50% { opacity: 1; filter: brightness(1.08); }
+}
