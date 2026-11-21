@@ -31,7 +31,7 @@ function makeZoneContext(browser) {
     const slot = { context, browser, uses: 0, dead: false };
     try {
       context.on('close', () => { slot.dead = true; });
-    } catch (e) {}
+    } catch (e) { }
     return slot;
   });
 }
@@ -81,7 +81,7 @@ async function acquireZoneContext(browser) {
       slot.uses++;
       return slot;
     }
-    try { await slot.context.close(); } catch (e) {}
+    try { await slot.context.close(); } catch (e) { }
   }
 
   const slot = await makeZoneContext(browser);
@@ -99,13 +99,13 @@ async function releaseZoneContext(slot, { recycle = false } = {}) {
     zoneContextPool.push(slot);
     return;
   }
-  try { await slot.context.close(); } catch (e) {}
+  try { await slot.context.close(); } catch (e) { }
 }
 
 async function closeZoneContextPool() {
   const slots = zoneContextPool.splice(0, zoneContextPool.length);
   for (const slot of slots) {
-    try { await slot.context.close(); } catch (e) {}
+    try { await slot.context.close(); } catch (e) { }
   }
 }
 
@@ -114,27 +114,27 @@ function calculateLeadScore(vendor) {
   let score = 0;
   const phone = vendor.phone || '';
   const cleanPhone = phone.replace(/\D/g, '');
-  
+
   // 1. Phone availability (35 pts)
   if (cleanPhone.length >= 10 && !phone.toLowerCase().includes('require') && !phone.toLowerCase().includes('lookup')) {
     score += 35;
   }
-  
+
   // 2. WhatsApp Readiness (15 pts)
   if (vendor.whatsappAvailable || (cleanPhone.slice(-10).length === 10)) {
     score += 15;
   }
-  
+
   // 3. Street Address / Location details (10 pts)
   if (vendor.address && vendor.address.length > 8 && !vendor.address.toLowerCase().startsWith('india')) {
     score += 10;
   }
-  
+
   // 4. Website presence (15 pts)
   if (vendor.website && vendor.website.startsWith('http') && !vendor.website.includes('google.com')) {
     score += 15;
   }
-  
+
   // 5. Reputation: Rating >= 4.0 (15 pts)
   const ratingNum = parseFloat(vendor.rating);
   if (!isNaN(ratingNum) && ratingNum >= 4.0) {
@@ -142,14 +142,14 @@ function calculateLeadScore(vendor) {
   } else if (!isNaN(ratingNum) && ratingNum >= 3.5) {
     score += 8;
   }
-  
+
   // 6. Review volume >= 10 (5 pts)
   const revStr = (vendor.reviewsCount || vendor.reviews || '').toString().replace(/,/g, '');
   const revNum = parseInt(revStr, 10);
   if (!isNaN(revNum) && revNum >= 10) {
     score += 5;
   }
-  
+
   // 7. Verified Email or Social Links (5 pts)
   if (vendor.email || vendor.instagram || vendor.facebook || (vendor.emails && vendor.emails.length > 0)) {
     score += 5;
@@ -168,20 +168,20 @@ function determineTier(score) {
 // Global state variables passed from index.js
 let globalAbortSignal = { aborted: false };
 let addLog = console.log;
-let emitVendorEvent = () => {};
+let emitVendorEvent = () => { };
 
 function setDeps({ logger, abortSignal, emitVendorEvent: evt }) {
-    if (logger) addLog = logger;
-    if (abortSignal) globalAbortSignal = abortSignal;
-    if (evt) emitVendorEvent = evt;
+  if (logger) addLog = logger;
+  if (abortSignal) globalAbortSignal = abortSignal;
+  if (evt) emitVendorEvent = evt;
 }
 
 async function scrapeWebsiteForSocials(browser, url, vendorName) {
   if (!url || !url.startsWith('http')) return { email: '', instagram: '', facebook: '', phone: '', instagramFollowers: '', facebookFollowers: '' };
-  
+
   try {
     addLog(`[Deep Scrape] Investigating website for ${vendorName || 'vendor'}...`);
-    const response = await axios.get(url, { 
+    const response = await axios.get(url, {
       timeout: 8000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -192,15 +192,15 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
 
     const html = response.data;
     const $ = cheerio.load(html);
-    
+
     const emailMatch = html.match(/[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}/g) || [];
-    let validEmails = [...new Set(emailMatch)].filter(e => 
+    let validEmails = [...new Set(emailMatch)].filter(e =>
       !e.endsWith('.png') && !e.endsWith('.jpg') && !e.endsWith('.jpeg') && !e.endsWith('.webp') && !e.endsWith('.gif') && !e.includes('wixpress') && !e.includes('sentry')
     );
 
     // We no longer scan the entire raw HTML for 10-digit strings because it hallucinates UNIX timestamps (e.g. 1608662146)
     let validPhones = [];
-    
+
     // Strict text-node scanning for contextual phone numbers (e.g. "Phone: 9876543210" or "Call +91-9876543210")
     const phoneContextRegex = /(?:phone|tel|call|whatsapp|mob|mobile)[\s:.-]*((?:\+\d{1,4}[\s-]?)?(?:\(\d{1,4}\)[\s-]?)?(?:\d{1,4}[\s-]?){2,4}\d{2,4})/gi;
     let match;
@@ -217,7 +217,7 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
     $('a').each((i, el) => {
       const href = $(el).attr('href');
       if (!href) return;
-      
+
       const lowerHref = href.toLowerCase();
       if (lowerHref.startsWith('mailto:')) {
         const mail = lowerHref.replace('mailto:', '').split('?')[0];
@@ -227,11 +227,11 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
         const tel = lowerHref.replace('tel:', '').replace(/[^\d+]/g, '');
         if (tel.length >= 10) validPhones.push(tel);
       }
-      
+
       if (lowerHref.includes('instagram.com/') && !instagram) instagram = href;
       if (lowerHref.includes('facebook.com/') && !facebook && !lowerHref.includes('sharer')) facebook = href;
     });
-    
+
     validEmails = [...new Set(validEmails)];
     validPhones = [...new Set(validPhones)];
 
@@ -246,10 +246,10 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
     const images = [];
     try {
       const ogImg = $('meta[property="og:image"]').attr('content');
-      const icon = $('link[rel="apple-touch-icon"]').attr('href') || 
-                   $('link[rel="icon"]').attr('href') || 
-                   $('link[rel="shortcut icon"]').attr('href');
-      
+      const icon = $('link[rel="apple-touch-icon"]').attr('href') ||
+        $('link[rel="icon"]').attr('href') ||
+        $('link[rel="shortcut icon"]').attr('href');
+
       const logoEl = $('img[src*="logo" i], img[class*="logo" i], img[alt*="logo" i], header img, nav img').first();
       const logoSrc = logoEl.attr('src');
 
@@ -258,7 +258,7 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
         if (rel.startsWith('http')) return rel;
         try {
           return new URL(rel, url).href;
-        } catch(e) { return ''; }
+        } catch (e) { return ''; }
       };
 
       logo = resolveUrl(logoSrc) || resolveUrl(icon) || resolveUrl(ogImg);
@@ -270,7 +270,7 @@ async function scrapeWebsiteForSocials(browser, url, vendorName) {
           images.push(src);
         }
       });
-    } catch (e) {}
+    } catch (e) { }
 
     return {
       email: validEmails.length > 0 ? validEmails[0] : '',
@@ -400,7 +400,7 @@ async function extractStorefrontMediaAndLogo(page, websiteUrl, businessName) {
         if (host && !['facebook.com', 'instagram.com', 'google.com', 'wa.me'].includes(host)) {
           officialLogo = `https://www.google.com/s2/favicons?domain=${host}&sz=128`;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Fallback to clean storefront cover photo. Never invent an avatar URL:
@@ -472,9 +472,9 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
   // 3. Known Out-of-Town Metropolitan Hubs
   // If target town is NOT this hub, businesses in this hub without mentioning targetTown are bleed!
   const majorMetros = [
-    'guntur', 'vijayawada', 'hyderabad', 'secunderabad', 'bangalore', 'bengaluru', 
-    'chennai', 'mumbai', 'pune', 'delhi', 'visakhapatnam', 'tirupati', 'kurnool', 
-    'nellore', 'rajahmundry', 'kakinada', 'ongole', 'eluru', 'anantapur', 'kadapa', 
+    'guntur', 'vijayawada', 'hyderabad', 'secunderabad', 'bangalore', 'bengaluru',
+    'chennai', 'mumbai', 'pune', 'delhi', 'visakhapatnam', 'tirupati', 'kurnool',
+    'nellore', 'rajahmundry', 'kakinada', 'ongole', 'eluru', 'anantapur', 'kadapa',
     'warangal', 'kolkata', 'jaipur', 'ahmedabad',
     'tenali', 'mangalagiri', 'tadepalle', 'ponnur', 'chebrolu', 'bapatla',
     'narasaraopet', 'sattenapalle', 'chilakaluripet', 'machilipatnam', 'gudivada'
@@ -506,7 +506,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
           // Check if it's merely a road/highway name (e.g., "Guntur Road", "Chennai - Kolkata Hwy, Guntur")
           const isRoadName = new RegExp(`\\b${hub}\\s*[-–]?\\s*(road|rd|highway|hwy|nh|main\\s+road|bypass|way|street|cross|kolkata|vijayawada|bangalore|hyderabad|chennai)\\b`, 'i').test(addrLower);
           const mentionsTown = fullText.includes(townToken) || (cleanTargetTown.length > 2 && fullText.includes(cleanTargetTown));
-          
+
           if (!mentionsTown && !mentionsParentCity && !isRoadName && !insideParentCity) {
             return { relevant: false, reason: `Listing belongs to metropolitan hub "${hub}" with no reference to target town "${cleanTargetTown}"` };
           }
@@ -545,24 +545,24 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
 
   // 4. Urban Pincode Range Checks
   if (!isTerritorialSweep) {
-  // Guntur City urban core: 522001 - 522007
-  // Vijayawada / Krishna: 520001 - 521999
-  // Prakasam / Ongole: 523001 - 523999
-  const pinMatch = addrLower.match(/\b(52[0-3]\d{3})\b/);
-  if (pinMatch) {
-    const pin = pinMatch[1];
-    // If target is Narasaraopet / Palnadu:
-    if (townToken.includes('narasarao') || townToken.includes('palnadu')) {
-      if (pin.startsWith('52200') || pin === '522001' || pin === '522002' || pin === '522003' || pin === '522004' || pin === '522005' || pin === '522006' || pin === '522007') {
-        if (!fullText.includes('narasaraopet')) {
-          return { relevant: false, reason: `Postal code ${pin} belongs to Guntur City urban center (~45km outside Narasaraopet)` };
+    // Guntur City urban core: 522001 - 522007
+    // Vijayawada / Krishna: 520001 - 521999
+    // Prakasam / Ongole: 523001 - 523999
+    const pinMatch = addrLower.match(/\b(52[0-3]\d{3})\b/);
+    if (pinMatch) {
+      const pin = pinMatch[1];
+      // If target is Narasaraopet / Palnadu:
+      if (townToken.includes('narasarao') || townToken.includes('palnadu')) {
+        if (pin.startsWith('52200') || pin === '522001' || pin === '522002' || pin === '522003' || pin === '522004' || pin === '522005' || pin === '522006' || pin === '522007') {
+          if (!fullText.includes('narasaraopet')) {
+            return { relevant: false, reason: `Postal code ${pin} belongs to Guntur City urban center (~45km outside Narasaraopet)` };
+          }
+        }
+        if (pin.startsWith('520') || pin.startsWith('521')) {
+          return { relevant: false, reason: `Postal code ${pin} belongs to Krishna / Vijayawada district` };
         }
       }
-      if (pin.startsWith('520') || pin.startsWith('521')) {
-        return { relevant: false, reason: `Postal code ${pin} belongs to Krishna / Vijayawada district` };
-      }
     }
-  }
 
   }
 
@@ -617,7 +617,7 @@ function isListingRelevantToQuery(name, address, district, stateName, mandal, lo
       const lngMargin = 22.0 / (111.0 * Math.cos(((minLat + maxLat) / 2) * Math.PI / 180));
 
       if (coords.lat < (minLat - latMargin) || coords.lat > (maxLat + latMargin) ||
-          coords.lng < (minLng - lngMargin) || coords.lng > (maxLng + lngMargin)) {
+        coords.lng < (minLng - lngMargin) || coords.lng > (maxLng + lngMargin)) {
         return {
           relevant: false,
           reason: `Coordinates (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}) exceed bounding box`
@@ -672,7 +672,7 @@ function extractCoords(url) {
 }
 
 function getDistanceKm(lat1, lon1, lat2, lon2) {
-  const R = 6371; 
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
@@ -711,7 +711,7 @@ function zoneDistanceReject(coords, centerLat, centerLng, radiusKm, toleranceKm 
 
 function isWithinBounds(lat, lng, bbox, toleranceKm = 2.5) {
   if (!bbox || bbox.length !== 4) return true; // No bounds provided
-  
+
   const minLat = parseFloat(bbox[0]);
   const maxLat = parseFloat(bbox[1]);
   const minLng = parseFloat(bbox[2]);
@@ -760,7 +760,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     console.warn('[scrapeGooglePlaces] Playwright Chromium not available. Skipping browser scrape.');
     return [];
   }
-  
+
   const browser = await getBrowser();
   if (!browser) {
     console.warn('[scrapeGooglePlaces] Browser not available. Skipping.');
@@ -786,17 +786,17 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     const searchUrl = exactQuery.startsWith('http')
       ? exactQuery
       : `https://www.google.com/maps/search/${encodeURIComponent(exactQuery)}${(() => {
-          // Local neighborhood viewport zoom (13z-16z) so each zone extracts distinct
-          // local businesses instead of repeating the city-wide 11z top-20 list.
-          const lat = Number(centerLat);
-          const lng = Number(centerLng);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return '';
-          const viewportKm = (Number(radiusKm) > 0 && Number(radiusKm) <= 8)
-            ? Number(radiusKm)
-            : (scope === 'district' || scope === 'state' ? 4.5 : 2.2);
-          const zoom = Math.max(13, Math.min(16, Math.round(15.2 - Math.log2(Math.max(0.6, viewportKm)))));
-          return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
-        })()}?hl=en&gl=${countryGl}`;
+        // Local neighborhood viewport zoom (13z-16z) so each zone extracts distinct
+        // local businesses instead of repeating the city-wide 11z top-20 list.
+        const lat = Number(centerLat);
+        const lng = Number(centerLng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return '';
+        const viewportKm = (Number(radiusKm) > 0 && Number(radiusKm) <= 8)
+          ? Number(radiusKm)
+          : (scope === 'district' || scope === 'state' ? 4.5 : 2.2);
+        const zoom = Math.max(13, Math.min(16, Math.round(15.2 - Math.log2(Math.max(0.6, viewportKm)))));
+        return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
+      })()}?hl=en&gl=${countryGl}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
     await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
     markZone('goto(domcontentloaded)');
@@ -804,10 +804,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
     try {
       if (await consentBtn.count() > 0) {
-        await consentBtn.first().click({ timeout: 3000 }).catch(()=>{});
+        await consentBtn.first().click({ timeout: 3000 }).catch(() => { });
         markZone('consent');
       }
-    } catch(e) {}
+    } catch (e) { }
 
     try {
       await Promise.race([
@@ -827,7 +827,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       addLog("[Cyber Core] Direct business page detected. Extracting telemetry...");
       const nameEl = page.locator('h1.DUwDvf');
       const name = await nameEl.count() > 0 ? await nameEl.innerText() : 'Target Listing';
-      
+
       let address = '';
       const addressEl = page.locator('[data-item-id="address"]');
       if (await addressEl.count() > 0) {
@@ -861,7 +861,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         if (await websiteEl.count() > 0) {
           website = await websiteEl.getAttribute('href', { timeout: 3000 }) || '';
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // Intelligent Storefront Media & Official Logo (strictly rejecting commenter avatars/photos)
       const mediaData = await extractStorefrontMediaAndLogo(page, website, name);
@@ -893,7 +893,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
             rating, source: 'Google Maps Direct'
           }, category);
-        } catch (e) {}
+        } catch (e) { }
         return scrapedResults;
       }
 
@@ -903,16 +903,16 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         addLog(`[Containment Guard] Discarded "${name}" - ${containment.reason}`);
         const oobLead = {
           id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
-          name, category, city: vendorCity, address: address || '', 
-          phone: phone || '', rating: rating || '', mapsLink: page.url(), 
-          latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null, 
+          name, category, city: vendorCity, address: address || '',
+          phone: phone || '', rating: rating || '', mapsLink: page.url(),
+          latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
           source: 'Containment Guard (Out of Bounds)',
           outOfBoundsDistance: containment.reason,
           scrapedAt: new Date().toISOString(),
           sessionId
         };
         dbAdapter.saveOutOfBoundsVendor(oobLead);
-        try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
+        try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) { }
         return scrapedResults;
       }
 
@@ -926,102 +926,102 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
       const isKnown = dbAdapter.isDuplicate({ mapsLink, name, phone, city: vendorCity });
 
       if (!isKnown) {
-          const leadScore = calculateLeadScore({ name, address, phone, rating });
-          const newLead = {
-            id,
-            name,
-            category,
-            city: vendorCity,
-            address: address || '',
-            pincode: pincode,
-            phone: phone || '',
-            rating,
-            mapsLink,
-            latitude: coords ? coords.lat : null,
-            longitude: coords ? coords.lng : null,
-            source: 'Cyber Intelligence Core',
-            verified: false,
-            aiVerified: false,
-            matchedKeywords: [],
-            email: enrichedData.email || '',
-            instagram: enrichedData.instagram || '',
-            instagramFollowers: enrichedData.instagramFollowers || '',
-            facebook: enrichedData.facebook || '',
-            facebookFollowers: enrichedData.facebookFollowers || '',
-            website: website,
-            logo: finalLogo,
-            photo: finalPhoto,
-            avatar: finalLogo || finalPhoto,
-            images: [...(mediaData.images || []), ...(enrichedData.images || [])].filter(Boolean),
-            qualityScore: leadScore,
-            tier: determineTier(leadScore),
-            operatingHours: '',
-            topReviews: [],
-            whatsappLink: (parsedPhone && parsedPhone.isMobile) 
-              ? `https://wa.me/${parsedPhone.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
-              : '',
-            whatsappAvailable: Boolean(parsedPhone && parsedPhone.isMobile),
-            isMobile: Boolean(parsedPhone && parsedPhone.isMobile),
-            isLandline: Boolean(parsedPhone && parsedPhone.isLandline),
-            phoneType: parsedPhone ? parsedPhone.phoneType : 'unknown',
-            callUrl: parsedPhone ? parsedPhone.callUrl : (phone ? `tel:${phone}` : ''),
-            scrapedAt: new Date().toISOString(),
-            sessionId,
-            category,
-            city: vendorCity,
-            zoneName: location,
-            suburb: location,
-            locality: location,
-            mandal: resolvedMandal,
-            district: district || '',
-            state: stateName || (countryCode === 'IN' ? 'India' : ''),
-            strategy
-          };
+        const leadScore = calculateLeadScore({ name, address, phone, rating });
+        const newLead = {
+          id,
+          name,
+          category,
+          city: vendorCity,
+          address: address || '',
+          pincode: pincode,
+          phone: phone || '',
+          rating,
+          mapsLink,
+          latitude: coords ? coords.lat : null,
+          longitude: coords ? coords.lng : null,
+          source: 'Cyber Intelligence Core',
+          verified: false,
+          aiVerified: false,
+          matchedKeywords: [],
+          email: enrichedData.email || '',
+          instagram: enrichedData.instagram || '',
+          instagramFollowers: enrichedData.instagramFollowers || '',
+          facebook: enrichedData.facebook || '',
+          facebookFollowers: enrichedData.facebookFollowers || '',
+          website: website,
+          logo: finalLogo,
+          photo: finalPhoto,
+          avatar: finalLogo || finalPhoto,
+          images: [...(mediaData.images || []), ...(enrichedData.images || [])].filter(Boolean),
+          qualityScore: leadScore,
+          tier: determineTier(leadScore),
+          operatingHours: '',
+          topReviews: [],
+          whatsappLink: (parsedPhone && parsedPhone.isMobile)
+            ? `https://wa.me/${parsedPhone.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`
+            : '',
+          whatsappAvailable: Boolean(parsedPhone && parsedPhone.isMobile),
+          isMobile: Boolean(parsedPhone && parsedPhone.isMobile),
+          isLandline: Boolean(parsedPhone && parsedPhone.isLandline),
+          phoneType: parsedPhone ? parsedPhone.phoneType : 'unknown',
+          callUrl: parsedPhone ? parsedPhone.callUrl : (phone ? `tel:${phone}` : ''),
+          scrapedAt: new Date().toISOString(),
+          sessionId,
+          category,
+          city: vendorCity,
+          zoneName: location,
+          suburb: location,
+          locality: location,
+          mandal: resolvedMandal,
+          district: district || '',
+          state: stateName || (countryCode === 'IN' ? 'India' : ''),
+          strategy
+        };
 
-          const sessionOwner = dbAdapter.getSessionOwner(sessionId) || 'admin_1';
-          dbAdapter.saveVendor(sessionOwner, newLead);
-          try { emitVendorEvent(newLead, 'inserted'); } catch (e) {}
-          scrapedResults.push(newLead);
-          addLog(`[Contact Extracted] 📞 ${newLead.name}: ${newLead.phone || 'No direct phone'}${newLead.whatsappAvailable ? ' (WhatsApp Verified)' : ''}`);
-        } else {
-          const existing = dbAdapter.findMatch({ mapsLink, name, phone, city: vendorCity });
-          if (existing) {
-            let updated = false;
-            const sessionOwner = dbAdapter.getSessionOwner(sessionId) || existing.userId || 'admin_1';
-            if (phone && (!existing.phone || existing.phone.includes('Requires') || existing.phone === 'no phone')) {
-              existing.phone = phone;
-              existing.phones = [...new Set([...(existing.phones || []), phone])];
-              existing.phoneType = parsedPhone?.phoneType || existing.phoneType || (parsedPhone?.isMobile ? 'mobile' : 'landline');
-              existing.callUrl = parsedPhone?.callUrl || existing.callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : '');
-              if (parsedPhone?.isMobile) {
-                existing.whatsappAvailable = true;
-                existing.whatsappLink = `https://wa.me/${parsedPhone.digits}`;
-              }
-              updated = true;
+        const sessionOwner = dbAdapter.getSessionOwner(sessionId) || 'admin_1';
+        dbAdapter.saveVendor(sessionOwner, newLead);
+        try { emitVendorEvent(newLead, 'inserted'); } catch (e) { }
+        scrapedResults.push(newLead);
+        addLog(`[Contact Extracted] 📞 ${newLead.name}: ${newLead.phone || 'No direct phone'}${newLead.whatsappAvailable ? ' (WhatsApp Verified)' : ''}`);
+      } else {
+        const existing = dbAdapter.findMatch({ mapsLink, name, phone, city: vendorCity });
+        if (existing) {
+          let updated = false;
+          const sessionOwner = dbAdapter.getSessionOwner(sessionId) || existing.userId || 'admin_1';
+          if (phone && (!existing.phone || existing.phone.includes('Requires') || existing.phone === 'no phone')) {
+            existing.phone = phone;
+            existing.phones = [...new Set([...(existing.phones || []), phone])];
+            existing.phoneType = parsedPhone?.phoneType || existing.phoneType || (parsedPhone?.isMobile ? 'mobile' : 'landline');
+            existing.callUrl = parsedPhone?.callUrl || existing.callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : '');
+            if (parsedPhone?.isMobile) {
+              existing.whatsappAvailable = true;
+              existing.whatsappLink = `https://wa.me/${parsedPhone.digits}`;
             }
-            if (address && (!existing.address || existing.address.length < 10)) {
-              existing.address = address;
-              updated = true;
-            }
-            if (website && !existing.website) {
-              existing.website = website;
-              updated = true;
-            }
-            if (updated || !(Array.isArray(existing.sessionIds) && existing.sessionIds.includes(sessionId))) {
-              existing.sessionId = sessionId;
-              dbAdapter.saveVendor(sessionOwner, existing);
-              try { emitVendorEvent(existing, 'updated'); } catch (e) {}
-              if (updated) addLog(`[Contact Enriched] 📞 ${existing.name}: updated with ${existing.phone}`);
-            }
-            scrapedResults.push(existing);
+            updated = true;
           }
+          if (address && (!existing.address || existing.address.length < 10)) {
+            existing.address = address;
+            updated = true;
+          }
+          if (website && !existing.website) {
+            existing.website = website;
+            updated = true;
+          }
+          if (updated || !(Array.isArray(existing.sessionIds) && existing.sessionIds.includes(sessionId))) {
+            existing.sessionId = sessionId;
+            dbAdapter.saveVendor(sessionOwner, existing);
+            try { emitVendorEvent(existing, 'updated'); } catch (e) { }
+            if (updated) addLog(`[Contact Enriched] 📞 ${existing.name}: updated with ${existing.phone}`);
+          }
+          scrapedResults.push(existing);
         }
+      }
     } else {
       // Case B: Search results list is loaded
       const scrollable = page.locator('div[role="feed"]');
       if (await scrollable.count() > 0) {
         addLog("Scrolling through search results feed... (Fast Mode)");
-        
+
         // Google Maps VIRTUALISES the results feed: only the cards currently in
         // (or near) the viewport exist in the DOM. Scrolling to the bottom and
         // extracting once therefore loses every place that scrolled out —
@@ -1084,7 +1084,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
                   rating, subcategory: rawItem.placeCategory, source: 'Google Maps Live'
                 }, category);
-              } catch (e) {}
+              } catch (e) { }
               return null;
             }
 
@@ -1101,7 +1101,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 sessionId
               };
               dbAdapter.saveOutOfBoundsVendor(oobLead);
-              try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
+              try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) { }
               return null;
             }
 
@@ -1176,11 +1176,11 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 hadWebsite: Boolean(websiteUrl),
                 hadAddress: Boolean(address)
               });
-              try { emitVendorEvent(place, 'inserted'); } catch (e) {}
+              try { emitVendorEvent(place, 'inserted'); } catch (e) { }
               try {
                 const { streamingEnricher } = require('../services/phoneBackfillService');
                 streamingEnricher.enqueue(place);
-              } catch (e) {}
+              } catch (e) { }
             } else {
               let existing = dbAdapter.findMatch(place);
               if (existing) {
@@ -1208,13 +1208,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   hadAddress: Boolean(existing.address)
                 });
                 if (!hadSession || fieldImproved) {
-                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) {}
+                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) { }
                 }
                 if (!existing.phone || !existing.website) {
                   try {
                     const { streamingEnricher } = require('../services/phoneBackfillService');
                     streamingEnricher.enqueue(existing);
-                  } catch (e) {}
+                  } catch (e) { }
                 }
                 scrapedResults.push(existing);
               }
@@ -1258,106 +1258,106 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         // parsed back in Node with the correct country rules.
         const collectVisibleCards = async () => {
           const rawCards = await page.evaluate(() => {
-          const feedCards = Array.from(document.querySelectorAll('div[role="feed"] div.Nv2PK'));
-          return feedCards.map(card => {
-            const nameEl = card.querySelector('div.fontHeadlineSmall, .qBF1Pd');
-            const name = nameEl ? nameEl.innerText.trim() : '';
-            if (!name || name.length < 2) return null;
+            const feedCards = Array.from(document.querySelectorAll('div[role="feed"] div.Nv2PK'));
+            return feedCards.map(card => {
+              const nameEl = card.querySelector('div.fontHeadlineSmall, .qBF1Pd');
+              const name = nameEl ? nameEl.innerText.trim() : '';
+              if (!name || name.length < 2) return null;
 
-            const mapsLinkEl = card.querySelector('a.hfpxzc');
-            const mapsLink = mapsLinkEl ? mapsLinkEl.getAttribute('href') : '';
+              const mapsLinkEl = card.querySelector('a.hfpxzc');
+              const mapsLink = mapsLinkEl ? mapsLinkEl.getAttribute('href') : '';
 
-            // Extract all text inside card, one visual line at a time. Google
-            // feed cards separate name, rating, category, address and hours
-            // with newlines inside the same container.
-            const textContainers = Array.from(card.querySelectorAll('div.W4Efsd'));
-            const textLines = [];
-            for (const tc of textContainers) {
-              for (const line of String(tc.innerText || '').split('\n')) {
-                const value = line.trim();
-                if (value) textLines.push(value);
+              // Extract all text inside card, one visual line at a time. Google
+              // feed cards separate name, rating, category, address and hours
+              // with newlines inside the same container.
+              const textContainers = Array.from(card.querySelectorAll('div.W4Efsd'));
+              const textLines = [];
+              for (const tc of textContainers) {
+                for (const line of String(tc.innerText || '').split('\n')) {
+                  const value = line.trim();
+                  if (value) textLines.push(value);
+                }
               }
-            }
-            const fullText = card.innerText || '';
+              const fullText = card.innerText || '';
 
-            // Phone numbers are parsed in Node after this evaluate returns:
-            // the browser has no access to the app's country-aware parser.
+              // Phone numbers are parsed in Node after this evaluate returns:
+              // the browser has no access to the app's country-aware parser.
 
-            // Extract Website link from card
-            const links = Array.from(card.querySelectorAll('a'));
-            const websiteLink = links.find(l => 
-              l.getAttribute('data-value') === 'Website' || 
-              (l.getAttribute('aria-label') && l.getAttribute('aria-label').toLowerCase().includes('website')) ||
-              (l.innerText && l.innerText.toLowerCase().includes('website'))
-            );
-            const websiteUrl = websiteLink ? websiteLink.href : '';
+              // Extract Website link from card
+              const links = Array.from(card.querySelectorAll('a'));
+              const websiteLink = links.find(l =>
+                l.getAttribute('data-value') === 'Website' ||
+                (l.getAttribute('aria-label') && l.getAttribute('aria-label').toLowerCase().includes('website')) ||
+                (l.innerText && l.innerText.toLowerCase().includes('website'))
+              );
+              const websiteUrl = websiteLink ? websiteLink.href : '';
 
-            // Rating & Review Count
-            const ratingEl = card.querySelector('span.MW4etd');
-            const reviewsEl = card.querySelector('span.UY7F9');
-            const rating = ratingEl ? parseFloat(ratingEl.innerText.trim()) : null;
-            const reviewsCount = reviewsEl ? parseInt(reviewsEl.innerText.replace(/[^0-9]/g, '')) : null;
+              // Rating & Review Count
+              const ratingEl = card.querySelector('span.MW4etd');
+              const reviewsEl = card.querySelector('span.UY7F9');
+              const rating = ratingEl ? parseFloat(ratingEl.innerText.trim()) : null;
+              const reviewsCount = reviewsEl ? parseInt(reviewsEl.innerText.replace(/[^0-9]/g, '')) : null;
 
-            // Address line detection. Google renders "Category · Address" on
-            // one line; when a place has no street address the same slot holds
-            // "Category · Open 24 hours". Only accept a segment that actually
-            // looks like an address, otherwise leave it blank. Never store the
-            // category or opening hours as an address.
-            const addressHints = /\b(road|rd|st|street|cross|main|nagar|layout|colony|block|floor|flr|opp|near|behind|sector|phase|ave|avenue|lane|bazar|bazaar|market|complex|building|tower|plaza|circle|junction|mandal|district|village|town|city)\b/i;
-            let address = '';
-            for (const line of textLines) {
-              if (!line.includes('·')) continue;
-              const parts = line.split('·').map(p => p.trim()).filter(Boolean);
-              const addressParts = parts.filter(part => {
-                if (/^\d+(\.\d+)?$/.test(part)) return false;
-                if (/^\(?\d[\d,]*\)?$/.test(part)) return false;
-                if (/^(open|closed|closes|opens|24 hours|temporarily)/i.test(part)) return false;
-                if (/\b(reviews?|ratings?)\b/i.test(part)) return false;
-                return addressHints.test(part) || /^\d+[A-Za-z]?[\/-]/.test(part) || part.includes(',');
-              });
-              if (addressParts.length) {
-                address = addressParts[addressParts.length - 1];
-                break;
-              }
-            }
-
-            // Operating hours
-            let hours = '';
-            const hoursMatch = fullText.match(/(?:Open 24 hours|Open\s*·\s*Closes \d+[\s ]?[ap]m|Closed\s*·\s*Opens \d+[\s ]?[ap]m)/i);
-            if (hoursMatch) hours = hoursMatch[0];
-
-            // Google Place Category detection
-            let placeCategory = '';
-            for (const line of textLines) {
-              const parts = line.includes('·')
-                ? line.split('·').map(p => p.trim()).filter(Boolean)
-                : [line.trim()];
-              for (const part of parts) {
-                if (/^\d+(\.\d+)?$/.test(part)) continue;
-                if (/^\(?\d[\d,]*\)?$/.test(part)) continue;
-                if (/^(open|closed|closes|opens|24 hours|temporarily)/i.test(part)) continue;
-                if (/\b(reviews?|ratings?)\b/i.test(part)) continue;
-                if (addressHints.test(part) || /^\d+[A-Za-z]?[\/-]/.test(part) || part.includes(',')) continue;
-                if (part.length >= 3 && part.length <= 60) {
-                  placeCategory = part;
+              // Address line detection. Google renders "Category · Address" on
+              // one line; when a place has no street address the same slot holds
+              // "Category · Open 24 hours". Only accept a segment that actually
+              // looks like an address, otherwise leave it blank. Never store the
+              // category or opening hours as an address.
+              const addressHints = /\b(road|rd|st|street|cross|main|nagar|layout|colony|block|floor|flr|opp|near|behind|sector|phase|ave|avenue|lane|bazar|bazaar|market|complex|building|tower|plaza|circle|junction|mandal|district|village|town|city)\b/i;
+              let address = '';
+              for (const line of textLines) {
+                if (!line.includes('·')) continue;
+                const parts = line.split('·').map(p => p.trim()).filter(Boolean);
+                const addressParts = parts.filter(part => {
+                  if (/^\d+(\.\d+)?$/.test(part)) return false;
+                  if (/^\(?\d[\d,]*\)?$/.test(part)) return false;
+                  if (/^(open|closed|closes|opens|24 hours|temporarily)/i.test(part)) return false;
+                  if (/\b(reviews?|ratings?)\b/i.test(part)) return false;
+                  return addressHints.test(part) || /^\d+[A-Za-z]?[\/-]/.test(part) || part.includes(',');
+                });
+                if (addressParts.length) {
+                  address = addressParts[addressParts.length - 1];
                   break;
                 }
               }
-              if (placeCategory) break;
-            }
 
-            return {
-              name,
-              mapsLink,
-              websiteUrl,
-              rating,
-              reviewsCount,
-              address,
-              operatingHours: hours,
-              placeCategory,
-              rawText: fullText
-            };
-          }).filter(Boolean);
+              // Operating hours
+              let hours = '';
+              const hoursMatch = fullText.match(/(?:Open 24 hours|Open\s*·\s*Closes \d+[\s ]?[ap]m|Closed\s*·\s*Opens \d+[\s ]?[ap]m)/i);
+              if (hoursMatch) hours = hoursMatch[0];
+
+              // Google Place Category detection
+              let placeCategory = '';
+              for (const line of textLines) {
+                const parts = line.includes('·')
+                  ? line.split('·').map(p => p.trim()).filter(Boolean)
+                  : [line.trim()];
+                for (const part of parts) {
+                  if (/^\d+(\.\d+)?$/.test(part)) continue;
+                  if (/^\(?\d[\d,]*\)?$/.test(part)) continue;
+                  if (/^(open|closed|closes|opens|24 hours|temporarily)/i.test(part)) continue;
+                  if (/\b(reviews?|ratings?)\b/i.test(part)) continue;
+                  if (addressHints.test(part) || /^\d+[A-Za-z]?[\/-]/.test(part) || part.includes(',')) continue;
+                  if (part.length >= 3 && part.length <= 60) {
+                    placeCategory = part;
+                    break;
+                  }
+                }
+                if (placeCategory) break;
+              }
+
+              return {
+                name,
+                mapsLink,
+                websiteUrl,
+                rating,
+                reviewsCount,
+                address,
+                operatingHours: hours,
+                placeCategory,
+                rawText: fullText
+              };
+            }).filter(Boolean);
           });
 
           // Country-aware phone parsing, back in Node where the parser lives.
@@ -1402,7 +1402,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             if (feed) {
               const cards = feed.querySelectorAll('div.Nv2PK');
               if (cards.length > 0) {
-                try { cards[cards.length - 1].scrollIntoView({ block: 'end', behavior: 'instant' }); } catch {}
+                try { cards[cards.length - 1].scrollIntoView({ block: 'end', behavior: 'instant' }); } catch { }
               }
               feed.scrollTop = feed.scrollHeight + 1200;
               feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 2800, bubbles: true }));
@@ -1415,7 +1415,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             if (!feed) return false;
             return feed.querySelectorAll('div.Nv2PK').length > before.cards
               || feed.scrollHeight > before.height + 10;
-          }, beforeScroll, { timeout: 340, polling: 50 }).catch(() => {});
+          }, beforeScroll, { timeout: 340, polling: 50 }).catch(() => { });
 
           const added = mergeCards(await collectVisibleCards());
 
@@ -1439,7 +1439,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 if (feed) {
                   feed.scrollTop = Math.max(0, feed.scrollTop - 350);
                 }
-              }).catch(() => {});
+              }).catch(() => { });
               await page.waitForTimeout(70);
               await page.evaluate(() => {
                 const feed = document.querySelector('div[role="feed"]');
@@ -1447,8 +1447,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                   feed.scrollTop = feed.scrollHeight;
                   feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 3500, bubbles: true }));
                 }
-              }).catch(() => {});
-              await page.keyboard.press('PageDown').catch(() => {});
+              }).catch(() => { });
+              await page.keyboard.press('PageDown').catch(() => { });
             } else if (staleTicks >= 3) {
               break;
             }
@@ -1466,7 +1466,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
         for (let i = 0; i < extractedCards.length; i++) {
           if (isAborted()) throw new Error('Master Stop Aborted');
-          
+
           try {
             const rawItem = extractedCards[i];
             const cardKey = (rawItem.mapsLink || '').split('&')[0]
@@ -1501,128 +1501,128 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               }
               if (enrichedLate) {
                 dbAdapter.saveVendor(sessionOwner, liveVendor);
-                try { emitVendorEvent(liveVendor, 'updated'); } catch (e) {}
+                try { emitVendorEvent(liveVendor, 'updated'); } catch (e) { }
               }
               continue;
             }
-          const name = rawItem.name;
-          const mapsLink = rawItem.mapsLink;
-          let phone = rawItem.phone || '';
-          // Keep every number the card exposed. Feed cards usually omit the
-          // phone entirely, but when they do show one we must not throw the
-          // rest away (Google often lists a landline plus a mobile).
-          const exposedNumbers = [];
-          for (const rawNumber of [rawItem.phone, ...(rawItem.allPhones || [])]) {
-            const parsed = normalizePhone(rawNumber, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
-            if (parsed && !exposedNumbers.some(n => n.national === parsed.national)) {
-              exposedNumbers.push(parsed);
+            const name = rawItem.name;
+            const mapsLink = rawItem.mapsLink;
+            let phone = rawItem.phone || '';
+            // Keep every number the card exposed. Feed cards usually omit the
+            // phone entirely, but when they do show one we must not throw the
+            // rest away (Google often lists a landline plus a mobile).
+            const exposedNumbers = [];
+            for (const rawNumber of [rawItem.phone, ...(rawItem.allPhones || [])]) {
+              const parsed = normalizePhone(rawNumber, { context: 'phone tel', defaultCountry: countryCode, allowInternational: true });
+              if (parsed && !exposedNumbers.some(n => n.national === parsed.national)) {
+                exposedNumbers.push(parsed);
+              }
             }
-          }
-          const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
-          let whatsappLink = '';
-          let whatsappAvailable = false;
-          let callUrl = '';
+            const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
+            let whatsappLink = '';
+            let whatsappAvailable = false;
+            let callUrl = '';
 
-          if (primaryNumber) {
-            phone = primaryNumber.displayPhone;
-            callUrl = primaryNumber.callUrl;
-            if (primaryNumber.isMobile) {
-              whatsappLink = `https://wa.me/${primaryNumber.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
-              whatsappAvailable = true;
+            if (primaryNumber) {
+              phone = primaryNumber.displayPhone;
+              callUrl = primaryNumber.callUrl;
+              if (primaryNumber.isMobile) {
+                whatsappLink = `https://wa.me/${primaryNumber.digits}?text=Hi%20${encodeURIComponent(name || '')}%2C%20I%20found%20your%20business%20on%20Google%20Maps%20and%20wanted%20to%20connect.`;
+                whatsappAvailable = true;
+              } else {
+                whatsappLink = '';
+                whatsappAvailable = false;
+              }
+              addLog(`[Contact Extracted] 📞 ${name}: ${phone}${whatsappAvailable ? ' (WhatsApp Verified)' : ' (STD Landline)'}`);
             } else {
-              whatsappLink = '';
-              whatsappAvailable = false;
+              phone = '';
             }
-            addLog(`[Contact Extracted] 📞 ${name}: ${phone}${whatsappAvailable ? ' (WhatsApp Verified)' : ' (STD Landline)'}`);
-          } else {
-            phone = '';
-          }
-          const websiteUrl = rawItem.websiteUrl || '';
-          const address = rawItem.address || '';
-          const rating = rawItem.rating;
-          const reviewsCount = rawItem.reviewsCount;
-          const operatingHours = rawItem.operatingHours || '';
-          const coords = extractCoords(mapsLink);
+            const websiteUrl = rawItem.websiteUrl || '';
+            const address = rawItem.address || '';
+            const rating = rawItem.rating;
+            const reviewsCount = rawItem.reviewsCount;
+            const operatingHours = rawItem.operatingHours || '';
+            const coords = extractCoords(mapsLink);
 
-          const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope, address, location);
-          if (zoneReject) {
-            addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
-            continue;
-          }
+            const zoneReject = zoneDistanceReject(coords, centerLat, centerLng, radiusKm, 1.5, isMaster, scope, address, location);
+            if (zoneReject) {
+              addLog(`[Boundary Filter] Rejected "${name}" · ${zoneReject.distanceKm.toFixed(1)}km from zone centre (max ${zoneReject.maxKm}km)`);
+              continue;
+            }
 
-          // Managed background website enrichment: only when contact details are missing
-          if (websiteUrl && websiteUrl.startsWith('http') && (!phone || phone.includes('Requires') || !rawItem.email)) {
-            try {
-              const { streamingEnricher } = require('../services/phoneBackfillService');
-              streamingEnricher.enqueue({ name, website: websiteUrl, country: countryCode, city: location });
-            } catch (e) {}
-          }
+            // Managed background website enrichment: only when contact details are missing
+            if (websiteUrl && websiteUrl.startsWith('http') && (!phone || phone.includes('Requires') || !rawItem.email)) {
+              try {
+                const { streamingEnricher } = require('../services/phoneBackfillService');
+                streamingEnricher.enqueue({ name, website: websiteUrl, country: countryCode, city: location });
+              } catch (e) { }
+            }
 
-          // Category fidelity: Maps can include related businesses (a
-          // wedding-photographer query returning banquet halls). Drop anything
-          // that clearly belongs to a different role before it is stored.
-          if (!fidelity.isVendorRelevant({ name, address, website: websiteUrl, subcategory: rawItem.placeCategory, category: rawItem.placeCategory }, category)) {
-            addLog(`[Category Guard] Skipped "${name}" (${rawItem.placeCategory || 'unmatched'}) · not a ${category} match`);
-            try {
-              const { archiveDivergentLead } = require('../services/divergentLeadService');
-              archiveDivergentLead({
-                name, address, phone, website: websiteUrl, mapsLink,
-                latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
-                rating, subcategory: rawItem.placeCategory, source: 'Google Maps Harvester'
-              }, category);
-            } catch (e) {}
-            continue;
-          }
+            // Category fidelity: Maps can include related businesses (a
+            // wedding-photographer query returning banquet halls). Drop anything
+            // that clearly belongs to a different role before it is stored.
+            if (!fidelity.isVendorRelevant({ name, address, website: websiteUrl, subcategory: rawItem.placeCategory, category: rawItem.placeCategory }, category)) {
+              addLog(`[Category Guard] Skipped "${name}" (${rawItem.placeCategory || 'unmatched'}) · not a ${category} match`);
+              try {
+                const { archiveDivergentLead } = require('../services/divergentLeadService');
+                archiveDivergentLead({
+                  name, address, phone, website: websiteUrl, mapsLink,
+                  latitude: coords ? coords.lat : null, longitude: coords ? coords.lng : null,
+                  rating, subcategory: rawItem.placeCategory, source: 'Google Maps Harvester'
+                }, category);
+              } catch (e) { }
+              continue;
+            }
 
-          const place = {
-            id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
-            name,
-            address,
-            phone: phone || '',
-            phones: exposedNumbers.map(n => n.displayPhone || n.e164),
-            phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
-            rating,
-            reviewsCount,
-            mapsLink,
-            latitude: coords ? coords.lat : null,
-            longitude: coords ? coords.lng : null,
-            website: websiteUrl,
-            operatingHours: (operatingHours || '').substring(0, 150),
-            topReviews: [],
-            email: '',
-            instagram: '',
-            facebook: '',
-            instagramFollowers: '',
-            facebookFollowers: '',
-            logo: '',
-            photo: '',
-            avatar: '',
-            images: [],
-            aiVerified: Boolean(phone && whatsappAvailable),
-            matchedKeywords: [],
-            whatsappLink,
-            whatsappAvailable,
-            isMobile: Boolean(primaryNumber && primaryNumber.isMobile),
-            isLandline: Boolean(primaryNumber && primaryNumber.isLandline),
-            phoneType: primaryNumber ? primaryNumber.phoneType : 'unknown',
-            callUrl: callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : ''),
-            qualityScore: phone ? 85 : (websiteUrl ? 65 : 45),
-            tier: phone ? 'Premium' : (websiteUrl ? 'Standard' : 'Basic'),
-            category,
-            city: vendorCity,
-            zoneName: location,
-            suburb: location,
-            locality: location,
-            mandal: resolvedMandal,
-            district: district || '',
-            state: stateName || (countryCode === 'IN' ? 'India' : ''),
-            source: 'Google Maps',
-            sourceEngine: 'google-places',
-            verified: Boolean(phone),
-            scrapedAt: new Date().toISOString(),
-            sessionId,
-            strategy
-          };
+            const place = {
+              id: 'place_' + Date.now().toString() + Math.random().toString(36).substring(7),
+              name,
+              address,
+              phone: phone || '',
+              phones: exposedNumbers.map(n => n.displayPhone || n.e164),
+              phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
+              rating,
+              reviewsCount,
+              mapsLink,
+              latitude: coords ? coords.lat : null,
+              longitude: coords ? coords.lng : null,
+              website: websiteUrl,
+              operatingHours: (operatingHours || '').substring(0, 150),
+              topReviews: [],
+              email: '',
+              instagram: '',
+              facebook: '',
+              instagramFollowers: '',
+              facebookFollowers: '',
+              logo: '',
+              photo: '',
+              avatar: '',
+              images: [],
+              aiVerified: Boolean(phone && whatsappAvailable),
+              matchedKeywords: [],
+              whatsappLink,
+              whatsappAvailable,
+              isMobile: Boolean(primaryNumber && primaryNumber.isMobile),
+              isLandline: Boolean(primaryNumber && primaryNumber.isLandline),
+              phoneType: primaryNumber ? primaryNumber.phoneType : 'unknown',
+              callUrl: callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : ''),
+              qualityScore: phone ? 85 : (websiteUrl ? 65 : 45),
+              tier: phone ? 'Premium' : (websiteUrl ? 'Standard' : 'Basic'),
+              category,
+              city: vendorCity,
+              zoneName: location,
+              suburb: location,
+              locality: location,
+              mandal: resolvedMandal,
+              district: district || '',
+              state: stateName || (countryCode === 'IN' ? 'India' : ''),
+              source: 'Google Maps',
+              sourceEngine: 'google-places',
+              verified: Boolean(phone),
+              scrapedAt: new Date().toISOString(),
+              sessionId,
+              strategy
+            };
 
             // STREAMING INSERTION TO DB
             const combinedText = `${place.name} ${place.address} ${place.operatingHours}`;
@@ -1631,7 +1631,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             let outOfBoundsDistance = null;
             let isOob = false;
 
-                        if (place.latitude && place.longitude) {
+            if (place.latitude && place.longitude) {
               if (isMaster || scope === 'district' || scope === 'state' || scope === 'mandal') {
                 isOob = false;
               } else if (boundingbox && boundingbox.length === 4) {
@@ -1661,7 +1661,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               place.scrapedAt = new Date().toISOString();
               place.sessionId = sessionId;
               dbAdapter.saveOutOfBoundsVendor(place);
-              try { emitVendorEvent(place, 'out-of-bounds'); } catch (e) {}
+              try { emitVendorEvent(place, 'out-of-bounds'); } catch (e) { }
               continue;
             }
 
@@ -1702,7 +1702,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 sessionId
               };
               dbAdapter.saveOutOfBoundsVendor(oobLead);
-              try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) {}
+              try { emitVendorEvent(oobLead, 'out-of-bounds'); } catch (e) { }
               continue;
             }
 
@@ -1735,7 +1735,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 place.whatsappLink = `https://wa.me/${waPhone.digits}?text=Hi%20${encodeURIComponent(place.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
                 place.whatsappAvailable = true;
               }
-              
+
               // Apply GeoAI reverse geocoding for deep location folders
               if (place.latitude && place.longitude) {
                 try {
@@ -1746,16 +1746,16 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                     place.district = locationInfo.district;
                     place.state = locationInfo.state;
                   }
-                } catch(e) { }
+                } catch (e) { }
               }
-              
+
               dbAdapter.saveVendor(sessionOwner, place);
               scrapedResults.push(place);
-              try { emitVendorEvent(place, 'inserted'); } catch (e) {}
+              try { emitVendorEvent(place, 'inserted'); } catch (e) { }
               try {
                 const { streamingEnricher } = require('../services/phoneBackfillService');
                 streamingEnricher.enqueue(place);
-              } catch (e) {}
+              } catch (e) { }
               insertedInBatch++;
               // Silently saving to DB, no log flooding
             } else {
@@ -1779,18 +1779,18 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                     updated = true;
                   }
                 }
-                
+
                 existing.sessionId = sessionId;
                 existing.scrapedAt = new Date().toISOString();
 
                 if (updated || !hadSession) {
                   dbAdapter.saveVendor(sessionOwner, existing);
-                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) {}
+                  try { emitVendorEvent(existing, hadSession ? 'updated' : 'inserted'); } catch (e) { }
                   if (!existing.phone || existing.phone.includes('Requires') || !existing.website) {
                     try {
                       const { streamingEnricher } = require('../services/phoneBackfillService');
                       streamingEnricher.enqueue(existing);
-                    } catch (e) {}
+                    } catch (e) { }
                   }
                 }
                 // Always include existing updated lead in batch results
@@ -1803,8 +1803,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           }
         }
 
-          
-          // Single-Tab extraction loop finishes here
+
+        // Single-Tab extraction loop finishes here
         addLog(`[Cyber Core] Streamed ${insertedInBatch} verified in-boundary records to database. (Total verified: ${scrapedResults.length})`);
       }
     }
@@ -1818,7 +1818,7 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     return [];
   } finally {
     if (page) {
-      try { await page.close(); } catch (e) {}
+      try { await page.close(); } catch (e) { }
     }
     if (zoneSlot) {
       await releaseZoneContext(zoneSlot, { recycle: zoneFailed });

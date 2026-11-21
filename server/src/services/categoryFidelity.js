@@ -598,6 +598,55 @@ const ROLES = [
     avoids: [
       'turmeric', 'spices', 'steel', 'cement', 'clinic', 'hospital'
     ]
+  },
+  {
+    id: 'marine_rigging',
+    label: 'Marine Rigging & Maritime Equipment',
+    match: ['marine rigging', 'marine supply', 'rigging', 'boat rigging', 'ship rigging', 'maritime supply', 'marine contractor'],
+    wants: ['marine', 'rigging', 'boat', 'vessel', 'ship', 'maritime', 'dock', 'yacht', 'harbor', 'harbour', 'naval', 'anchoring'],
+    avoids: ['bakery', 'cupcake', 'cafe', 'restaurant', 'salon', 'barber', 'dental', 'clinic', 'dentist', 'locksmith', 'bridal', 'saree']
+  },
+  {
+    id: 'coffee_roaster',
+    label: 'Specialty Coffee & Roasteries',
+    match: ['coffee roaster', 'coffee roasters', 'specialty coffee', 'roastery', 'coffee bean wholesale', 'artisan coffee'],
+    wants: ['coffee', 'roaster', 'roastery', 'espresso', 'beans', 'brew', 'cafe', 'barista'],
+    avoids: ['auto repair', 'garage', 'clutch', 'brake', 'dentist', 'clinic', 'plumber', 'locksmith', 'salon', 'tire', 'tyre']
+  },
+  {
+    id: 'perfume_fragrance',
+    label: 'Perfumes, Fragrances & Cosmetics',
+    match: ['perfume', 'perfumes', 'fragrance', 'cologne', 'attar', 'oud', 'cosmetics wholesale', 'luxury perfume'],
+    wants: ['perfume', 'perfumes', 'fragrance', 'scent', 'cologne', 'attar', 'oud', 'beauty', 'cosmetics'],
+    avoids: ['tire', 'tyre', 'battery replacement', 'auto repair', 'plumber', 'dentist', 'garage', 'brake']
+  },
+  {
+    id: 'cleanroom_semiconductor',
+    label: 'Semiconductor & Cleanroom Equipment',
+    match: ['cleanroom', 'clean room', 'semiconductor equipment', 'microelectronics', 'wafer fabrication', 'semiconductor cleanroom'],
+    wants: ['cleanroom', 'clean room', 'semiconductor', 'microelectronics', 'wafer', 'fabrication', 'hvac cleanroom', 'filtration', 'silicon', 'technology'],
+    avoids: ['spa', 'reflexology', 'massage', 'salon', 'barber', 'bakery', 'dentist', 'restaurant']
+  },
+  {
+    id: 'automotive_engineering',
+    label: 'Automotive Powertrain & Engineering',
+    match: ['powertrain', 'powertrain engineering', 'transmission engineering', 'automotive engineering', 'ev powertrain'],
+    wants: ['powertrain', 'transmission', 'automotive engineering', 'engine engineering', 'motor engineering', 'drivetrain', 'chassis', 'vehicle engineering'],
+    avoids: ['salon', 'barber', 'hairdresser', 'spa', 'bakery', 'dentist', 'boutique', 'bridal']
+  },
+  {
+    id: 'biotech_lab',
+    label: 'Biotechnology & Analytical Laboratories',
+    match: ['biotechnology lab', 'biotech laboratory', 'analytical testing lab', 'testing laboratories', 'bioanalytics', 'biotechnology analytical'],
+    wants: ['biotechnology', 'biotech', 'analytical testing', 'testing lab', 'laboratory', 'laboratories', 'bioanalytics', 'molecular', 'bioscience', 'testing'],
+    avoids: ['locksmith', 'safe co', 'key cutter', 'salon', 'barber', 'bakery', 'garage', 'tire', 'dental clinic']
+  },
+  {
+    id: 'cold_storage_logistics',
+    label: 'Cold Storage & Refrigerated Logistics',
+    match: ['cold storage logistics', 'refrigerated logistics', 'cold storage warehousing', 'cold chain'],
+    wants: ['cold storage', 'refrigerat', 'warehouse', 'warehousing', 'logistics', 'freight', 'cold chain', 'temperature controlled'],
+    avoids: ['bridal', 'wedding dress', 'saree', 'boutique', 'salon', 'dental', 'bakery', 'dentist']
   }
 ];
 
@@ -682,10 +731,23 @@ function isVendorRelevant(vendor, requestedCategory) {
   const requestedRole = detectRole(requestedCategory);
   if (!requestedRole) {
     // Universal Category & Token Matching Guard for all vendor types
-    const cleanReq = norm(requestedCategory).replace(/\b(in|near|best|top|all|the|and|for|city|town|district|mandal)\b/g, '').trim();
+    const cleanReq = norm(requestedCategory)
+      .replace(/\b(in|near|best|top|all|the|and|for|city|town|district|mandal|suburb|county|state|province)\b/g, '')
+      .replace(/\b(wholesale|wholesalers|wholesaler|supplier|suppliers|contractor|contractors|dealer|dealers|distributor|distributors|company|store|stores|shop|shops|factory|manufacturers?|provider|commercial|industrial|residential|artisan|specialty|luxury|custom|retail|centre|center|services?)\b/g, '')
+      .trim();
     const reqTokens = cleanReq.split(/\s+/).filter(t => t.length > 2);
     if (reqTokens.length > 0) {
-      const vText = norm([vendor.name, vendor.subcategory, vendor.description].filter(Boolean).join(' '));
+      const vText = norm([vendor.name, vendor.subcategory, vendor.description, vendor.placeCategory].filter(Boolean).join(' '));
+      // Cross-Industry Incompatibility Rejection:
+      // If the vendor belongs to an obvious mismatched sector and shares ZERO substantive tokens with the requested category
+      const hasTokenMatch = reqTokens.some(t => vText.includes(t));
+      if (!hasTokenMatch) {
+        const isMismatchedSector = /\b(bakery|cupcake|cafe|restaurant|salon|barber|hairdresser|spa|massage|reflexology|dentist|dental|locksmith|safe co|tyre|tire|brake|clutch|bridal boutique|wedding dress)\b/i.test(vText);
+        if (isMismatchedSector) {
+          return false;
+        }
+      }
+
       // Common noise rejection: pure retail/stores appearing in service searches
       const isServiceSearch = reqTokens.some(t => ['repair', 'service', 'services', 'contractor', 'contractors', 'works', 'agency', 'consultant', 'cleaner', 'cleaning'].includes(t));
       if (isServiceSearch) {

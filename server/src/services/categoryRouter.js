@@ -199,6 +199,7 @@ const FAMILY_KEYWORDS = {
     ['ac convention centres', 10], ['ac convention centers', 10]
   ],
   'home-services': [
+    ['commercial solar', 15], ['solar pv', 15], ['solar contractor', 14],
     ['plumb', 8], ['electric', 8], ['carpenter', 8], ['carpentry', 7], ['painter', 6],
     ['painting', 5], ['pest control', 8], ['cleaning service', 7], ['house cleaning', 6],
     ['ac repair', 8], ['air condition', 7], ['appliance repair', 8], ['refrigerator repair', 8],
@@ -212,6 +213,7 @@ const FAMILY_KEYWORDS = {
     ['home service', 5], ['repair service', 5]
   ],
   retail: [
+    ['perfume', 14], ['perfumes', 14], ['fragrance', 14], ['luxury perfume', 15], ['cologne', 13],
     ['camera shop', 15], ['camera shops', 15], ['camera store', 15], ['camera stores', 15],
     ['camera dealer', 14], ['camera dealers', 14], ['camera showroom', 14], ['dslr shop', 14],
     ['dslr store', 14], ['dslr camera', 13], ['camera lens', 13], ['camera', 11],
@@ -225,6 +227,7 @@ const FAMILY_KEYWORDS = {
     ['departmental', 5], ['retail', 4], ['dealer', 2], ['distributor', 3]
   ],
   health: [
+    ['biotechnology', 15], ['testing laboratory', 15], ['analytical testing', 15], ['bioanalytics', 15], ['testing labs', 14],
     ['clinic', 7], ['hospital', 7], ['doctor', 7], ['dentist', 8], ['dental', 8],
     ['orthodont', 7], ['dermatolog', 7], ['gynec', 7], ['pediatric', 7],
     ['physician', 6], ['pharmacy', 7], ['chemist', 6], ['diagnostic', 7],
@@ -239,12 +242,14 @@ const FAMILY_KEYWORDS = {
     ['grooming', 5], ['cosmetolog', 6], ['skin care', 5]
   ],
   food: [
+    ['coffee roaster', 15], ['coffee roasters', 15], ['specialty coffee', 15], ['roastery', 14], ['coffee bean', 13],
     ['restaurant', 8], ['cafe', 7], ['coffee', 6], ['bakery', 7], ['caterer', 7],
     ['catering', 7], ['cloud kitchen', 8], ['food', 4], ['bar', 3], ['pub', 5],
     ['brewery', 6], ['sweet shop', 6], ['ice cream', 6], ['biryani', 7],
     ['pizza', 6], ['dining', 5], ['eatery', 6], ['juice', 4], ['fast food', 6]
   ],
   auto: [
+    ['powertrain', 15], ['powertrain engineering', 15], ['transmission engineering', 15],
     ['car showroom', 9], ['bike showroom', 9], ['motorcycle', 7], ['scooter', 6],
     ['automobile', 7], ['car dealer', 8], ['car service', 8], ['garage', 8],
     ['service center', 6], ['tyre', 6], ['tire', 5], ['battery shop', 6],
@@ -281,6 +286,7 @@ const FAMILY_KEYWORDS = {
     ['event photographer', 6], ['drone', 4]
   ],
   industrial: [
+    ['marine rigging', 15], ['cleanroom', 15], ['semiconductor', 15], ['wafer fabrication', 14],
     ['manufacturer', 9], ['manufacturing', 8], ['supplier', 7], ['wholesaler', 8],
     ['wholesale', 6], ['distributor', 6], ['exporter', 8], ['importer', 7],
     ['industrial', 7], ['factory', 8], ['machinery', 7], ['equipment', 4],
@@ -290,6 +296,7 @@ const FAMILY_KEYWORDS = {
     ['bulk supplier', 8], ['oem', 6], ['contractor', 4]
   ],
   logistics: [
+    ['cold storage logistics', 16], ['cold storage warehousing', 16], ['refrigerated logistics', 15],
     ['logistics', 10], ['transport', 9], ['packers and movers', 11], ['courier', 10],
     ['cargo', 9], ['freight', 9], ['warehouse', 9], ['cold storage', 10], ['trucking', 9]
   ],
