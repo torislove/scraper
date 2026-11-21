@@ -1,230 +1,187 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  Layers, Cpu, ShieldCheck, Zap, Rocket, Check, ArrowRight
-} from 'lucide-react';
-import { ALL_BUILTIN_ENGINES } from '../utils/deviceRamEngine';
-import {
-  RadarGeospatialIcon, TradePurityIcon, TelecomWhatsAppIcon,
-  GlobalSovereignIcon, HardwareConcurrencyIcon, PrivacyZeroKnowledgeIcon
-} from '../components/FeatureIcons';
+import { Layers, Rocket, Check, ArrowRight, ShieldCheck, Zap } from 'lucide-react';
+import LiquidButton3D from '../components/LiquidButton3D';
+import ThreeSwarmCluster3D from '../components/three/ThreeSwarmCluster3D';
 
-const BENTO_ADVANTAGES = [
+const ENGINE_CATEGORIES = [
   {
-    IconComponent: HardwareConcurrencyIcon,
-    span: 'col-7',
-    badge: 'HARDWARE-AWARE CONCURRENCY',
-    title: 'Workstation Memory Engine with >= 4.5 GB Headroom',
-    body: 'Hardware tier detection automatically provisions 2, 4, 8, or 16 parallel workers directly inside your browser memory with guaranteed OS headroom. Zero cloud server waiting lines or shared datacenter throttle queues.'
+    id: 'geo',
+    name: 'Maps & Geospatial (4 Cores)',
+    tagline: 'Micro-Zone Territory Sweepers',
+    desc: 'Breaks any city, mandal, or county into micro-coordinates to completely bypass Google listing caps (120+ limit).',
+    color: '#10b981'
   },
   {
-    IconComponent: TradePurityIcon,
-    span: 'col-5',
-    badge: 'ZERO HALLUCINATION FIDELITY',
-    title: 'Universal Trade Context Mutual Exclusion',
-    body: 'Deep commodity preservation and cross-industry boundary enforcement guarantee that turmeric searches never return sarees, metal shops, or unrelated retail stores. Leads match exact commercial intent.'
+    id: 'dirs',
+    name: 'National Directories (7 Cores)',
+    tagline: 'Verified Commercial Registries',
+    desc: 'Cross-checks official local business directories, MCA filings, and chamber of commerce records for corporate registration.',
+    color: '#06b6d4'
   },
   {
-    IconComponent: TelecomWhatsAppIcon,
-    span: 'col-5',
-    badge: 'CARRIER REGEX VALIDATOR',
-    title: 'Deep Telecom & Direct WhatsApp Classification',
-    body: 'Classifies every phone line as verified mobile, direct WhatsApp, or corporate landline before writing to Excel. Strips dead switchboards so your outbound team reaches real decision-makers immediately.'
+    id: 'b2b',
+    name: 'B2B & Wholesale (1 Core)',
+    tagline: 'Bulk Traders & Agri-Distributors',
+    desc: 'Uncovers unlisted wholesale suppliers, mandi commission agents, raw material stockists, and industrial manufacturers.',
+    color: '#3b82f6'
   },
   {
-    IconComponent: GlobalSovereignIcon,
-    span: 'col-7',
-    badge: 'EQUAL SOVEREIGN COVERAGE',
-    title: 'Equal Prominence Across All 11 Global Markets',
-    body: 'Every single US county, UK borough, Canadian census division, Australian LGA, German Landkreis, and Indian mandal is indexed with identical administrative granularity. No territory is second-class.'
+    id: 'hospitality',
+    name: 'Hospitality & Venues (4 Cores)',
+    tagline: 'Event & Banquet Infrastructure',
+    desc: 'Scrapes banquet halls, convention centers, wedding venues, catering suppliers, and hotels with seating capacities.',
+    color: '#f59e0b'
   },
   {
-    IconComponent: RadarGeospatialIcon,
-    span: 'col-6',
-    badge: 'PARALLEL SWARM ARCHITECTURE',
-    title: '22-Engine Synchronized Autonomous Swarm',
-    body: 'Sweeps across satellite geospatial nodes, verified commercial directories, B2B wholesale portals, open knowledge graphs, and corporate websites simultaneously. Eliminates search listing caps by decomposing territories into fine micro-zones.'
+    id: 'web',
+    name: 'Web & Direct Crawlers (3 Cores)',
+    tagline: 'Direct Decision-Maker Scraping',
+    desc: 'Deep-crawls company websites, "About" and "Contact" pages to harvest verified founder emails and direct mobile numbers.',
+    color: '#8b5cf6'
   },
   {
-    IconComponent: PrivacyZeroKnowledgeIcon,
-    span: 'col-6',
-    badge: 'ZERO-KNOWLEDGE ARCHITECTURE',
-    title: '100% Local Self-Hosted Privacy',
-    body: 'Run on your local server engine or RAM extension. Your search queries, extracted contacts, and target prospect databases remain 100% confidential on your physical machine. Zero data uploaded to third-party clouds.'
+    id: 'clean',
+    name: 'Deduplication & Quality (3 Cores)',
+    tagline: 'Carrier Validator & CRM Formatter',
+    desc: 'Strips dead landlines, tags WhatsApp numbers, eliminates duplicates across engines, and formats directly for Excel (.xlsx).',
+    color: '#ec4899'
   }
 ];
 
 export default function LandingArchitecture() {
   const navigate = useNavigate();
-  const [engineCategoryFilter, setEngineCategoryFilter] = useState('All');
+  const [selectedCatId, setSelectedCatId] = useState('geo');
 
-  const categories = [
-    { id: 'All', label: 'All Engines (22)' },
-    { id: 'Maps & Geospatial', label: 'Maps & Geospatial (4)' },
-    { id: 'National Directories', label: 'National Commercial Directories (7)' },
-    { id: 'B2B & Wholesale', label: 'B2B & Wholesale (1)' },
-    { id: 'Hospitality', label: 'Hospitality & Venues (4)' },
-    { id: 'Web Discovery', label: 'Web Discovery & Crawling (3)' },
-    { id: 'Social Discovery', label: 'Social & Knowledge (2)' },
-    { id: 'Data Quality & Export', label: 'Deduplication & Quality (1)' }
-  ];
+  const selectedCat = ENGINE_CATEGORIES.find(c => c.id === selectedCatId) || ENGINE_CATEGORIES[0];
 
   return (
-    <div className="lx-subpage-wrap">
-      {/* Page Header */}
-      <section className="lx-subpage-hero">
-        <div className="lx-wrap" style={{ maxWidth: 960, textAlign: 'center' }}>
-          <div className="lx-eyebrow-capsule" style={{ margin: '0 auto 16px' }}>
-            <Layers size={13} />
-            <span>ENTERPRISE ARCHITECTURE · 22 SPECIALIZED CORES</span>
+    <div className="lx-screen-container">
+      {/* 1. Eyebrow Badge */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <span className="lx-highlight-tag">
+          <Layers size={13} />
+          <span>PARALLEL SWARM TECHNOLOGY · 22 SPECIALIZED EXTRACTION CORES</span>
+        </span>
+      </motion.div>
+
+      {/* 2. Headline & Simple Explainer */}
+      <div style={{ maxWidth: 880 }}>
+        <h1 className="lx-kinetic-title">
+          22 Engines Querying Together{' '}
+          <span className="lx-gradient-text">in Real-Time.</span>
+        </h1>
+
+        <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
+          Instead of searching one single website, our swarm queries 22 specialized sources simultaneously —
+          Maps, B2B wholesale hubs, public directories, and company websites — removing search caps completely.
+        </p>
+      </div>
+
+      {/* 3. Interactive 3D WebGL Swarm Stage */}
+      <motion.div
+        className="lx-engine-hub-stage"
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45, delay: 0.1 }}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16, alignItems: 'center' }}>
+          {/* Left: 3D WebGL Swarm Cluster Canvas */}
+          <div style={{ height: 210, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <ThreeSwarmCluster3D selectedEngine={selectedCatId} />
+            <div style={{ position: 'absolute', bottom: 8, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
+              <span>🖱️ Drag to rotate 3D Swarm Core</span>
+              <span style={{ color: '#059669', fontWeight: 800 }}>22 Cores Synchronized</span>
+            </div>
           </div>
 
-          <h1 className="lx-subpage-h1">
-            Engineered for Extreme Yield, Trade Fidelity &amp; Machine Safety.
-          </h1>
-
-          <p className="lx-subpage-copy">
-            Every component is decoupled and optimized for native workstation performance.
-            Explore the 6 architectural pillars and 22 brand-safe discovery engines below.
-          </p>
-        </div>
-      </section>
-
-      {/* 6 Bento Grid Pillars */}
-      <section className="lx-section">
-        <div className="lx-wrap" style={{ maxWidth: 1180 }}>
-          <div className="lx-nex-bento-grid">
-            {BENTO_ADVANTAGES.map(b => {
-              const IconComp = b.IconComponent;
-              return (
-                <div key={b.title} className={`lx-nex-bento-card ${b.span}`}>
-                  <div style={{ marginBottom: 18 }}>
-                    <IconComp size={48} />
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.06em', color: '#007aff', textTransform: 'uppercase', marginBottom: 6 }}>
-                    {b.badge}
-                  </span>
-                  <h3>{b.title}</h3>
-                  <p>{b.body}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Trade Context & Anti-Bleed Explanation Banner */}
-      <section className="lx-section lx-section-alt">
-        <div className="lx-wrap" style={{ maxWidth: 1100 }}>
-          <div className="lx-trade-purity-banner">
-            <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start' }}>
-              <TradePurityIcon size={52} />
-              <div>
-                <span className="lx-kicker" style={{ color: '#059669', marginBottom: 6 }}>
-                  <ShieldCheck size={14} /> ZERO-HALLUCINATION COMMODITY PRESERVATION
-                </span>
-                <h3 style={{ fontSize: 22, fontWeight: 850, color: '#0f172a', margin: '4px 0 10px' }}>
-                  Universal Cross-Industry Anti-Bleed Mutual Exclusion Matrix
-                </h3>
-                <p style={{ fontSize: 14.5, lineHeight: 1.65, color: '#475569', margin: 0 }}>
-                  Standard map scraping tools blindly return sarees, steel dealerships, or hardware stores when you search for agricultural commodities like turmeric or spices.
-                  Scraper.co.in implements 18 commercial sector vector definitions with strict mutual exclusion:
-                  queries for <em>&ldquo;Wholesale Turmeric in Tenali&rdquo;</em> automatically reject textiles, building materials, and retail fashion before writing to your export files.
-                </p>
+          {/* Right: Selected Category Explainer Card */}
+          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', padding: '4px 0' }}>
+            <div>
+              <span style={{ fontSize: 10.5, fontWeight: 850, textTransform: 'uppercase', color: selectedCat.color, letterSpacing: '0.04em' }}>
+                Active Cluster Focus
+              </span>
+              <h3 style={{ margin: '4px 0 6px', fontSize: 17, fontWeight: 850, color: '#0f172a' }}>
+                {selectedCat.name}
+              </h3>
+              <div style={{ fontSize: 12, fontWeight: 750, color: '#047857', marginBottom: 8 }}>
+                ⚡ {selectedCat.tagline}
               </div>
+              <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.55, color: '#475569' }}>
+                {selectedCat.desc}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', marginTop: 12 }}>
+              <ShieldCheck size={13} color="#10b981" />
+              <span>Zero IP bans · Hardware-governed rate limit protection</span>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* 22 Specialized Extraction Engines Fleet */}
-      <section className="lx-section" id="engines">
-        <div className="lx-wrap" style={{ maxWidth: 1180 }}>
-          <div className="lx-sec-head">
-            <span className="lx-kicker"><Cpu size={13} /> 22 Specialized Extraction Engines</span>
-            <h2>Synchronized Multi-Engine Sweep Fleet</h2>
-            <p>
-              All proprietary third-party names have been abstracted into enterprise generic architectures
-              to prevent trademark liabilities while delivering full deep-web discovery depth across 11 sovereign nations.
-            </p>
-          </div>
-
-          {/* Category Filter Pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 24, justifyContent: 'center' }}>
-            {categories.map(cat => (
+        {/* 6 Category Selection Pills */}
+        <div className="lx-engine-categories-grid">
+          {ENGINE_CATEGORIES.map(cat => {
+            const isSelected = cat.id === selectedCatId;
+            return (
               <button
                 key={cat.id}
                 type="button"
-                style={{
-                  padding: '8px 18px', borderRadius: 50, fontSize: 12.5, fontWeight: 750,
-                  background: engineCategoryFilter === cat.id ? '#007aff' : '#ffffff',
-                  border: engineCategoryFilter === cat.id ? '1px solid #007aff' : '1px solid #e2e8f0',
-                  color: engineCategoryFilter === cat.id ? '#ffffff' : '#475569',
-                  boxShadow: engineCategoryFilter === cat.id ? '0 4px 12px rgba(0, 122, 255, 0.25)' : '0 1px 3px rgba(15, 23, 42, 0.04)',
-                  cursor: 'pointer', transition: 'all 0.16s ease'
-                }}
-                onClick={() => setEngineCategoryFilter(cat.id)}
+                className={`lx-engine-pod-card ${isSelected ? 'is-selected' : ''}`}
+                onClick={() => setSelectedCatId(cat.id)}
               >
-                {cat.label}
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, marginTop: 4, flex: 'none' }} />
+                <div>
+                  <strong style={{ fontSize: 11.5, color: isSelected ? '#047857' : '#0f172a', display: 'block' }}>{cat.name}</strong>
+                  <span style={{ fontSize: 10.5, color: '#64748b' }}>{cat.tagline}</span>
+                </div>
               </button>
-            ))}
-          </div>
-
-          {/* 22 Engines Grid */}
-          <div className="lx-engines-6-grid">
-            {ALL_BUILTIN_ENGINES
-              .filter(eng => {
-                if (engineCategoryFilter === 'All') return true;
-                if (engineCategoryFilter === 'Hospitality') return eng.category.includes('Hospitality');
-                return eng.category.includes(engineCategoryFilter);
-              })
-              .map((eng, idx) => (
-                <motion.div
-                  key={eng.id}
-                  className="lx-engine-cart-card"
-                  initial={{ opacity: 0, y: 12 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.1 }}
-                  transition={{ delay: idx * 0.02 }}
-                  whileHover={{ y: -3 }}
-                >
-                  <div className="lx-engine-cart-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                    <span
-                      style={{
-                        width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center',
-                        background: '#eff6ff', border: '1px solid #bfdbfe', color: '#007aff'
-                      }}
-                    >
-                      <Zap size={15} />
-                    </span>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: 10.5, fontWeight: 850, color: '#047857', letterSpacing: '0.04em' }}>LIVE · {eng.number.toUpperCase()}</span>
-                      <div style={{ fontSize: 10.5, color: '#007aff', fontWeight: 750 }}>{eng.coverage}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 10.5, fontWeight: 850, textTransform: 'uppercase', color: '#007aff', marginBottom: 4 }}>
-                    {eng.category}
-                  </div>
-                  <b>{eng.name}</b>
-                  <small>{eng.shortDesc}</small>
-                </motion.div>
-              ))}
-          </div>
-
-          {/* Bottom Launch Bar */}
-          <div style={{ textAlign: 'center', marginTop: 44 }}>
-            <button
-              type="button"
-              className="lx-btn lx-btn-primary"
-              style={{ height: 48, padding: '0 28px', fontSize: 14, borderRadius: 50 }}
-              onClick={() => navigate('/command?country=IN')}
-            >
-              <Rocket size={16} /> Launch All 22 Engines in Command Center
-            </button>
-          </div>
+            );
+          })}
         </div>
-      </section>
+      </motion.div>
+
+      {/* 4. Tactile 3D Action Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+        <LiquidButton3D
+          variant="emerald"
+          size="lg"
+          icon={Rocket}
+          pulse
+          onClick={() => navigate('/command?country=IN')}
+        >
+          Launch 22-Engine Swarm
+        </LiquidButton3D>
+
+        <LiquidButton3D
+          variant="ghost"
+          size="lg"
+          onClick={() => navigate('/global-coverage')}
+        >
+          Explore 11 Sovereign Markets →
+        </LiquidButton3D>
+      </div>
+
+      {/* 5. 4 Micro Value Pills */}
+      <div className="lx-value-strip">
+        <span className="lx-value-chip is-highlight">
+          <span>✓ 22 Autonomous Scraping Engines</span>
+        </span>
+        <span className="lx-value-chip">
+          <span>✓ 0 Cloud Scraping Queue Waiting</span>
+        </span>
+        <span className="lx-value-chip is-highlight">
+          <span>✓ Micro-Zone Radius Sweeping</span>
+        </span>
+        <span className="lx-value-chip">
+          <span>✓ 100% Brand-Safe Extraction</span>
+        </span>
+      </div>
     </div>
   );
 }

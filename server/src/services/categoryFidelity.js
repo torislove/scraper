@@ -485,13 +485,13 @@ const ROLES = [
     label: 'Agriculture, Spices & Agro Commodities',
     match: [
       'turmeric', 'haldi', 'pasupu', 'spices', 'spice', 'masala', 'chilli', 'chillies',
-      'mirchi', 'cotton', 'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses',
+      'mirchi', 'raw cotton', 'cotton ginning', 'cotton bale', 'cotton seed', 'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses',
       'dal mill', 'oil mill', 'groundnut', 'jaggery', 'bellam', 'tobacco', 'agro commodity',
       'agricultural', 'apmc', 'mandi', 'krishi', 'fertilizer', 'seeds', 'grain merchant',
       'cold storage', 'spice wholesale', 'turmeric wholesale'
     ],
     wants: [
-      'turmeric', 'haldi', 'pasupu', 'curcumin', 'spices', 'spice', 'masala', 'chilli', 'mirchi', 'cotton',
+      'turmeric', 'haldi', 'pasupu', 'curcumin', 'spices', 'spice', 'masala', 'chilli', 'mirchi', 'raw cotton', 'cotton ginning',
       'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses', 'dal mill', 'oil mill',
       'groundnut', 'jaggery', 'bellam', 'tobacco', 'agro', 'agricultural', 'mandi', 'apmc', 'market yard',
       'cold storage', 'produce', 'krishi', 'seeds', 'fertilizer', 'processing unit', 'polishing unit'
@@ -528,13 +528,14 @@ const ROLES = [
     id: 'textiles_sarees',
     label: 'Textiles, Sarees, Handlooms & Apparel',
     match: [
+      'cotton knitwear', 'cotton garments', 'cotton garment', 'cotton apparel', 'knitwear', 'hosiery',
       'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles',
       'fabric', 'fabrics', 'cloth', 'garment', 'garments', 'spinning mill', 'weaving',
       'silk', 'cotton cloth', 'readymade', 'apparel', 'boutique'
     ],
     wants: [
       'saree', 'sarees', 'handloom', 'silk', 'textile', 'textiles', 'cloth',
-      'garment', 'garments', 'readymade', 'apparel', 'dress', 'fabrics', 'showroom', 'matching'
+      'garment', 'garments', 'readymade', 'apparel', 'knitwear', 'hosiery', 'dress', 'fabrics', 'showroom', 'matching'
     ],
     avoids: [
       'turmeric', 'spices', 'chilli', 'grain', 'steel', 'iron', 'tmt', 'cement',
@@ -753,7 +754,7 @@ function isVendorRelevant(vendor, requestedCategory) {
       // If the vendor belongs to an obvious mismatched sector and shares ZERO substantive tokens with the requested category
       const hasTokenMatch = naicsTaxonomy.hasAnchorMatch(requestedCategory, vendor) || reqTokens.some(t => vText.includes(t));
       if (!hasTokenMatch) {
-        const isMismatchedSector = /\b(bakery|cupcake|cafe|restaurant|gelato|gelateria|pastry|ice\s*cream|deli|bistro|salon|barber|hairdresser|spa|massage|reflexology|dentist|dental|orthodontic|locksmith|safe\s*co|tyre|tire|brake|clutch|auto\s*repair|car\s*repair|auto\s*body|paint\s*workshop|bodywork|garage|bicycle|bike\s*repair|fietsen|dry\s*clean|laundry|bridal\s*boutique|wedding\s*dress|florist|flower\s*shop|pet\s*clinic|veterinary|grooming)\b/i.test(vText);
+        const isMismatchedSector = /\b(bakery|cupcake|cafe|restaurant|sweet\s*shop|sweets|gelato|gelateria|pastry|ice\s*cream|deli|bistro|salon|barber|hairdresser|spa|massage|reflexology|dentist|dental|orthodontic|locksmith|safe\s*co|tyre|tire|brake|clutch|auto\s*repair|car\s*repair|auto\s*body|paint\s*workshop|bodywork|garage|bicycle|bike\s*repair|fietsen|dry\s*clean|laundry|bridal\s*boutique|wedding\s*dress|florist|flower\s*shop|pet\s*clinic|veterinary|grooming|dairy|dairy\s*farm|milk\s*dairy|cattle|poultry|livestock|footwear|shoe\s*repair|shoe\s*store|shoes|cobbler)\b/i.test(vText);
         if (isMismatchedSector) {
           return false;
         }
@@ -820,7 +821,9 @@ function isVendorRelevant(vendor, requestedCategory) {
     const combined = `${norm(vendor.name)} ${norm(subcategory)}`;
     if (hasAny(combined, [
       'turmeric', 'spices', 'chilli', 'grain', 'paddy', 'saree', 'handloom', 'cloth',
-      'textile', 'hotel', 'lodge', 'hospital', 'clinic', 'dentist', 'pharmacy'
+      'textile', 'hotel', 'lodge', 'hospital', 'clinic', 'dentist', 'pharmacy',
+      'sweet', 'sweets', 'sweet shop', 'bakery', 'restaurant', 'cafe', 'dining',
+      'salon', 'beauty parlour', 'auto garage', 'car repair', 'mechanic'
     ])) {
       return false;
     }

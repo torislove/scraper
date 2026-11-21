@@ -1,121 +1,110 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Cpu, Globe2, Mail, Phone, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Sparkles, ShieldCheck, Zap, Globe2, Rocket } from 'lucide-react';
 import BrandLogo from '../v2/components/BrandLogo';
-import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
-} from '../v2/utils/deviceRamEngine';
+import LiquidButton3D from '../v2/components/LiquidButton3D';
+import AnimatedLiquidBackground from '../v2/components/AnimatedLiquidBackground';
 
 const PLANS = [
   {
     id: 'starter',
     name: 'Starter',
-    tagline: 'For local businesses & solo sales professionals',
+    badge: 'SOLO PROFESSIONAL',
+    tagline: 'Ideal for local businesses & solo sales reps',
     monthly: '₹1,499',
     annual: '₹1,199',
-    billingMonthly: 'Billed monthly · Cancel anytime',
-    billingAnnual: 'Billed annually · Save 20%',
-    tone: 'teal',
-    accentColor: '#0284c7',
-    accentBorder: 'rgba(6, 182, 212, 0.38)',
-    ctaBg: 'linear-gradient(135deg, #0284c7, #06b6d4)',
-    ctaLip: '#0369a1',
-    cta: 'Start Starter Plan',
+    leads: '2,000 Verified Leads / mo',
     features: [
-      '2,000 verified business leads / month',
-      'Direct phone numbers, websites & addresses',
-      'Live interactive territory map',
-      'Saved search folders & automatic deduplication',
-      '1-click Excel (.xlsx), CSV & phone (.vcf) export',
-      'Full India coverage down to towns & villages'
-    ]
+      'Full India coverage (all towns & villages)',
+      'Direct mobile numbers & WhatsApp filter',
+      'Live interactive territory mapping',
+      '1-click Excel (.xlsx), CSV & vCard export',
+      'Automatic deduplication'
+    ],
+    buttonVariant: 'cyan',
+    buttonLabel: 'Start Starter Plan'
   },
   {
-    id: 'pro',
+    id: 'growth',
     name: 'Growth',
-    tagline: 'Most popular for agencies & growing sales teams',
+    badge: 'MOST POPULAR',
+    highlight: true,
+    tagline: 'Best for agencies & growing outbound sales teams',
     monthly: '₹3,999',
     annual: '₹3,199',
-    billingMonthly: 'Billed monthly · Cancel anytime',
-    billingAnnual: 'Billed annually · Save 20%',
-    highlight: true,
-    badge: 'MOST POPULAR',
-    tone: 'emerald',
-    accentColor: '#059669',
-    accentBorder: 'rgba(5, 150, 105, 0.42)',
-    ctaBg: 'linear-gradient(135deg, #059669 0%, #10b981 55%, #06b6d4 100%)',
-    ctaLip: '#047857',
-    cta: 'Start Growth Plan',
+    leads: '10,000 Verified Leads / mo',
     features: [
-      '10,000 verified business leads / month',
-      'All 11 supported countries included (India, US, UK, UAE, CA, AU, SG, NZ, IE, ZA, DE)',
-      'Automatic missing phone & email discovery',
-      'Area-divided multi-sheet Excel reports',
-      'Merge & deduplicate multiple lead lists',
-      'Priority live discovery speed & support'
-    ]
+      'All 11 sovereign nations included',
+      'All 22 synchronized extraction engines',
+      'Automatic phone & executive email enrichment',
+      'Multi-sheet Excel territory reports',
+      'Priority extraction speed & support'
+    ],
+    buttonVariant: 'emerald',
+    buttonLabel: 'Start Growth Plan',
+    pulse: true
   },
   {
-    id: 'agency',
-    name: 'Agency & Enterprise',
-    tagline: 'For large teams, distributors & high-volume territories',
+    id: 'enterprise',
+    name: 'Enterprise',
+    badge: 'CUSTOM VOLUME',
+    tagline: 'For distributors, large teams & multi-seat desks',
     monthly: 'Custom',
     annual: 'Custom',
-    billingMonthly: 'Tailored lead volume & dedicated onboarding',
-    billingAnnual: 'Annual volume pricing available',
-    tone: 'dandelion',
-    accentColor: '#d97706',
-    accentBorder: 'rgba(245, 158, 11, 0.4)',
-    ctaBg: 'linear-gradient(135deg, #0f172a, #1e293b)',
-    ctaLip: '#020617',
-    cta: 'Contact Sales',
+    leads: '50,000+ Verified Leads / mo',
     features: [
-      '50,000+ verified leads / month',
-      'State, district & county-wide territory sweeps',
-      'Multi-seat workspaces & shared lead lists',
-      'Custom industry list preparation & onboarding',
-      'Dedicated account specialist'
-    ]
+      'State & district-wide complete internet sweeps',
+      'Multi-seat team workspace with shared lists',
+      'Dedicated account onboarding specialist',
+      'Custom CRM data preparation',
+      'SLA guarantee & custom API webhooks'
+    ],
+    buttonVariant: 'ghost',
+    buttonLabel: 'Contact Enterprise Sales'
   }
 ];
 
 export default function PricingPage() {
   const navigate = useNavigate();
   const [isAnnual, setIsAnnual] = useState(true);
-  const hardware = detectDeviceHardware();
 
   return (
     <div
       style={{
         minHeight: '100vh',
-        background:
-          'radial-gradient(960px 460px at 12% -6%, rgba(16, 185, 129, 0.12), transparent 62%), radial-gradient(880px 440px at 88% 2%, rgba(6, 182, 212, 0.12), transparent 60%), radial-gradient(720px 380px at 50% 105%, rgba(14, 116, 144, 0.08), transparent 62%), #f8fafc',
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        fontFamily: '"Plus Jakarta Sans", "Inter", -apple-system, sans-serif',
         color: '#0f172a',
-        fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif'
+        overflowX: 'hidden'
       }}
     >
-      {/* Top 3D Liquid Glass Navbar */}
+      {/* 1. Mesmerizing Ambient Background */}
+      <AnimatedLiquidBackground />
+
+      {/* 2. Glassmorphic Header */}
       <header
         style={{
+          height: 62,
           position: 'sticky',
           top: 0,
           zIndex: 40,
-          background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.72))',
-          backdropFilter: 'blur(24px) saturate(190%)',
-          borderBottom: '1.5px solid rgba(255, 255, 255, 0.94)',
-          boxShadow: 'inset 0 -1px 0 rgba(15, 23, 42, 0.06), 0 8px 24px -12px rgba(15, 23, 42, 0.12)'
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          borderBottom: '1.5px solid rgba(255, 255, 255, 0.92)',
+          display: 'flex',
+          alignItems: 'center'
         }}
       >
         <div
           style={{
-            width: 'min(1180px, calc(100% - 40px))',
+            width: 'min(1220px, calc(100% - 36px))',
             margin: '0 auto',
-            height: 68,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 16
+            justifyContent: 'space-between'
           }}
         >
           <button
@@ -123,79 +112,137 @@ export default function PricingPage() {
             onClick={() => navigate('/')}
             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
           >
-            <BrandLogo size={32} theme="light" />
+            <BrandLogo size={30} theme="light" />
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button
               type="button"
               onClick={() => navigate('/')}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, height: 38, padding: '0 15px', borderRadius: 12,
-                background: 'linear-gradient(180deg, #ffffff, #f8fafc)', border: '1px solid rgba(15, 23, 42, 0.13)',
-                boxShadow: 'inset 0 1.5px 0 #ffffff, 0 2.5px 0 rgba(15, 23, 42, 0.08)',
-                color: '#1e293b', fontSize: 13, fontWeight: 700, cursor: 'pointer'
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: 'transparent',
+                border: 'none',
+                color: '#475569',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer'
               }}
             >
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> Back to Overview
             </button>
-            <button
-              type="button"
+
+            <LiquidButton3D
+              variant="emerald"
+              size="sm"
+              icon={Rocket}
               onClick={() => navigate('/command')}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 7, height: 38, padding: '0 18px', borderRadius: 12,
-                background: 'linear-gradient(135deg, #059669 0%, #10b981 55%, #06b6d4 100%)', border: 'none',
-                color: '#ffffff', fontSize: 13.5, fontWeight: 800, cursor: 'pointer',
-                boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.42), 0 3px 0 #047857, 0 10px 22px -6px rgba(16, 185, 129, 0.48)'
-              }}
             >
-              Open Workspace <ArrowRight size={14} />
-            </button>
+              Open Command Center
+            </LiquidButton3D>
           </div>
         </div>
       </header>
 
-      <main style={{ width: 'min(1180px, calc(100% - 40px))', margin: '0 auto', padding: '58px 0 92px' }}>
+      {/* 3. Concentrated Pricing Stage */}
+      <main
+        style={{
+          flex: 1,
+          width: 'min(1160px, calc(100% - 32px))',
+          margin: '0 auto',
+          padding: '36px 0 48px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          position: 'relative',
+          zIndex: 10
+        }}
+      >
+        {/* Simple Eyebrow & Headline */}
         <motion.div
-          initial={{ opacity: 0, y: 16 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          style={{ textAlign: 'center', maxWidth: 680, margin: '0 auto 44px' }}
+          style={{ textAlign: 'center', maxWidth: 660, marginBottom: 28 }}
         >
           <span
             style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 999,
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.12))',
-              border: '1px solid rgba(16, 185, 129, 0.28)', color: '#065f46',
-              fontSize: 12, fontWeight: 850, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 13px',
+              borderRadius: 999,
+              background: 'linear-gradient(135deg, rgba(236, 253, 245, 0.95), rgba(207, 250, 254, 0.95))',
+              border: '1px solid rgba(16, 185, 129, 0.35)',
+              color: '#047857',
+              fontSize: 11,
+              fontWeight: 850,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              marginBottom: 12
             }}
           >
-            <Sparkles size={13} /> 20+ Built-In Lead Engines Included
+            <Sparkles size={13} />
+            <span>TRANSPARENT PRICING · ZERO API BILLS EVER</span>
           </span>
-          <h1 style={{ fontSize: 'clamp(32px, 4vw, 48px)', fontWeight: 850, letterSpacing: '-0.035em', margin: '0 0 14px', lineHeight: 1.08 }}>
-            All 20+ lead discovery engines included in every plan.
+
+          <h1
+            style={{
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontSize: 'clamp(28px, 3.4vw, 42px)',
+              fontWeight: 850,
+              letterSpacing: '-0.035em',
+              color: '#0f172a',
+              margin: '0 0 10px',
+              lineHeight: 1.1
+            }}
+          >
+            Simple, Transparent Pricing.{' '}
+            <span
+              style={{
+                background: 'linear-gradient(135deg, #059669 0%, #10b981 40%, #06b6d4 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent'
+              }}
+            >
+              Zero Hidden Fees.
+            </span>
           </h1>
-          <p style={{ fontSize: 16, color: '#475569', lineHeight: 1.6, margin: '0 0 28px' }}>
-            Every plan unlocks our fleet of 20+ specialized lead discovery engines — sweeping live Satellite Maps, National Commercial Directories, Official Websites, B2B Trade Catalogs, and Public Web Profiles across 11 countries, plus 1-click Excel export.
+
+          <p style={{ fontSize: 14.5, color: '#475569', margin: 0, lineHeight: 1.5 }}>
+            No per-lead credits. No proxy bills. No surprise monthly charges.
+            Every plan unlocks our fleet of 22 specialized engines running directly on your hardware.
           </p>
 
-          {/* Tactile 3D Liquid Glass Billing Toggle */}
+          {/* Concentrated Annual / Monthly Switcher */}
           <div
             style={{
-              display: 'inline-flex', alignItems: 'center',
-              background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.9), rgba(241, 245, 249, 0.72))',
-              backdropFilter: 'blur(18px)', border: '1.5px solid #ffffff', borderRadius: 15, padding: 5, gap: 5,
-              boxShadow: 'inset 0 2px 0 #ffffff, 0 10px 26px -10px rgba(15, 23, 42, 0.14)'
+              display: 'inline-flex',
+              alignItems: 'center',
+              background: 'rgba(241, 245, 249, 0.9)',
+              border: '1px solid rgba(203, 213, 225, 0.8)',
+              borderRadius: 999,
+              padding: 4,
+              marginTop: 18,
+              boxShadow: 'inset 0 1px 2px rgba(15, 23, 42, 0.05)'
             }}
           >
             <button
               type="button"
               onClick={() => setIsAnnual(false)}
               style={{
-                padding: '9px 20px', borderRadius: 11, border: 'none', fontSize: 13.5, fontWeight: 750, cursor: 'pointer',
-                background: !isAnnual ? 'linear-gradient(135deg, #059669, #10b981)' : 'transparent',
-                color: !isAnnual ? '#ffffff' : '#64748b',
-                boxShadow: !isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #047857' : 'none'
+                padding: '6px 18px',
+                borderRadius: 999,
+                border: 'none',
+                fontSize: 12.5,
+                fontWeight: 750,
+                cursor: 'pointer',
+                background: !isAnnual ? '#ffffff' : 'transparent',
+                color: !isAnnual ? '#047857' : '#64748b',
+                boxShadow: !isAnnual ? '0 2px 6px rgba(15, 23, 42, 0.08)' : 'none',
+                transition: 'all 0.16s ease'
               }}
             >
               Monthly
@@ -204,194 +251,191 @@ export default function PricingPage() {
               type="button"
               onClick={() => setIsAnnual(true)}
               style={{
-                padding: '9px 20px', borderRadius: 11, border: 'none', fontSize: 13.5, fontWeight: 750, cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: isAnnual ? 'linear-gradient(135deg, #059669, #10b981)' : 'transparent',
-                color: isAnnual ? '#ffffff' : '#64748b',
-                boxShadow: isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #047857' : 'none'
+                padding: '6px 18px',
+                borderRadius: 999,
+                border: 'none',
+                fontSize: 12.5,
+                fontWeight: 750,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: isAnnual ? '#ffffff' : 'transparent',
+                color: isAnnual ? '#047857' : '#64748b',
+                boxShadow: isAnnual ? '0 2px 6px rgba(15, 23, 42, 0.08)' : 'none',
+                transition: 'all 0.16s ease'
               }}
             >
-              Annual
-              <span style={{ padding: '2px 8px', borderRadius: 999, background: '#10b981', color: '#ffffff', fontSize: 10.5, fontWeight: 850 }}>
+              <span>Annual</span>
+              <span style={{ padding: '1px 7px', borderRadius: 999, background: '#10b981', color: '#ffffff', fontSize: 10, fontWeight: 850 }}>
                 SAVE 20%
               </span>
             </button>
           </div>
         </motion.div>
 
-        {/* 3 Built-In Discovery Engines + User-RAM Hardware Speed Guide */}
-        <section
+        {/* 3 Concentrated Plan Cards */}
+        <div
           style={{
-            marginBottom: 34,
-            padding: '20px 22px',
-            borderRadius: 20,
-            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.84))',
-            border: '1.5px solid #ffffff',
-            boxShadow: 'inset 0 2px 0 #ffffff, 0 14px 34px -14px rgba(15, 23, 42, 0.12)'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
+            gap: 20,
+            width: '100%',
+            alignItems: 'stretch'
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 850 }}>
-              <Cpu size={16} color="#059669" />
-              <span>Included Automatically: 20+ Specialized Lead Discovery Engines Running in Parallel</span>
-            </div>
-            <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 12, fontWeight: 800 }}>
-              💻 Your Device Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Zones ({hardware.expectedSpeed})
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 14 }}>
-            {ALL_BUILTIN_ENGINES.map(eng => (
-              <div key={eng.id} style={{ padding: '12px 14px', borderRadius: 14, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)' }}>
-                <div style={{ fontSize: 11, fontWeight: 850, color: '#0e7490', textTransform: 'uppercase' }}>{eng.number}</div>
-                <b style={{ display: 'block', fontSize: 14, marginTop: 2 }}>{eng.name}</b>
-                <small style={{ color: '#475569', fontSize: 12.5, lineHeight: 1.45, display: 'block', marginTop: 4 }}>{eng.shortDesc}</small>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10 }}>
-            {DEVICE_REQUIREMENTS.map(req => (
-              <div
-                key={req.tier}
-                style={{
-                  padding: '9px 12px',
-                  borderRadius: 12,
-                  background: req.tier === hardware.tier ? '#ecfdf5' : '#f8fafc',
-                  border: req.tier === hardware.tier ? '1.5px solid #10b981' : '1px solid rgba(15, 23, 42, 0.08)',
-                  fontSize: 12
-                }}
-              >
-                <b style={{ color: '#0f172a' }}>{req.badge}: {req.ram} · {req.cpu}</b>
-                <div style={{ color: '#047857', fontWeight: 700 }}>{req.parallelZones} Parallel Zones · {req.speed}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(305px, 1fr))', gap: 22, alignItems: 'stretch' }}>
           {PLANS.map((plan, idx) => (
-            <motion.article
+            <motion.div
               key={plan.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.08 * idx, duration: 0.4 }}
-              whileHover={{ y: -4 }}
+              transition={{ delay: idx * 0.08 }}
               style={{
-                background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.76))',
-                backdropFilter: 'blur(24px) saturate(190%)',
-                borderRadius: 24,
-                padding: 30,
-                border: `1.5px solid ${plan.highlight ? plan.accentBorder : 'rgba(255, 255, 255, 0.98)'}`,
+                background: 'rgba(255, 255, 255, 0.94)',
+                backdropFilter: 'blur(24px)',
+                borderRadius: 20,
+                padding: '24px 26px',
+                border: plan.highlight ? '1.5px solid #10b981' : '1.5px solid rgba(255, 255, 255, 0.95)',
                 boxShadow: plan.highlight
-                  ? 'inset 0 2px 0 #ffffff, 0 28px 60px -16px rgba(5, 150, 105, 0.22)'
-                  : 'inset 0 2px 0 #ffffff, 0 16px 38px -14px rgba(15, 23, 42, 0.12)',
+                  ? '0 20px 48px -12px rgba(16, 185, 129, 0.22), inset 0 1px 0 #ffffff'
+                  : '0 16px 36px -12px rgba(15, 23, 42, 0.08), inset 0 1px 0 #ffffff',
                 display: 'flex',
                 flexDirection: 'column',
+                justifyContent: 'space-between',
                 position: 'relative'
               }}
             >
-              {plan.badge && (
+              {plan.highlight && (
                 <span
                   style={{
-                    position: 'absolute', top: -12, right: 24, padding: '5px 13px', borderRadius: 999,
-                    background: 'linear-gradient(135deg, #059669, #10b981)', color: '#ffffff',
-                    fontSize: 10.5, fontWeight: 850, letterSpacing: '0.08em',
-                    boxShadow: '0 4px 12px rgba(16, 185, 129, 0.4)'
+                    position: 'absolute',
+                    top: -11,
+                    right: 20,
+                    padding: '3px 11px',
+                    borderRadius: 999,
+                    background: 'linear-gradient(135deg, #059669, #10b981)',
+                    color: '#ffffff',
+                    fontSize: 10,
+                    fontWeight: 850,
+                    letterSpacing: '0.06em'
+                  }}
+                >
+                  MOST POPULAR
+                </span>
+              )}
+
+              <div>
+                <span
+                  style={{
+                    fontSize: 10.5,
+                    fontWeight: 850,
+                    letterSpacing: '0.06em',
+                    color: plan.highlight ? '#059669' : '#64748b'
                   }}
                 >
                   {plan.badge}
                 </span>
-              )}
 
-              <span style={{ fontSize: 11, fontWeight: 850, letterSpacing: '0.08em', textTransform: 'uppercase', color: plan.accentColor, marginBottom: 4 }}>
-                {plan.id === 'agency' ? 'High Volume' : plan.id === 'pro' ? 'Best Value' : 'Starter Tier'}
-              </span>
-              <h2 style={{ fontSize: 23, fontWeight: 850, margin: '0 0 6px', letterSpacing: '-0.025em' }}>{plan.name}</h2>
-              <p style={{ fontSize: 13.5, color: '#64748b', margin: '0 0 22px', minHeight: 40 }}>{plan.tagline}</p>
+                <h2 style={{ fontSize: 22, fontWeight: 850, margin: '4px 0 4px', color: '#0f172a' }}>
+                  {plan.name}
+                </h2>
 
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
-                <b style={{ fontSize: 40, fontWeight: 850, letterSpacing: '-0.03em', color: '#0f172a' }}>
-                  {isAnnual ? plan.annual : plan.monthly}
-                </b>
-                {plan.monthly !== 'Custom' && <span style={{ fontSize: 14, color: '#64748b', fontWeight: 600 }}>/month</span>}
+                <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 16px', lineHeight: 1.4 }}>
+                  {plan.tagline}
+                </p>
+
+                {/* Pricing Block */}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
+                  <b style={{ fontSize: 34, fontWeight: 850, color: '#0f172a', letterSpacing: '-0.03em' }}>
+                    {isAnnual ? plan.annual : plan.monthly}
+                  </b>
+                  {plan.monthly !== 'Custom' && <span style={{ fontSize: 13, color: '#64748b' }}>/month</span>}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 800,
+                    color: '#047857',
+                    background: '#ecfdf5',
+                    padding: '3px 8px',
+                    borderRadius: 6,
+                    display: 'inline-block',
+                    marginBottom: 18
+                  }}
+                >
+                  ⚡ {plan.leads}
+                </div>
+
+                {/* Features List */}
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  {plan.features.map(f => (
+                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#334155' }}>
+                      <span
+                        style={{
+                          width: 17,
+                          height: 17,
+                          borderRadius: '50%',
+                          background: '#ecfdf5',
+                          color: '#059669',
+                          display: 'grid',
+                          placeItems: 'center',
+                          flex: 'none'
+                        }}
+                      >
+                        <Check size={11} strokeWidth={3} />
+                      </span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <small style={{ fontSize: 12, color: '#64748b', fontWeight: 600, marginBottom: 22, display: 'block' }}>
-                {isAnnual ? plan.billingAnnual : plan.billingMonthly}
-              </small>
 
-              <button
-                type="button"
-                onClick={() => plan.id === 'agency'
-                  ? (window.location.href = 'mailto:support@scraper.co.in?subject=Enterprise%20Plan')
-                  : navigate(`/signup?plan=${encodeURIComponent(plan.id)}`)
-                }
-                style={{
-                  width: '100%', height: 46, borderRadius: 14, fontSize: 14, fontWeight: 800,
-                  cursor: 'pointer', marginBottom: 24, border: 'none',
-                  background: plan.ctaBg, color: '#ffffff',
-                  boxShadow: `inset 0 1.5px 0 rgba(255,255,255,0.4), 0 3.5px 0 ${plan.ctaLip}, 0 10px 24px -8px rgba(15,23,42,0.28)`
-                }}
-              >
-                {plan.cta}
-              </button>
-
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12, flex: 1 }}>
-                {plan.features.map(f => (
-                  <li key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 13.5, color: '#334155', lineHeight: 1.45 }}>
-                    <span
-                      style={{
-                        width: 20, height: 20, borderRadius: '50%',
-                        background: 'rgba(16, 185, 129, 0.14)', color: '#059669',
-                        display: 'grid', placeItems: 'center', flexShrink: 0, marginTop: 1
-                      }}
-                    >
-                      <Check size={12} strokeWidth={3} />
-                    </span>
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-            </motion.article>
+              {/* 3D Liquid Action Button */}
+              <div style={{ marginTop: 'auto' }}>
+                <LiquidButton3D
+                  variant={plan.buttonVariant}
+                  size="md"
+                  pulse={plan.pulse}
+                  style={{ width: '100%' }}
+                  onClick={() => plan.id === 'enterprise'
+                    ? (window.location.href = 'mailto:support@scraper.co.in?subject=Enterprise%20Plan')
+                    : navigate(`/signup?plan=${encodeURIComponent(plan.id)}`)
+                  }
+                >
+                  {plan.buttonLabel}
+                </LiquidButton3D>
+              </div>
+            </motion.div>
           ))}
         </div>
 
-        <div style={{ marginTop: 44, display: 'flex', justifyContent: 'center', gap: 28, flexWrap: 'wrap', color: '#64748b', fontSize: 13, fontWeight: 650 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={15} color="#059669" /> Runs in your RAM · Secure accounts</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe2 size={15} color="#0e7490" /> All 11 locked markets included</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Zap size={15} color="#0284c7" /> Upgrade or switch anytime</span>
-        </div>
-
-        {/* Master District / State Complete Internet Coverage Contact Bar */}
-        <section
+        {/* 4. Single-Line Trust Assurance Footer */}
+        <div
           style={{
-            marginTop: 28,
-            padding: '18px 22px',
-            borderRadius: 18,
-            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(236, 253, 245, 0.85))',
-            border: '1.5px solid #ffffff',
-            boxShadow: '0 14px 32px -14px rgba(5, 150, 105, 0.18)',
+            marginTop: 26,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
+            justifyContent: 'center',
+            gap: 20,
             flexWrap: 'wrap',
-            gap: 16
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#64748b'
           }}
         >
-          <div style={{ maxWidth: 580 }}>
-            <b style={{ display: 'block', fontSize: 15, color: '#0f172a' }}>Need an entire District, County, State, or Nationwide list across every public website?</b>
-            <span style={{ fontSize: 13, color: '#475569' }}>Ask our Master Territory Intelligence Desk — we gather and verify the entire region from every public directory, map, and website across the internet.</span>
-          </div>
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            {/* TODO: Replace "Adding Soon" with live mobile & email */}
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', fontSize: 12.5, fontWeight: 750 }}>
-              <Phone size={14} color="#059669" /> Mobile: Adding Soon
-            </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', fontSize: 12.5, fontWeight: 750 }}>
-              <Mail size={14} color="#0e7490" /> Email: Adding Soon
-            </span>
-          </div>
-        </section>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <ShieldCheck size={14} color="#059669" /> 100% On-Device Memory Privacy
+          </span>
+          <span>·</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Globe2 size={14} color="#0284c7" /> 11 Sovereign Markets Included
+          </span>
+          <span>·</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Zap size={14} color="#f59e0b" /> Zero Cloud Proxy or Scraping Fees
+          </span>
+        </div>
       </main>
     </div>
   );

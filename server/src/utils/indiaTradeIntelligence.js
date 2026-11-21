@@ -45,7 +45,10 @@ const COMMODITY_ENTITIES = [
   },
   {
     key: 'cotton',
-    patterns: [/\b(cotton|ginning|cotton\s*spinning|kapas|cotton\s*mill)\b/i],
+    patterns: [
+      /\b(raw\s*cotton|cotton\s*(?:ginning|pressing|seed|bale|farming|raw|mandi|market\s*yard|spinning|mill)|ginning|kapas)\b/i,
+      /\bcotton\b(?!.*(?:knitwear|garment|hosiery|apparel|fabric|cloth|shirt|dress|wear|textile))/i
+    ],
     label: 'Cotton & Ginning',
     sectorKey: 'agriculture_spices',
     subvectors: [
@@ -276,7 +279,7 @@ const SECTORS = {
     key: 'agriculture_spices',
     label: 'Agriculture, Spices & Agro Commodities',
     patterns: [
-      /\b(turmeric|haldi|pasupu|spices?|masala|chilli|chillies|mirchi|cotton|ginning|rice\s*mill|paddy|grain|grains|pulses?|dal\s*mill|oil\s*mill|groundnut|jaggery|bellam|tobacco|agro\s*commodit|agricultural|apmc|mandi|krishi|fertilizer|seeds?|pesticide|grain\s*merchant|produce\s*merchant|dry\s*fruits?|cashew|cardamom|pepper|coriander|cumin|jeera|oilseeds?|cold\s*storage|spice\s*dealer|spice\s*merchant|spice\s*wholesal)\b/i
+      /\b(turmeric|haldi|pasupu|spices?|masala|chilli|chillies|mirchi|raw\s*cotton|cotton\s*(?:ginning|pressing|seed|bale|farming|raw|mandi|market\s*yard|spinning|mill)|ginning|kapas|rice\s*mill|paddy|grain|grains|pulses?|dal\s*mill|oil\s*mill|groundnut|jaggery|bellam|tobacco|agro\s*commodit|agricultural|apmc|mandi|krishi|fertilizer|seeds?|pesticide|grain\s*merchant|produce\s*merchant|dry\s*fruits?|cashew|cardamom|pepper|coriander|cumin|jeera|oilseeds?|cold\s*storage|spice\s*dealer|spice\s*merchant|spice\s*wholesal)\b/i
     ],
     subvectors: [
       'Turmeric Wholesalers & Commission Agents',
@@ -304,7 +307,7 @@ const SECTORS = {
     key: 'textiles_apparel',
     label: 'Textiles, Sarees, Handlooms & Apparel',
     patterns: [
-      /\b(saree|sari|sarees|handloom|handlooms|textile|textiles|fabric|fabrics|cloth|clothes|clothing|garment|garments|spinning\s*mill|weaving|silk|cotton\s*cloth|readymade|apparel|hosiery|tailor|boutique)\b/i
+      /\b(saree|sari|sarees|handloom|handlooms|textile|textiles|fabric|fabrics|cloth|clothes|clothing|garment|garments|spinning\s*mill|weaving|silk|cotton\s*cloth|cotton\s*knitwear|cotton\s*garments?|cotton\s*apparel|knitwear|hosiery|readymade|apparel|tailor|boutique)\b/i
     ],
     subvectors: [
       'Saree Wholesalers & Showrooms',

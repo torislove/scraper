@@ -1,11 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import {
-  Cpu, Server, Zap, Rocket, ShieldCheck, Phone, Mail, CheckCircle2
-} from 'lucide-react';
-import { detectDeviceHardware, DEVICE_REQUIREMENTS } from '../utils/deviceRamEngine';
-import { HardwareConcurrencyIcon } from '../components/FeatureIcons';
+import { Cpu, Server, Zap, Rocket, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { detectDeviceHardware } from '../utils/deviceRamEngine';
+import LiquidButton3D from '../components/LiquidButton3D';
+import ThreeHardwareProcessor3D from '../components/three/ThreeHardwareProcessor3D';
 
 export default function LandingHardware() {
   const navigate = useNavigate();
@@ -22,207 +21,174 @@ export default function LandingHardware() {
     const ram = Number(simulatedRamGb) || 16;
     let lanes = 2;
     let speed = '120 leads/min';
-    let tier = 'T1';
+    let tier = 'T1 Basic';
     if (ram >= 64) {
       lanes = 16;
       speed = '600+ leads/min';
-      tier = 'T4';
+      tier = 'T4 Extreme';
     } else if (ram >= 32) {
       lanes = 12;
       speed = '450+ leads/min';
-      tier = 'T3';
+      tier = 'T3 Professional';
     } else if (ram >= 16) {
       lanes = 8;
       speed = '300+ leads/min';
-      tier = 'T2';
+      tier = 'T2 Standard';
     } else if (ram >= 8) {
       lanes = 4;
       speed = '180+ leads/min';
-      tier = 'T1';
+      tier = 'T1 Starter';
     }
-    const headroom = Math.max(4.5, (ram * 0.35)).toFixed(1);
+    const headroom = Math.max(4.5, ram * 0.35).toFixed(1);
     return { ram, lanes, speed, tier, headroom };
   }, [simulatedRamGb]);
 
   return (
-    <div className="lx-subpage-wrap">
-      {/* Page Header */}
-      <section className="lx-subpage-hero">
-        <div className="lx-wrap" style={{ maxWidth: 960, textAlign: 'center' }}>
-          <div className="lx-eyebrow-capsule" style={{ margin: '0 auto 16px' }}>
-            <Cpu size={13} />
-            <span>HARDWARE CONCURRENCY · ZERO CLOUD COSTS</span>
+    <div className="lx-screen-container">
+      {/* 1. Eyebrow Badge */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <span className="lx-highlight-tag">
+          <Cpu size={13} />
+          <span>ZERO CLOUD QUEUE LATENCY · 100% PRIVATE HARDWARE ENGINE</span>
+        </span>
+      </motion.div>
+
+      {/* 2. Headline & Simple Explainer */}
+      <div style={{ maxWidth: 880 }}>
+        <h1 className="lx-kinetic-title">
+          Your Workstation Drives the Speed.{' '}
+          <span className="lx-gradient-text">Safely.</span>
+        </h1>
+
+        <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
+          No waiting in shared cloud queues. The engine checks your computer's RAM, locks a safe 4.5 GB buffer
+          so your PC stays butter-smooth, and uses the rest for parallel multi-core scraping.
+        </p>
+      </div>
+
+      {/* 3. Interactive 3D WebGL Hardware Processor Stage */}
+      <motion.div
+        className="lx-hardware-stage"
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45, delay: 0.1 }}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16, alignItems: 'center' }}>
+          {/* Left: 3D WebGL Motherboard & RAM Banks */}
+          <div style={{ height: 210, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <ThreeHardwareProcessor3D simulatedRamGb={simSpecs.ram} parallelLanes={simSpecs.lanes} />
+            <div style={{ position: 'absolute', bottom: 8, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
+              <span>🖱️ Drag to inspect 3D Silicon Wafer</span>
+              <span style={{ color: '#059669', fontWeight: 800 }}>{simSpecs.lanes} Parallel Lanes Active</span>
+            </div>
           </div>
 
-          <h1 className="lx-subpage-h1">
-            Workstation Memory Architecture with Headroom Safety.
-          </h1>
-
-          <p className="lx-subpage-copy">
-            Parallel multi-lane extraction runs directly on your machine&apos;s physical RAM with
-            guaranteed operating system headroom protection. Zero cloud queue waiting lines.
-          </p>
-        </div>
-      </section>
-
-      {/* Interactive RAM Safety Allocator Section */}
-      <section className="lx-section">
-        <div className="lx-wrap" style={{ maxWidth: 1180 }}>
-          <div className="lx-ram-banner">
-            <div className="lx-ram-banner-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <HardwareConcurrencyIcon size={48} />
-                <div>
-                  <b style={{ fontSize: 20, color: '#0f172a' }}>Hardware-Governed RAM Extraction Lanes</b>
-                  <div style={{ fontSize: 13.5, color: '#475569', marginTop: 3 }}>
-                    Parallel concurrency auto-calibrates to your physical hardware with strict OS headroom protection:
-                  </div>
-                </div>
-              </div>
-              <span
-                style={{
-                  padding: '6px 16px', borderRadius: 50,
-                  background: '#eff6ff', border: '1.5px solid #bfdbfe',
-                  color: '#007aff', fontSize: 12.5, fontWeight: 850
-                }}
-              >
-                💻 Detected: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Lanes
-              </span>
-            </div>
-
-            {/* Interactive Simulation Slider Box */}
-            <div className="lx-ram-slider-box">
-              <div className="lx-ram-slider-header">
-                <div>
-                  <strong style={{ fontSize: 14.5, color: '#0f172a' }}>Interactive Hardware Safety Calculator:</strong>
-                  <span style={{ fontSize: 13, color: '#64748b', marginLeft: 8 }}>
-                    Slide to simulate extraction lanes and OS headroom across workstation RAM configurations.
-                  </span>
-                </div>
-                <span style={{ fontSize: 13.5, fontWeight: 850, color: '#007aff', background: '#ffffff', padding: '5px 14px', borderRadius: 50, border: '1px solid #e2e8f0' }}>
-                  Simulated: {simSpecs.ram} GB RAM
+          {/* Right: Telemetry & Interactive Slider */}
+          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', padding: '4px 0' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 850, color: '#0f172a' }}>Simulate System RAM:</span>
+                <span style={{ fontSize: 14, fontWeight: 850, color: '#047857', background: '#ecfdf5', padding: '2px 10px', borderRadius: 999 }}>
+                  {simSpecs.ram} GB RAM
                 </span>
               </div>
 
+              {/* Slider Input */}
               <input
                 type="range"
-                min="4"
+                min="8"
                 max="64"
-                step="4"
+                step="8"
                 value={simulatedRamGb}
-                onChange={e => setSimulatedRamGb(Number(e.target.value))}
-                className="lx-ram-slider-range"
+                onChange={(e) => setSimulatedRamGb(Number(e.target.value))}
+                style={{ width: '100%', accentColor: '#10b981', cursor: 'pointer', marginBottom: 14 }}
               />
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 18 }}>
-                <div style={{ padding: '12px 16px', borderRadius: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
-                  <small style={{ color: '#64748b', fontSize: 11, fontWeight: 750, textTransform: 'uppercase' }}>Extraction Lanes</small>
-                  <div style={{ fontSize: 18, fontWeight: 850, color: '#007aff', marginTop: 3 }}>{simSpecs.lanes} Parallel Lanes</div>
+              {/* Dynamic Stats Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Extraction Concurrency</span>
+                  <strong style={{ fontSize: 14, color: '#0f172a' }}>{simSpecs.lanes}x Parallel Lanes</strong>
                 </div>
-                <div style={{ padding: '12px 16px', borderRadius: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
-                  <small style={{ color: '#64748b', fontSize: 11, fontWeight: 750, textTransform: 'uppercase' }}>OS Safety Headroom</small>
-                  <div style={{ fontSize: 18, fontWeight: 850, color: '#10b981', marginTop: 3 }}>&ge; {simSpecs.headroom} GB Buffer</div>
+
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Estimated Speed</span>
+                  <strong style={{ fontSize: 14, color: '#059669' }}>{simSpecs.speed}</strong>
                 </div>
-                <div style={{ padding: '12px 16px', borderRadius: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
-                  <small style={{ color: '#64748b', fontSize: 11, fontWeight: 750, textTransform: 'uppercase' }}>Peak Mining Rate</small>
-                  <div style={{ fontSize: 18, fontWeight: 850, color: '#0f172a', marginTop: 3 }}>{simSpecs.speed}</div>
+
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Hardware Tier</span>
+                  <strong style={{ fontSize: 14, color: '#0284c7' }}>{simSpecs.tier}</strong>
                 </div>
-                <div style={{ padding: '12px 16px', borderRadius: 14, background: '#ffffff', border: '1px solid #e2e8f0' }}>
-                  <small style={{ color: '#64748b', fontSize: 11, fontWeight: 750, textTransform: 'uppercase' }}>Crash Protection</small>
-                  <div style={{ fontSize: 18, fontWeight: 850, color: '#059669', marginTop: 3 }}>Guaranteed Fluid</div>
+
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Guaranteed OS Headroom</span>
+                  <strong style={{ fontSize: 14, color: '#d97706' }}>&ge; {simSpecs.headroom} GB Free</strong>
                 </div>
               </div>
             </div>
 
-            {/* 4 Hardware Requirements Tiers */}
-            <div className="lx-req-grid">
-              {DEVICE_REQUIREMENTS.map(req => (
-                <div key={req.tier} className={`lx-req-card ${req.tier === hardware.tier ? 'is-matched' : ''}`}>
-                  <span className="lx-req-badge">{req.badge}{req.tier === hardware.tier ? ' · DETECTED MATCH' : ''}</span>
-                  <b>{req.ram} · {req.cpu}</b>
-                  <small style={{ color: '#047857', fontWeight: 850 }}>{req.parallelZones} Parallel Zones · {req.speed}</small>
-                  <p>{req.note}</p>
-                </div>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', marginTop: 12 }}>
+              <ShieldCheck size={13} color="#10b981" />
+              <span>Detected Device: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU Cores</span>
             </div>
           </div>
         </div>
-      </section>
 
-      {/* Dual Cartridge Operating Modes */}
-      <section className="lx-section lx-section-alt">
-        <div className="lx-wrap" style={{ maxWidth: 1180 }}>
-          <div className="lx-sec-head">
-            <span className="lx-kicker"><Server size={13} /> Dual Operating Modes</span>
-            <h2>Client Workspace &amp; Master Territory Intelligence</h2>
-            <p>
-              Self-serve immediate micro-zone searches in your browser, or let our Master Intelligence Desk
-              deliver entire nationwide datasets.
-            </p>
-          </div>
-
-          <div className="lx-dual-cartridge-grid">
-            {/* Cartridge 01: Client Workspace Edition */}
-            <article className="lx-cartridge-panel is-client">
-              <span className="lx-cartridge-tag is-client">CARTRIDGE 01 · CLIENT WORKSPACE EDITION</span>
-              <h3>Instant City, Town, Mandal &amp; County Leads</h3>
-              <p>
-                Built for startups, sales reps, and growth agencies. Select any of the 11 global markets,
-                type a query, and stream verified phone numbers straight into Excel. Works locally on your
-                machine with zero setup.
-              </p>
-              <ul className="lx-story-bullets">
-                <li><CheckCircle2 size={15} color="#10b981" /> All 22 Discovery Engines running in parallel</li>
-                <li><CheckCircle2 size={15} color="#10b981" /> 100% HD Satellite Live Zone Radar across 11 nations</li>
-                <li><CheckCircle2 size={15} color="#10b981" /> Clean, deduplicated Excel (.xlsx), CSV &amp; Phone (.vcf) exports</li>
-              </ul>
-              <div style={{ display: 'flex', gap: 10, marginTop: 'auto', flexWrap: 'wrap' }}>
-                <button
-                  type="button"
-                  className="lx-btn lx-btn-primary"
-                  onClick={() => navigate('/command?country=IN')}
-                >
-                  <Rocket size={15} /> Launch Client Workspace
-                </button>
-                <button
-                  type="button"
-                  className="lx-btn-local-engine"
-                  onClick={() => navigate('/command?country=IN&mode=local')}
-                >
-                  <Zap size={14} /> Run on Local Server
-                </button>
+        {/* Multi-Lane Concurrency Strip */}
+        <div className="lx-ram-lanes-track">
+          {Array.from({ length: 8 }, (_, idx) => {
+            const isActive = idx < simSpecs.lanes;
+            return (
+              <div key={idx} className={`lx-ram-lane-pipe ${isActive ? 'is-active' : ''}`}>
+                <span>Lane 0{idx + 1}</span>
+                {isActive && <div className="lx-ram-lane-pulse" />}
               </div>
-            </article>
-
-            {/* Cartridge 02: Master Territory Intelligence Edition */}
-            <article className="lx-cartridge-panel is-master">
-              <span className="lx-cartridge-tag is-master">CARTRIDGE 02 · MASTER TERRITORY INTELLIGENCE</span>
-              <h3>Entire Districts, Full States &amp; Complete Web Rollouts</h3>
-              <p>
-                Need every business across an entire District, County, State, or Nationwide territory?
-                Our Master Edition gathers verified datasets from every public website, trade catalog, and
-                corporate registry across the internet and delivers clean master workbooks.
-              </p>
-              <div className="lx-contact-slots" style={{ marginTop: 'auto' }}>
-                <div className="lx-contact-slot" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <Phone size={18} color="#10b981" />
-                  <div>
-                    <small style={{ color: '#64748b' }}>DIRECT MOBILE &amp; WHATSAPP DESK</small>
-                    <b style={{ color: '#0f172a' }}>Priority Access Desk</b>
-                  </div>
-                </div>
-                <div className="lx-contact-slot" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                  <Mail size={18} color="#007aff" />
-                  <div>
-                    <small style={{ color: '#64748b' }}>ENTERPRISE DISPATCH EMAIL</small>
-                    <b style={{ color: '#0f172a' }}>support@scraper.co.in</b>
-                  </div>
-                </div>
-              </div>
-            </article>
-          </div>
+            );
+          })}
         </div>
-      </section>
+      </motion.div>
+
+      {/* 4. Action Row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+        <LiquidButton3D
+          variant="emerald"
+          size="lg"
+          icon={Rocket}
+          pulse
+          onClick={() => navigate('/command?country=IN')}
+        >
+          Launch Full-Speed Workstation Sweep
+        </LiquidButton3D>
+
+        <LiquidButton3D
+          variant="ghost"
+          size="lg"
+          onClick={() => navigate('/')}
+        >
+          ← Return to Overview
+        </LiquidButton3D>
+      </div>
+
+      {/* 5. 4 Micro Value Pills */}
+      <div className="lx-value-strip">
+        <span className="lx-value-chip is-highlight">
+          <span>✓ Guaranteed &ge; 4.5 GB Headroom</span>
+        </span>
+        <span className="lx-value-chip">
+          <span>✓ Up to 16x Hardware Lanes</span>
+        </span>
+        <span className="lx-value-chip is-highlight">
+          <span>✓ 100% On-Device Memory Privacy</span>
+        </span>
+        <span className="lx-value-chip">
+          <span>✓ Zero Cloud Queue Throttle</span>
+        </span>
+      </div>
     </div>
   );
 }

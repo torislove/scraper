@@ -18,7 +18,7 @@ const NAICS_SECTORS = {
     code: '11',
     title: 'Agriculture, Forestry, Fishing & Hunting',
     patterns: [
-      /\b(turmeric|haldi|pasupu|curcumin|spices?|masala|chilli|chillies|mirchi|cotton|ginning|rice\s*mill|paddy|grain|grains|pulses?|dal\s*mill|oil\s*mill|groundnut|jaggery|bellam|tobacco|agro|agricultural|apmc|mandi|krishi|crop|farming|livestock|fishery|seeds?|fertilizer|produce\s*merchant|cold\s*storage|olive\s*oil|hydroponics?|greenhouses?|winer(?:y|ies)|wine\s*cooperatives?|vineyards?|green\s*coffee)\b/i
+      /\b(turmeric|haldi|pasupu|curcumin|spices?|masala|chilli|chillies|mirchi|raw\s*cotton|cotton\s*(?:ginning|pressing|seed|bale|farming|raw|mandi|market\s*yard|spinning|mill)|ginning|kapas|rice\s*mill|paddy|grain|grains|pulses?|dal\s*mill|oil\s*mill|groundnut|jaggery|bellam|tobacco|agro|agricultural|apmc|mandi|krishi|crop|farming|livestock|fishery|seeds?|fertilizer|produce\s*merchant|cold\s*storage|olive\s*oil|hydroponics?|greenhouses?|winer(?:y|ies)|wine\s*cooperatives?|vineyards?|green\s*coffee)\b/i
     ]
   },
   21: {
@@ -46,7 +46,7 @@ const NAICS_SECTORS = {
     code: '31-33',
     title: 'Manufacturing & Industrial',
     patterns: [
-      /\b(manufacturing|manufacturer|factory|foundry|casting|machinery|cnc|precision\s*tooling|precision\s*machining|semiconductor|cleanroom|wafer|fabrication|powertrain|transmission\s*engineering|packaging\s*unit|chemical\s*plant|plastic\s*factory|industrial\s*equipment|marine\s*rigging|corrugated\s*box(?:es)?|watchmaking|micro-mechanics|leather\s*tanning|tannery|mining\s*equipment|dairy\s*processing)\b/i
+      /\b(manufacturing|manufacturer|factory|foundry|casting|machinery|cnc|precision\s*tooling|precision\s*machining|semiconductor|cleanroom|wafer|fabrication|powertrain|transmission\s*engineering|packaging\s*unit|chemical\s*plant|plastic\s*factory|industrial\s*equipment|marine\s*rigging|corrugated\s*box(?:es)?|watchmaking|micro-mechanics|leather\s*tanning|tannery|mining\s*equipment|dairy\s*processing|knitwear|hosiery|garments?|apparel|textiles?|fabrics?|cotton\s*knitwear|cotton\s*garments?)\b/i
     ]
   },
   42: {

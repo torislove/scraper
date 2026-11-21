@@ -151,6 +151,8 @@ const FAMILY_KEYWORDS = {
     ['olive oil', 16], ['hydroponic', 16], ['greenhouse', 15], ['wine cooperative', 16], ['winery', 15], ['green coffee', 16]
   ],
   textiles: [
+    ['cotton knitwear', 18], ['cotton garments', 18], ['cotton garment', 18],
+    ['knitwear', 17], ['hosiery', 17], ['apparel export', 16],
     ['saree', 16], ['sarees', 16], ['handloom', 16], ['handlooms', 16], ['silk', 15],
     ['textile', 15], ['textiles', 15], ['cloth', 14], ['garment', 14], ['garments', 14],
     ['readymade', 13], ['weaving', 15], ['spinning mill', 16],
