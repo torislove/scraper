@@ -17,7 +17,8 @@ const requestGuard = require('../utils/requestGuard');
 const taxonomyLearner = require('./taxonomyLearner');
 const { isVendorRelevant } = require('./categoryFidelity');
 const { collectCarryForward, findRepeatCoveredZones } = require('./carryForwardService');
-const { areNearDuplicates, mergeVendorLeads } = require('../utils/indiaTradeIntelligence');
+const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
+const { areNearDuplicates, mergeVendorLeads } = indiaTradeIntelligence;
 const { calculateLeadQuality, determineTier } = require('../utils/leadScoring');
 const { streamingEnricher, backfillPhones, hasValidMobile, countryForLead } = require('./phoneBackfillService');
 const { resolveUniversalZones, zoneCoordinates, ZONE_COORDINATES, buildCityGridZones, classifyLocation, mandalIndex } = require('../utils/universalGeoCluster');
@@ -721,6 +722,22 @@ async function runOmniSearchOrchestrator(
         }
       }
     } catch (anchorError) {}
+
+    // Pre-flight Trade Sector Zone Gate:
+    // Drop any zone whose name or query contains negative avoids of the trade sector
+    const sectorAvoids = indiaTradeIntelligence.getNegativeAvoidsForQuery(category);
+    if (Array.isArray(sectorAvoids) && sectorAvoids.length > 0) {
+      const beforeCount = zones.length;
+      zones = zones.filter(z => {
+        const zName = String(z.zoneName || z.name || '').toLowerCase();
+        const zQuery = String(z.queryText || '').toLowerCase();
+        const combined = `${zName} ${zQuery}`;
+        return !sectorAvoids.some(avoid => combined.includes(avoid.toLowerCase()));
+      });
+      if (zones.length < beforeCount) {
+        addLog(`[Trade Intelligence] Pruned ${beforeCount - zones.length} conflicting subvector zone(s) to preserve 100% sector purity.`);
+      }
+    }
 
     // One guard is used by every write path â€” live snapshot, reconciliation and
     // the final folder â€” so a row can never enter through the side door after

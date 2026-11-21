@@ -17,6 +17,8 @@
 
 const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me|top\s+\d+.*|best\s+\d+.*|\d+\s+best.*|list\s+of\s+.*)$/i;
 
+const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
+
 function clean(value) {
   return String(value == null ? '' : value)
     // JustDial and Google sometimes embed private-use icon glyphs / emoji
@@ -476,6 +478,125 @@ const ROLES = [
     avoids: [
       'bank', 'atm', 'doctor', 'pharmacy'
     ]
+  },
+  {
+    id: 'agriculture_spices',
+    label: 'Agriculture, Spices & Agro Commodities',
+    match: [
+      'turmeric', 'haldi', 'pasupu', 'spices', 'spice', 'masala', 'chilli', 'chillies',
+      'mirchi', 'cotton', 'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses',
+      'dal mill', 'oil mill', 'groundnut', 'jaggery', 'bellam', 'tobacco', 'agro commodity',
+      'agricultural', 'apmc', 'mandi', 'krishi', 'fertilizer', 'seeds', 'grain merchant',
+      'cold storage', 'spice wholesale', 'turmeric wholesale'
+    ],
+    wants: [
+      'turmeric', 'haldi', 'spices', 'spice', 'masala', 'chilli', 'mirchi', 'cotton',
+      'ginning', 'rice mill', 'paddy', 'grain', 'grains', 'pulses', 'dal mill', 'oil mill',
+      'jaggery', 'tobacco', 'agro', 'agricultural', 'mandi', 'apmc', 'commission agent',
+      'trader', 'traders', 'merchant', 'merchants', 'cold storage', 'produce', 'krishi',
+      'seeds', 'fertilizer', 'wholesaler', 'wholesalers', 'trading', 'processing unit', 'polishing'
+    ],
+    avoids: [
+      'iron and steel', 'iron & steel', 'steel', 'tmt', 'railing', 'tiles', 'sanitaryware',
+      'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles', 'cloth',
+      'garment', 'readymade', 'electrical', 'electricals', 'appliances', 'hotel', 'lodge',
+      'banquet', 'mandapam', 'function hall', 'cement', 'hospital', 'clinic', 'dentist',
+      'car repair', 'garage', 'photo studio', 'salon', 'parlour', 'vox ceiling', 'metal store',
+      'metal house', 'marbles', 'granites'
+    ]
+  },
+  {
+    id: 'metals_steel',
+    label: 'Iron, Steel, Metals & TMT',
+    match: [
+      'iron and steel', 'iron & steel', 'tmt steel', 'tmt bars', 'steel dealer',
+      'steel trader', 'structural steel', 'metal store', 'sheet metal', 'pipes and tubes',
+      'foundry', 'casting', 'metal fabricat', 'steel railing'
+    ],
+    wants: [
+      'iron', 'steel', 'tmt', 'metal', 'pipes', 'tubes', 'structural', 'railing',
+      'fabrication', 'sheets', 'foundry', 'dealer', 'traders', 'corporation', 'steels'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'chilli', 'grain', 'saree', 'textile', 'clothing',
+      'pharmacy', 'hospital', 'clinic', 'hotel', 'restaurant', 'photo studio'
+    ]
+  },
+  {
+    id: 'textiles_sarees',
+    label: 'Textiles, Sarees, Handlooms & Apparel',
+    match: [
+      'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles',
+      'fabric', 'fabrics', 'cloth', 'garment', 'garments', 'spinning mill', 'weaving',
+      'silk', 'cotton cloth', 'readymade', 'apparel', 'boutique'
+    ],
+    wants: [
+      'saree', 'sarees', 'handloom', 'silk', 'textile', 'textiles', 'cloth',
+      'garment', 'garments', 'readymade', 'apparel', 'dress', 'fabrics', 'showroom', 'matching'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'chilli', 'grain', 'steel', 'iron', 'tmt', 'cement',
+      'tiles', 'sanitaryware', 'hardware', 'hospital', 'clinic', 'pharmacy', 'hotel', 'electrical'
+    ]
+  },
+  {
+    id: 'building_materials',
+    label: 'Building Materials, Tiles, Cement & Sanitaryware',
+    match: [
+      'building materials', 'cement dealer', 'cement stockist', 'sanitaryware',
+      'tiles showroom', 'tiles dealer', 'granite', 'marble', 'vitrified', 'plywood',
+      'hardware and tools', 'bathroom fittings'
+    ],
+    wants: [
+      'building material', 'cement', 'tiles', 'granite', 'marble', 'sanitaryware',
+      'plywood', 'laminates', 'hardware', 'bathroom fittings', 'ceramic', 'vitrified'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'chilli', 'grain', 'saree', 'textile', 'clothing',
+      'hospital', 'clinic', 'pharmacy', 'hotel', 'restaurant'
+    ]
+  },
+  {
+    id: 'electrical_goods',
+    label: 'Electrical Goods, Lighting & Cables',
+    match: [
+      'electrical goods', 'switchgear', 'cables and wires', 'industrial lighting',
+      'electrical switch', 'electrical wholesale'
+    ],
+    wants: [
+      'electrical', 'electricals', 'cables', 'wires', 'switchgear', 'switches',
+      'lighting', 'panel', 'fans', 'appliances', 'fittings'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'chilli', 'grain', 'saree', 'textile', 'clothing',
+      'hospital', 'clinic', 'dentist', 'hotel', 'plumber'
+    ]
+  },
+  {
+    id: 'furniture_decor',
+    label: 'Furniture & Woodwork',
+    match: [
+      'furniture', 'wooden furniture', 'sofas', 'mattresses', 'office furniture', 'wardrobes'
+    ],
+    wants: [
+      'furniture', 'sofa', 'wood', 'wooden', 'mattress', 'furnishing', 'office furniture', 'interior'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'steel tmt', 'saree', 'clinic', 'dentist', 'hospital'
+    ]
+  },
+  {
+    id: 'footwear_shoes',
+    label: 'Footwear & Shoes',
+    match: [
+      'footwear', 'shoes wholesale', 'shoe showroom', 'leather shoes', 'sandals', 'chappal'
+    ],
+    wants: [
+      'footwear', 'shoes', 'shoe', 'sandals', 'chappals', 'boots', 'sneakers'
+    ],
+    avoids: [
+      'turmeric', 'spices', 'steel', 'cement', 'clinic', 'hospital'
+    ]
   }
 ];
 
@@ -545,6 +666,18 @@ function isVendorRelevant(vendor, requestedCategory) {
   if (!vendor) return false;
   if (isGenericName(vendor.name)) return false;
 
+  const text = vendorHaystack(vendor);
+  const subcategory = String(vendor.subcategory || '');
+
+  // 1. Cross-Industry Anti-Bleed Conflict Check:
+  // Detect trade sector for the requested query and test against vendor profile
+  const tradeSector = indiaTradeIntelligence.detectTradeSector(requestedCategory);
+  if (tradeSector) {
+    if (indiaTradeIntelligence.isIndustryConflict(tradeSector.key, text, subcategory)) {
+      return false;
+    }
+  }
+
   const requestedRole = detectRole(requestedCategory);
   if (!requestedRole) {
     // Universal Category & Token Matching Guard for all vendor types
@@ -563,11 +696,85 @@ function isVendorRelevant(vendor, requestedCategory) {
     return true;
   }
 
-  const text = vendorHaystack(vendor);
   if (!text) return true;
 
   const wants = hasAny(text, requestedRole.wants.map(norm));
   const avoids = hasAny(text, requestedRole.avoids.map(norm));
+
+  // Special high-fidelity rule for Agriculture, Spices & Agro Commodities:
+  // ABSOLUTELY NEVER allow Iron & Steel, Sarees/Handloom, Tiles/Sanitaryware,
+  // Electricals, Hotels, or Hospitals into an Agricultural/Spices result list!
+  if (requestedRole.id === 'agriculture_spices') {
+    const combined = `${norm(vendor.name)} ${norm(subcategory)}`;
+    if (hasAny(combined, [
+      'iron and steel', 'iron & steel', 'steel', 'tmt', 'railing', 'tiles', 'sanitaryware',
+      'saree', 'sari', 'sarees', 'handloom', 'handlooms', 'textile', 'textiles', 'cloth',
+      'garment', 'readymade', 'electrical', 'electricals', 'appliances', 'hotel', 'lodge',
+      'banquet', 'mandapam', 'function hall', 'cement', 'hospital', 'clinic', 'dentist',
+      'car repair', 'garage', 'photo studio', 'salon', 'parlour', 'vox ceiling', 'metal store',
+      'metal house', 'marbles', 'granites'
+    ])) {
+      return false;
+    }
+
+    if (avoids) return false;
+
+    // Positive wants check: if business has positive agriculture/spices tokens
+    if (wants) return true;
+
+    // Check specific commodity entity
+    const commodity = indiaTradeIntelligence.extractSpecificCommodity(requestedCategory);
+    if (commodity) {
+      const hasSpecificNoun = commodity.patterns.some(p => p.test(text));
+      const hasGeneralAgroNoun = /\b(agro|mandi|commission agent|market yard|apmc|processing unit|traders?|wholesal|merchant|merchants?|stockist|cold storage)\b/i.test(text);
+      if (hasSpecificNoun || hasGeneralAgroNoun) {
+        return true;
+      }
+      return false;
+    }
+
+    return wants;
+  }
+
+  // Special high-fidelity rule for Iron, Steel & Metals:
+  // ABSOLUTELY NEVER allow Spices/Turmeric, Sarees, Hotels or Clinics into a Steel result list!
+  if (requestedRole.id === 'metals_steel') {
+    const combined = `${norm(vendor.name)} ${norm(subcategory)}`;
+    if (hasAny(combined, [
+      'turmeric', 'spices', 'chilli', 'grain', 'paddy', 'saree', 'handloom', 'cloth',
+      'textile', 'hotel', 'lodge', 'hospital', 'clinic', 'dentist', 'pharmacy'
+    ])) {
+      return false;
+    }
+    if (avoids) return false;
+    return wants;
+  }
+
+  // Special high-fidelity rule for Textiles, Sarees & Apparel:
+  if (requestedRole.id === 'textiles_sarees') {
+    const combined = `${norm(vendor.name)} ${norm(subcategory)}`;
+    if (hasAny(combined, [
+      'turmeric', 'spices', 'chilli', 'steel', 'iron', 'tmt', 'cement', 'tiles',
+      'sanitaryware', 'hardware', 'hospital', 'clinic', 'pharmacy', 'hotel'
+    ])) {
+      return false;
+    }
+    if (avoids) return false;
+    return wants;
+  }
+
+  // Special high-fidelity rule for Building Materials & Tiles:
+  if (requestedRole.id === 'building_materials') {
+    const combined = `${norm(vendor.name)} ${norm(subcategory)}`;
+    if (hasAny(combined, [
+      'turmeric', 'spices', 'chilli', 'grain', 'saree', 'handloom', 'cloth',
+      'textile', 'hospital', 'clinic', 'pharmacy', 'hotel'
+    ])) {
+      return false;
+    }
+    if (avoids) return false;
+    return wants;
+  }
 
   // Special high-fidelity rule for Photography & Studios:
   // ABSOLUTELY NEVER allow Xerox, MeeSeva, Photocopying, Digital Seva, Photo Framing, or Camera Repair shops into Photographers!
@@ -672,8 +879,6 @@ function isVendorRelevant(vendor, requestedCategory) {
 
 function filterRelevantVendors(vendors, requestedCategory) {
   if (!Array.isArray(vendors)) return [];
-  const role = detectRole(requestedCategory);
-  if (!role) return vendors;
   return vendors.filter(vendor => isVendorRelevant(vendor, requestedCategory));
 }
 

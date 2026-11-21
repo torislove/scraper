@@ -979,14 +979,58 @@ const CATEGORY_SUBVECTORS = [
       'Commercial business arcade'
     ]
   },
-  // 9. Wholesale, Retail, Products, Showrooms & FMCG
+  // 8c. Agriculture, Spices & Agro Commodities
   {
-    match: /shop|store|showroom|dealer|distributor|wholesaler|supplier|traders?|market|grocery|supermarket|kirana|garment|cloth|saree|jewell?ery|footwear|furniture|fmcg|product/i,
+    match: /\b(turmeric|haldi|pasupu|spices?|masala|chilli|chillies|mirchi|cotton|ginning|rice\s*mill|paddy|grain|grains|pulses?|dal\s*mill|oil\s*mill|groundnut|jaggery|bellam|tobacco|agro\s*commodit|agricultural|apmc|mandi|krishi|fertilizer|seeds?|pesticide|grain\s*merchant|produce\s*merchant|dry\s*fruits?|cashew|cardamom|pepper|coriander|cumin|jeera|oilseeds?|cold\s*storage)\b/i,
+    exclude: /\b(saree|textile|cloth|steel|iron|cement|tiles|sanitary|hospital|clinic|doctor|pharmacy|hotel|lodge|restaurant|barber|salon|parlour)\b/i,
     labels: [
-      'Wholesale market', 'Wholesale dealer', 'Authorized distributor', 'Retail showroom',
-      'Supermarket', 'Departmental store', 'FMCG distributor', 'Electronics showroom',
-      'Garment wholesaler', 'Saree showroom', 'Footwear showroom', 'Furniture showroom',
-      'Home appliances store', 'Cosmetics store', 'Hardware and tools store'
+      'Agricultural commodity traders', 'Spices wholesalers and commission agents',
+      'Grain and pulse wholesale merchants', 'Rice mills and paddy processors',
+      'Mandi merchants and APMC yard stockists', 'Cold storage and agro warehouse'
+    ]
+  },
+  // 9a. Textiles, Sarees, Handlooms & Apparel
+  {
+    match: /\b(saree|sari|sarees|handloom|handlooms|textile|textiles|fabric|fabrics|cloth|clothes|clothing|garment|garments|spinning\s*mill|weaving|silk|cotton\s*cloth|readymade|apparel|hosiery|tailor|boutique)\b/i,
+    exclude: /\b(turmeric|spices|chilli|grain|steel|iron|cement|tiles|sanitary|hospital|clinic)\b/i,
+    labels: [
+      'Saree showroom', 'Handloom sarees and silk', 'Textile wholesaler',
+      'Readymade garments wholesale', 'Fabric and cloth merchants', 'Boutique and designer studio'
+    ]
+  },
+  // 9b. Footwear & Shoes Showrooms
+  {
+    match: /\b(footwear|shoes\s*wholesale|shoe\s*showroom|leather\s*shoes|chappal|sandals)\b/i,
+    exclude: /\b(turmeric|spices|steel|saree|hospital|clinic)\b/i,
+    labels: [
+      'Footwear showroom', 'Wholesale shoe dealer', 'Leather footwear store',
+      'Sports shoe and sneaker store'
+    ]
+  },
+  // 9c. Furniture, Woodwork & Mattresses
+  {
+    match: /\b(furniture|wooden\s*furniture|sofas?|mattresses?|office\s*furniture|wardrobes?)\b/i,
+    exclude: /\b(turmeric|spices|steel|saree|hospital|clinic)\b/i,
+    labels: [
+      'Furniture showroom', 'Wooden furniture manufacturer', 'Sofa and interior furniture store',
+      'Mattress and sleep studio', 'Office furniture supplier'
+    ]
+  },
+  // 9d. Jewellery, Gold & Diamonds
+  {
+    match: /\b(jeweller|jewellers|jewellery|gold\s*shop|gold\s*merchant|bullion|diamond\s*jewell?ery)\b/i,
+    exclude: /\b(turmeric|steel|saree|cement|clinic)\b/i,
+    labels: [
+      'Jewellery showroom', 'Gold merchants and bullion', 'Diamond jewellery store',
+      'Silver ornaments and articles'
+    ]
+  },
+  // 9e. Pure Wholesale & Distribution (General, when no specific retail industry matches)
+  {
+    match: /\b(wholesaler|wholesale\s*market|wholesale\s*dealer|distributor|bulk\s*supplier|c&f\s*agent|stockist)\b/i,
+    exclude: /\b(turmeric|spices|chilli|cotton|grain|rice|dal|saree|garment|cloth|furniture|footwear|jewell|cctv|computer|doctor|clinic|hotel|restaurant|tiles|cement|steel)\b/i,
+    labels: [
+      'Wholesale market', 'Wholesale dealer', 'Authorized distributor', 'Bulk supplier and stockist'
     ]
   },
   // 10. Education, Coaching, Institutes & Academies
@@ -1069,23 +1113,38 @@ function buildCategorySubVectorZones(category, cityLabel, limit = 32) {
   const city = String(cityLabel || '').replace(/,\s*$/, '').trim();
   if (!city) return [];
 
-  const family = CATEGORY_SUBVECTORS.find(entry => entry.match.test(cat) && (!entry.exclude || !entry.exclude.test(cat)));
-  let labels = family ? [...family.labels] : [];
   const tradeVectors = indiaTradeIntelligence.getSubvectorsForQuery(cat);
-  if (Array.isArray(tradeVectors) && tradeVectors.length) {
-    labels = [...tradeVectors, ...labels];
+  let labels = [];
+
+  if (Array.isArray(tradeVectors) && tradeVectors.length > 0) {
+    // Exact trade intelligence subvectors have highest priority and absolute domain purity
+    labels = [...tradeVectors];
+  } else {
+    const family = CATEGORY_SUBVECTORS.find(entry => entry.match.test(cat) && (!entry.exclude || !entry.exclude.test(cat)));
+    labels = family ? [...family.labels] : [];
   }
+
+  // Cross-Industry Negative Gate: Strictly drop any label matching negative avoid keywords
+  const sectorAvoids = indiaTradeIntelligence.getNegativeAvoidsForQuery(cat);
+  if (Array.isArray(sectorAvoids) && sectorAvoids.length > 0) {
+    labels = labels.filter(lbl => {
+      const lower = lbl.toLowerCase();
+      return !sectorAvoids.some(avoid => lower.includes(avoid.toLowerCase()));
+    });
+  }
+
   const catKey = normalizeCategoryKey(cat);
 
-  // Add a few generic modifiers when they make sense. For a specific category
-  // like "Wedding Photographer" the generic "best/famous" variants are useful;
-  // "wholesale" and "service centre" are not, so they are filtered out.
-  const generic = GENERIC_SUBVECTORS
-    .filter(mod => {
-      if (/wholesale|service centre/.test(mod)) return /shop|dealer|store|repair|computer|mobile|car|bike|electronics/i.test(catKey);
-      return true;
-    })
-    .map(mod => (mod === 'best' || mod === 'famous') ? `${mod} ${cat}` : `${cat} ${mod}`);
+  // Add generic modifiers only when they do not dilute or contradict the sector intent
+  const isAgroOrCommodity = /\b(turmeric|haldi|pasupu|spices?|masala|chilli|cotton|grain|paddy|rice|dal|oilseed|tobacco|jaggery)\b/i.test(cat);
+  const generic = (tradeVectors.length > 0 || isAgroOrCommodity)
+    ? [] // When we have authoritative trade vectors or commodities, keep 100% pure focus
+    : GENERIC_SUBVECTORS
+        .filter(mod => {
+          if (/wholesale|service centre/.test(mod)) return /shop|dealer|store|repair|computer|mobile|car|bike|electronics/i.test(catKey);
+          return true;
+        })
+        .map(mod => (mod === 'best' || mod === 'famous') ? `${mod} ${cat}` : `${cat} ${mod}`);
 
   const seen = new Set();
   const zones = [];

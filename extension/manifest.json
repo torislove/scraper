@@ -10,8 +10,7 @@
     "alarms",
     "scripting",
     "system.memory",
-    "system.cpu",
-    "tabs"
+    "system.cpu"
   ],
   "host_permissions": [
     "https://scraper.co.in/*",

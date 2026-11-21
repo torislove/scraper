@@ -17,6 +17,24 @@ const brandIntel = require('./brandIntel');
 const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
 
 const FAMILY_DEFINITIONS = {
+  agriculture_spices: {
+    label: 'Agriculture, Spices & Commodities',
+    description: 'Turmeric, chilli, agro commodities, mandi merchants, rice mills and cold storage',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+  },
+  textiles: {
+    label: 'Textiles, Sarees & Apparel',
+    description: 'Saree showrooms, handlooms, fabrics, spinning mills and wholesale garments',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+  },
+  metals: {
+    label: 'Iron, Steel & Metals',
+    description: 'TMT bars, structural steel, sheet metal, fabrication and industrial metal stores',
+    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
+    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+  },
   technology: {
     label: 'IT, Computers & Electronics',
     description: 'Computer shops, laptop dealers, mobile stores, CCTV, software and electronics',
@@ -273,7 +291,7 @@ const FAMILY_KEYWORDS = {
 
 // Tie-break priority: specialist families win over broad ones with equal score.
 const FAMILY_PRIORITY = [
-  'technology', 'photography', 'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
+  'agriculture_spices', 'textiles', 'metals', 'technology', 'photography', 'wedding', 'industrial', 'home-services', 'auto', 'real-estate',
   'health', 'fitness', 'hospitality', 'logistics', 'beauty', 'education', 'food', 'retail', 'professional', 'generic'
 ];
 
@@ -371,13 +389,27 @@ function classifyCategory(category) {
   const tradeSector = indiaTradeIntelligence.detectTradeSector(raw);
   if (tradeSector) {
     const sectorFamilyMap = {
+      agriculture_spices: 'agriculture_spices',
+      textiles_apparel: 'textiles',
+      metals_steel: 'metals',
+      building_materials: 'industrial',
+      electrical_goods: 'industrial',
+      chemicals_packaging: 'industrial',
+      industrial_machinery: 'industrial',
+      technology_computers: 'technology',
+      surveillance_cctv: 'technology',
       photography_media: 'photography',
       weddings_hospitality: 'wedding',
       healthcare_doctors: 'health',
+      pharmacies_drugstores: 'health',
       home_services_contractors: 'home-services',
       automotive_garages: 'auto',
       wholesale_building_materials: 'industrial',
       retail_lifestyle: 'retail',
+      hospitality_hotels: 'hospitality',
+      jewelry_gems: 'retail',
+      furniture_woodwork: 'retail',
+      footwear_leather: 'retail',
       professional_legal_finance: 'professional',
       beauty_wellness: 'beauty',
       food_dining: 'food',

@@ -151,6 +151,108 @@ async function run() {
     assert.strictEqual(relevant, false, 'CCTV category must reject pure computer store');
   });
 
+  // 6. Agricultural Commodities & Spices Trade Intelligence
+  console.log('\n--- 6. Agricultural Commodities & Spices (Zero Hallucination) ---');
+  test('Sub-vector zones for "Wholesale Turmeric" in Tenali must contain pure Turmeric/Commodity vectors and ZERO Sarees, Steel, Tiles, Footwear, or Furniture', () => {
+    const zones = buildCategorySubVectorZones('Wholesale Turmeric Suppliers', 'Tenali');
+    const names = zones.map(z => z.zoneName.toLowerCase());
+    
+    // Positive assertions
+    assert.ok(names.some(n => n.includes('turmeric')), `Must include turmeric subvectors: ${names.join(', ')}`);
+    assert.ok(names.some(n => n.includes('wholesalers') || n.includes('merchants') || n.includes('mandi') || n.includes('commission agents')), `Must include wholesale/mandi subvectors: ${names.join(', ')}`);
+    
+    // Absolute Zero-Tolerance Bleed Assertions
+    const hasSaree = names.some(n => /\b(?:saree|garment|cloth|apparel|textile)\b/i.test(n));
+    const hasSteel = names.some(n => /\b(?:steel|iron|tmt|metal)\b/i.test(n));
+    const hasTiles = names.some(n => /\b(?:tiles|sanitaryware|granite|cement)\b/i.test(n));
+    const hasFootwear = names.some(n => /\b(?:footwear|shoes|shoe)\b/i.test(n));
+    const hasFurniture = names.some(n => /\b(?:furniture|sofa|woodwork)\b/i.test(n));
+    const hasHardware = names.some(n => /\b(?:hardware and tools)\b/i.test(n));
+
+    assert.strictEqual(hasSaree, false, `Found Saree in Turmeric zones: ${names.join(', ')}`);
+    assert.strictEqual(hasSteel, false, `Found Steel in Turmeric zones: ${names.join(', ')}`);
+    assert.strictEqual(hasTiles, false, `Found Tiles in Turmeric zones: ${names.join(', ')}`);
+    assert.strictEqual(hasFootwear, false, `Found Footwear in Turmeric zones: ${names.join(', ')}`);
+    assert.strictEqual(hasFurniture, false, `Found Furniture in Turmeric zones: ${names.join(', ')}`);
+    assert.strictEqual(hasHardware, false, `Found Hardware in Turmeric zones: ${names.join(', ')}`);
+  });
+
+  test('Category Fidelity for "Wholesale Turmeric Suppliers" MUST REJECT all 25 mismatched businesses reported in Tenali', () => {
+    const requestedCategory = 'Wholesale Turmeric Suppliers';
+
+    const mismatchedVendors = [
+      { name: 'MMinar Traders', subcategory: 'Iron & Steel TMT Dealers, Tenali, India', address: 'Tenali' },
+      { name: 'SSri Balaji steel railing And Glass Tenali', subcategory: 'Steel Railing & Glass', address: 'Gopal Reddy St' },
+      { name: 'LLakshmi sainath metal stores', subcategory: 'Metal Stores', address: 'Sivaji circle, Burripalem Road' },
+      { name: 'BBharat Steel And Electricals', subcategory: 'Iron & Steel TMT Dealers', address: 'Tenali' },
+      { name: 'RRaja Steel Corporation', subcategory: 'Iron & Steel Corporation', address: '7-11-125, Gopal Reddy St' },
+      { name: 'LLakshmi Steel Corporation (Cement, Iron and Steel)', subcategory: 'Cement, Iron and Steel', address: 'Gopal Reddy St' },
+      { name: 'VVISAKHA STEEL & CEMENT', subcategory: 'Iron & Steel TMT Dealers', address: 'Tenali' },
+      { name: 'Jj k Metal house', subcategory: 'Iron & Steel TMT Dealers', address: 'Tenali' },
+      { name: 'SSri Raghavendra Steel Corporation', subcategory: 'Steel Corporation', address: 'Burripalem Road' },
+      { name: 'CChamundeswari Enterprises - VOX CEILING', subcategory: 'VOX CEILING False Ceiling', address: 'Gopal Reddy St' },
+      { name: 'SSRI SAI TILES SANITARY MARBLES AND GRANITES', subcategory: 'Tiles Sanitary Marbles', address: 'D.No: 11-1-20/3' },
+      { name: 'LLAKSHMI SAI TILES AND TILES', subcategory: 'Tiles & Ceramic Showrooms', address: 'Tenali' },
+      { name: 'MMAHESH HANDLOOM SAREES', subcategory: 'Handloom Sarees Showroom', address: '6, Nehru Rd' },
+      { name: 'KKIRTI SAREES', subcategory: 'Sarees Showroom', address: 'Opp. poorna departmental stores, main road' },
+      { name: 'SSubham Grand - Tenali', subcategory: 'Hotel & Banquet', address: 'Bose Rd' },
+      { name: 'KKranti Show Room', subcategory: 'Sarees Showroom', address: 'Main Rd' },
+      { name: 'Ssatyabhama sarees', subcategory: 'Sarees Showroom', address: 'Main Rd, near Gandhi Chowk' },
+      { name: 'SSri Vijaya saradhi textiles', subcategory: 'Textiles Showroom', address: 'Door No: 16' },
+      { name: 'TTenali Electricals', subcategory: 'Electrical Goods & Spares', address: 'Bose Rd' },
+      { name: 'RRR ELECTRICAL & SPARES', subcategory: 'Electrical & Spares', address: 'opp. ICIC BANK' },
+      { name: 'KKuber electricals', subcategory: 'Electricals Store', address: 'Gopal Reddy St' },
+      { name: 'SSri sai Durga electricals and sanitary ware', subcategory: 'Electricals and Sanitary Ware', address: 'Gopal Reddy St' },
+      { name: 'SSri Venkata Ramana Electricals', subcategory: 'Electrical Goods Store', address: 'Bose Rd' },
+      { name: 'SSRI VIJAYA ELECTRICALS', subcategory: 'Electrical Goods & Lighting', address: 'Manda Vari St' }
+    ];
+
+    for (const v of mismatchedVendors) {
+      const allowed = isVendorRelevant(v, requestedCategory);
+      assert.strictEqual(allowed, false, `Category fidelity failed: "${v.name}" was NOT rejected for Turmeric search!`);
+    }
+  });
+
+  test('Category Fidelity for "Wholesale Turmeric Suppliers" MUST ACCEPT legitimate commodity & spice merchants', () => {
+    const requestedCategory = 'Wholesale Turmeric Suppliers';
+
+    const validAgroVendors = [
+      { name: 'Sri Lakshmi Turmeric Traders & Exporters', subcategory: 'Agricultural Produce Merchants', address: 'Market Yard, Tenali' },
+      { name: 'Guntur Mirchi & Turmeric Mandi Commission Agent', subcategory: 'Spices Wholesalers & Commission Agents', address: 'APMC Yard, Tenali' },
+      { name: 'Tenali Agricultural Produce & Spices Wholesale Merchant', subcategory: 'Grain & Spices Wholesaler', address: 'Bazaar Street, Tenali' },
+      { name: 'Sri Venkateswara Turmeric Polishing & Cold Storage', subcategory: 'Cold Storage & Agro Processing', address: 'Industrial Belt, Tenali' }
+    ];
+
+    for (const v of validAgroVendors) {
+      const allowed = isVendorRelevant(v, requestedCategory);
+      assert.strictEqual(allowed, true, `Category fidelity failed: Valid agro merchant "${v.name}" was rejected!`);
+    }
+  });
+
+  // 7. Iron & Steel vs Sarees Mutual Exclusion
+  console.log('\n--- 7. Cross-Industry Anti-Bleed Mutual Exclusion ---');
+  test('Iron & Steel category MUST ACCEPT steel traders and REJECT turmeric/sarees', () => {
+    const steelCategory = 'Iron & Steel TMT Dealers';
+    const steelShop = { name: 'Minar Traders - TMT Steel & Iron', subcategory: 'Iron & Steel Dealers', address: 'Tenali' };
+    const sareeShop = { name: 'Mahesh Handloom Sarees', subcategory: 'Handloom Sarees', address: 'Tenali' };
+    const turmericShop = { name: 'Sri Lakshmi Turmeric Mandi', subcategory: 'Spices Wholesaler', address: 'Tenali' };
+
+    assert.strictEqual(isVendorRelevant(steelShop, steelCategory), true, 'Steel category must accept steel vendor');
+    assert.strictEqual(isVendorRelevant(sareeShop, steelCategory), false, 'Steel category must reject saree vendor');
+    assert.strictEqual(isVendorRelevant(turmericShop, steelCategory), false, 'Steel category must reject turmeric vendor');
+  });
+
+  test('Handloom Sarees category MUST ACCEPT saree showrooms and REJECT steel/turmeric', () => {
+    const sareeCategory = 'Handloom Sarees & Silk';
+    const sareeShop = { name: 'Mahesh Handloom Sarees', subcategory: 'Handloom Sarees', address: 'Tenali' };
+    const steelShop = { name: 'Minar Traders - TMT Steel & Iron', subcategory: 'Iron & Steel Dealers', address: 'Tenali' };
+    const turmericShop = { name: 'Sri Lakshmi Turmeric Mandi', subcategory: 'Spices Wholesaler', address: 'Tenali' };
+
+    assert.strictEqual(isVendorRelevant(sareeShop, sareeCategory), true, 'Saree category must accept saree vendor');
+    assert.strictEqual(isVendorRelevant(steelShop, sareeCategory), false, 'Saree category must reject steel vendor');
+    assert.strictEqual(isVendorRelevant(turmericShop, sareeCategory), false, 'Saree category must reject turmeric vendor');
+  });
+
   console.log(`\n========================================`);
   console.log(`Results: ${passed} passed, ${failed} failed`);
   console.log(`========================================\n`);

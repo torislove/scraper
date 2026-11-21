@@ -40,6 +40,7 @@ const dbAdapter = require('../config/dbAdapter');
 const browserBudget = require('../utils/browserBudget');
 const { defaultPool } = require('../scrapers/concurrencyManager');
 const categoryRouter = require('../services/categoryRouter');
+const { isVendorRelevant } = require('../services/categoryFidelity');
 const credits = require('../services/credits');
 const engineHealth = require('../services/engineHealth');
 const requestGuard = require('../utils/requestGuard');
@@ -2148,6 +2149,10 @@ router.post('/client-ingest', async (req, res) => {
         scrapedAt: new Date().toISOString(),
         deviceTier: deviceSpec?.tier || undefined
       };
+
+      if (category && !isVendorRelevant(vendor, category)) {
+        continue;
+      }
 
       const saved = dbAdapter.saveVendor(userId, vendor);
       if (saved) {
