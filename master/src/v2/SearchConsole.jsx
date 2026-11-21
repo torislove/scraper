@@ -540,26 +540,29 @@ function SearchConsole({
 
           <button
             type="button"
-            className={cx('v2-console-go', running && 'is-stop', busy && 'is-busy')}
-            onClick={() => commitAndDeploy()}
-            disabled={busy || (!running && !canSearch)}
+            className={cx('v2-console-go', (running || busy) && 'is-stop')}
+            onClick={() => {
+              if (running || busy) {
+                onStop?.();
+              } else {
+                commitAndDeploy();
+              }
+            }}
+            disabled={!running && !busy && !canSearch}
+            title={running || busy ? 'Stop search and save all leads immediately' : 'Find leads across all zones'}
           >
-            {!busy && (
-              <span className={cx('lx-gbc-keycap', running ? 'is-b' : 'is-a')}>
-                {running ? 'B' : 'A'}
-              </span>
-            )}
-            {busy ? <Loader2 size={16} className="v2-spin" /> : running ? <Square size={14} /> : <Zap size={16} />}
+            <span className={cx('lx-gbc-keycap', (running || busy) ? 'is-b' : 'is-a')}>
+              {(running || busy) ? 'B' : 'A'}
+            </span>
+            {(running || busy) ? <Square size={14} /> : <Zap size={16} />}
             <span>
-              {busy
-                ? 'Starting…'
-                : running
-                  ? `Stop · ${doneZones}/${totalZones} Zones`
-                  : locClassification?.type === 'district'
-                    ? 'Sweep District'
-                    : locClassification?.type === 'state'
-                      ? 'Sweep State'
-                      : 'Find Leads'}
+              {(running || busy)
+                ? `Stop · ${doneZones}/${totalZones} Zones`
+                : locClassification?.type === 'district'
+                  ? 'Sweep District'
+                  : locClassification?.type === 'state'
+                    ? 'Sweep State'
+                    : 'Find Leads'}
             </span>
           </button>
         </div>

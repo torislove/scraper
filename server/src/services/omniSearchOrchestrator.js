@@ -1358,12 +1358,12 @@ async function runOmniSearchOrchestrator(
       const zoneScope = z.scope || plan?.resolvedScope || (isMaster ? 'district' : null);
       const zoneAlreadyCovered = repeatCoveredZones.has(zoneKey(z));
 
-      // Zone-by-zone priority gradient: Zone 1 (zi === 0, Central Hub) is assigned
-      // highest priority (30) so the worker pool dispatches it instantly and streams
-      // prime downtown commercial leads first. Radial sectors follow in descending waves.
+      // High-velocity wave priority: The first 5 zones share top priority tier (30) so
+      // the worker pool launches all safe parallel browser lanes concurrently at full speed,
+      // streaming prime downtown commercial leads first. Subsequent waves follow.
       const basePriority = isGridZone(z)
-        ? Math.max(3, 8 - Math.floor(zi / 4))
-        : Math.max(10, 30 - zi);
+        ? Math.max(3, 10 - Math.floor(zi / 4))
+        : Math.max(10, 30 - Math.floor(zi / 5));
       const zonePriority = zoneAlreadyCovered ? 2 : basePriority;
 
       if (allowMaps) {
@@ -1582,7 +1582,7 @@ async function runOmniSearchOrchestrator(
               activeSessions[sessionId].totalMandalsAcrossAll = totalZones;
               activeSessions[sessionId].overallTotalMandals = totalZones;
             }
-            addLog(`[Adaptive Radar] âš¡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
+            addLog(`[Adaptive Radar] ⚡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
           }
         }
       } catch (adaptiveErr) { /* best-effort adaptive split */ }

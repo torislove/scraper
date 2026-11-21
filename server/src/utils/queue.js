@@ -147,24 +147,30 @@ const PLAYWRIGHT_TASKS = new Set([
   'scrapeScrapySpider'
 ]);
 
-// Dynamic Concurrency Calculator based on real-time System RAM availability
+// Dynamic Concurrency Calculator based on client hardware profile & real-time system RAM availability
 function getDynamicConcurrency() {
   try {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const freeRamPct = Math.round((freeMem / totalMem) * 100);
 
-    const totalGb = totalMem / (1024 * 1024 * 1024);
-    let maxHttp = (totalGb >= 15 && freeMem >= 900 * 1024 * 1024)
-      ? 18
-      : (totalGb >= 8 && freeMem >= 650 * 1024 * 1024)
-        ? 14
-        : 10;
-    const maxPlaywright = browserBudget.discoveryLimit();
+    const clientHw = browserBudget.getClientHardware();
+    const totalGb = clientHw?.ramGb || (totalMem / (1024 * 1024 * 1024));
 
-    if (freeMem < 400 * 1024 * 1024) {
-      maxHttp = 5;
+    let maxHttp = 10;
+    if (totalGb >= 30) maxHttp = 18;
+    else if (totalGb >= 14) maxHttp = 14;
+    else if (totalGb >= 7.5) maxHttp = 8;
+    else maxHttp = 4;
+
+    // Soft-throttle HTTP workers if memory approaches critical safety floor
+    if (freeMem < 600 * 1024 * 1024) {
+      maxHttp = 2;
+    } else if (freeMem < 1.2 * 1024 * 1024 * 1024) {
+      maxHttp = Math.min(6, maxHttp);
     }
+
+    const maxPlaywright = browserBudget.discoveryLimit();
 
     return {
       maxHttpConcurrency: maxHttp,
@@ -174,7 +180,7 @@ function getDynamicConcurrency() {
       playwrightActiveCount
     };
   } catch (e) {
-    return { maxHttpConcurrency: 8, maxPlaywrightConcurrency: 6, freeRamPct: 50, activeCount, playwrightActiveCount };
+    return { maxHttpConcurrency: 8, maxPlaywrightConcurrency: 5, freeRamPct: 50, activeCount, playwrightActiveCount };
   }
 }
 

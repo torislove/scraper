@@ -37,6 +37,7 @@ const { resolveUniversalZones, ZONE_COORDINATES, classifyLocation } = require('.
 const { fastWebsiteExtract } = require('../utils/fastWebsiteExtractor');
 const geoAI = require('../utils/geoAI');
 const dbAdapter = require('../config/dbAdapter');
+const browserBudget = require('../utils/browserBudget');
 const { defaultPool } = require('../scrapers/concurrencyManager');
 const categoryRouter = require('../services/categoryRouter');
 const credits = require('../services/credits');
@@ -776,8 +777,10 @@ function creditsPreflight(res) {
 }
 
 router.post('/omni', async (req, res) => {
-  const { query, category, location, radius, gridDensity, enabledEngines, engines, sessionId, userId: bodyUserId } = req.body;
+  const { query, category, location, radius, gridDensity, enabledEngines, engines, sessionId, userId: bodyUserId, hardware } = req.body;
   const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
+  const clientHw = hardware || (req.headers['x-hardware-ram'] ? { ramGb: Number(req.headers['x-hardware-ram']), parallelZones: Number(req.headers['x-hardware-lanes']) } : null);
+  if (clientHw) browserBudget.setClientHardware(clientHw);
   const { parseUniversalQuery } = require('../utils/universalQueryEngine');
   const fullInput = query || `${category || ''} in ${location || ''}`.trim();
   const parsedNL = parseUniversalQuery(fullInput);
@@ -931,8 +934,10 @@ router.post('/omni', async (req, res) => {
  */
 router.post('/auto', async (req, res) => {
   try {
-    const { query, category, location, strategy = 'broad', radius, gridDensity, sessionId, userId: bodyUserId, engines, enabledEngines } = req.body;
+    const { query, category, location, strategy = 'broad', radius, gridDensity, sessionId, userId: bodyUserId, engines, enabledEngines, hardware } = req.body;
     const userId = req.headers['x-user-id'] || bodyUserId || 'anonymous';
+    const clientHw = hardware || (req.headers['x-hardware-ram'] ? { ramGb: Number(req.headers['x-hardware-ram']), parallelZones: Number(req.headers['x-hardware-lanes']) } : null);
+    if (clientHw) browserBudget.setClientHardware(clientHw);
     const { parseUniversalQuery } = require('../utils/universalQueryEngine');
     const fullInput = query || `${category || ''} in ${location || ''}`.trim();
     const parsedNL = parseUniversalQuery(fullInput);
@@ -1251,7 +1256,9 @@ router.post('/master-sweep', async (req, res) => {
       });
     }
 
-    const { category, scope = 'district', name, userId = 'master', strategy = 'broad', speedPreset = 'precision_grid', engines, deep = false } = req.body;
+    const { category, scope = 'district', name, userId = 'master', strategy = 'broad', speedPreset = 'precision_grid', engines, deep = false, hardware } = req.body;
+    const clientHw = hardware || (req.headers['x-hardware-ram'] ? { ramGb: Number(req.headers['x-hardware-ram']), parallelZones: Number(req.headers['x-hardware-lanes']) } : null);
+    if (clientHw) browserBudget.setClientHardware(clientHw);
     if (!category || !name) {
       return res.status(400).json({ error: 'Both category and target location name are required for a Master Sweep.' });
     }
@@ -1696,8 +1703,8 @@ const handleMasterStopAll = async (req, res) => {
   const bodySessionId = req.body?.sessionId || req.query?.sessionId || req.headers['x-session-id'] || null;
   const workspaceScope = req.headers['x-workspace-scope'] || (req.body?.isMaster ? 'master' : null);
   addLog(bodySessionId
-    ? `ðŸ›‘ [SYSTEM] STOP INITIATED for session ${bodySessionId}.`
-    : `ðŸ›‘ [SYSTEM] STOP INITIATED (scope: ${workspaceScope || 'global'}). Aborting active scrapes & clearing queue.`);
+    ? `🛑 [SYSTEM] STOP INITIATED for session ${bodySessionId}.`
+    : `🛑 [SYSTEM] STOP INITIATED (scope: ${workspaceScope || 'global'}). Aborting active scrapes & clearing queue.`);
 
   // 1. Determine targets: targeted stop must never abort unrelated runs
   const runningSessions = Object.values(activeSessions).filter(session =>

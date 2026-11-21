@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, Tooltip, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, Polyline, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -24,9 +24,9 @@ try {
   });
 } catch (e) { }
 
-// 100% Keyless, Disk-Cached + Offline Procedural Vector Map Engine (No API Keys Ever Required)
+// 100% Same-Origin Disk-Cached & Procedural Offline-Capable Basemaps (Zero API Keys Required)
 const TILE_VOYAGER = `${API_URL}/map-tiles/voyager/{z}/{x}/{y}.png`;
-const TILE_VOYAGER_ATTRIBUTION = '&copy; Local Cached Map &copy; OpenStreetMap';
+const TILE_VOYAGER_ATTRIBUTION = '&copy; CARTO &copy; OpenStreetMap &copy; Local Offline Vector';
 const TILE_STREETS = `${API_URL}/map-tiles/streets/{z}/{x}/{y}.png`;
 const TILE_SATELLITE = `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`;
 const TILE_SATELLITE_LABELS = `${API_URL}/map-tiles/labels/{z}/{x}/{y}.png`;
@@ -202,8 +202,9 @@ function SmartMapController({ center, zoom, activePoint, scanning }) {
   return null;
 }
 
-function scanTargetIcon(label = '') {
+function scanTargetIcon(label = '', leadsCount = 0) {
   const safeLabel = String(label || '').replace(/[<>&"]/g, '');
+  const countTag = leadsCount > 0 ? ` · ${leadsCount} Leads` : '';
   return L.divIcon({
     className: 'v2-scan-target-wrap',
     html: `
@@ -213,7 +214,7 @@ function scanTargetIcon(label = '') {
         <i class="ring r2"></i>
         <i class="ring r3"></i>
         <b></b>
-        ${safeLabel ? `<div class="v2-scan-target-badge"><span class="v2-scan-badge-dot"></span><span class="v2-scan-badge-text">📡 SCANNING: ${safeLabel}</span></div>` : ''}
+        ${safeLabel ? `<div class="v2-scan-target-badge"><span class="v2-scan-badge-dot"></span><span class="v2-scan-badge-text">⚡ SCANNING: ${safeLabel}${countTag}</span></div>` : ''}
       </div>
     `,
     iconSize: [160, 160],
@@ -233,8 +234,8 @@ function zoneBeaconIcon(zoneName = '', cellState = 'queued', leadsCount = 0) {
   return L.divIcon({
     className: 'v2-zone-beacon-wrap',
     html: `<div class="v2-zone-beacon-pill ${stateClass}"><i></i><span>${iconGlyph} ${safeName}${countTag}</span></div>`,
-    iconSize: [144, 24],
-    iconAnchor: [72, 12]
+    iconSize: [156, 26],
+    iconAnchor: [78, 13]
   });
 }
 
@@ -278,10 +279,10 @@ export default function CommandMap({
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
-  const [tileMode, setTileMode] = useState('satellite');
+  const [tileMode, setTileMode] = useState('satellite'); // Locked 100% HD Satellite Live Zone Radar
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
   const TILE_FAILOVER_ORDER = ['satellite'];
-  const handleTileError = useMemo(() => () => { }, []);
+  const handleTileError = useMemo(() => () => {}, []);
 
   const safeCenter = useMemo(() => {
     const lat = Number(center?.[0]);
@@ -433,7 +434,7 @@ export default function CommandMap({
             boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 24px -8px rgba(15, 23, 42, 0.18)'
           }}
         >
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #6ee7b7, #059669)', boxShadow: '0 0 8px rgba(5, 150, 105, 0.8)' }} />
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #6ee7b7, #10b981)', boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }} />
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', color: '#0f172a' }}>
             {scopeTitle.toUpperCase()}
           </span>
@@ -509,7 +510,7 @@ export default function CommandMap({
         {/* Always-On Live Hub-and-Spoke Vector Network over Satellite Terrain */}
         {coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
           <Polyline
-            key={`spoke-${zone.index || idx}-${zone.name}`}
+            key={`spoke-${zone.index || idx}`}
             positions={[safeCenter, [zone.lat, zone.lng]]}
             pathOptions={{
               color: '#38bdf8',
@@ -552,17 +553,17 @@ export default function CommandMap({
                 }}
                 pathOptions={{
                   color: tone,
-                  weight: cellState === 'scanning' ? 3.2 : cellState === 'saturated' || cellState === 'done' ? 2.4 : 1.7,
+                  weight: cellState === 'scanning' ? 3.8 : cellState === 'saturated' || cellState === 'done' ? 2.4 : 1.7,
                   opacity: cellState === 'scanning' ? 1 : cellState === 'done' || cellState === 'saturated' ? 0.92 : 0.65,
                   fillColor: tone,
-                  fillOpacity: cellState === 'scanning' ? 0.28 : cellState === 'saturated' ? 0.18 : cellState === 'done' ? 0.14 : 0.08,
+                  fillOpacity: cellState === 'scanning' ? 0.32 : cellState === 'saturated' ? 0.18 : cellState === 'done' ? 0.14 : 0.08,
                   dashArray: cellState === 'scanning' || cellState === 'done' ? undefined : '5 7'
                 }}
               >
                 <Tooltip direction="top" opacity={0.95}>
                   <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
                     {cellState === 'scanning'
-                      ? `⚡ ACTIVE SWARM · ${zone.name}`
+                      ? `⚡ SCANNING · ${zone.name}`
                       : cellState === 'saturated'
                         ? `🔀 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
                         : cellState === 'done'
@@ -570,19 +571,27 @@ export default function CommandMap({
                           : cellState === 'dry'
                             ? `🟡 LOW DENSITY · ${zone.name}`
                             : zone.approximate
-                              ? `📍 Region · ${zone.name} (Estimated)`
-                              : `🎯 Verified Zone · ${zone.name}`}
+                              ? `Area · ${zone.name}`
+                              : `Covered Area · ${zone.name}`}
                   </div>
                 </Tooltip>
               </Circle>
-              {(!compact && index < 28 && !isActive) && (
+              {(isActive || (!compact && index < 36)) && (
                 <Marker
                   position={[zone.lat, zone.lng]}
                   icon={zoneBeaconIcon(zone.name, cellState, cellInfo?.leads || 0)}
-                  zIndexOffset={cellState === 'scanning' ? 950 : 250}
+                  zIndexOffset={cellState === 'scanning' ? 3500 : 250}
                   eventHandlers={{
                     click: () => onSelectZone?.(zone.name)
                   }}
+                />
+              )}
+              {isActive && (
+                <Marker
+                  position={[zone.lat, zone.lng]}
+                  icon={scanTargetIcon(zone.name, cellInfo?.leads || 0)}
+                  interactive={false}
+                  zIndexOffset={4000}
                 />
               )}
             </React.Fragment>
@@ -637,7 +646,7 @@ export default function CommandMap({
                     <div className="v2-map-popup-actions">
                       {onSelect && (
                         <button type="button" onClick={() => onSelect(vendor)}>
-                          <ExternalLink size={12} /> Open Lead
+                          <ExternalLink size={12} /> View Details
                         </button>
                       )}
                       {vendor.phone && (
@@ -650,7 +659,7 @@ export default function CommandMap({
                       )}
                       {vendor.mapsLink && (
                         <a href={vendor.mapsLink} target="_blank" rel="noreferrer">
-                          <MapPin size={12} /> Maps
+                          <MapPin size={12} /> Directions
                         </a>
                       )}
                     </div>
@@ -661,16 +670,21 @@ export default function CommandMap({
           })}
         </MarkerClusterGroup>
 
-        {activePoint && scanning && (
+        {activePoint && scanning && !coverage.some(z => {
+          const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const cleanZ = norm(z.name);
+          const cleanAct = norm(activeZoneLabel);
+          return (cleanAct && (cleanAct === cleanZ || cleanZ.includes(cleanAct))) || (Math.abs(z.lat - activePoint[0]) < 0.005 && Math.abs(z.lng - activePoint[1]) < 0.005);
+        }) && (
           <>
             <Circle
               center={activePoint}
               radius={Math.max(1400, Math.min(6000, ((Number(activeZone?.radiusKm) || 3.5) * 1000)))}
               pathOptions={{
-                color: '#38bdf8',
-                fillColor: '#38bdf8',
-                fillOpacity: 0.22,
-                weight: 3,
+                color: '#06b6d4',
+                fillColor: '#06b6d4',
+                fillOpacity: 0.28,
+                weight: 3.5,
                 dashArray: '8, 8'
               }}
             />
@@ -678,7 +692,7 @@ export default function CommandMap({
               position={activePoint}
               icon={scanIcon}
               interactive={false}
-              zIndexOffset={1200}
+              zIndexOffset={3000}
             />
           </>
         )}
@@ -762,18 +776,18 @@ export default function CommandMap({
           style={{
             background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92))',
             backdropFilter: 'blur(16px)',
-            border: '1.5px solid #6ee7b7',
+            border: '1.5px solid #06b6d4',
             color: '#0f172a',
-            boxShadow: 'inset 0 1px 0 #ffffff, 0 12px 28px -8px rgba(5, 150, 105, 0.24)'
+            boxShadow: 'inset 0 1px 0 #ffffff, 0 12px 28px -8px rgba(6, 182, 212, 0.35)'
           }}
         >
-          <span className="v2-map-scan-radar"><i style={{ background: '#059669' }} /></span>
+          <span className="v2-map-scan-radar"><i style={{ background: '#06b6d4' }} /></span>
           <span className="v2-map-scan-copy">
-            <b style={{ color: '#047857', letterSpacing: '0.07em' }}>LIVE ZONE SWEEP</b>
-            <small style={{ color: '#475569', fontWeight: 700 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
+            <b style={{ color: '#0891b2', letterSpacing: '0.07em' }}>LIVE ACTIVE ZONE SWEEP</b>
+            <small style={{ color: '#0f172a', fontWeight: 800 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
             {activePoint && (
-              <span style={{ fontSize: 9.5, color: '#64748b', fontFamily: '"JetBrains Mono", monospace' }}>
-                [{activePoint[0].toFixed(4)}, {activePoint[1].toFixed(4)}]
+              <span style={{ fontSize: 9.5, color: '#0891b2', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700 }}>
+                [{activePoint[0].toFixed(4)}, {activePoint[1].toFixed(4)}] · ULTRA FAST WAVE
               </span>
             )}
           </span>
@@ -782,13 +796,13 @@ export default function CommandMap({
 
       {/* Scope and Status Overlay */}
       <div className="v2-map-overlay">
-        <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.95)', color: '#0F172A', border: '1px solid #ffffff', fontWeight: 700 }}>
+        <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.94)', color: '#0F172A', border: '1px solid #E2E8F0', fontWeight: 600 }}>
           <i className={scanning || points.length ? 'is-live' : ''} />
-          {scanning ? 'SWEEPING TERRITORY' : `${formatNumber(validVendors.length)} LEADS IN ${scopeTitle.toUpperCase()}`}
+          {scanning ? 'SEARCHING AREA' : `${formatNumber(validVendors.length)} BUSINESSES IN ${scopeTitle.toUpperCase()}`}
         </span>
         {validVendors.length < vendors.filter(hasCoords).length && (
           <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.92)', color: '#64748B', border: '1px solid #E2E8F0' }}>
-            TOP {MAX_MAP_PLOTTED_LEADS} PLOTTED
+            TOP {MAX_MAP_PLOTTED_LEADS} SHOWN
           </span>
         )}
       </div>

@@ -811,11 +811,12 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
     try {
       await Promise.race([
-        page.waitForSelector('div[role="feed"]', { timeout: 6000 }),
-        page.waitForSelector('[data-item-id="address"]', { timeout: 6000 })
+        page.waitForSelector('div[role="feed"]', { timeout: 1200 }),
+        page.waitForSelector('[data-item-id="address"]', { timeout: 1200 }),
+        page.waitForSelector('div.Nv2PK', { timeout: 1200 })
       ]);
     } catch (e) {
-      addLog("[Cyber Core] Waiting for listing feed timed out, extracting visible nodes...");
+      // Quiet/sparse zone or instant load: proceed directly to extract visible nodes without idle waiting
     }
     markZone('feed-wait');
 

@@ -38,6 +38,7 @@ import { authHeaders, getSession } from './auth';
 import { useExtension } from './context/ExtensionContext';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
+import { detectDeviceHardware } from './utils/deviceRamEngine';
 
 const STRATEGIES = ['broad', 'smart', 'strict'];
 
@@ -1355,7 +1356,8 @@ export default function CommandCenter() {
         mobileOnly: masterSweepForm.mobileOnly === true,
         hasWebsite: masterSweepForm.hasWebsite === true,
         verifiedOnly: masterSweepForm.verifiedOnly === true,
-        country: searchCountry
+        country: searchCountry,
+        hardware: detectDeviceHardware()
       });
 
       if (res?.sessionId) {
@@ -1477,7 +1479,8 @@ export default function CommandCenter() {
           gridDensity: coverageMode,
           engines,
           country: searchCountry,
-          sessionId
+          sessionId,
+          hardware: detectDeviceHardware()
         });
         const plan = response?.plan || {};
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
@@ -1530,7 +1533,8 @@ export default function CommandCenter() {
           gridDensity: coverageMode,
           engines,
           country: searchCountry,
-          sessionId
+          sessionId,
+          hardware: detectDeviceHardware()
         });
         const plan = response?.plan || {};
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
@@ -3425,6 +3429,63 @@ export default function CommandCenter() {
           onClose={() => setTrashOpen(false)}
           onRestored={() => { refresh(); }}
         />
+      )}
+
+      {/* Persistent Floating Stop Controller during active scraping */}
+      {(scanning || (run && run.status === 'running')) && (
+        <div
+          className="v2-floating-stop-dock"
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            right: 28,
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '8px 16px',
+            background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.94))',
+            border: '1.5px solid rgba(239, 68, 68, 0.75)',
+            borderRadius: 999,
+            boxShadow: '0 12px 32px rgba(239, 68, 68, 0.3), 0 4px 16px rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(16px)',
+            animation: 'v2FloatingPulse 2s ease-in-out infinite'
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, paddingRight: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#f8fafc', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 10px #ef4444', animation: 'v2BadgeBlink 1s infinite' }} />
+              MASTER SWARM · {effectiveActiveZone?.name || progress?.activeMandal || 'Zone 1'}
+            </span>
+            <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>
+              {runDone}/{Math.max(1, runTotal || mapZones.length || 1)} Zones · {formatNumber(runLeadCount)} Leads Verified
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={stopRun}
+            disabled={stopping}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              borderRadius: 999,
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: '#ffffff',
+              border: 'none',
+              fontWeight: 800,
+              fontSize: 12,
+              cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.5)',
+              transition: 'all 0.15s ease'
+            }}
+            title="Immediately stop search and preserve all leads"
+          >
+            <Square size={13} fill="#ffffff" />
+            <span>{stopping ? 'STOPPING…' : 'STOP RUN'}</span>
+          </button>
+        </div>
       )}
     </div>
   );
