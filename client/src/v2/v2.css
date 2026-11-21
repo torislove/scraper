@@ -3375,7 +3375,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 .v2-crm-column.tone-blue .v2-crm-col-icon { color: #2563EB; border-color: rgba(37, 99, 235, 0.24); }
 .v2-crm-column.tone-amber .v2-crm-col-icon { color: #D97706; border-color: rgba(217, 119, 6, 0.24); }
 .v2-crm-column.tone-cyan .v2-crm-col-icon { color: #0284C7; border-color: rgba(2, 132, 199, 0.24); }
-.v2-crm-column.tone-violet .v2-crm-col-icon { color: #7C3AED; border-color: rgba(124, 58, 237, 0.24); }
+.v2-crm-column.tone-violet .v2-crm-col-icon { color: #0e7490; border-color: rgba(14, 116, 144, 0.24); }
 .v2-crm-column.tone-lime .v2-crm-col-icon { color: #059669; border-color: rgba(5, 150, 105, 0.26); }
 .v2-crm-column.tone-red .v2-crm-col-icon { color: #E11D48; border-color: rgba(225, 29, 72, 0.24); }
 .v2-crm-column.tone-neutral .v2-crm-col-icon { color: #64748B; }
@@ -8151,8 +8151,8 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 .v2-source-chip.is-osm b { background: #DCFCE7; color: #15803D; }
 .v2-source-chip.is-indiamart { border-color: #FBCFE8; color: #BE185D; }
 .v2-source-chip.is-indiamart b { background: #FCE7F3; color: #BE185D; }
-.v2-source-chip.is-sulekha { border-color: #DDD6FE; color: #6D28D9; }
-.v2-source-chip.is-sulekha b { background: #EDE9FE; color: #6D28D9; }
+.v2-source-chip.is-sulekha { border-color: #A5F3FC; color: #0E7490; }
+.v2-source-chip.is-sulekha b { background: #CFFAFE; color: #0E7490; }
 .v2-source-chip.is-practo { border-color: #A5F3FC; color: #0E7490; }
 .v2-source-chip.is-practo b { background: #CFFAFE; color: #0E7490; }
 .v2-source-chip.is-bing { border-color: #C7D2FE; color: #4338CA; }
@@ -8186,7 +8186,7 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
 .v2-source-badge.is-justdial { background: #FFFBEB; border-color: #FDE68A; color: #B45309; }
 .v2-source-badge.is-osm { background: #F0FDF4; border-color: #BBF7D0; color: #15803D; }
 .v2-source-badge.is-indiamart { background: #FDF2F8; border-color: #FBCFE8; color: #BE185D; }
-.v2-source-badge.is-sulekha { background: #F5F3FF; border-color: #DDD6FE; color: #6D28D9; }
+.v2-source-badge.is-sulekha { background: #ECFEFF; border-color: #A5F3FC; color: #0E7490; }
 .v2-source-badge.is-practo { background: #ECFEFF; border-color: #A5F3FC; color: #0E7490; }
 .v2-source-badge.is-bing { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
 .v2-source-badge.is-social { background: #FAF5FF; border-color: #E9D5FF; color: #7E22CE; }
@@ -8437,13 +8437,13 @@ button.v2-chip:hover { border-color: rgba(37, 99, 235, 0.35); color: var(--v2-li
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #06b6d4 0%, #7c3aed 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #06b6d4 0%, #059669 50%, #0e7490 100%);
   border: 2px solid rgba(255, 255, 255, 0.85);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.6),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.6),
-    0 0 20px rgba(124, 58, 237, 0.65),
-    0 4px 12px rgba(0, 0, 0, 0.5);
+    inset -1px -1px 0 rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(5, 150, 105, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.4);
   color: #ffffff;
   font-family: var(--v2-mono);
   font-weight: 900;

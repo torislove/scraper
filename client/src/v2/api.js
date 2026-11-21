@@ -31,9 +31,9 @@ client.interceptors.request.use(config => {
  * The first version dispatched `leadharvest:server_online` on every successful
  * response. The command centre listened for that event, reconnected the event
  * stream and refreshed every panel. Each refresh produced another successful
- * response, which fired the event again â€” a self-feeding loop that exhausted
+ * response, which fired the event again — a self-feeding loop that exhausted
  * the API rate limit within a minute, made the stream flap, and surfaced to the
- * customer as "Reconnecting to Swarm Server â€¦ Attempt #473" while the engine
+ * customer as "Reconnecting to Swarm Server … Attempt #473" while the engine
  * was perfectly healthy.
  *
  * The event now fires only on a real offline -> online transition, so it is a

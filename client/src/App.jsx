@@ -9,6 +9,7 @@ import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import {
   AUTH_REQUIRED, fetchAuthConfig, getCachedAuthConfig, logout, useAuthSession
 } from './v2/auth';
+import { ExtensionProvider } from './v2/context/ExtensionContext';
 import './v2/v2.css';
 import './v2/whiteTheme.css';
 import './v2/designSystem.css';
@@ -27,9 +28,9 @@ function PageLoader() {
             width: 44,
             height: 44,
             borderRadius: '50%',
-            border: '3px solid rgba(124, 58, 237, 0.18)',
+            border: '3px solid rgba(5, 150, 105, 0.16)',
             borderTopColor: '#10b981',
-            borderRightColor: '#7c3aed',
+            borderRightColor: '#0e7490',
             animation: 'v2-spin 0.8s linear infinite'
           }}
         />
@@ -173,25 +174,27 @@ export default function App() {
         }}
       />
 
-      <Suspense fallback={<PageLoader />}>
-        <Routes>
-          <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
-          <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
-          <Route path="/login" element={<LoginV2 initialMode="signin" />} />
-          <Route path="/signup" element={<LoginV2 initialMode="signup" />} />
-          <Route path="/forgot-password" element={<LoginV2 initialMode="reset" />} />
-          <Route path="/logout" element={<LogoutRoute />} />
+      <ExtensionProvider>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
+            <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
+            <Route path="/login" element={<LoginV2 initialMode="signin" />} />
+            <Route path="/signup" element={<LoginV2 initialMode="signup" />} />
+            <Route path="/forgot-password" element={<LoginV2 initialMode="reset" />} />
+            <Route path="/logout" element={<LogoutRoute />} />
 
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
 
-          <Route path="/app/*" element={<Navigate to="/command" replace />} />
-          <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
-          <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-          <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-        </Routes>
-      </Suspense>
+            <Route path="/app/*" element={<Navigate to="/command" replace />} />
+            <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
+            <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+            <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+          </Routes>
+        </Suspense>
+      </ExtensionProvider>
     </ErrorBoundary>
   );
 }

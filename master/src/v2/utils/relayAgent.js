@@ -2,10 +2,11 @@
  * relayAgent.js — the client/master half of the zero-knowledge relay.
  *
  * One singleton per tab. It:
- *   1. detects the RAM Turbo extension (dataset flag, then a ping)
- *   2. pairs it with this origin the first time it is seen
- *   3. heartbeats every 10 s and executes every ticket the server hands back
- *   4. backs off on failure instead of hammering
+ *   1. detects the RAM Turbo extension (DOM dataset, double-ping on wakeup)
+ *   2. pairs it with this origin + explicit backend apiBase on first sight
+ *   3. heartbeats every 10 s and wakes immediately on tab focus / visibility /
+ *      live PONG events so once installed it stays connected silently
+ *   4. backs off cleanly on failure instead of hammering
  *
  * Keeping this in one file means client and master cannot drift. Copy this
  * file verbatim between the two apps.
@@ -22,7 +23,16 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-export function detectExtension(timeoutMs = 400) {
+function resolveAbsoluteApiBase(apiBase) {
+  if (typeof window === 'undefined') return String(apiBase || '/api');
+  try {
+    return new URL(apiBase || '/api', window.location.origin).href.replace(/\/+$/, '');
+  } catch (e) {
+    return `${window.location.origin}/api`;
+  }
+}
+
+export function detectExtension(timeoutMs = 500) {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return Promise.resolve({ installed: false, version: '', paired: false });
   }
@@ -43,6 +53,7 @@ export function detectExtension(timeoutMs = 400) {
       settled = true;
       window.removeEventListener('message', onMessage);
       clearTimeout(timer);
+      clearTimeout(secondPingTimer);
       resolve(value);
     };
 
@@ -58,6 +69,14 @@ export function detectExtension(timeoutMs = 400) {
       }
     };
 
+    const sendPing = () => {
+      try {
+        window.postMessage({ type: 'SCRAPER_EXT_PING' }, window.location.origin);
+      } catch (error) {
+        finish({ installed: false, version: '', paired: false });
+      }
+    };
+
     const timer = setTimeout(() => {
       const retry = document.documentElement?.dataset?.scraperExtension;
       finish(retry
@@ -65,12 +84,11 @@ export function detectExtension(timeoutMs = 400) {
         : { installed: false, version: '', paired: false });
     }, timeoutMs);
 
+    // Second wakeup ping in case Chrome is mid-waking the content bridge or MV3 worker.
+    const secondPingTimer = timeoutMs > 220 ? setTimeout(sendPing, 180) : null;
+
     window.addEventListener('message', onMessage);
-    try {
-      window.postMessage({ type: 'SCRAPER_EXT_PING' }, '*');
-    } catch (error) {
-      finish({ installed: false, version: '', paired: false });
-    }
+    sendPing();
   });
 }
 
@@ -107,14 +125,14 @@ export function executeTicket(ticket, timeoutMs = TICKET_TIMEOUT_MS) {
 
     window.addEventListener('message', onMessage);
     try {
-      window.postMessage({ type: 'SCRAPER_EXT_EXECUTE_TICKET', ticket }, '*');
+      window.postMessage({ type: 'SCRAPER_EXT_EXECUTE_TICKET', ticket }, window.location.origin);
     } catch (error) {
       finish({ ok: false, ticketId: ticket.ticketId, error: String(error?.message || 'post_message_failed') });
     }
   });
 }
 
-export function pairExtension({ serverBase, userId } = {}) {
+export function pairExtension({ serverBase, apiBase, userId } = {}) {
   if (typeof window === 'undefined') return Promise.resolve({ ok: false });
   return new Promise((resolve) => {
     let settled = false;
@@ -138,9 +156,10 @@ export function pairExtension({ serverBase, userId } = {}) {
         {
           type: 'SCRAPER_EXT_PAIR',
           serverBase: serverBase || window.location.origin,
+          apiBase: resolveAbsoluteApiBase(apiBase),
           userId
         },
-        '*'
+        window.location.origin
       );
     } catch (error) {
       finish({ ok: false, error: String(error?.message || 'post_message_failed') });
@@ -195,6 +214,7 @@ export function startRelayAgent(options = {}) {
   let timer = null;
   let backoffIndex = 0;
   let inFlight = false;
+  let pokePending = false;
 
   function emit() {
     try {
@@ -206,24 +226,26 @@ export function startRelayAgent(options = {}) {
 
   async function heartbeatOnce() {
     if (!state.installed) {
-      const detected = await detectExtension(300);
+      const detected = await detectExtension(400);
       state.installed = detected.installed;
-      state.version = detected.version || '';
-      state.capabilities = detected.capabilities || [];
+      state.version = detected.version || state.version;
+      state.capabilities = detected.capabilities?.length ? detected.capabilities : state.capabilities;
       state.paired = Boolean(detected.paired);
+    }
 
-      if (state.installed && !state.paired) {
-        const paired = await pairExtension({
-          serverBase: window.location.origin,
-          userId: current.userId
-        });
-        state.paired = Boolean(paired?.ok);
-      }
-      if (!state.installed) {
-        state.connected = false;
-        emit();
-        return;
-      }
+    if (!state.installed) {
+      state.connected = false;
+      emit();
+      return;
+    }
+
+    if (!state.paired) {
+      const paired = await pairExtension({
+        serverBase: window.location.origin,
+        apiBase: current.apiBase,
+        userId: current.userId
+      });
+      state.paired = Boolean(paired?.ok);
     }
 
     const res = await fetch(`${current.apiBase}/scrape/extension-heartbeat`, {
@@ -279,9 +301,20 @@ export function startRelayAgent(options = {}) {
     emit();
   }
 
+  function schedule(delay) {
+    if (timer) clearTimeout(timer);
+    if (!state.running) return;
+    timer = setTimeout(tick, delay);
+  }
+
   async function tick() {
-    if (!state.running || inFlight) return;
+    if (!state.running) return;
+    if (inFlight) {
+      pokePending = true;
+      return;
+    }
     inFlight = true;
+    pokePending = false;
     try {
       await heartbeatOnce();
       backoffIndex = 0;
@@ -296,23 +329,51 @@ export function startRelayAgent(options = {}) {
     } finally {
       inFlight = false;
     }
-    schedule(current.intervalMs);
+    schedule(pokePending ? 150 : current.intervalMs);
   }
 
-  function schedule(delay) {
-    if (timer) clearTimeout(timer);
-    if (!state.running) return;
-    timer = setTimeout(tick, delay);
-  }
+  // Instant wakeup when extension is newly loaded, or tab regains focus.
+  const onWindowMessage = (event) => {
+    if (event.source !== window || !event.data) return;
+    if (event.data.source !== SOURCE) return;
+    if (event.data.type === 'SCRAPER_EXT_PONG' || event.data.type === 'SCRAPER_EXT_STATE') {
+      const s = event.data.state || event.data;
+      const wasInstalled = state.installed;
+      state.installed = true;
+      if (s?.version) state.version = String(s.version);
+      if (Array.isArray(s?.capabilities) && s.capabilities.length) state.capabilities = s.capabilities;
+      if (s?.paired !== undefined) state.paired = Boolean(s.paired);
+      if (!wasInstalled || !state.connected) {
+        emit();
+        singleton?.poke();
+      }
+    }
+  };
+
+  const onFocusOrVisible = () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    try {
+      window.postMessage({ type: 'SCRAPER_EXT_PING' }, window.location.origin);
+    } catch (e) {}
+    singleton?.poke();
+  };
+
+  window.addEventListener('message', onWindowMessage);
+  window.addEventListener('focus', onFocusOrVisible);
+  document.addEventListener('visibilitychange', onFocusOrVisible);
 
   singleton = {
     update(next = {}) {
       current = { ...current, ...next };
+      emit();
     },
     stop() {
       state.running = false;
       if (timer) clearTimeout(timer);
       timer = null;
+      window.removeEventListener('message', onWindowMessage);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
       singleton = null;
     },
     status() {

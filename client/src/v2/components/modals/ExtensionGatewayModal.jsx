@@ -1,110 +1,60 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import {
-  Download,
-  Copy,
+  Activity,
+  ArrowRight,
   Check,
   CheckCircle2,
-  ExternalLink,
+  Copy,
   Cpu,
-  Zap,
+  Download,
+  Layers,
+  RefreshCw,
   ShieldCheck,
   Sparkles,
   X,
-  ArrowRight,
-  RefreshCw,
-  AlertTriangle
+  Zap
 } from 'lucide-react';
-import { detectExtension } from '../../utils/relayAgent';
-import { EXTENSION_DOWNLOAD_URL, EXTENSION_STORE_URL } from '../../utils/deviceRamEngine';
+import { useExtension } from '../../context/ExtensionContext';
+import {
+  ALL_BUILTIN_ENGINES,
+  DEVICE_REQUIREMENTS,
+  EXTENSION_DOWNLOAD_URL,
+  EXTENSION_STORE_URL
+} from '../../utils/deviceRamEngine';
 
 /**
  * ExtensionGatewayModal.jsx
  *
- * Automated, user-friendly Browser Extension installation & connection gateway.
- *
- * Explains in simple English why the browser extension is needed:
- *   - Runs searches through the user's browser connection (RAM Turbo)
- *   - Zero cloud queues, zero IP bans, 10x faster scraping
- *
- * Provides a 1-click ZIP download, visual 3-step setup guide, and
- * real-time auto-detection so that as soon as the user loads unpacked in Chrome,
- * it turns green and automatically launches the target search.
+ * Unified 3D Crystal Ceramic × Emerald Hardware modal powered by ExtensionContext.
+ * Supports two crisp modes:
+ *   1. 'setup'     — ONLY shown when no extension is detected on the system.
+ *                    Guides 1-click ZIP download + 3-step Chrome Load Unpacked
+ *                    and auto-launches the pending action the instant connected.
+ *   2. 'telemetry' — Opened intentionally when clicking the green status pill
+ *                    while already connected; shows RAM lanes, relayed count,
+ *                    device tiers, and the 22 built-in engines.
  */
-export default function ExtensionGatewayModal({
-  isOpen,
-  onClose,
-  onConnected,
-  targetQuery = '',
-  targetCountry = 'IN',
-  allowBypass = true
-}) {
+export default function ExtensionGatewayModal() {
+  const ctx = useExtension();
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [connected, setConnected] = useState(false);
-  const [extVersion, setExtVersion] = useState('');
-  const [checking, setChecking] = useState(true);
-  const [autoProceedCountdown, setAutoProceedCountdown] = useState(null);
-  const autoProceedRef = useRef(null);
 
-  // Poll for extension connection while modal is open
-  useEffect(() => {
-    if (!isOpen) return;
+  if (!ctx || !ctx.gatewayOpen) return null;
 
-    let active = true;
-
-    const check = async () => {
-      try {
-        const res = await detectExtension(300);
-        if (!active) return;
-        if (res?.installed) {
-          setConnected(true);
-          setExtVersion(res.version || '1.1.0');
-          setChecking(false);
-        } else {
-          setConnected(false);
-          setChecking(false);
-        }
-      } catch (e) {
-        if (active) setChecking(false);
-      }
-    };
-
-    check();
-    const interval = setInterval(check, 1200);
-
-    // Also listen for immediate postMessage from contentBridge
-    const onMessage = (event) => {
-      if (event.source !== window || !event.data) return;
-      if (event.data.source === 'SCRAPER_RAM_EXTENSION' && event.data.type === 'SCRAPER_EXT_PONG') {
-        if (active) {
-          setConnected(true);
-          setExtVersion(event.data.version || '1.1.0');
-          setChecking(false);
-        }
-      }
-    };
-    window.addEventListener('message', onMessage);
-
-    return () => {
-      active = false;
-      clearInterval(interval);
-      window.removeEventListener('message', onMessage);
-    };
-  }, [isOpen]);
-
-  // When connection turns true, trigger countdown to auto-proceed
-  useEffect(() => {
-    if (connected && autoProceedCountdown === null) {
-      setAutoProceedCountdown(1.5);
-      autoProceedRef.current = setTimeout(() => {
-        onConnected?.();
-      }, 1500);
-    }
-    return () => {
-      if (autoProceedRef.current) clearTimeout(autoProceedRef.current);
-    };
-  }, [connected, autoProceedCountdown, onConnected]);
+  const {
+    ready,
+    connected,
+    checking,
+    version,
+    relayed,
+    lastError,
+    hardware,
+    isMaster,
+    gatewayMode,
+    closeGateway,
+    completeProceed
+  } = ctx;
 
   const copyChromeUrl = () => {
     try {
@@ -116,185 +66,250 @@ export default function ExtensionGatewayModal({
 
   const handleDownload = () => {
     setDownloading(true);
-    // Direct download trigger from server package
     const link = document.createElement('a');
     link.href = EXTENSION_DOWNLOAD_URL;
     link.setAttribute('download', 'scraper-co-in-ram-turbo-extension.zip');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    setTimeout(() => setDownloading(false), 2000);
+    setTimeout(() => setDownloading(false), 1800);
   };
 
-  if (!isOpen) return null;
+  const showTelemetry = gatewayMode === 'telemetry' && ready;
 
   return (
-    <div className="lx-ext-gateway-backdrop" role="dialog" aria-modal="true">
+    <div className="lx-ext-gateway-backdrop" role="dialog" aria-modal="true" aria-label="Browser Extension Gateway">
       <motion.div
         className="lx-ext-gateway-card"
-        initial={{ opacity: 0, scale: 0.96, y: 16 }}
+        initial={{ opacity: 0, scale: 0.96, y: 14 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 12 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
-        {/* Top Header */}
         <header className="lx-ext-gateway-header">
           <div className="lx-ext-gateway-brand">
-            <span className="lx-ext-bezel-tag">SCRAPER.CO.IN · RAM TURBO ACCELERATOR</span>
+            <span className={`lx-ext-bezel-tag ${isMaster ? 'is-master' : ''}`}>
+              {isMaster ? 'MASTER CONTROL · RAM TURBO HARDWARE' : 'SCRAPER.CO.IN · RAM TURBO HARDWARE'}
+            </span>
             <div className="lx-ext-head-row">
               <div className="lx-ext-icon-orb">
-                <Cpu size={20} color="#7c3aed" />
+                <Cpu size={20} color="#059669" />
               </div>
               <div>
-                <h2>Connect Browser Extension</h2>
-                <p>Run instant, zero-queue searches powered by your local browser connection.</p>
+                <h2>{showTelemetry ? 'RAM Turbo Telemetry & Engines' : 'Connect Browser Extension'}</h2>
+                <p>
+                  {showTelemetry
+                    ? 'Connected and persistent across tabs — every search routes cleanly through your hardware.'
+                    : 'Install once in 30 seconds. After that it stays connected automatically with zero server queues.'}
+                </p>
               </div>
             </div>
           </div>
           <button
             type="button"
             className="lx-ext-close-btn"
-            onClick={onClose}
-            aria-label="Close extension prompt"
+            onClick={closeGateway}
+            aria-label="Close extension gateway"
           >
             <X size={18} />
           </button>
         </header>
 
-        {/* Live Status Pill */}
-        <div className={`lx-ext-status-bar ${connected ? 'is-connected' : 'is-pending'}`}>
+        <div className={`lx-ext-status-bar ${ready ? 'is-connected' : 'is-pending'}`}>
           <div className="lx-ext-status-info">
-            <span className={`lx-ext-led ${connected ? 'is-green' : 'is-pulsing'}`} />
+            <span className={`cb-led ${ready ? 'is-live' : 'is-warn'}`} />
             <b>
-              {connected
-                ? `RAM Turbo Connected! (v${extVersion} Ready)`
+              {ready
+                ? `RAM Turbo Active · v${version || '1.1.0'} · ${connected ? 'Heartbeat Live' : 'Bridge Ready'}`
                 : checking
-                ? 'Detecting Extension Bridge…'
-                : 'Extension Not Detected Yet'}
+                  ? 'Detecting Extension Bridge…'
+                  : 'Extension Not Installed Yet'}
             </b>
           </div>
-          {connected ? (
+          {ready ? (
             <span className="lx-ext-badge-green">
-              <CheckCircle2 size={13} /> Active &amp; Ready
+              <CheckCircle2 size={13} /> Always On · {relayed || 0} relayed
             </span>
           ) : (
-            <span className="lx-ext-badge-amber">Setup Required (30 Seconds)</span>
+            <span className="lx-ext-badge-amber">One-Time Setup</span>
           )}
         </div>
 
-        {connected ? (
-          /* Celebratory Connected State */
+        {showTelemetry ? (
+          <div className="lx-ext-telemetry-view">
+            <div className="lx-ext-hw-grid">
+              <div className="lx-ext-hw-tile is-best">
+                <span>DETECTED RAM</span>
+                <b>{hardware.ramGb} GB RAM</b>
+                <small>{hardware.tierLabel}</small>
+              </div>
+              <div className="lx-ext-hw-tile">
+                <span>CPU LANES</span>
+                <b>{hardware.cpuCores} Cores</b>
+                <small>{hardware.parallelZones}x Parallel Zones</small>
+              </div>
+              <div className="lx-ext-hw-tile">
+                <span>PAGES RELAYED</span>
+                <b>{relayed || 0}</b>
+                <small>20+ Engines Auto-Dispatched</small>
+              </div>
+            </div>
+
+            <div className="lx-ext-tiers-row">
+              {DEVICE_REQUIREMENTS.map((req) => (
+                <div key={req.tier} className={`lx-ext-tier-pill ${req.tier === hardware.tier ? 'is-current' : ''}`}>
+                  <b>{req.badge} ({req.ram})</b>
+                  <span>{req.parallelZones} Zones · {req.speed}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="lx-ext-engines-box">
+              <div className="lx-ext-engines-head">
+                <Layers size={13} color="#059669" />
+                <b>{ALL_BUILTIN_ENGINES.length} Built-In Lead Engines (Auto-Orchestrated)</b>
+              </div>
+              <div className="lx-ext-engines-scroll">
+                {ALL_BUILTIN_ENGINES.map((eng) => (
+                  <div key={eng.id} className="lx-ext-engine-item">
+                    <b>{eng.number} · {eng.name}</b>
+                    <span>AUTO ON</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {lastError && (
+              <div className="lx-ext-note is-error">Last status note: {lastError}</div>
+            )}
+
+            <button
+              type="button"
+              className="lx-btn lx-btn-primary lx-ext-proceed-btn"
+              onClick={closeGateway}
+            >
+              <Activity size={15} />
+              <span>Done · Keep Sweeping</span>
+            </button>
+          </div>
+        ) : ready ? (
           <div className="lx-ext-connected-view">
             <div className="lx-ext-success-banner">
-              <Sparkles size={28} color="#059669" />
+              <Sparkles size={26} color="#059669" />
               <div>
-                <h3>You're All Set!</h3>
+                <h3>Extension Connected! Launching Workspace…</h3>
                 <p>
-                  RAM Turbo extension is verified and communicating with the scraper.
-                  Your local browser connection will now handle high-speed lead extraction.
+                  Your browser extension is verified and locked in. It stays connected across reloads,
+                  new tabs, and restarts so you will never be asked again.
                 </p>
               </div>
             </div>
             <button
               type="button"
               className="lx-btn lx-btn-primary lx-ext-proceed-btn"
-              onClick={() => onConnected?.()}
+              onClick={completeProceed}
             >
-              <span>Launch Workspace Now</span>
+              <span className="lx-gbc-keycap is-a">A</span>
+              <span>Proceed Now</span>
               <ArrowRight size={16} />
             </button>
           </div>
         ) : (
-          /* Guided 3-Step Setup Flow */
           <div className="lx-ext-setup-flow">
             <div className="lx-ext-value-prop">
               <div className="lx-ext-prop-item">
                 <Zap size={14} color="#059669" />
-                <span>Zero Cloud Waiting Queues</span>
+                <span>Zero Server Waiting Queues</span>
               </div>
               <div className="lx-ext-prop-item">
                 <ShieldCheck size={14} color="#059669" />
-                <span>Zero IP Bans (Uses Your Direct Connection)</span>
+                <span>All 20+ Engines Via Your Connection</span>
               </div>
               <div className="lx-ext-prop-item">
-                <Cpu size={14} color="#7c3aed" />
-                <span>Multi-Core Parallel Zone Sweeps</span>
+                <Cpu size={14} color="#0e7490" />
+                <span>{hardware.parallelZones}x Parallel Zones ({hardware.ramGb} GB RAM)</span>
               </div>
             </div>
 
-            {/* Step 1: Download ZIP */}
             <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">1</div>
+              <div className="lx-ext-step-number">01</div>
               <div className="lx-ext-step-content">
                 <b>Download the Extension Package</b>
-                <p>Click below to download the lightweight, pre-configured zip file (11 KB).</p>
-                <button
-                  type="button"
-                  className="lx-btn lx-btn-primary lx-ext-dl-btn"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                >
-                  <Download size={15} />
-                  <span>{downloading ? 'Downloading…' : 'Download Extension (.zip)'}</span>
-                </button>
+                <p>One lightweight, verified ZIP package containing Chrome manifest, icons, and bridge.</p>
+                <div className="lx-ext-step-actions">
+                  {EXTENSION_STORE_URL ? (
+                    <a
+                      href={EXTENSION_STORE_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="lx-btn lx-btn-primary lx-ext-dl-btn"
+                    >
+                      <Download size={15} />
+                      <span>Add to Chrome</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      className="lx-btn lx-btn-primary lx-ext-dl-btn"
+                      onClick={handleDownload}
+                      disabled={downloading}
+                    >
+                      <Download size={15} />
+                      <span>{downloading ? 'Downloading ZIP…' : 'Download Extension (.zip)'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Step 2: Open chrome://extensions */}
             <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">2</div>
+              <div className="lx-ext-step-number">02</div>
               <div className="lx-ext-step-content">
-                <b>Extract &amp; Open Extensions Page</b>
-                <p>Unzip the downloaded file. Next, open this URL in a new browser tab:</p>
+                <b>Extract ZIP &amp; Open Chrome Extensions</b>
+                <p>Unzip the downloaded folder, then paste this URL in a new browser tab:</p>
                 <div className="lx-ext-url-box">
                   <code>chrome://extensions</code>
                   <button type="button" className="lx-ext-copy-btn" onClick={copyChromeUrl}>
                     {copied ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                    <span>{copied ? 'Copied URL!' : 'Copy URL'}</span>
+                    <span>{copied ? 'Copied!' : 'Copy URL'}</span>
                   </button>
                 </div>
-                <small className="lx-ext-note">
-                  (Works in Chrome, Edge, Brave, Opera, or any Chromium browser)
-                </small>
               </div>
             </div>
 
-            {/* Step 3: Load Unpacked */}
             <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">3</div>
+              <div className="lx-ext-step-number">03</div>
               <div className="lx-ext-step-content">
-                <b>Toggle 'Developer mode' &amp; Click 'Load unpacked'</b>
+                <b>Enable &ldquo;Developer mode&rdquo; &amp; Click &ldquo;Load unpacked&rdquo;</b>
                 <p>
-                  1. Turn ON <b>Developer mode</b> (toggle switch in the top-right corner of <code>chrome://extensions</code>).<br />
-                  2. Click the <b>"Load unpacked"</b> button (top-left).<br />
-                  3. Select the extracted <code>extension</code> folder.
+                  1. Turn ON <b>Developer mode</b> (top-right switch on <code>chrome://extensions</code>).<br />
+                  2. Click <b>Load unpacked</b> (top-left) and pick the extracted folder.
                 </p>
               </div>
             </div>
 
-            {/* Real-time Listening Footer */}
             <div className="lx-ext-auto-detect-footer">
               <RefreshCw size={14} className="lx-ext-spin" />
               <span>
-                Listening for extension bridge… As soon as you load the folder, this screen automatically connects.
+                Waiting silently for your extension… As soon as you select the folder, this window connects
+                and launches automatically with no refresh needed.
               </span>
             </div>
           </div>
         )}
 
-        {/* Bottom Fallback Options */}
-        <footer className="lx-ext-gateway-footer">
-          {allowBypass && !connected && (
+        {isMaster && !ready && (
+          <footer className="lx-ext-gateway-footer">
             <button
               type="button"
               className="lx-ext-bypass-link"
-              onClick={() => onConnected?.()}
+              onClick={completeProceed}
             >
-              <span>Continue in Cloud Server Mode (Queues may apply)</span>
+              <span>Continue in Master Server Mode (No Extension)</span>
               <ArrowRight size={13} />
             </button>
-          )}
-        </footer>
+          </footer>
+        )}
       </motion.div>
     </div>
   );

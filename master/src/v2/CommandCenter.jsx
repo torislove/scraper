@@ -35,10 +35,7 @@ import {
 import { createLiveStream } from './liveStream';
 import { API_URL } from '../apiConfig';
 import { authHeaders, getSession } from './auth';
-import { startRelayAgent } from './utils/relayAgent';
-import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_STORE_URL, EXTENSION_DOWNLOAD_URL
-} from './utils/deviceRamEngine';
+import { useExtension } from './context/ExtensionContext';
 import { IS_DESKTOP, HOME_ROUTE } from '../desktop';
 import DesktopBadge from './DesktopBadge';
 
@@ -191,33 +188,14 @@ export default function CommandCenter() {
   const [reconnectAttemptCount, setReconnectAttemptCount] = useState(0);
   const reconnectStreamRef = useRef(null);
 
-  // RAM Turbo: the master can use the same zero-knowledge relay as the client.
-  const [relayState, setRelayState] = useState({ installed: false, connected: false, relayed: 0, lastError: '' });
-  const [hwPopupOpen, setHwPopupOpen] = useState(false);
-  const hardware = useMemo(() => detectDeviceHardware(), []);
-  const relayAgentRef = useRef(null);
-
-  useEffect(() => {
-    const session = getSession();
-    const userId = session?.userId || session?.user?.id || '';
-    relayAgentRef.current = startRelayAgent({
-      apiBase: API_URL,
-      userId,
-      headers: authHeaders(),
-      onStatus: (status) => {
-        setRelayState({
-          installed: status.installed,
-          connected: status.connected,
-          relayed: status.relayed || 0,
-          lastError: status.lastError || ''
-        });
-      }
-    });
-    return () => {
-      relayAgentRef.current?.stop?.();
-      relayAgentRef.current = null;
-    };
-  }, []);
+  // RAM Turbo: the master uses the same zero-knowledge root extension context as the client.
+  const {
+    ready: extReady,
+    relayed: extRelayed,
+    hardware,
+    openTelemetry,
+    openSetup
+  } = useExtension();
 
   useEffect(() => {
     const handleOnline = () => {
@@ -419,15 +397,17 @@ export default function CommandCenter() {
   const [deepEstimate, setDeepEstimate] = useState(null);
   const [scanPlan, setScanPlan] = useState(null);
 
+  const initialPreset = (searchParams.get('preset') || '').toLowerCase();
   const [filters, setFilters] = useState({
     query: '',
-    phoneOnly: false,
+    phoneOnly: initialPreset === 'startup' || initialPreset === 'sales',
     primeOnly: false,
     websiteOnly: false,
+    noWebsiteOnly: initialPreset === 'agency',
     deepOnly: false,
     conflictsOnly: false,
-    minRating: 0,
-    sort: 'newest',
+    minRating: initialPreset === 'agency' ? 4 : 0,
+    sort: initialPreset === 'sales' ? 'area' : initialPreset === 'startup' ? 'quality' : 'newest',
     source: 'all'
   });
   const [page, setPage] = useState(1);
@@ -1286,7 +1266,15 @@ export default function CommandCenter() {
   }, [deepJob?.id, deepJob?.status, refresh]);
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
-  const updateFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
+  const updateFilter = (keyOrPatch, value) => {
+    setFilters(prev => {
+      const patch = (keyOrPatch && typeof keyOrPatch === 'object') ? keyOrPatch : { [keyOrPatch]: value };
+      const next = { ...prev, ...patch };
+      if (patch.noWebsiteOnly) next.websiteOnly = false;
+      if (patch.websiteOnly) next.noWebsiteOnly = false;
+      return next;
+    });
+  };
   const updateMasterSweep = (key, value) => {
     setMasterConfirm(false);
     setMasterSweepForm(prev => ({ ...prev, [key]: value }));
@@ -2245,6 +2233,7 @@ export default function CommandCenter() {
         if (!isMob || rating < 4.0 || reviews === 0) return false;
       }
       if (filters.websiteOnly && !vendor.website) return false;
+      if (filters.noWebsiteOnly && String(vendor.website || '').trim()) return false;
       if (filters.deepOnly && !vendor.deepExtractedAt) return false;
       if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
       if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
@@ -2280,6 +2269,15 @@ export default function CommandCenter() {
         return (qualityOf(b) || 0) - (qualityOf(a) || 0);
       }
       if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      if (filters.sort === 'area') {
+        const pinA = String(a.pincode || '999999').trim();
+        const pinB = String(b.pincode || '999999').trim();
+        if (pinA !== pinB) return pinA.localeCompare(pinB);
+        const areaA = String(a.mandal || a.locality || a.village || a.city || 'zzz').toLowerCase();
+        const areaB = String(b.mandal || b.locality || b.village || b.city || 'zzz').toLowerCase();
+        if (areaA !== areaB) return areaA.localeCompare(areaB);
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
       // Default 'newest': deterministic arrival/scrapedAt order during and after completion (no post-run jump)
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
     });
@@ -2750,14 +2748,14 @@ export default function CommandCenter() {
 
           <button
             type="button"
-            className={cx('cb-relay-pill', relayState.connected && 'is-live')}
-            onClick={() => setHwPopupOpen(true)}
-            title={relayState.connected
-              ? `RAM Turbo connected · ${relayState.relayed} pages relayed`
+            className={cx('cb-relay-pill', extReady && 'is-live')}
+            onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
+            title={extReady
+              ? `RAM Turbo connected · ${extRelayed || 0} pages relayed · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`
               : 'Add the RAM Turbo extension in Chrome to use your own hardware'}
           >
-            <span className={cx('cb-led', relayState.connected ? 'is-live' : 'is-warn')} />
-            {relayState.connected ? `RAM TURBO · ${relayState.relayed}` : 'CONNECT RAM TURBO'}
+            <span className={cx('cb-led', extReady ? 'is-live' : 'is-warn')} />
+            {extReady ? `RAM TURBO · ${extRelayed || 0}` : 'CONNECT RAM TURBO'}
           </button>
 
           <SystemCheckPill variant="master" />
@@ -2767,15 +2765,16 @@ export default function CommandCenter() {
               type="button"
               className="v2-btn v2-btn-ghost v2-btn-sm lx-watch-client-btn"
               style={{
-                background: 'linear-gradient(135deg, #ede9fe, #ddd6fe)',
-                border: '1.5px solid #8b5cf6',
-                color: '#5b21b6',
+                background: 'linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%)',
+                border: '1px solid #f59e0b',
+                color: '#92400e',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 2px 0 #d97706, 0 6px 14px -4px rgba(217, 119, 6, 0.24)',
                 fontWeight: 800,
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 5,
                 borderRadius: 999,
-                padding: '4px 10px'
+                padding: '4px 11px'
               }}
               onClick={() => {
                 const target = liveClientSessions[0];
@@ -3391,125 +3390,6 @@ export default function CommandCenter() {
           onClose={() => setTrashOpen(false)}
           onRestored={() => { refresh(); }}
         />
-      )}
-
-      {hwPopupOpen && (
-        <div className="v2-gbc-hw-modal-backdrop" role="dialog" aria-modal="true" aria-label="RAM Turbo hardware setup">
-          <div className="v2-gbc-hw-modal">
-            <div className="v2-gbc-hw-bezel">
-              <div className="v2-gbc-hw-head">
-                <div className="v2-gbc-hw-title">
-                  <span className="v2-gbc-hw-led" />
-                  <div>
-                    <small>SCRAPER.CO.IN · GAME BOY COLOR TURBO ENGINE</small>
-                    <h3>Use your own hardware to run the Master Sweep</h3>
-                  </div>
-                </div>
-                <button type="button" className="v2-icon-btn" onClick={() => setHwPopupOpen(false)} aria-label="Close RAM Turbo panel">
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="v2-gbc-hw-specs">
-                <div className="v2-gbc-spec-card is-best">
-                  <span>DETECTED RAM</span>
-                  <b>{hardware.ramGb} GB RAM</b>
-                  <small>{hardware.tierLabel} · Web Worker Ready</small>
-                </div>
-                <div className="v2-gbc-spec-card">
-                  <span>CPU THREADS</span>
-                  <b>{hardware.cpuCores} Cores</b>
-                  <small>{hardware.parallelZones}x parallel zones</small>
-                </div>
-                <div className="v2-gbc-spec-card">
-                  <span>BACKGROUND ENGINES</span>
-                  <b>20+ Active</b>
-                  <small>Maps · Directories · B2B · Web · Dedup</small>
-                </div>
-              </div>
-
-              <div className="v2-gbc-hw-engines">
-                {ALL_BUILTIN_ENGINES.map(eng => (
-                  <div key={eng.id} className="v2-gbc-hw-engine-pill">
-                    <b>{eng.number} · {eng.name}</b>
-                    <span>AUTO ON</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="v2-gbc-hw-tiers">
-                {DEVICE_REQUIREMENTS.map(req => (
-                  <div key={req.tier} className={cx('v2-gbc-tier-chip', req.tier === hardware.tier && 'is-current')}>
-                    <b>{req.badge} ({req.ram})</b>
-                    <span>{req.parallelZones} Parallel Zones · {req.speed}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className={cx('cb-glass-card', relayState.connected ? 'is-live' : 'is-idle')}>
-                <div className="cb-glass-head">
-                  <span className={cx('cb-led', relayState.connected ? 'is-live' : 'is-warn')} />
-                  <div className="cb-glass-title">
-                    <b>{relayState.connected ? 'RAM TURBO CONNECTED' : 'ADD RAM TURBO'}</b>
-                    <span>
-                      {relayState.connected
-                        ? `${hardware.ramGb} GB · ${hardware.parallelZones} lanes · ${relayState.relayed || 0} pages relayed`
-                        : 'One click in Chrome. After that it connects itself.'}
-                    </span>
-                  </div>
-                  <span className={cx('cb-chip', relayState.connected ? 'is-live' : 'is-idle')}>
-                    {relayState.connected ? 'READY' : 'NOT CONNECTED'}
-                  </span>
-                </div>
-
-                <p className="cb-glass-copy">
-                  Our 20+ engines stay on our servers. RAM Turbo only lets them read pages through your
-                  connection, so district, mandal and state sweeps skip the queue.
-                </p>
-
-                {!relayState.connected && (
-                  <ol className="cb-steps">
-                    <li><b>Add</b> RAM Turbo to Chrome.</li>
-                    <li><b>Reload</b> this page.</li>
-                    <li><b>Sweep</b> — it starts on its own.</li>
-                  </ol>
-                )}
-
-                <div className="cb-glass-actions">
-                  {relayState.connected ? (
-                    <span className="cb-badge-live">All engines on your hardware</span>
-                  ) : EXTENSION_STORE_URL ? (
-                    <a className="cb-btn-primary" href={EXTENSION_STORE_URL} target="_blank" rel="noopener noreferrer">
-                      <Download size={14} />
-                      <span>Add to Chrome</span>
-                    </a>
-                  ) : (
-                    <a
-                      className="cb-btn-primary"
-                      href={EXTENSION_DOWNLOAD_URL}
-                      download="scraper-co-in-ram-turbo-extension.zip"
-                    >
-                      <Download size={14} />
-                      <span>Download Extension (.zip)</span>
-                    </a>
-                  )}
-                </div>
-
-                {!relayState.connected && (
-                  <p className="cb-glass-fine">
-                    {EXTENSION_STORE_URL
-                      ? 'Add RAM Turbo from the Chrome Web Store. Chrome shows the permissions before it installs, and it connects itself after that.'
-                      : 'Download the pre-configured zip package (11 KB), extract it, open chrome://extensions, toggle Developer mode, and click "Load unpacked". Auto-connects immediately.'}
-                  </p>
-                )}
-
-                {relayState.lastError && (
-                  <p className="cb-glass-fine is-error">Last error: {relayState.lastError}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

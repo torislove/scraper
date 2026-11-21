@@ -9,13 +9,12 @@ import {
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
-import ExtensionGatewayModal from './components/modals/ExtensionGatewayModal';
+import { useExtension } from './context/ExtensionContext';
 import { POPULAR_COUNTRIES } from './data/countries';
 import { COUNTRY_COUNTY_SHOWCASE, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
 import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_STORE_URL
+  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
-import { detectExtension } from './utils/relayAgent';
 import { pingHealth } from './api';
 import './landingExecutive.css';
 import './landingCloud.css';
@@ -53,9 +52,9 @@ const DEMO_SCENARIOS = [
       { top: '42%', left: '28%' }
     ],
     leads: [
-      { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad', rating: '4.9', reviews: 318, phone: '+91 98490 •••12' },
-      { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad', rating: '4.8', reviews: 214, phone: '+91 94401 •••89' },
-      { name: 'Jubilee Enterprise Tech', area: 'Banjara Hills, Hyderabad', rating: '4.9', reviews: 276, phone: '+91 90005 •••44' }
+      { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad · PIN 500081', rating: '4.9', reviews: 318, phone: '+91 98490 •••12', hasPin: true },
+      { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad · PIN 500081', rating: '4.8', reviews: 214, phone: '+91 94401 •••89', noWebsite: true, hasPin: true },
+      { name: 'Jubilee Enterprise Tech', area: 'Banjara Hills, Hyderabad · PIN 500034', rating: '4.9', reviews: 276, phone: '+91 90005 •••44', hasPin: true }
     ]
   },
   {
@@ -73,9 +72,9 @@ const DEMO_SCENARIOS = [
       { top: '58%', left: '72%' }
     ],
     leads: [
-      { name: 'Studio Vastu & Living Spaces', area: 'Bandra West, Mumbai', rating: '4.9', reviews: 312, phone: '+91 98201 •••67' },
-      { name: 'Urban Craft Modular Interiors', area: 'Andheri West, Mumbai', rating: '4.7', reviews: 145, phone: '+91 98192 •••31' },
-      { name: 'Crestline Architecture & Decor', area: 'Powai, Mumbai', rating: '4.8', reviews: 198, phone: '+91 97690 •••15' }
+      { name: 'Studio Vastu & Living Spaces', area: 'Bandra West, Mumbai · PIN 400050', rating: '4.9', reviews: 312, phone: '+91 98201 •••67', hasPin: true },
+      { name: 'Urban Craft Modular Interiors', area: 'Andheri West, Mumbai · PIN 400053', rating: '4.7', reviews: 145, phone: '+91 98192 •••31', noWebsite: true, hasPin: true },
+      { name: 'Crestline Architecture & Decor', area: 'Powai, Mumbai · PIN 400076', rating: '4.8', reviews: 198, phone: '+91 97690 •••15', hasPin: true }
     ]
   },
   {
@@ -93,9 +92,9 @@ const DEMO_SCENARIOS = [
       { top: '34%', left: '76%' }
     ],
     leads: [
-      { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX', rating: '4.9', reviews: 420, phone: '+1 (214) •••-0192' },
-      { name: 'Metroplex Climate Solutions', area: 'Harris County, TX', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418' },
-      { name: 'Coastal Cooling Mechanical', area: 'Orange County, CA', rating: '4.7', reviews: 180, phone: '+1 (949) •••-8820' }
+      { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX · ZIP 75201', rating: '4.9', reviews: 420, phone: '+1 (214) •••-0192', hasPin: true },
+      { name: 'Metroplex Climate Solutions', area: 'Harris County, TX · ZIP 77002', rating: '4.8', reviews: 265, phone: '+1 (469) •••-4418', noWebsite: true, hasPin: true },
+      { name: 'Coastal Cooling Mechanical', area: 'Orange County, CA · ZIP 92614', rating: '4.7', reviews: 180, phone: '+1 (949) •••-8820', hasPin: true }
     ]
   },
   {
@@ -167,6 +166,8 @@ const PLAYBOOKS = [
   {
     icon: Rocket,
     tone: 'tone-kiwi',
+    preset: 'startup',
+    query: 'B2B software & IT companies in Hyderabad',
     badge: 'FOR STARTUPS & FOUNDERS',
     title: 'Launch city outreach in 60 seconds — without a data team',
     body: 'Enter a new city or launch a B2B product immediately. Pull 1,000+ direct decision-maker phone numbers without spending weeks hiring freelancers or buying stale databases.',
@@ -175,6 +176,8 @@ const PLAYBOOKS = [
   {
     icon: Briefcase,
     tone: 'tone-atomic',
+    preset: 'agency',
+    query: 'Dental clinics & local shops in Vijayawada',
     badge: 'FOR WEB, SEO & AD AGENCIES',
     title: 'Spot businesses with "No Website" & win ready clients',
     body: 'Filter leads to reveal high-rated local shops and clinics that still have no official website — giving your agency warm prospects who genuinely need digital growth today.',
@@ -183,6 +186,8 @@ const PLAYBOOKS = [
   {
     icon: Building2,
     tone: 'tone-teal',
+    preset: 'sales',
+    query: 'Hardware & electronics distributors in Guntur',
     badge: 'FOR DISTRIBUTORS & SALES TEAMS',
     title: 'Area-sorted Excel sheets with street pins for every rep',
     body: 'Give each field representative a clean neighborhood spreadsheet organized by pincode, mandal, or locality with direct map directions and verified phone contacts.',
@@ -346,7 +351,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
         animate={{ y: [0, 5, 0] }}
         transition={{ duration: 3.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
       >
-        <FileSpreadsheet size={15} color="#7c3aed" />
+        <FileSpreadsheet size={15} color="#0e7490" />
         <span>Satellite Radar · 1-Click Excel</span>
       </motion.div>
 
@@ -390,7 +395,7 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
           </div>
 
           <div className="lx-showcase-bar">
-            <Search size={17} color="#7c3aed" />
+            <Search size={17} color="#059669" />
             <span className="lx-showcase-query">
               {typedText}
               <span className="lx-typing-caret" />
@@ -446,6 +451,12 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
                     <div style={{ minWidth: 0 }}>
                       <b>{lead.name}</b>
                       <small>{lead.area} · ★ {lead.rating} ({lead.reviews})</small>
+                      {(lead.noWebsite || lead.hasPin) && (
+                        <div className="lx-demo-row-meta">
+                          {lead.noWebsite && <span className="lx-hero-row-tag is-agency">No Website · Warm Lead</span>}
+                          {lead.hasPin && <span className="lx-hero-row-tag is-pin"><MapPin size={9} /> Street Pin</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <span className="lx-demo-phone">{lead.phone}</span>
@@ -494,14 +505,12 @@ function InteractiveShowcase({ demo, activeDemo, setActiveDemo, totalDemos = 4, 
 
 export default function LandingV2() {
   const navigate = useNavigate();
+  const { ready: extReady, ensureConnected, openTelemetry, openSetup } = useExtension();
   const [online, setOnline] = useState(true);
   const [activeDemo, setActiveDemo] = useState(0);
   const [weeklySearches, setWeeklySearches] = useState(12);
   const [activePulseZone, setActivePulseZone] = useState(0);
   const [selectedMarketCode, setSelectedMarketCode] = useState('IN');
-  const [showExtensionModal, setShowExtensionModal] = useState(false);
-  const [extConnected, setExtConnected] = useState(false);
-  const [pendingLaunch, setPendingLaunch] = useState(null);
   const [engineCategoryFilter, setEngineCategoryFilter] = useState('All');
   const hardware = useMemo(() => detectDeviceHardware(), []);
 
@@ -518,28 +527,6 @@ export default function LandingV2() {
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
-    };
-  }, []);
-
-  // Probe extension presence and listen for bridge pongs
-  useEffect(() => {
-    let active = true;
-    const probe = async () => {
-      try {
-        const res = await detectExtension(250);
-        if (active && res?.installed) setExtConnected(true);
-      } catch (e) {}
-    };
-    probe();
-    const handleMsg = (ev) => {
-      if (ev.data?.source === 'SCRAPER_RAM_EXTENSION' && ev.data?.type === 'SCRAPER_EXT_PONG') {
-        if (active) setExtConnected(true);
-      }
-    };
-    window.addEventListener('message', handleMsg);
-    return () => {
-      active = false;
-      window.removeEventListener('message', handleMsg);
     };
   }, []);
 
@@ -560,26 +547,11 @@ export default function LandingV2() {
   }, []);
 
   const demo = DEMO_SCENARIOS[activeDemo];
-  const openWorkspace = async (countryCode = 'IN', query = '') => {
-    try {
-      const res = await detectExtension(250);
-      if (res?.installed) {
-        setExtConnected(true);
-        const qParam = query ? `&q=${encodeURIComponent(query)}` : '';
-        navigate(`/command?country=${encodeURIComponent(countryCode)}${qParam}`);
-        return;
-      }
-    } catch (e) {}
-    setPendingLaunch({ countryCode, query });
-    setShowExtensionModal(true);
-  };
-
-  const handleExtensionConnected = () => {
-    setExtConnected(true);
-    setShowExtensionModal(false);
-    const target = pendingLaunch || { countryCode: 'IN', query: '' };
-    const qParam = target.query ? `&q=${encodeURIComponent(target.query)}` : '';
-    navigate(`/command?country=${encodeURIComponent(target.countryCode || 'IN')}${qParam}`);
+  const openWorkspace = (countryCode = 'IN', query = '', preset = '') => {
+    const qParam = query ? `&q=${encodeURIComponent(query)}` : '';
+    const presetParam = preset ? `&preset=${encodeURIComponent(preset)}` : '';
+    const targetUrl = `/command?country=${encodeURIComponent(countryCode)}${qParam}${presetParam}`;
+    ensureConnected(() => navigate(targetUrl), { country: countryCode, query, preset });
   };
 
   const lockedMarkets = useMemo(() => {
@@ -623,12 +595,12 @@ export default function LandingV2() {
             </span>
             <button
               type="button"
-              className={`lx-nav-ext-pill ${extConnected ? 'is-connected' : ''}`}
-              onClick={() => setShowExtensionModal(true)}
-              title={extConnected ? 'Browser Extension Connected (RAM Turbo Active)' : 'Connect Browser Extension'}
+              className={`lx-nav-ext-pill ${extReady ? 'is-connected' : ''}`}
+              onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
+              title={extReady ? 'Browser Extension Active (RAM Turbo Live)' : 'Connect Browser Extension'}
             >
               <Cpu size={13} />
-              <span>{extConnected ? 'Extension Active' : 'Connect Extension'}</span>
+              <span>{extReady ? 'Extension Active' : 'Connect Extension'}</span>
             </button>
             <button type="button" className="lx-btn lx-btn-ghost" onClick={() => navigate('/login')}>
               <LogIn size={15} /> Sign in
@@ -731,6 +703,60 @@ export default function LandingV2() {
               onLaunch={() => openWorkspace(demo.country, demo.query)}
             />
           </div>
+
+          {/* Hero Playbooks Dock: Startups, Web/SEO/Ad Agencies & Field Sales Teams */}
+          <div className="lx-wrap lx-hero-playbooks" id="playbooks">
+            <div className="lx-hero-pb-head">
+              <div>
+                <span className="lx-kicker"><Briefcase size={13} /> Built for Real Growth</span>
+                <h2>Why Startups, Agencies &amp; Sales Teams rely on Scraper.co.in.</h2>
+                <p>
+                  Whether you are launching day-one outbound sales or pitching local businesses as an agency,
+                  every workflow is ready right out of the box.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="lx-btn lx-btn-ghost"
+                onClick={() => openWorkspace(selectedMarketCode)}
+              >
+                Explore Live Leads &amp; Exports <ArrowRight size={14} />
+              </button>
+            </div>
+
+            <div className="lx-hero-pb-grid">
+              {PLAYBOOKS.map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <motion.article
+                    key={item.title}
+                    className="lx-hero-pb-card"
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.08 * idx, duration: 0.35 }}
+                    whileHover={{ y: -3 }}
+                  >
+                    <div className="lx-hero-pb-top">
+                      <div className={`lx-flow-step-orb ${item.tone}`} style={{ margin: 0, width: 42, height: 42, borderRadius: 12 }}>
+                        <Icon size={19} />
+                      </div>
+                      <span className="lx-hero-pb-badge">{item.badge}</span>
+                    </div>
+                    <h3>{item.title}</h3>
+                    <p>{item.body}</p>
+                    <button
+                      type="button"
+                      className="lx-hero-pb-cta"
+                      onClick={() => openWorkspace(selectedMarketCode, item.query, item.preset)}
+                    >
+                      <span>{item.cta}</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  </motion.article>
+                );
+              })}
+            </div>
+          </div>
         </section>
 
         {/* Cloud engines + extension speed — the one idea the whole product rests on */}
@@ -780,9 +806,11 @@ export default function LandingV2() {
                   <button
                     type="button"
                     className="lx-btn lx-btn-primary"
-                    onClick={() => setShowExtensionModal(true)}
+                    onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
                   >
-                    <Download size={15} /> Install Extension (1-Click)
+                    {extReady
+                      ? <><CheckCircle2 size={15} /> Extension Active · Live Speed</>
+                      : <><Download size={15} /> Install Extension (1-Click)</>}
                   </button>
                 </div>
               </article>
@@ -883,7 +911,7 @@ export default function LandingV2() {
                       <motion.div
                         key={z.name}
                         className="lx-zone-cell"
-                        animate={isHot ? { scale: 1.04, borderColor: '#7c3aed', backgroundColor: '#f5f3ff' } : { scale: 1 }}
+                        animate={isHot ? { scale: 1.04, borderColor: '#059669', backgroundColor: '#ecfdf5' } : { scale: 1 }}
                         transition={{ duration: 0.18 }}
                       >
                         <span>{z.name}</span>
@@ -965,7 +993,7 @@ export default function LandingV2() {
                       </span>
                       <div style={{ textAlign: 'right' }}>
                         <span className="lx-engine-live-dot">LIVE · {eng.number.toUpperCase()}</span>
-                        <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 800 }}>{eng.coverage}</div>
+                        <div style={{ fontSize: 10, color: '#0e7490', fontWeight: 800 }}>{eng.coverage}</div>
                       </div>
                     </div>
                     <div style={{ fontSize: 10, fontWeight: 850, textTransform: 'uppercase', color: '#059669', marginBottom: 2 }}>
@@ -1018,9 +1046,11 @@ export default function LandingV2() {
                     <button
                       type="button"
                       className="lx-btn lx-btn-primary"
-                      onClick={() => setShowExtensionModal(true)}
+                      onClick={() => (extReady ? openTelemetry() : openSetup({ country: selectedMarketCode }))}
                     >
-                      <Download size={15} /> Install Extension (1-Click)
+                      {extReady
+                        ? <><CheckCircle2 size={15} /> Extension Connected</>
+                        : <><Download size={15} /> Install Extension (1-Click)</>}
                     </button>
                     <button type="button" className="lx-btn lx-btn-ghost" onClick={() => openWorkspace('IN')}>
                       Open Command Center <ArrowRight size={14} />
@@ -1058,51 +1088,6 @@ export default function LandingV2() {
           </div>
         </section>
 
-        {/* ANIMATED STORY 3: FOR STARTUPS, AGENCIES & SALES TEAMS */}
-        <section className="lx-section lx-section-alt" id="playbooks">
-          <div className="lx-wrap">
-            <div className="lx-sec-head">
-              <span className="lx-kicker"><Briefcase size={13} /> Built for Real Growth</span>
-              <h2>Why Startups, Agencies &amp; Sales Teams rely on Scraper.co.in.</h2>
-              <p>Whether you are launching day-one outbound sales or pitching local businesses as an agency, every workflow is ready right out of the box.</p>
-            </div>
-
-            <div className="lx-playbook-grid">
-              {PLAYBOOKS.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <motion.article
-                    key={item.title}
-                    className="lx-playbook-card"
-                    initial={{ opacity: 0, y: 18 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, amount: 0.2 }}
-                    transition={{ delay: idx * 0.08 }}
-                    whileHover={{ y: -4 }}
-                  >
-                    <div className={`lx-flow-step-orb ${item.tone}`} style={{ margin: 0, width: 46, height: 46, borderRadius: 13 }}>
-                      <Icon size={21} />
-                    </div>
-                    <span className="lx-mono" style={{ fontSize: 10.5, fontWeight: 800, color: '#7c3aed', letterSpacing: '0.06em' }}>
-                      {item.badge}
-                    </span>
-                    <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#0f172a', lineHeight: 1.25 }}>{item.title}</h3>
-                    <p style={{ margin: 0, fontSize: 13.5, color: '#475569', lineHeight: 1.6, flex: 1 }}>{item.body}</p>
-                    <button
-                      type="button"
-                      className="lx-btn lx-btn-ghost"
-                      style={{ alignSelf: 'flex-start', height: 36, fontSize: 12.5, padding: '0 14px' }}
-                      onClick={() => openWorkspace('IN')}
-                    >
-                      {item.cta} <ArrowRight size={13} />
-                    </button>
-                  </motion.article>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
         {/* How It Works */}
         <section className="lx-section" id="how">
           <div className="lx-wrap">
@@ -1130,7 +1115,7 @@ export default function LandingV2() {
                     whileHover={{ y: -5 }}
                   >
                     <div className={`lx-flow-step-orb ${item.tone}`}><Icon size={22} /></div>
-                    <small style={{ fontSize: 11, fontWeight: 850, color: '#7c3aed', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                    <small style={{ fontSize: 11, fontWeight: 850, color: '#059669', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
                       {item.step}
                     </small>
                     <h3 style={{ margin: '6px 0 8px', fontSize: 17, fontWeight: 800, color: '#0f172a' }}>{item.title}</h3>
@@ -1211,7 +1196,7 @@ export default function LandingV2() {
                   </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ padding: '3px 9px', borderRadius: 999, background: '#f5f3ff', border: '1px solid #ddd6fe', color: '#6d28d9', fontSize: 11, fontWeight: 850 }}>
+                      <span style={{ padding: '3px 9px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', fontSize: 11, fontWeight: 850 }}>
                         COMPUTER SHOPS
                       </span>
                       <span style={{ fontSize: 12.5, fontWeight: 750, color: '#d97706' }}>★ 4.8 (184 reviews)</span>
@@ -1234,7 +1219,7 @@ export default function LandingV2() {
                       <Globe2 size={14} color="#059669" /> apexcomputers.in
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 13, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)', color: '#334155', fontSize: 13, fontWeight: 600 }}>
-                      <Mail size={14} color="#7c3aed" /> sales@apex…
+                      <Mail size={14} color="#0e7490" /> sales@apex…
                     </div>
                   </div>
                 </div>
@@ -1353,7 +1338,7 @@ export default function LandingV2() {
                         className="lx-example-chip"
                         onClick={() => openWorkspace(activeCountry.code, ex)}
                       >
-                        <Sparkles size={12} color="#7c3aed" />
+                        <Sparkles size={12} color="#059669" />
                         <span>{ex}</span>
                         <ArrowRight size={12} />
                       </button>
@@ -1424,7 +1409,7 @@ export default function LandingV2() {
                   </div>
                   {/* TODO: Replace "Adding Soon" with live support email when ready */}
                   <div className="lx-contact-slot">
-                    <Mail size={18} color="#7c3aed" />
+                    <Mail size={18} color="#0e7490" />
                     <div>
                       <small>PRIORITY SUPPORT EMAIL</small>
                       <b>Adding Soon</b>
@@ -1622,7 +1607,7 @@ export default function LandingV2() {
                 <details key={item.q} className="lx-faq-item" open={idx === 0}>
                   <summary>
                     <span>{item.q}</span>
-                    <Plus size={16} color="#7c3aed" />
+                    <Plus size={16} color="#059669" />
                   </summary>
                   <p>{item.a}</p>
                 </details>
@@ -1671,15 +1656,6 @@ export default function LandingV2() {
           </div>
         </div>
       </footer>
-
-      <ExtensionGatewayModal
-        isOpen={showExtensionModal}
-        onClose={() => setShowExtensionModal(false)}
-        onConnected={handleExtensionConnected}
-        targetQuery={pendingLaunch?.query || ''}
-        targetCountry={pendingLaunch?.countryCode || 'IN'}
-        allowBypass={true}
-      />
     </div>
   );
 }

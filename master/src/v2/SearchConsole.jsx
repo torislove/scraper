@@ -676,7 +676,7 @@ function SearchConsole({
             <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
             <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
             <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#6d28d9" /> 20+ Lead Engines Auto: Satellite Maps · Directories · Websites · B2B Wholesale · Clean Excel</span>
+            <span className="lx-precision-pill"><Layers size={12} color="#0e7490" /> 20+ Lead Engines Auto: Satellite Maps · Directories · Websites · B2B Wholesale · Clean Excel</span>
           </div>
 
           <button
@@ -707,14 +707,14 @@ function SearchConsole({
                 commitAndDeploy(example);
               }}
             >
-              <Sparkles size={11} color="#7c3aed" />
+              <Sparkles size={11} color="#059669" />
               <span>{example}</span>
             </button>
           ))}
           <button
             type="button"
             className="lx-example-chip"
-            style={{ background: showAll11Countries ? '#f5f3ff' : '#ffffff', borderColor: 'rgba(124, 58, 237, 0.3)', color: '#5b21b6' }}
+            style={{ background: showAll11Countries ? '#ecfdf5' : '#ffffff', borderColor: 'rgba(5, 150, 105, 0.34)', color: '#065f46' }}
             onClick={() => setShowAll11Countries(prev => !prev)}
             aria-expanded={showAll11Countries}
           >
@@ -737,7 +737,7 @@ function SearchConsole({
                   commitAndDeploy(item.query);
                 }}
               >
-                <b style={{ color: '#6d28d9' }}>{item.country}:</b>
+                <b style={{ color: '#0e7490' }}>{item.country}:</b>
                 <span>{item.query}</span>
               </button>
             ))}
@@ -774,7 +774,7 @@ function SearchConsole({
                       background: req.tier === hardware.tier ? '#ecfdf5' : '#ffffff'
                     }}
                   >
-                    <div style={{ fontSize: 10, fontWeight: 850, color: '#6d28d9' }}>{req.badge} {req.tier === hardware.tier ? '· YOUR PC' : ''}</div>
+                    <div style={{ fontSize: 10, fontWeight: 850, color: '#0e7490' }}>{req.badge} {req.tier === hardware.tier ? '· YOUR PC' : ''}</div>
                     <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>{req.ram} · {req.cpu}</div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, color: '#047857' }}>{req.parallelZones} Parallel Zones · {req.speed}</div>
                     <div style={{ fontSize: 11, color: '#475569' }}>{req.note}</div>

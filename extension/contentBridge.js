@@ -1,21 +1,26 @@
 /**
  * contentBridge.js — page ⇄ extension bridge for Scraper.co.in
  * ============================================================================
- * Runs at document_start on Scraper.co.in only. It does three things:
+ * Runs at document_start on Scraper.co.in only (or injected immediately into
+ * already-open tabs via `chrome.scripting.executeScript` when installed).
  *
- *   1. announces the extension to the page instantly (no refresh needed)
+ * It does three mechanical jobs:
+ *   1. announces the extension to the page instantly (zero refresh needed)
  *   2. forwards opaque signed tickets from the page to the service worker
  *   3. pushes live extension state (paired, relayed count, capabilities)
  *
- * It never reads page content, never inspects the DOM beyond setting one
- * dataset flag, and never touches localStorage.
+ * Guarded against double-injection so re-running it in an active tab simply
+ * re-announces and refreshes state with zero duplicate listeners.
  * ============================================================================
  */
 
 (function initScraperBridge() {
-  const SOURCE = 'SCRAPER_RAM_EXTENSION';
-  const PAGE_SOURCE = 'SCRAPER_PAGE';
+  if (typeof window.__SCRAPER_BRIDGE_ANNOUNCE__ === 'function') {
+    window.__SCRAPER_BRIDGE_ANNOUNCE__();
+    return;
+  }
 
+  const SOURCE = 'SCRAPER_RAM_EXTENSION';
   let lastState = null;
 
   function post(payload) {
@@ -26,22 +31,27 @@
     }
   }
 
-  function announce(state) {
-    const version = state?.version || lastState?.version || '1.1.0';
+  function stampDom(version, paired) {
     try {
       if (document.documentElement) {
         document.documentElement.dataset.scraperExtension = version;
-        document.documentElement.dataset.scraperExtensionPaired = state?.paired ? '1' : '0';
+        document.documentElement.dataset.scraperExtensionPaired = paired ? '1' : '0';
       }
     } catch (error) {
       // documentElement can be null very early.
     }
+  }
+
+  function announce(state) {
+    const version = state?.version || lastState?.version || '1.1.0';
+    const paired = Boolean(state?.paired ?? lastState?.paired);
+    stampDom(version, paired);
     post({
       type: 'SCRAPER_EXT_PONG',
       version,
       status: 'READY',
       capabilities: state?.capabilities || ['fetch'],
-      paired: Boolean(state?.paired),
+      paired,
       relayedCount: Number(state?.relayedCount) || 0
     });
     if (state) post({ type: 'SCRAPER_EXT_STATE', state });
@@ -72,18 +82,32 @@
     return state;
   }
 
-  async function autoPair(serverBase, userId) {
-    if (!serverBase) return { ok: false, error: 'no_server_base' };
+  async function autoPair(serverBase, userId, apiBase) {
+    const origin = serverBase || window.location.origin;
+    if (!origin) return { ok: false, error: 'no_server_base' };
+    const resolvedApi = apiBase || `${origin.replace(/\/+$/, '')}/api`;
+    const uid = String(userId || '');
+
     const current = await askBackground('SCRAPER_EXT_STATE');
-    if (current?.ok && current.paired && current.serverBase === serverBase) {
+    const alreadyInPairings = Array.isArray(current?.pairings)
+      ? current.pairings.some((p) => p.apiBase === resolvedApi && String(p.userId || '') === uid)
+      : (current?.paired && current?.serverBase === origin);
+
+    if (current?.ok && alreadyInPairings) {
       return { ok: true, alreadyPaired: true };
     }
+
     const result = await askBackground('SCRAPER_EXT_PAIR', {
-      payload: { serverBase, userId }
+      payload: { serverBase: origin, apiBase: resolvedApi, userId: uid }
     });
     if (result?.ok) await refreshState();
     return result;
   }
+
+  window.__SCRAPER_BRIDGE_ANNOUNCE__ = () => {
+    announce(lastState);
+    refreshState();
+  };
 
   // ---- boot ---------------------------------------------------------------
   announce(null);
@@ -93,7 +117,12 @@
     document.addEventListener('DOMContentLoaded', () => announce(lastState), { once: true });
   }
 
-  // Keep the dataset flag honest if the worker restarts.
+  window.addEventListener('pageshow', () => announce(lastState));
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) announce(lastState);
+  });
+
+  // Keep the dataset flag intact across worker wakes or DOM resets.
   setInterval(() => {
     if (!document.documentElement?.dataset?.scraperExtension) {
       announce(lastState);
@@ -109,6 +138,7 @@
     switch (msg.type) {
       case 'SCRAPER_EXT_PING':
         announce(lastState);
+        if (!lastState) refreshState();
         break;
 
       case 'SCRAPER_EXT_GET_STATE':
@@ -116,14 +146,17 @@
         break;
 
       case 'SCRAPER_EXT_PAIR':
-        autoPair(msg.serverBase, msg.userId).then((result) => {
+        autoPair(msg.serverBase, msg.userId, msg.apiBase).then((result) => {
           post({ type: 'SCRAPER_EXT_PAIR_RESULT', result });
         });
         break;
 
       case 'SCRAPER_EXT_EXECUTE_TICKET':
         if (!msg.ticket) break;
-        askBackground('SCRAPER_EXT_EXECUTE_TICKET', { ticket: msg.ticket }).then((result) => {
+        askBackground('SCRAPER_EXT_EXECUTE_TICKET', {
+          ticket: msg.ticket,
+          fromPage: true
+        }).then((result) => {
           post({
             type: 'SCRAPER_EXT_TICKET_RESULT',
             ticketId: msg.ticket.ticketId,
@@ -136,13 +169,4 @@
         break;
     }
   });
-
-  // The page may declare who it is; pair once, silently.
-  if (window.location.hostname.endsWith('scraper.co.in') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    setTimeout(() => {
-      const serverBase = window.location.origin;
-      const probe = window.__SCRAPER_USER_ID__;
-      if (probe) autoPair(serverBase, probe);
-    }, 1200);
-  }
 })();

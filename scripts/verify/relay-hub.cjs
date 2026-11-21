@@ -158,6 +158,21 @@ async function main() {
     const zip = hub.buildExtensionZipBuffer();
     check('zip starts with PK', zip[0] === 0x50 && zip[1] === 0x4b);
     check('zip is non-trivial', zip.length > 1000, `${zip.length} bytes`);
+    const requiredFiles = [
+      'manifest.json',
+      'background.js',
+      'contentBridge.js',
+      'popup.html',
+      'popup.js',
+      'popup.css',
+      'icons/icon16.png',
+      'icons/icon32.png',
+      'icons/icon48.png',
+      'icons/icon128.png'
+    ];
+    for (const reqFile of requiredFiles) {
+      check(`zip contains ${reqFile}`, zip.includes(Buffer.from(reqFile, 'utf8')), reqFile);
+    }
   }
 
   console.log(`\n${passed} passed, ${failed} failed\n`);

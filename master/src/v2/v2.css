@@ -8364,8 +8364,8 @@ button.v2-chip:hover {
 }
 
 .v2-crm-column.tone-violet .v2-crm-col-icon {
-  color: #7C3AED;
-  border-color: rgba(124, 58, 237, 0.24);
+  color: #0e7490;
+  border-color: rgba(14, 116, 144, 0.24);
 }
 
 .v2-crm-column.tone-lime .v2-crm-col-icon {
@@ -14997,13 +14997,13 @@ button.v2-chip:hover {
 }
 
 .v2-source-chip.is-sulekha {
-  border-color: #DDD6FE;
-  color: #6D28D9;
+  border-color: #A5F3FC;
+  color: #0E7490;
 }
 
 .v2-source-chip.is-sulekha b {
-  background: #EDE9FE;
-  color: #6D28D9;
+  background: #CFFAFE;
+  color: #0E7490;
 }
 
 .v2-source-chip.is-practo {
@@ -15089,9 +15089,9 @@ button.v2-chip:hover {
 }
 
 .v2-source-badge.is-sulekha {
-  background: #F5F3FF;
-  border-color: #DDD6FE;
-  color: #6D28D9;
+  background: #ECFEFF;
+  border-color: #A5F3FC;
+  color: #0E7490;
 }
 
 .v2-source-badge.is-practo {
@@ -15414,13 +15414,13 @@ button.v2-chip:hover {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: linear-gradient(135deg, #06b6d4 0%, #7c3aed 50%, #ec4899 100%);
+  background: linear-gradient(135deg, #06b6d4 0%, #059669 50%, #0e7490 100%);
   border: 2px solid rgba(255, 255, 255, 0.85);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.6),
-    inset -1px -1px 0 rgba(0, 0, 0, 0.6),
-    0 0 20px rgba(124, 58, 237, 0.65),
-    0 4px 12px rgba(0, 0, 0, 0.5);
+    inset -1px -1px 0 rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(5, 150, 105, 0.55),
+    0 4px 12px rgba(0, 0, 0, 0.4);
   color: #ffffff;
   font-family: var(--v2-mono);
   font-weight: 900;

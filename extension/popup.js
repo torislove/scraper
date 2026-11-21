@@ -1,8 +1,10 @@
 /**
- * popup.js — real state, never a fake green light.
+ * popup.js — live extension telemetry & active workspace launcher.
  */
 
 (function initPopup() {
+  let latestState = null;
+
   const els = {
     led: document.getElementById('led'),
     statusPill: document.getElementById('status-pill'),
@@ -36,6 +38,7 @@
   }
 
   function render(state) {
+    latestState = state || null;
     if (!state || state.ok === false) {
       setTone('off');
       els.status.textContent = 'NOT RESPONDING';
@@ -57,19 +60,20 @@
       els.siteCount.textContent = `${sites.grantedCount || 0} of ${sites.requiredCount || 0} sites allowed.`;
     }
 
+    els.pair.hidden = true;
     if (state.paused) {
       setTone('warn');
       els.status.textContent = 'PAUSED';
     } else if (!state.paired) {
-      setTone('warn');
-      els.status.textContent = 'NOT PAIRED';
+      setTone('live');
+      els.status.textContent = 'STANDBY · OPEN TAB TO PAIR';
       els.pair.hidden = false;
     } else if (!sites.ok) {
       setTone('warn');
       els.status.textContent = 'SITE ACCESS NEEDED';
     } else {
       setTone('live');
-      els.status.textContent = 'CONNECTED';
+      els.status.textContent = 'CONNECTED · ALWAYS ON';
     }
 
     // The wildcard upgrade is only offered once the basics work.
@@ -88,10 +92,29 @@
     render(state);
   }
 
-  els.open?.addEventListener('click', () => {
-    const target = 'https://scraper.co.in/command';
-    if (chrome.tabs?.create) chrome.tabs.create({ url: target });
-    else window.open(target, '_blank', 'noopener');
+  els.open?.addEventListener('click', async () => {
+    const base = String(latestState?.serverBase || 'https://scraper.co.in').replace(/\/+$/, '');
+    const target = `${base}/command`;
+    try {
+      if (chrome.tabs?.query) {
+        const tabs = await chrome.tabs.query({ url: [`${base}/*`, 'http://localhost:*/*', 'http://127.0.0.1:*/*'] });
+        const match = (tabs || []).find((t) => String(t.url || '').startsWith(base));
+        if (match?.id) {
+          await chrome.tabs.update(match.id, { active: true });
+          if (chrome.windows?.update && match.windowId) {
+            await chrome.windows.update(match.windowId, { focused: true });
+          }
+          window.close();
+          return;
+        }
+      }
+      if (chrome.tabs?.create) {
+        await chrome.tabs.create({ url: target });
+        window.close();
+        return;
+      }
+    } catch (e) {}
+    window.open(target, '_blank', 'noopener');
   });
 
   els.pair?.addEventListener('click', async () => {

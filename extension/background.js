@@ -11,11 +11,13 @@
  *
  * The server decides every URL and does all parsing. The extension is a pipe.
  *
- * SELF-SUFFICIENCY
+ * SELF-SUFFICIENCY & MULTI-WORKSPACE PERSISTENCE
  *
  * An MV3 service worker is evicted after ~30 s idle. A `setInterval` dies with
- * it. `chrome.alarms` does not, so the heartbeat lives there and the extension
- * stays registered with the server even when no Scraper tab is open.
+ * it. `chrome.alarms` keeps firing across restarts, keeping ALL paired origins
+ * (Client & Master) alive simultaneously. When installed or updated, any
+ * already-open Scraper tabs receive `contentBridge.js` right away with zero
+ * page reload required.
  * ============================================================================
  */
 
@@ -24,6 +26,13 @@ const HEARTBEAT_ALARM = 'scraper-heartbeat';
 const HEARTBEAT_MINUTES = 0.5; // 30 s — the server TTL is 90 s
 const MAX_BODY_BYTES = 750_000;
 const MAX_RENDER_LANES = 3;
+const MAX_PAIRINGS = 6;
+const SCRAPER_TAB_PATTERNS = [
+  'https://scraper.co.in/*',
+  'https://*.scraper.co.in/*',
+  'http://localhost/*',
+  'http://127.0.0.1/*'
+];
 
 /* ---------------------------------------------------------------------------
  * Settings
@@ -31,8 +40,10 @@ const MAX_RENDER_LANES = 3;
 
 const DEFAULTS = {
   serverBase: '',
+  apiBase: '',
   userId: '',
   pairToken: '',
+  pairings: [],
   relayedCount: 0,
   lastRelayAt: '',
   lastError: '',
@@ -46,6 +57,7 @@ async function getSettings() {
   for (const key of Object.keys(DEFAULTS)) {
     if (stored[key] !== undefined) merged[key] = stored[key];
   }
+  if (!Array.isArray(merged.pairings)) merged.pairings = [];
   return merged;
 }
 
@@ -61,6 +73,21 @@ function normaliseBase(value) {
   return raw;
 }
 
+function resolvePairings(settings) {
+  const list = Array.isArray(settings.pairings) ? settings.pairings.filter((p) => p && normaliseBase(p.serverBase || p.apiBase)) : [];
+  if (list.length) return list;
+  const legacyBase = normaliseBase(settings.serverBase);
+  if (legacyBase) {
+    return [{
+      serverBase: legacyBase,
+      apiBase: normaliseBase(settings.apiBase) || `${legacyBase}/api`,
+      userId: String(settings.userId || ''),
+      lastPairedAt: ''
+    }];
+  }
+  return [];
+}
+
 function hardware() {
   return {
     ramGb: Number(navigator.deviceMemory) > 0 ? Number(navigator.deviceMemory) : 8,
@@ -72,9 +99,35 @@ function capabilities() {
   const { ramGb } = hardware();
   const lanes = ramGb >= 16 ? 3 : ramGb >= 8 ? 2 : 1;
   const caps = ['fetch'];
-  // Render needs the scripting API to read the tab it created.
   if (chrome.scripting && chrome.tabs) caps.push('render');
   return { caps, lanes };
+}
+
+/* ---------------------------------------------------------------------------
+ * Instant Open-Tab Injection (no manual refresh required after install)
+ * ------------------------------------------------------------------------- */
+
+async function injectIntoOpenScraperTabs() {
+  if (!chrome.tabs?.query || !chrome.scripting?.executeScript) return 0;
+  let injected = 0;
+  try {
+    const tabs = await chrome.tabs.query({ url: SCRAPER_TAB_PATTERNS });
+    for (const tab of tabs || []) {
+      if (!tab?.id) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['contentBridge.js']
+        });
+        injected += 1;
+      } catch (err) {
+        // Individual restricted tabs can fail without blocking others.
+      }
+    }
+  } catch (err) {
+    // Ignore tab query errors on restricted profiles.
+  }
+  return injected;
 }
 
 /* ---------------------------------------------------------------------------
@@ -85,64 +138,102 @@ function apiUrl(base, path) {
   return `${normaliseBase(base)}${path}`;
 }
 
+function heartbeatUrl(pairing) {
+  const apiBase = normaliseBase(pairing?.apiBase);
+  if (apiBase) {
+    return apiBase.endsWith('/api') ? `${apiBase}/scrape/extension-heartbeat` : `${apiBase}/scrape/extension-heartbeat`;
+  }
+  return apiUrl(pairing?.serverBase, '/api/scrape/extension-heartbeat');
+}
+
+async function heartbeatPairing(pairing, meta) {
+  const url = heartbeatUrl(pairing);
+  if (!/^https?:\/\//i.test(url)) return { ok: false, reason: 'invalid_base' };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-scraper-extension': EXTENSION_VERSION,
+      ...(pairing.userId ? { 'x-user-id': pairing.userId } : {})
+    },
+    credentials: 'omit',
+    cache: 'no-store',
+    body: JSON.stringify({
+      installed: true,
+      version: EXTENSION_VERSION,
+      ramGb: meta.ramGb,
+      cpuCores: meta.cpuCores,
+      capabilities: meta.caps,
+      standalone: true
+    })
+  });
+
+  if (!res.ok) {
+    return { ok: false, reason: `http_${res.status}`, status: res.status };
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const tickets = Array.isArray(data?.tickets) ? data.tickets : [];
+  if (tickets.length) {
+    const relayBase = normaliseBase(pairing.apiBase) || `${normaliseBase(pairing.serverBase)}/api`;
+    void runTickets(tickets, { apiBase: relayBase, serverBase: pairing.serverBase, userId: pairing.userId || '' });
+  }
+
+  return {
+    ok: true,
+    connected: Boolean(data?.connected),
+    extensionOnly: Boolean(data?.extensionOnly)
+  };
+}
+
 async function heartbeat({ force = false } = {}) {
   const settings = await getSettings();
-  if (!settings.serverBase) return { ok: false, reason: 'not_paired' };
+  const pairings = resolvePairings(settings);
+  if (!pairings.length) return { ok: false, reason: 'not_paired' };
   if (settings.paused && !force) return { ok: false, reason: 'paused' };
 
   const { ramGb, cpuCores } = hardware();
   const { caps } = capabilities();
 
-  try {
-    const res = await fetch(apiUrl(settings.serverBase, '/api/scrape/extension-heartbeat'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-scraper-extension': EXTENSION_VERSION,
-        ...(settings.userId ? { 'x-user-id': settings.userId } : {})
-      },
-      credentials: 'omit',
-      cache: 'no-store',
-      body: JSON.stringify({
-        installed: true,
-        version: EXTENSION_VERSION,
-        ramGb,
-        cpuCores,
-        capabilities: caps,
-        standalone: true
-      })
-    });
+  let anyOk = false;
+  let anyConnected = false;
+  let extensionOnly = false;
+  let lastFail = '';
 
-    if (!res.ok) {
-      await patchSettings({ lastError: `heartbeat_http_${res.status}` });
-      return { ok: false, reason: `http_${res.status}` };
+  for (const pairing of pairings) {
+    try {
+      const outcome = await heartbeatPairing(pairing, { ramGb, cpuCores, caps });
+      if (outcome.ok) {
+        anyOk = true;
+        if (outcome.connected) anyConnected = true;
+        if (outcome.extensionOnly) extensionOnly = true;
+      } else {
+        lastFail = outcome.reason || 'heartbeat_failed';
+      }
+    } catch (error) {
+      lastFail = String(error?.message || 'heartbeat_failed').slice(0, 160);
     }
-
-    const data = await res.json().catch(() => ({}));
-    await patchSettings({ lastError: '' });
-
-    const tickets = Array.isArray(data?.tickets) ? data.tickets : [];
-    if (tickets.length) {
-      // Run them without blocking the alarm handler for long.
-      void runTickets(tickets, settings);
-    }
-
-    return { ok: true, connected: Boolean(data?.connected), extensionOnly: Boolean(data?.extensionOnly) };
-  } catch (error) {
-    await patchSettings({ lastError: String(error?.message || 'heartbeat_failed').slice(0, 160) });
-    return { ok: false, reason: 'network' };
   }
+
+  if (anyOk) {
+    await patchSettings({ lastError: '' });
+    return { ok: true, connected: anyConnected, extensionOnly };
+  }
+  await patchSettings({ lastError: lastFail || 'network' });
+  return { ok: false, reason: lastFail || 'network' };
 }
 
-async function postResult(settings, ticket, result) {
-  if (!settings.serverBase) return;
+async function postResult(pairing, ticket, result) {
+  const base = normaliseBase(pairing?.apiBase) || (normaliseBase(pairing?.serverBase) ? `${normaliseBase(pairing.serverBase)}/api` : '');
+  if (!base) return;
   try {
-    await fetch(apiUrl(settings.serverBase, '/api/scrape/relay-result'), {
+    await fetch(`${base}/scrape/relay-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-scraper-extension': EXTENSION_VERSION,
-        ...(settings.userId ? { 'x-user-id': settings.userId } : {})
+        ...(pairing.userId ? { 'x-user-id': pairing.userId } : {})
       },
       credentials: 'omit',
       cache: 'no-store',
@@ -299,7 +390,6 @@ async function renderTicket(ticket) {
       };
     } catch (error) {
       const message = String(error?.message || 'render_failed');
-      // A missing host permission is the common failure. Say so plainly.
       if (/cannot access|permission|host/i.test(message)) {
         return { ok: false, ticketId: ticket.ticketId, error: 'site_not_allowed' };
       }
@@ -318,12 +408,23 @@ async function renderTicket(ticket) {
 
 const executing = new Set();
 
-async function runTickets(tickets, settings) {
+async function recordRelayOutcome(result) {
+  if (result?.ok) {
+    const fresh = await getSettings();
+    await patchSettings({
+      relayedCount: (Number(fresh.relayedCount) || 0) + 1,
+      lastRelayAt: new Date().toISOString()
+    });
+  } else {
+    await patchSettings({ lastError: String(result?.error || 'relay_failed').slice(0, 160) });
+  }
+}
+
+async function runTickets(tickets, pairing) {
   for (const ticket of tickets) {
     if (!ticket?.ticketId || executing.has(ticket.ticketId)) continue;
     executing.add(ticket.ticketId);
 
-    // Fire and forget; each ticket posts its own result.
     (async () => {
       let result;
       try {
@@ -336,34 +437,47 @@ async function runTickets(tickets, settings) {
         executing.delete(ticket.ticketId);
       }
 
-      await postResult(settings, ticket, result);
-
-      if (result.ok) {
-        const fresh = await getSettings();
-        await patchSettings({
-          relayedCount: (Number(fresh.relayedCount) || 0) + 1,
-          lastRelayAt: new Date().toISOString()
-        });
-      } else {
-        await patchSettings({ lastError: String(result.error || 'relay_failed').slice(0, 160) });
-      }
+      await postResult(pairing, ticket, result);
+      await recordRelayOutcome(result);
     })();
   }
 }
 
 /* ---------------------------------------------------------------------------
- * Pairing
+ * Pairing (supports multiple simultaneous workspaces: Client + Master)
  * ------------------------------------------------------------------------- */
 
-async function pair({ serverBase, userId, pairToken }) {
+async function pair({ serverBase, apiBase, userId, pairToken }) {
   const base = normaliseBase(serverBase);
-  if (!base) return { ok: false, error: 'invalid_server_base' };
+  const resolvedApi = normaliseBase(apiBase) || (base ? `${base}/api` : '');
+  if (!base && !resolvedApi) return { ok: false, error: 'invalid_server_base' };
 
-  await patchSettings({ serverBase: base, userId: String(userId || ''), pairToken: String(pairToken || '') });
+  const effectiveServer = base || resolvedApi.replace(/\/api$/, '');
+  const uid = String(userId || '');
+  const settings = await getSettings();
+  const existing = resolvePairings(settings);
+  const entry = {
+    serverBase: effectiveServer,
+    apiBase: resolvedApi,
+    userId: uid,
+    lastPairedAt: new Date().toISOString()
+  };
 
-  // Prove the pairing immediately so the page can flip to "connected".
+  const filtered = existing.filter(
+    (p) => !(p.apiBase === entry.apiBase && p.userId === entry.userId)
+  );
+  const nextPairings = [entry, ...filtered].slice(0, MAX_PAIRINGS);
+
+  await patchSettings({
+    serverBase: effectiveServer,
+    apiBase: resolvedApi,
+    userId: uid,
+    pairToken: String(pairToken || settings.pairToken || ''),
+    pairings: nextPairings
+  });
+
   const result = await heartbeat({ force: true });
-  return { ok: result.ok, serverBase: base, ...result };
+  return { ok: result.ok, serverBase: effectiveServer, apiBase: resolvedApi, ...result };
 }
 
 /* ---------------------------------------------------------------------------
@@ -381,11 +495,6 @@ function allOrigins() {
   return [...new Set(SITE_GROUPS.flatMap((g) => g.origins))];
 }
 
-/**
- * Site access is granted at install time by the manifest, so this is a health
- * check rather than a prompt. The optional wildcard grant exists only for
- * "also read business websites I find", which the user enables from the popup.
- */
 async function siteAccessState() {
   let have = [];
   try {
@@ -418,11 +527,6 @@ async function siteAccessState() {
   };
 }
 
-/**
- * Optional upgrade: let the relay read arbitrary business websites it finds.
- * Must be called from a user gesture inside the extension (the popup button),
- * because Chrome requires one for permissions.request.
- */
 async function requestWildcardAccess() {
   try {
     const granted = await chrome.permissions.request({ origins: ['https://*/*'] });
@@ -448,16 +552,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   await ensureAlarm();
   if (details.reason === 'install') {
     await patchSettings({ relayedCount: 0 });
-    try {
-      await chrome.tabs.create({ url: 'https://scraper.co.in/install' });
-    } catch (error) {
-      // The tab may be blocked; the popup still works.
-    }
   }
+  await injectIntoOpenScraperTabs();
+  await heartbeat({ force: true });
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   await ensureAlarm();
+  await injectIntoOpenScraperTabs();
   await heartbeat({ force: true });
 });
 
@@ -489,11 +591,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       const run = ticket.mode === 'render' ? renderTicket(ticket) : fetchTicket(ticket);
       run.then(async (result) => {
         const settings = await getSettings();
-        // A page-originated ticket still has to report to the server; the
-        // page posts results too, so only post when we own the pairing.
-        if (settings.standalone !== false && settings.serverBase) {
-          await postResult(settings, ticket, result);
+        // When triggered from the open page's relayAgent, the page owns posting
+        // `/relay-result` once (prevents double-POST 410 replay warnings).
+        if (!message.fromPage) {
+          const pairings = resolvePairings(settings);
+          if (pairings.length) await postResult(pairings[0], ticket, result);
         }
+        await recordRelayOutcome(result);
         sendResponse(result);
       });
       return true;
@@ -504,11 +608,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case 'SCRAPER_EXT_UNPAIR':
-      patchSettings({ serverBase: '', userId: '', pairToken: '' }).then(() => sendResponse({ ok: true }));
+      patchSettings({ serverBase: '', apiBase: '', userId: '', pairToken: '', pairings: [] })
+        .then(() => sendResponse({ ok: true }));
       return true;
 
     case 'SCRAPER_EXT_STATE':
       Promise.all([getSettings(), siteAccessState()]).then(([settings, sites]) => {
+        const pairings = resolvePairings(settings);
         sendResponse({
           ok: true,
           version: EXTENSION_VERSION,
@@ -517,8 +623,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           relayedCount: Number(settings.relayedCount) || 0,
           lastRelayAt: settings.lastRelayAt || '',
           lastError: settings.lastError || '',
-          paired: Boolean(settings.serverBase),
-          serverBase: settings.serverBase,
+          paired: pairings.length > 0,
+          serverBase: settings.serverBase || pairings[0]?.serverBase || '',
+          pairings,
           paused: Boolean(settings.paused),
           sites
         });
@@ -546,5 +653,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-// Keep the alarm alive even if the worker is woken by something else.
+// Boot initialization
 ensureAlarm();
+injectIntoOpenScraperTabs();

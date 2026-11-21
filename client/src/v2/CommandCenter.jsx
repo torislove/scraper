@@ -54,10 +54,9 @@ import { API_URL } from '../apiConfig';
 import { getUserId } from '../utils/sessionManager';
 import { getToken } from './auth';
 import {
-  startBrowserRamAssist, detectDeviceHardware, detectRamExtension,
-  DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES, EXTENSION_DOWNLOAD_URL
+  startBrowserRamAssist, detectDeviceHardware
 } from './utils/deviceRamEngine';
-import { startRelayAgent } from './utils/relayAgent';
+import { useExtension } from './context/ExtensionContext';
 import { extractLeadArea, CarriedBadge, qualityOf, calculateHaversineKm, mergeSingleVendor, mergeVendorLists } from './utils/leadHelpers';
 
 const LAST_LIVE_SESSION_KEY = 'scraper_client_last_live_session';
@@ -217,86 +216,15 @@ export default function CommandCenter() {
     deepLimit: 100
   });
 
-  const hardware = useMemo(() => detectDeviceHardware(), []);
-  const [hwTurboEnabled, setHwTurboEnabled] = useState(true);
-  const [hwPopupOpen, setHwPopupOpen] = useState(false);
-  const [extState, setExtState] = useState({
-    installed: false,
-    version: '',
-    connected: false,
-    paired: false,
-    relayed: 0,
-    capabilities: [],
-    extensionOnly: false,
-    storeUrl: '',
-    lastError: ''
-  });
-  const relayRef = useRef(null);
-
-  useEffect(() => {
-    const userId = getUserId();
-    const headers = {};
-    const token = getToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-
-    relayRef.current = startRelayAgent({
-      apiBase: API_URL,
-      userId,
-      headers,
-      onStatus: (status) => {
-        setExtState(prev => ({
-          ...prev,
-          installed: status.installed,
-          version: status.version || prev.version,
-          connected: status.connected,
-          paired: status.paired,
-          relayed: status.relayed ?? prev.relayed,
-          capabilities: status.capabilities || prev.capabilities,
-          lastError: status.lastError || ''
-        }));
-      }
-    });
-
-    let active = true;
-    const readServer = async () => {
-      try {
-        const res = await fetch(`${API_URL}/scrape/extension-status`, { headers });
-        if (!res.ok || !active) return;
-        const data = await res.json();
-        setExtState(prev => ({
-          ...prev,
-          extensionOnly: Boolean(data?.extensionOnly),
-          storeUrl: data?.storeUrl || prev.storeUrl,
-          capabilities: data?.capabilities?.length ? data.capabilities : prev.capabilities,
-          relayed: data?.relayedTotal ?? prev.relayed
-        }));
-      } catch (e) { /* server offline; the agent keeps retrying */ }
-    };
-    readServer();
-
-    return () => {
-      active = false;
-      relayRef.current?.stop?.();
-      relayRef.current = null;
-    };
-  }, []);
-  const enableLocalHardwareTurbo = useCallback(() => {
-    setHwTurboEnabled(true);
-    try {
-      localStorage.setItem('scraper_hw_popup_seen_v2', 'true');
-    } catch (e) {}
-    if (extState.connected) {
-      setHwPopupOpen(false);
-      toast.success(`RAM Turbo connected · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`, { icon: '⚡' });
-      return;
-    }
-    if (extState.storeUrl) {
-      window.open(extState.storeUrl, '_blank', 'noopener,noreferrer');
-      toast.success('Opening the Chrome Web Store — press “Add to Chrome” there.', { icon: '🧩' });
-      return;
-    }
-    toast.success('RAM Turbo is in review. The Add to Chrome button appears here once it is live.', { icon: '🧩' });
-  }, [hardware.ramGb, hardware.parallelZones, extState.connected, extState.storeUrl]);
+  const {
+    ready: extReady,
+    extensionOnly: extExtensionOnly,
+    hardware,
+    ensureConnected,
+    openTelemetry,
+    openSetup
+  } = useExtension();
+  const [hwTurboEnabled] = useState(true);
 
   // Country context for the flag bar. India is home; every other country runs
   // the keyless global engines. The choice only pre-fills an empty location box,
@@ -339,15 +267,17 @@ export default function CommandCenter() {
   const [deepEstimate, setDeepEstimate] = useState(null);
   const [scanPlan, setScanPlan] = useState(null);
 
+  const initialPreset = (searchParams.get('preset') || '').toLowerCase();
   const [filters, setFilters] = useState({
     query: '',
-    phoneOnly: false,
+    phoneOnly: initialPreset === 'startup' || initialPreset === 'sales',
     primeOnly: false,
     websiteOnly: false,
+    noWebsiteOnly: initialPreset === 'agency',
     deepOnly: false,
     conflictsOnly: false,
-    minRating: 0,
-    sort: 'newest',
+    minRating: initialPreset === 'agency' ? 4 : 0,
+    sort: initialPreset === 'sales' ? 'area' : initialPreset === 'startup' ? 'quality' : 'newest',
     source: 'all'
   });
   const [page, setPage] = useState(1);
@@ -1112,7 +1042,15 @@ export default function CommandCenter() {
   }, [deepJob?.id, deepJob?.status, refresh]);
 
   const updateForm = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
-  const updateFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
+  const updateFilter = (keyOrPatch, value) => {
+    setFilters(prev => {
+      const patch = (keyOrPatch && typeof keyOrPatch === 'object') ? keyOrPatch : { [keyOrPatch]: value };
+      const next = { ...prev, ...patch };
+      if (patch.noWebsiteOnly) next.websiteOnly = false;
+      if (patch.websiteOnly) next.noWebsiteOnly = false;
+      return next;
+    });
+  };
 
   const startRun = async (overrides = {}) => {
     const auto = runMode === 'auto';
@@ -1126,6 +1064,15 @@ export default function CommandCenter() {
     }
     if (!auto && (!runCategory || !runLocation)) {
       toast.error('Category and location are required.');
+      return;
+    }
+
+    // Enforce Extension-Only connection when required before dispatching a run
+    if (extExtensionOnly && !extReady) {
+      ensureConnected(
+        () => startRun(overrides),
+        { country: searchCountry, query: runQuery || `${runCategory} in ${runLocation}`.trim() }
+      );
       return;
     }
 
@@ -1339,7 +1286,10 @@ export default function CommandCenter() {
       setRun(null);
       activeSessionIdRef.current = '';
       if (error?.response?.status === 428 || error?.response?.data?.extensionRequired) {
-        setHwPopupOpen(true);
+        openSetup(
+          { country: searchCountry, query: runQuery || `${runCategory} in ${runLocation}`.trim() },
+          () => startRun(overrides)
+        );
         toast.error('Extension-Only Deployment: Install & connect the Scraper.co.in RAM Extension to run searches on your RAM.');
       } else {
         toast.error(error?.response?.data?.error || 'Search could not be started.');
@@ -1849,6 +1799,7 @@ export default function CommandCenter() {
         if (!isMob || rating < 4.0 || reviews === 0) return false;
       }
       if (filters.websiteOnly && !vendor.website) return false;
+      if (filters.noWebsiteOnly && String(vendor.website || '').trim()) return false;
       if (filters.deepOnly && !vendor.deepExtractedAt) return false;
       if (filters.conflictsOnly && !(Array.isArray(vendor.conflicts) && vendor.conflicts.length)) return false;
       if (filters.minRating && !(Number(vendor.rating) >= Number(filters.minRating))) return false;
@@ -1873,6 +1824,15 @@ export default function CommandCenter() {
       if (filters.sort === 'reviews') return (Number(b.reviewsCount) || 0) - (Number(a.reviewsCount) || 0);
       if (filters.sort === 'quality') return (qualityOf(b) || 0) - (qualityOf(a) || 0);
       if (filters.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+      if (filters.sort === 'area') {
+        const pinA = String(a.pincode || '999999').trim();
+        const pinB = String(b.pincode || '999999').trim();
+        if (pinA !== pinB) return pinA.localeCompare(pinB);
+        const areaA = String(a.mandal || a.locality || a.village || a.city || 'zzz').toLowerCase();
+        const areaB = String(b.mandal || b.locality || b.village || b.city || 'zzz').toLowerCase();
+        if (areaA !== areaB) return areaA.localeCompare(areaB);
+        return String(a.name || '').localeCompare(String(b.name || ''));
+      }
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
     });
 
@@ -2120,13 +2080,13 @@ export default function CommandCenter() {
 
           <button
             type="button"
-            className={cx('v2-gbc-cartridge-pill', extState.connected && 'is-on')}
-            onClick={() => setHwPopupOpen(true)}
+            className={cx('v2-gbc-cartridge-pill', extReady && 'is-on')}
+            onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
             title="RAM Turbo status and your hardware lanes"
           >
             <Cpu size={12} />
             <span>
-              {extState.connected
+              {extReady
                 ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
                 : 'CONNECT RAM TURBO'}
             </span>
@@ -2624,154 +2584,6 @@ export default function CommandCenter() {
           onClose={() => setTrashOpen(false)}
           onRestored={() => { refresh(); }}
         />
-      )}
-
-      {hwPopupOpen && (
-        <div className="v2-gbc-hw-modal-backdrop" role="dialog" aria-modal="true" aria-label="Local Hardware Acceleration Setup">
-          <div className="v2-gbc-hw-modal">
-            <div className="v2-gbc-hw-bezel">
-              <div className="v2-gbc-hw-head">
-                <div className="v2-gbc-hw-title">
-                  <span className="v2-gbc-hw-led" />
-                  <div>
-                    <small>SCRAPER.CO.IN · GAME BOY COLOR TURBO ENGINE</small>
-                    <h3>Use Your Computer Hardware for Zero-Queue Ultra-Fast Leads</h3>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="v2-icon-btn"
-                  onClick={() => {
-                    setHwPopupOpen(false);
-                    try { localStorage.setItem('scraper_hw_popup_seen_v2', 'true'); } catch (e) {}
-                  }}
-                  aria-label="Close hardware popup"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <div className="v2-gbc-hw-specs">
-                <div className="v2-gbc-spec-card is-best">
-                  <span>DETECTED RAM</span>
-                  <b>{hardware.ramGb} GB RAM</b>
-                  <small>{hardware.tierLabel} · Web Worker Ready</small>
-                </div>
-                <div className="v2-gbc-spec-card">
-                  <span>CPU THREADS</span>
-                  <b>{hardware.cpuCores} Cores</b>
-                  <small>{hardware.parallelZones}x Parallel Zones Simultaneous</small>
-                </div>
-                <div className="v2-gbc-spec-card">
-                  <span>BACKGROUND ENGINES</span>
-                  <b>20+ Active</b>
-                  <small>Maps · Directories · B2B · Web · Dedup</small>
-                </div>
-              </div>
-
-              <div className="v2-gbc-hw-engines">
-                {ALL_BUILTIN_ENGINES.map(eng => (
-                  <div key={eng.id} className="v2-gbc-hw-engine-pill">
-                    <b>{eng.number} · {eng.name}</b>
-                    <span>AUTO ON</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="v2-gbc-hw-tiers">
-                {DEVICE_REQUIREMENTS.map(req => (
-                  <div key={req.tier} className={cx('v2-gbc-tier-chip', req.tier === hardware.tier && 'is-current')}>
-                    <b>{req.badge} ({req.ram})</b>
-                    <span>{req.parallelZones} Parallel Zones · {req.speed}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className={cx('cb-glass-card', extState.connected ? 'is-live' : 'is-idle')}>
-                <div className="cb-glass-head">
-                  <span className={cx('cb-led', extState.connected ? 'is-live' : 'is-warn')} />
-                  <div className="cb-glass-title">
-                    <b>{extState.connected ? 'RAM TURBO CONNECTED' : 'ADD RAM TURBO'}</b>
-                    <span>
-                      {extState.connected
-                        ? `v${extState.version || '1.1.0'} · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes · ${extState.relayed || 0} pages relayed`
-                        : 'One click in Chrome. After that it connects itself.'}
-                    </span>
-                  </div>
-                  <span className={cx('cb-chip', extState.connected ? 'is-live' : 'is-idle')}>
-                    {extState.connected ? 'READY' : 'NOT CONNECTED'}
-                  </span>
-                </div>
-
-                <p className="cb-glass-copy">
-                  Our 20+ engines stay on our servers. RAM Turbo only lets them read pages through your
-                  connection, so your searches skip the queue and never share your browsing data.
-                </p>
-
-                {!extState.connected && (
-                  <ol className="cb-steps">
-                    <li><b>Add</b> RAM Turbo to Chrome.</li>
-                    <li><b>Reload</b> this page.</li>
-                    <li><b>Search</b> — it starts on its own.</li>
-                  </ol>
-                )}
-
-                <div className="cb-glass-actions">
-                  {extState.connected ? (
-                    <span className="cb-badge-live">All engines on your hardware</span>
-                  ) : extState.storeUrl ? (
-                    <a
-                      className="cb-btn-primary"
-                      href={extState.storeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Download size={14} />
-                      <span>Add to Chrome</span>
-                    </a>
-                  ) : (
-                    <a
-                      className="cb-btn-primary"
-                      href={EXTENSION_DOWNLOAD_URL}
-                      download="scraper-co-in-ram-turbo-extension.zip"
-                    >
-                      <Download size={14} />
-                      <span>Download Extension (.zip)</span>
-                    </a>
-                  )}
-                </div>
-
-                {!extState.connected && (
-                  <p className="cb-glass-fine">
-                    {extState.storeUrl
-                      ? 'Add RAM Turbo from the Chrome Web Store. Chrome shows the permissions before it installs, and it connects itself after that.'
-                      : 'Download the pre-configured zip package (11 KB), extract it, open chrome://extensions, toggle Developer mode, and click "Load unpacked". Auto-connects immediately.'}
-                  </p>
-                )}
-
-                {extState.lastError && (
-                  <p className="cb-glass-fine is-error">Last error: {extState.lastError}</p>
-                )}
-              </div>
-
-              <div className="v2-gbc-hw-actions">
-                <button
-                  type="button"
-                  className="v2-gbc-hw-primary"
-                  onClick={enableLocalHardwareTurbo}
-                >
-                  <span className="lx-gbc-keycap is-a">A</span>
-                  <Zap size={16} />
-                  <span>
-                    {extState.connected
-                      ? `START SEARCHING · ${hardware.parallelZones}x ON YOUR HARDWARE`
-                      : 'CONNECT RAM TURBO TO START'}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

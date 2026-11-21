@@ -41,9 +41,9 @@ const PLANS = [
     billingAnnual: 'Billed annually · Save 20%',
     highlight: true,
     badge: 'MOST POPULAR',
-    tone: 'atomic',
-    accentColor: '#7c3aed',
-    accentBorder: 'rgba(124, 58, 237, 0.45)',
+    tone: 'emerald',
+    accentColor: '#059669',
+    accentBorder: 'rgba(5, 150, 105, 0.42)',
     ctaBg: 'linear-gradient(135deg, #059669 0%, #10b981 55%, #06b6d4 100%)',
     ctaLip: '#047857',
     cta: 'Start Growth Plan',
@@ -67,8 +67,8 @@ const PLANS = [
     tone: 'dandelion',
     accentColor: '#d97706',
     accentBorder: 'rgba(245, 158, 11, 0.4)',
-    ctaBg: 'linear-gradient(135deg, #6d28d9, #7c3aed)',
-    ctaLip: '#4c1d95',
+    ctaBg: 'linear-gradient(135deg, #0f172a, #1e293b)',
+    ctaLip: '#020617',
     cta: 'Contact Sales',
     features: [
       '50,000+ verified leads / month',
@@ -90,7 +90,7 @@ export default function PricingPage() {
       style={{
         minHeight: '100vh',
         background:
-          'radial-gradient(960px 460px at 12% -6%, rgba(124, 58, 237, 0.12), transparent 62%), radial-gradient(880px 440px at 88% 2%, rgba(16, 185, 129, 0.12), transparent 60%), radial-gradient(720px 380px at 50% 105%, rgba(6, 182, 212, 0.1), transparent 62%), #f5f7fb',
+          'radial-gradient(960px 460px at 12% -6%, rgba(16, 185, 129, 0.12), transparent 62%), radial-gradient(880px 440px at 88% 2%, rgba(6, 182, 212, 0.12), transparent 60%), radial-gradient(720px 380px at 50% 105%, rgba(14, 116, 144, 0.08), transparent 62%), #f8fafc',
         color: '#0f172a',
         fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif'
       }}
@@ -165,8 +165,8 @@ export default function PricingPage() {
           <span
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', borderRadius: 999,
-              background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(16, 185, 129, 0.1))',
-              border: '1px solid rgba(124, 58, 237, 0.24)', color: '#5b21b6',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 182, 212, 0.12))',
+              border: '1px solid rgba(16, 185, 129, 0.28)', color: '#065f46',
               fontSize: 12, fontWeight: 850, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 16
             }}
           >
@@ -193,9 +193,9 @@ export default function PricingPage() {
               onClick={() => setIsAnnual(false)}
               style={{
                 padding: '9px 20px', borderRadius: 11, border: 'none', fontSize: 13.5, fontWeight: 750, cursor: 'pointer',
-                background: !isAnnual ? 'linear-gradient(135deg, #6d28d9, #7c3aed)' : 'transparent',
+                background: !isAnnual ? 'linear-gradient(135deg, #059669, #10b981)' : 'transparent',
                 color: !isAnnual ? '#ffffff' : '#64748b',
-                boxShadow: !isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #4c1d95' : 'none'
+                boxShadow: !isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #047857' : 'none'
               }}
             >
               Monthly
@@ -206,9 +206,9 @@ export default function PricingPage() {
               style={{
                 padding: '9px 20px', borderRadius: 11, border: 'none', fontSize: 13.5, fontWeight: 750, cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: isAnnual ? 'linear-gradient(135deg, #6d28d9, #7c3aed)' : 'transparent',
+                background: isAnnual ? 'linear-gradient(135deg, #059669, #10b981)' : 'transparent',
                 color: isAnnual ? '#ffffff' : '#64748b',
-                boxShadow: isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #4c1d95' : 'none'
+                boxShadow: isAnnual ? 'inset 0 1px 0 rgba(255,255,255,0.35), 0 2.5px 0 #047857' : 'none'
               }}
             >
               Annual
@@ -232,7 +232,7 @@ export default function PricingPage() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 850 }}>
-              <Cpu size={16} color="#7c3aed" />
+              <Cpu size={16} color="#059669" />
               <span>Included Automatically: 20+ Specialized Lead Discovery Engines Running in Parallel</span>
             </div>
             <span style={{ padding: '4px 12px', borderRadius: 999, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 12, fontWeight: 800 }}>
@@ -243,7 +243,7 @@ export default function PricingPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12, marginBottom: 14 }}>
             {ALL_BUILTIN_ENGINES.map(eng => (
               <div key={eng.id} style={{ padding: '12px 14px', borderRadius: 14, background: '#ffffff', border: '1px solid rgba(15, 23, 42, 0.08)' }}>
-                <div style={{ fontSize: 11, fontWeight: 850, color: '#7c3aed', textTransform: 'uppercase' }}>{eng.number}</div>
+                <div style={{ fontSize: 11, fontWeight: 850, color: '#0e7490', textTransform: 'uppercase' }}>{eng.number}</div>
                 <b style={{ display: 'block', fontSize: 14, marginTop: 2 }}>{eng.name}</b>
                 <small style={{ color: '#475569', fontSize: 12.5, lineHeight: 1.45, display: 'block', marginTop: 4 }}>{eng.shortDesc}</small>
               </div>
@@ -284,7 +284,7 @@ export default function PricingPage() {
                 padding: 30,
                 border: `1.5px solid ${plan.highlight ? plan.accentBorder : 'rgba(255, 255, 255, 0.98)'}`,
                 boxShadow: plan.highlight
-                  ? 'inset 0 2px 0 #ffffff, 0 28px 60px -16px rgba(124, 58, 237, 0.24)'
+                  ? 'inset 0 2px 0 #ffffff, 0 28px 60px -16px rgba(5, 150, 105, 0.22)'
                   : 'inset 0 2px 0 #ffffff, 0 16px 38px -14px rgba(15, 23, 42, 0.12)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -358,7 +358,7 @@ export default function PricingPage() {
 
         <div style={{ marginTop: 44, display: 'flex', justifyContent: 'center', gap: 28, flexWrap: 'wrap', color: '#64748b', fontSize: 13, fontWeight: 650 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><ShieldCheck size={15} color="#059669" /> Runs in your RAM · Secure accounts</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe2 size={15} color="#7c3aed" /> All 11 locked markets included</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe2 size={15} color="#0e7490" /> All 11 locked markets included</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Zap size={15} color="#0284c7" /> Upgrade or switch anytime</span>
         </div>
 
@@ -368,9 +368,9 @@ export default function PricingPage() {
             marginTop: 28,
             padding: '18px 22px',
             borderRadius: 18,
-            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 243, 255, 0.85))',
+            background: 'linear-gradient(145deg, rgba(255, 255, 255, 0.96), rgba(236, 253, 245, 0.85))',
             border: '1.5px solid #ffffff',
-            boxShadow: '0 14px 32px -14px rgba(124, 58, 237, 0.18)',
+            boxShadow: '0 14px 32px -14px rgba(5, 150, 105, 0.18)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
@@ -388,7 +388,7 @@ export default function PricingPage() {
               <Phone size={14} color="#059669" /> Mobile: Adding Soon
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 12, background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', fontSize: 12.5, fontWeight: 750 }}>
-              <Mail size={14} color="#7c3aed" /> Email: Adding Soon
+              <Mail size={14} color="#0e7490" /> Email: Adding Soon
             </span>
           </div>
         </section>

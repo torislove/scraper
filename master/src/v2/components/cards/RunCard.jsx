@@ -73,7 +73,7 @@ export default function RunCard({
           <div className="v2-run-meta-row">
             <span className="v2-run-loc"><MapPin size={10} /> {run.location || 'India'}</span>
             {run.masterScope && (
-              <span className="v2-run-scope-pill" style={{ marginLeft: 4, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#EDE9FE', color: '#6D28D9' }}>
+              <span className="v2-run-scope-pill" style={{ marginLeft: 4, padding: '1px 5px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#92400e' }}>
                 {run.masterScope === 'state' ? '🏛️ State Sweep' : run.masterScope === 'district' ? '🗺️ District Sweep' : run.masterScope === 'mandal' ? '📍 Mandal Cluster' : `${run.masterScope} Sweep`}
               </span>
             )}

@@ -27,17 +27,17 @@ try {
   console.error('Master boot mount error:', err)
   if (rootEl) {
     const wrap = document.createElement('div')
-    wrap.style.cssText = 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif;background:#070b14;color:#f8fafc'
+    wrap.style.cssText = 'min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a'
     const card = document.createElement('div')
-    card.style.cssText = 'max-width:440px;background:#0f172a;border:1px solid rgba(167,139,250,0.35);border-radius:16px;padding:24px;text-align:center;box-shadow:0 12px 30px rgba(0,0,0,0.45)'
+    card.style.cssText = 'max-width:440px;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:18px;padding:24px;text-align:center;box-shadow:0 16px 36px -14px rgba(15,23,42,0.18)'
     const h = document.createElement('h2')
-    h.style.cssText = 'margin:0 0 8px;font-size:18px;color:#fda4af'
+    h.style.cssText = 'margin:0 0 8px;font-size:18px;color:#be123c'
     h.textContent = 'Master Workspace failed to start'
     const p = document.createElement('p')
-    p.style.cssText = 'margin:0 0 16px;font-size:13px;color:#94a3b8'
+    p.style.cssText = 'margin:0 0 16px;font-size:13px;color:#475569'
     p.textContent = err?.message || 'Unexpected startup error.'
     const btn = document.createElement('button')
-    btn.style.cssText = 'background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer'
+    btn.style.cssText = 'background:#059669;color:#fff;border:none;border-radius:10px;padding:10px 20px;font-weight:700;cursor:pointer'
     btn.textContent = 'Reload Master Workspace'
     btn.onclick = () => window.location.reload()
     card.append(h, p, btn)

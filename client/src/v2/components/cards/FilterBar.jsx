@@ -7,6 +7,7 @@ export const SORTS = [
   ['rating', 'Highest rating'],
   ['reviews', 'Most reviews'],
   ['quality', 'Most complete'],
+  ['area', 'Area / Pincode'],
   ['name', 'Name A–Z']
 ];
 
@@ -39,6 +40,14 @@ export default function FilterBar({ filters, onChange, total, shown, compact = f
         </button>
         <button type="button" className={cx(filters.websiteOnly && 'is-active')} onClick={() => onChange('websiteOnly', !filters.websiteOnly)}>
           <Globe2 size={12} /> Has Website
+        </button>
+        <button
+          type="button"
+          className={cx(filters.noWebsiteOnly && 'is-active')}
+          onClick={() => onChange('noWebsiteOnly', !filters.noWebsiteOnly)}
+          title="Businesses with no official website — ideal for Web, SEO & Ad Agencies"
+        >
+          <Globe2 size={12} /> No Website
         </button>
         <button type="button" className={cx(filters.deepOnly && 'is-active')} onClick={() => onChange('deepOnly', !filters.deepOnly)}>
           <CheckCircle2 size={12} /> Full Profile

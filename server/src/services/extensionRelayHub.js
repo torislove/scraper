@@ -65,7 +65,11 @@ const EXTENSION_FILES = [
   'contentBridge.js',
   'popup.html',
   'popup.js',
-  'popup.css'
+  'popup.css',
+  'icons/icon16.png',
+  'icons/icon32.png',
+  'icons/icon48.png',
+  'icons/icon128.png'
 ];
 
 /* --------------------------------------------------------------------------
@@ -597,9 +601,10 @@ function buildExtensionZipBuffer() {
   let offset = 0;
 
   for (const filename of files) {
-    const raw = fs.readFileSync(path.join(dir, filename));
+    const zipEntryName = filename.replace(/\\/g, '/');
+    const raw = fs.readFileSync(path.join(dir, ...filename.split('/')));
     const compressed = zlib.deflateRawSync(raw, { level: 9 });
-    const nameBuf = Buffer.from(filename, 'utf8');
+    const nameBuf = Buffer.from(zipEntryName, 'utf8');
     const sum = crc32(raw);
 
     const localHeader = Buffer.alloc(30);

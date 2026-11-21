@@ -64,21 +64,21 @@ export default function SystemCheckPill({ variant = 'client' }) {
           height: 34,
           padding: '0 11px',
           borderRadius: 999,
-          border: isMaster ? '1px solid rgba(167, 139, 250, 0.35)' : '1px solid rgba(16, 185, 129, 0.32)',
+          border: isMaster ? '1px solid rgba(15, 23, 42, 0.16)' : '1px solid rgba(16, 185, 129, 0.32)',
           background: isMaster
-            ? 'rgba(255, 255, 255, 0.08)'
+            ? 'linear-gradient(155deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.92))'
             : 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(236, 253, 245, 0.9))',
-          color: isMaster ? '#ecfdf5' : '#047857',
+          color: isMaster ? '#0f172a' : '#047857',
           fontSize: 11.5,
           fontWeight: 800,
           letterSpacing: '0.02em',
           cursor: 'pointer',
           boxShadow: isMaster
-            ? 'inset 0 1px 0 rgba(255,255,255,0.14)'
+            ? 'inset 0 1.5px 0 #ffffff, 0 2px 0 rgba(15, 23, 42, 0.1), 0 4px 12px -4px rgba(15, 23, 42, 0.12)'
             : 'inset 0 1.5px 0 #ffffff, 0 2px 0 rgba(16, 185, 129, 0.14), 0 4px 12px -4px rgba(15, 23, 42, 0.1)'
         }}
       >
-        <ShieldCheck size={13} color={isMaster ? '#34d399' : '#059669'} />
+        <ShieldCheck size={13} color={isMaster ? '#d97706' : '#059669'} />
         <span>Keyless Auto</span>
       </button>
 
@@ -100,7 +100,7 @@ export default function SystemCheckPill({ variant = 'client' }) {
             overflow: 'hidden'
           }}
         >
-          <div style={{ height: 3, background: 'linear-gradient(90deg, #10b981, #06b6d4, #f59e0b, #e11d48, #7c3aed)' }} />
+          <div style={{ height: 3, background: 'linear-gradient(90deg, #10b981, #06b6d4, #f59e0b)' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid rgba(15,23,42,0.08)' }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 850, color: '#0f172a' }}>Autonomous System Check</div>
@@ -118,9 +118,9 @@ export default function SystemCheckPill({ variant = 'client' }) {
                 gap: 4,
                 padding: '5px 9px',
                 borderRadius: 999,
-                border: '1px solid rgba(124, 58, 237, 0.25)',
-                background: 'linear-gradient(145deg, #f5f3ff, #ecfeff)',
-                color: '#5b21b6',
+                border: '1px solid rgba(16, 185, 129, 0.28)',
+                background: 'linear-gradient(145deg, #ecfdf5, #f0fdfa)',
+                color: '#047857',
                 fontSize: 11,
                 fontWeight: 750,
                 cursor: 'pointer'

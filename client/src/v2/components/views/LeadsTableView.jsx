@@ -86,17 +86,32 @@ export default function LeadsTableView({
       toast.error('Select businesses first to export CSV.');
       return;
     }
-    const headers = ['Business Name', 'Category', 'Phone', 'Address', 'City', 'District', 'State', 'Rating', 'Reviews', 'Website'];
+    const headers = [
+      'Business Name', 'Category', 'Phone', 'Address', 'Area / Mandal',
+      'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
+      'Map Directions', 'Rating', 'Reviews', 'Website'
+    ];
     const lines = [headers.join(',')];
     target.forEach(r => {
+      const rLat = r.latitude ?? r.lat ?? '';
+      const rLng = r.longitude ?? r.lng ?? '';
+      const hasGeo = Number.isFinite(Number(rLat)) && Number.isFinite(Number(rLng)) && (Number(rLat) !== 0 || Number(rLng) !== 0);
+      const mapUrl = hasGeo
+        ? `https://www.google.com/maps/search/?api=1&query=${rLat},${rLng}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name || ''} ${r.address || r.city || ''}`)}`;
       lines.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
         `"${getDisplayPhone(r) || ''}"`,
         `"${(r.address || '').replace(/"/g, '""')}"`,
+        `"${(r.mandal || r.locality || '').replace(/"/g, '""')}"`,
         `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
         `"${(r.district || '').replace(/"/g, '""')}"`,
         `"${(r.state || '').replace(/"/g, '""')}"`,
+        `"${(r.pincode || '').replace(/"/g, '""')}"`,
+        `"${hasGeo ? rLat : ''}"`,
+        `"${hasGeo ? rLng : ''}"`,
+        `"${mapUrl}"`,
         `"${r.rating || ''}"`,
         `"${r.reviewsCount || ''}"`,
         `"${(r.website || '').replace(/"/g, '""')}"`
@@ -123,6 +138,40 @@ export default function LeadsTableView({
           <button type="button" onClick={() => setSessionFilter('')}><X size={12} /> Show all</button>
         </div>
       )}
+
+      <div className="lx-preset-strip" role="region" aria-label="1-Click Playbook Presets">
+        <span className="lx-preset-label">WORKFLOW PRESETS</span>
+        <button
+          type="button"
+          className={cx('lx-preset-btn', filters.phoneOnly && !filters.noWebsiteOnly && filters.sort === 'quality' && 'is-active')}
+          onClick={() => setFilters(prev => ({ ...prev, phoneOnly: true, noWebsiteOnly: false, websiteOnly: false, minRating: 0, sort: 'quality' }))}
+        >
+          Startup Outreach
+        </button>
+        <button
+          type="button"
+          className={cx('lx-preset-btn', filters.noWebsiteOnly && Number(filters.minRating || 0) >= 4 && 'is-active')}
+          onClick={() => setFilters(prev => ({ ...prev, noWebsiteOnly: true, websiteOnly: false, minRating: 4, sort: 'rating' }))}
+        >
+          Agency · No Website (4★+)
+        </button>
+        <button
+          type="button"
+          className={cx('lx-preset-btn', filters.sort === 'area' && 'is-active')}
+          onClick={() => setFilters(prev => ({ ...prev, phoneOnly: true, noWebsiteOnly: false, sort: 'area' }))}
+        >
+          Field Rep · Area &amp; Pins
+        </button>
+        {(filters.query || filters.phoneOnly || filters.noWebsiteOnly || filters.websiteOnly || filters.minRating > 0 || filters.sort !== 'newest') && (
+          <button
+            type="button"
+            className="lx-preset-reset"
+            onClick={() => setFilters({ query: '', phoneOnly: false, primeOnly: false, websiteOnly: false, noWebsiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest', source: 'all' })}
+          >
+            <X size={11} /> Reset
+          </button>
+        )}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 280 }}>
@@ -184,6 +233,8 @@ export default function LeadsTableView({
                 }).join(', ');
                 const displayPhone = getDisplayPhone(vendor);
                 const isMob = displayPhone ? isMobilePhone(displayPhone, vendor.country || country) : false;
+                const hasGeo = Number.isFinite(Number(vLat)) && Number.isFinite(Number(vLng)) && (Number(vLat) !== 0 || Number(vLng) !== 0);
+                const pinUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hasGeo ? `${vLat},${vLng}` : `${vendor.name || ''} ${leadAddress}`)}`;
 
                 return (
                   <tr
@@ -214,6 +265,7 @@ export default function LeadsTableView({
                           <span className="lx-biz-cat">
                             {vendor.category || 'Business'}
                             {vendor.subcategory ? ` · ${vendor.subcategory}` : ''}
+                            {(vendor.mandal || vendor.pincode) ? ` · ${[vendor.mandal, vendor.pincode].filter(Boolean).join(' · ')}` : ''}
                             {quality != null ? ` · ${quality}% complete` : ''}
                           </span>
                         </div>
@@ -243,25 +295,32 @@ export default function LeadsTableView({
                         ) : (
                           <span className="lx-muted-text">No phone listed</span>
                         )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           {vendor.website ? (
                             <a
                               href={vendor.website}
                               target="_blank"
                               rel="noreferrer"
                               className="lx-web-mini"
-                              onClick={event => event.stopPropagation()}
                             >
                               <Globe2 size={11} /> Website
                             </a>
                           ) : (
-                            <span className="lx-muted-text">No website</span>
+                            <span className="lx-noweb-pill">No Website · Warm Lead</span>
                           )}
+                          <a
+                            href={pinUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="lx-pin-link"
+                            title="Open street pin & directions"
+                          >
+                            <MapPin size={10} /> Street Pin
+                          </a>
                           {vendor.email && (
                             <a
                               href={`mailto:${vendor.email}`}
                               className="lx-web-mini"
-                              onClick={event => event.stopPropagation()}
                             >
                               Email
                             </a>
@@ -294,7 +353,7 @@ export default function LeadsTableView({
               icon={Search}
               title="No businesses match this filter."
               body="Clear your filters or start a new search above to see fresh business leads."
-              action={() => setFilters({ query: '', phoneOnly: false, websiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest' })}
+              action={() => setFilters({ query: '', phoneOnly: false, primeOnly: false, websiteOnly: false, noWebsiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest', source: 'all' })}
               actionLabel="Reset filters"
             />
           )}

@@ -134,7 +134,7 @@ export default function LoginV2({ variant = 'master' }) {
 
       <header className="login-topbar">
         <button type="button" className="login-brand" onClick={() => navigate('/command')}>
-          <BrandLogo size={32} theme="dark" />
+          <BrandLogo size={32} theme="light" />
         </button>
 
         <div className="login-topbar-right">

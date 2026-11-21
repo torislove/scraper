@@ -13,8 +13,8 @@
   --c-border-strong: rgba(255,255,255,0.12);
 
   /* Brand */
-  --c-violet: #7c3aed;
-  --c-violet-light: #a78bfa;
+  --c-violet: #0e7490;
+  --c-violet-light: #22d3ee;
   --c-cyan: #06b6d4;
   --c-emerald: #10b981;
   --c-amber: #f59e0b;
@@ -151,9 +151,9 @@ body {
 .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
 .btn-primary {
-  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  background: linear-gradient(135deg, #059669, #0e7490);
   color: white;
-  box-shadow: 0 4px 16px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  box-shadow: 0 4px 16px rgba(5,150,105,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
 }
 .btn-primary:hover {
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
@@ -544,7 +544,7 @@ body {
 }
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #06b6d4);
+  background: linear-gradient(90deg, #059669, #06b6d4);
   border-radius: 999px;
   transition: width 0.4s ease;
 }

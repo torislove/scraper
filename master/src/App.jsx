@@ -9,6 +9,7 @@ import { lazyRetry, isChunkLoadError } from './v2/lazyRetry';
 import {
   AUTH_REQUIRED, fetchAuthConfig, getCachedAuthConfig, logout, useAuthSession
 } from './v2/auth';
+import { ExtensionProvider } from './v2/context/ExtensionContext';
 import './v2/v2.css';
 import './v2/whiteTheme.css';
 import './v2/designSystem.css';
@@ -48,9 +49,9 @@ function PageLoader() {
             width: 44,
             height: 44,
             borderRadius: '50%',
-            border: '3px solid rgba(124, 58, 237, 0.2)',
-            borderTopColor: '#7c3aed',
-            borderRightColor: '#06b6d4',
+            border: '3px solid rgba(5, 150, 105, 0.16)',
+            borderTopColor: '#059669',
+            borderRightColor: '#d97706',
             animation: 'v2-spin 0.8s linear infinite'
           }}
         />
@@ -60,7 +61,7 @@ function PageLoader() {
             fontSize: 10.5,
             fontWeight: 700,
             letterSpacing: '0.22em',
-            color: '#64748b'
+            color: '#475569'
           }}
         >
           LOADING MASTER CONTROL
@@ -99,38 +100,38 @@ class ErrorBoundary extends React.Component {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#070b14',
-          color: '#f8fafc',
+          backgroundColor: '#f5f7fb',
+          color: '#0f172a',
           padding: '24px',
           fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif'
         }}>
           <div style={{
             maxWidth: '520px',
-            background: 'rgba(15, 23, 42, 0.88)',
-            border: '1.5px solid rgba(167, 139, 250, 0.3)',
+            background: 'linear-gradient(160deg, #ffffff 0%, #f8fafc 100%)',
+            border: '1.5px solid #d5dde6',
             borderRadius: '22px',
             padding: '30px',
-            boxShadow: '0 24px 60px rgba(0, 0, 0, 0.55)',
+            boxShadow: 'inset 0 2px 0 #ffffff, 0 24px 56px -14px rgba(15, 23, 42, 0.16)',
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '32px', marginBottom: '12px' }}>⚠️</div>
-            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#fda4af', marginBottom: '8px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#be123c', marginBottom: '8px' }}>
               Master Command Center Encountered a Problem
             </h2>
-            <p style={{ fontSize: '13.5px', color: '#94a3b8', marginBottom: '20px', lineHeight: 1.55 }}>
+            <p style={{ fontSize: '13.5px', color: '#475569', marginBottom: '20px', lineHeight: 1.55 }}>
               {this.state.error?.message || 'An unexpected rendering error occurred.'}
             </p>
             <button
               onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
               style={{
-                background: 'linear-gradient(135deg, #6d28d9, #7c3aed)',
+                background: 'linear-gradient(135deg, #059669, #10b981)',
                 color: '#ffffff',
                 fontWeight: 800,
                 fontSize: '13.5px',
                 border: 'none',
                 padding: '11px 24px',
                 borderRadius: '12px',
-                boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.35), 0 4px 0 #4c1d95',
+                boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.4), 0 4px 0 #047857',
                 cursor: 'pointer'
               }}
             >
@@ -179,47 +180,49 @@ export default function App() {
         position="top-right"
         toastOptions={{
           style: {
-            background: 'rgba(15, 23, 42, 0.94)',
+            background: 'rgba(255, 255, 255, 0.94)',
             backdropFilter: 'blur(18px)',
-            color: '#f8fafc',
-            border: '1px solid rgba(167, 139, 250, 0.35)',
+            color: '#0f172a',
+            border: '1.5px solid #e2ebf2',
             fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
             fontSize: '13px',
             fontWeight: 650,
             borderRadius: '14px',
-            boxShadow: '0 16px 38px -8px rgba(0, 0, 0, 0.45)',
+            boxShadow: 'inset 0 1px 0 #ffffff, 0 14px 36px -8px rgba(15, 23, 42, 0.16)',
           },
-          success: { iconTheme: { primary: '#10b981', secondary: '#0f172a' } },
-          error: { iconTheme: { primary: '#fb7185', secondary: '#0f172a' } },
+          success: { iconTheme: { primary: '#10b981', secondary: '#ffffff' } },
+          error: { iconTheme: { primary: '#e11d48', secondary: '#ffffff' } },
         }}
       />
 
       <ErrorBoundary>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
-            <Route path="/master" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
-            <Route path="/command" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
-            <Route path="/login" element={<LoginV2 variant="master" />} />
-            <Route path="/logout" element={<LogoutRoute />} />
-            <Route path="/landing" element={<LandingV2 />} />
-            <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
-            <Route path="/clients" element={<RequireMasterAuth><MasterClients /></RequireMasterAuth>} />
-            <Route path="/learning" element={<RequireMasterAuth><LearningRoute /></RequireMasterAuth>} />
-            <Route path="/theater" element={<RequireMasterAuth><TheaterRoute /></RequireMasterAuth>} />
-            <Route path="/engines" element={<Navigate to="/command?tab=engines" replace />} />
-            <Route path="/terminal" element={<Navigate to="/command?tab=terminal" replace />} />
+        <ExtensionProvider>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
+              <Route path="/master" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
+              <Route path="/command" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
+              <Route path="/login" element={<LoginV2 variant="master" />} />
+              <Route path="/logout" element={<LogoutRoute />} />
+              <Route path="/landing" element={<LandingV2 />} />
+              <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
+              <Route path="/clients" element={<RequireMasterAuth><MasterClients /></RequireMasterAuth>} />
+              <Route path="/learning" element={<RequireMasterAuth><LearningRoute /></RequireMasterAuth>} />
+              <Route path="/theater" element={<RequireMasterAuth><TheaterRoute /></RequireMasterAuth>} />
+              <Route path="/engines" element={<Navigate to="/command?tab=engines" replace />} />
+              <Route path="/terminal" element={<Navigate to="/command?tab=terminal" replace />} />
 
-            <Route path="/pricing" element={<PricingPage />} />
-            <Route path="/terms" element={<Terms />} />
-            <Route path="/privacy" element={<Privacy />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
 
-            <Route path="/app/*" element={<Navigate to="/command" replace />} />
-            <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
-            <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-            <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
-          </Routes>
-        </Suspense>
+              <Route path="/app/*" element={<Navigate to="/command" replace />} />
+              <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />
+              <Route path="/landing-legacy" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+              <Route path="*" element={<Navigate to={IS_DESKTOP ? '/command' : '/'} replace />} />
+            </Routes>
+          </Suspense>
+        </ExtensionProvider>
       </ErrorBoundary>
     </>
   );

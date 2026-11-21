@@ -384,7 +384,7 @@ export function startBrowserRamAssist({
   onStats
 }) {
   if (typeof window === 'undefined' || typeof Worker === 'undefined') {
-    return () => {};
+    return () => { };
   }
 
   let stopped = false;
@@ -396,9 +396,9 @@ export function startBrowserRamAssist({
 
   const cleanup = () => {
     stopped = true;
-    try { controller.abort(); } catch (e) {}
-    try { worker?.terminate(); } catch (e) {}
-    try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (e) {}
+    try { controller.abort(); } catch (e) { }
+    try { worker?.terminate(); } catch (e) { }
+    try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (e) { }
     worker = null;
     blobUrl = '';
   };

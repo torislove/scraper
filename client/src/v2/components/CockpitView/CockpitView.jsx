@@ -89,15 +89,32 @@ export default function CockpitView({
       toast.error('No leads to download yet.');
       return;
     }
-    const headers = ['Business Name', 'Category', 'Phone', 'Address', 'City', 'Rating', 'Reviews', 'Website'];
+    const headers = [
+      'Business Name', 'Category', 'Phone', 'Address', 'Area / Mandal',
+      'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
+      'Map Directions', 'Rating', 'Reviews', 'Website'
+    ];
     const lines = [headers.join(',')];
     rows.forEach(r => {
+      const rLat = r.latitude ?? r.lat ?? '';
+      const rLng = r.longitude ?? r.lng ?? '';
+      const hasGeo = Number.isFinite(Number(rLat)) && Number.isFinite(Number(rLng)) && (Number(rLat) !== 0 || Number(rLng) !== 0);
+      const mapUrl = hasGeo
+        ? `https://www.google.com/maps/search/?api=1&query=${rLat},${rLng}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name || ''} ${r.address || r.city || ''}`)}`;
       lines.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
         `"${formatLeadPhone(r, r.country || searchCountry)?.display || getDisplayPhone(r) || ''}"`,
         `"${(r.address || '').replace(/"/g, '""')}"`,
+        `"${(r.mandal || r.locality || '').replace(/"/g, '""')}"`,
         `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
+        `"${(r.district || '').replace(/"/g, '""')}"`,
+        `"${(r.state || '').replace(/"/g, '""')}"`,
+        `"${(r.pincode || '').replace(/"/g, '""')}"`,
+        `"${hasGeo ? rLat : ''}"`,
+        `"${hasGeo ? rLng : ''}"`,
+        `"${mapUrl}"`,
         `"${r.rating || ''}"`,
         `"${r.reviewsCount || ''}"`,
         `"${(r.website || '').replace(/"/g, '""')}"`
@@ -209,6 +226,24 @@ export default function CockpitView({
 
             <button
               type="button"
+              className={cx('lx-chip-toggle', filters.noWebsiteOnly && 'is-on')}
+              onClick={() => onFilterChange?.('noWebsiteOnly', !filters.noWebsiteOnly)}
+              title="Spot high-value businesses with No Website — warm agency prospects"
+            >
+              <Globe2 size={12} /> No Website
+            </button>
+
+            <button
+              type="button"
+              className={cx('lx-chip-toggle', filters.sort === 'area' && 'is-on')}
+              onClick={() => onFilterChange?.('sort', filters.sort === 'area' ? 'newest' : 'area')}
+              title="Group leads by Pincode, Mandal & Locality for field reps"
+            >
+              <MapPin size={12} /> Area Sort
+            </button>
+
+            <button
+              type="button"
               className="lx-chip-export"
               onClick={() => exportCsvRows(filteredVendors, 'leads')}
               disabled={!filteredVendors.length}
@@ -247,7 +282,11 @@ export default function CockpitView({
                 const isPhonePop = Boolean(phoneJustFoundIds?.has(vendor.id || vKey));
                 const locality = vendor.city || vendor.village || vendor.district || '';
                 const address = vendor.address || [vendor.locality, locality, vendor.state].filter(Boolean).join(', ') || 'Location available';
-                const distKm = calculateHaversineKm(originLat, originLng, vendor.latitude ?? vendor.lat, vendor.longitude ?? vendor.lng);
+                const vLat = vendor.latitude ?? vendor.lat;
+                const vLng = vendor.longitude ?? vendor.lng;
+                const hasGeo = Number.isFinite(Number(vLat)) && Number.isFinite(Number(vLng)) && (Number(vLat) !== 0 || Number(vLng) !== 0);
+                const pinUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hasGeo ? `${vLat},${vLng}` : `${vendor.name || ''} ${address}`)}`;
+                const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
                 const isHovered = hoveredLeadId === vKey || hoveredLeadId === vendor.id;
 
                 return (
@@ -322,11 +361,18 @@ export default function CockpitView({
                         ) : (
                           <span className="lx-muted-text">No phone listed</span>
                         )}
-                        {vendor.website && (
-                          <a href={vendor.website} target="_blank" rel="noreferrer" className="lx-web-mini">
-                            <Globe2 size={10} /> Website
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {vendor.website ? (
+                            <a href={vendor.website} target="_blank" rel="noreferrer" className="lx-web-mini">
+                              <Globe2 size={10} /> Website
+                            </a>
+                          ) : (
+                            <span className="lx-noweb-pill">No Website · Warm Lead</span>
+                          )}
+                          <a href={pinUrl} target="_blank" rel="noreferrer" className="lx-pin-link" title="Open street pin & directions">
+                            <MapPin size={10} /> Street Pin
                           </a>
-                        )}
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -362,7 +408,9 @@ export default function CockpitView({
                 icon={Search}
                 title="Ready to find leads"
                 body="Pick a country flag above, type any business and city in the search bar, and press Enter."
-                action={filters.query || filters.phoneOnly ? () => onFilterChange?.({ query: '', phoneOnly: false }) : undefined}
+                action={(filters.query || filters.phoneOnly || filters.noWebsiteOnly || filters.sort === 'area')
+                  ? () => onFilterChange?.({ query: '', phoneOnly: false, noWebsiteOnly: false, sort: 'newest' })
+                  : undefined}
                 actionLabel="Clear filters"
               />
             )

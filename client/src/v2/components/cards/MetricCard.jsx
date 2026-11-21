@@ -12,7 +12,7 @@ export function hasValidLogo(vendor) {
 }
 
 export function VendorAvatar({ vendor, size = 36 }) {
-  const palette = ['#059669', '#2563eb', '#7c3aed', '#d97706', '#0891b2', '#db2777'];
+  const palette = ['#059669', '#0284c7', '#0e7490', '#d97706', '#0891b2', '#db2777'];
   const code = (vendor?.name || 'A').charCodeAt(0) % palette.length;
   const accent = palette[code];
   return (
@@ -36,7 +36,7 @@ export function VendorAvatar({ vendor, size = 36 }) {
 const TONE_THEME = {
   lime: { bg: 'linear-gradient(135deg, #ecfdf5 0%, #ffffff 100%)', iconBg: '#dcfce7', iconColor: '#059669', bar: '#10b981' },
   cyan: { bg: 'linear-gradient(135deg, #eff6ff 0%, #ffffff 100%)', iconBg: '#dbeafe', iconColor: '#2563eb', bar: '#3b82f6' },
-  violet: { bg: 'linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)', iconBg: '#ede9fe', iconColor: '#7c3aed', bar: '#8b5cf6' },
+  violet: { bg: 'linear-gradient(135deg, #ecfeff 0%, #ffffff 100%)', iconBg: '#cffafe', iconColor: '#0e7490', bar: '#06b6d4' },
   amber: { bg: 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)', iconBg: '#fef3c7', iconColor: '#d97706', bar: '#f59e0b' }
 };
 
