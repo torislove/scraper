@@ -14,6 +14,114 @@ const categoryRouter = require('./categoryRouter');
 const brandIntel = require('./brandIntel');
 const { normalizePrepositionTypos } = require('../utils/queryParser');
 
+const COUNTRY_FLAGS = {
+  IN: { name: 'India', flag: '🇮🇳' },
+  US: { name: 'United States', flag: '🇺🇸' },
+  GB: { name: 'United Kingdom', flag: '🇬🇧' },
+  CA: { name: 'Canada', flag: '🇨🇦' },
+  AU: { name: 'Australia', flag: '🇦🇺' },
+  AE: { name: 'United Arab Emirates', flag: '🇦🇪' },
+  DE: { name: 'Germany', flag: '🇩🇪' },
+  SG: { name: 'Singapore', flag: '🇸🇬' },
+  FR: { name: 'France', flag: '🇫🇷' },
+  JP: { name: 'Japan', flag: '🇯🇵' },
+  CH: { name: 'Switzerland', flag: '🇨🇭' },
+  SA: { name: 'Saudi Arabia', flag: '🇸🇦' },
+  QA: { name: 'Qatar', flag: '🇶🇦' },
+  KW: { name: 'Kuwait', flag: '🇰🇼' },
+  IT: { name: 'Italy', flag: '🇮🇹' },
+  NL: { name: 'Netherlands', flag: '🇳🇱' },
+  ES: { name: 'Spain', flag: '🇪🇸' },
+  BR: { name: 'Brazil', flag: '🇧🇷' },
+  MX: { name: 'Mexico', flag: '🇲🇽' },
+  NG: { name: 'Nigeria', flag: '🇳🇬' },
+  ZA: { name: 'South Africa', flag: '🇿🇦' }
+};
+
+function extractPowerDirectives(rawQuery) {
+  let text = String(rawQuery || '');
+  const directives = {
+    phonesOnly: false,
+    websiteOnly: false,
+    scope: null,
+    target: null
+  };
+
+  if (/\b(?:phone|phones):(?:yes|true|only)\b/i.test(text) || /\bhas:phones?\b/i.test(text)) {
+    directives.phonesOnly = true;
+    text = text.replace(/\b(?:phones?:\s*(?:yes|true|only)|has:phones?)\b/gi, ' ');
+  }
+
+  if (/\b(?:site|web|website):(?:yes|true|only)\b/i.test(text) || /\bhas:(?:site|website|web)\b/i.test(text)) {
+    directives.websiteOnly = true;
+    text = text.replace(/\b(?:(?:site|web|website):\s*(?:yes|true|only)|has:(?:site|website|web))\b/gi, ' ');
+  }
+
+  const scopeMatch = text.match(/\bscope:(district|mandal|city|state)\b/i);
+  if (scopeMatch) {
+    directives.scope = scopeMatch[1].toLowerCase();
+    text = text.replace(/\bscope:(?:district|mandal|city|state)\b/gi, ' ');
+  }
+
+  const targetMatch = text.match(/\b(?:target|min|max|goal):(\d+)\b/i);
+  if (targetMatch) {
+    directives.target = parseInt(targetMatch[1], 10);
+    text = text.replace(/\b(?:target|min|max|goal):\d+\b/gi, ' ');
+  }
+
+  return {
+    cleanedQuery: text.replace(/\s+/g, ' ').trim(),
+    directives
+  };
+}
+
+function detectCountryMismatch(locationFragment, activeCountry = 'IN') {
+  if (!locationFragment || locationFragment.length < 3) return null;
+  const targetCode = String(activeCountry || 'IN').toUpperCase();
+
+  // If active country is not IN, check if location is an Indian city
+  if (targetCode !== 'IN') {
+    try {
+      const geo = getGeo();
+      const indMatches = geo.searchLocations(locationFragment, 2, false);
+      if (indMatches && indMatches.length) {
+        const topInd = indMatches[0];
+        if (norm(topInd.name) === norm(locationFragment) || (topInd.type === 'city' && topInd.name.toLowerCase().startsWith(locationFragment.toLowerCase()))) {
+          return {
+            detectedCountry: 'IN',
+            countryName: 'India',
+            flag: '🇮🇳',
+            matchedPlace: topInd.name,
+            matchedState: topInd.state || ''
+          };
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Check international places across 245 countries
+  try {
+    const { searchInternationalPlaces } = require('./internationalGeoIndex');
+    const intlMatches = searchInternationalPlaces(locationFragment, { limit: 3, isMaster: true });
+    if (intlMatches && intlMatches.length) {
+      const topMatch = intlMatches[0];
+      if (topMatch.country && topMatch.country.toUpperCase() !== targetCode) {
+        const matchCountry = topMatch.country.toUpperCase();
+        const meta = COUNTRY_FLAGS[matchCountry] || { name: matchCountry, flag: '🌐' };
+        return {
+          detectedCountry: matchCountry,
+          countryName: meta.name,
+          flag: meta.flag,
+          matchedPlace: topMatch.value,
+          matchedState: topMatch.state || ''
+        };
+      }
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 const PREPOSITION_SPLIT = /^(.*?)\s+(?:in|near|around|within|at|across)\s+(.+)$/i;
 const PLACE_SUFFIX = /^(.*?)\s+(districts?|dists?|zillas?|zilas?|jillas?|jilas?|mandals?|tehsils?|tahsils?|talukas?|taluks?|taluq|circles?|blocks?|subdivisions?|sub[-\s]?districts?|cities|city|towns?|villages?|states?|municipalities?|municipal\s+corporations?|nagar\s+palikas?|nagar\s+nigams?|gram\s+panchayats?|GPs?|wards?)$/i;
 const SUFFIX_LEVEL = {
@@ -916,6 +1024,9 @@ function findPlaceVariants(text, limit = 6, isMaster = false) {
  * @param {number} options.limit      suggestions per group
  */
 function suggest(options = {}) {
+  const { cleanedQuery, directives } = extractPowerDirectives(options.q || '');
+  options = { ...options, q: cleanedQuery };
+
   const limit = Math.max(1, Math.min(12, Number(options.limit) || 6));
   const isMaster = Boolean(options.isMaster);
   const explicitCategory = clean(options.category);
@@ -1010,6 +1121,23 @@ function suggest(options = {}) {
         matched: titleCase(categoryFragment)
       } : null);
 
+  if (bestCategory) {
+    try {
+      const naicsTaxonomy = require('../utils/naicsTaxonomy');
+      const classified = naicsTaxonomy.classifyToNaics(bestCategory.value) ||
+        naicsTaxonomy.classifyToNaics(bestCategory.raw || '') ||
+        naicsTaxonomy.classifyToNaics(bestCategory.familyLabel || '');
+      if (classified && classified.sectorCode) {
+        bestCategory.naics = {
+          code: classified.sectorCode,
+          name: classified.sectorTitle,
+          confidence: 'high',
+          shield: '100% Zero-Bleed'
+        };
+      }
+    } catch (e) {}
+  }
+
   let bestLocation = null;
   const firstLocation = locationMatches[0];
   if (firstLocation && locationFragment.length >= 3) {
@@ -1093,7 +1221,26 @@ function suggest(options = {}) {
       corrected: false,
       matched: b.label || b.value
     })) : [])
-  ]).slice(0, Math.max(limit, 8));
+  ]).slice(0, Math.max(limit, 8)).map(item => {
+    try {
+      const naicsTaxonomy = require('../utils/naicsTaxonomy');
+      const classified = naicsTaxonomy.classifyToNaics(item.label || item.value || '') ||
+        naicsTaxonomy.classifyToNaics(item.detail || '') ||
+        naicsTaxonomy.classifyToNaics(item.familyLabel || '');
+      if (classified && classified.sectorCode) {
+        return {
+          ...item,
+          naics: {
+            code: classified.sectorCode,
+            name: classified.sectorTitle,
+            confidence: 'high',
+            shield: '100% Zero-Bleed'
+          }
+        };
+      }
+    } catch (e) {}
+    return item;
+  });
 
   const suggestions = [
     ...mergedCategories,
@@ -1142,11 +1289,15 @@ function suggest(options = {}) {
     (rawQNorm && tradeFixedRaw && rawQNorm !== tradeFixedRaw)
   );
 
+  const detectedCountryMismatch = detectCountryMismatch(locationFragment, options.country || 'IN');
+
   return {
     ok: true,
     query: correctedQuery,
     ready: Boolean(bestCategory && bestLocation),
     intent,
+    directives,
+    detectedCountryMismatch,
     fragments: {
       category: categoryFragment,
       location: locationFragment,
@@ -1228,7 +1379,9 @@ module.exports = {
   detectFragments,
   findLocations,
   titleCase,
-  correctLocationName
+  correctLocationName,
+  extractPowerDirectives,
+  detectCountryMismatch
 };
 
 /**

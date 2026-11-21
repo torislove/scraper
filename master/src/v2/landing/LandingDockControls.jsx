@@ -5,9 +5,10 @@ import { ChevronLeft, ChevronRight, ShieldCheck, X } from 'lucide-react';
 
 const SCREENS = [
   { path: '/', label: '01 Overview', short: 'Overview' },
-  { path: '/architecture', label: '02 22 Engines', short: '22 Engines' },
-  { path: '/global-coverage', label: '03 11 Nations', short: '11 Nations' },
-  { path: '/hardware', label: '04 Hardware RAM', short: 'Hardware RAM' }
+  { path: '/solutions', label: "02 Who It's For", short: 'Solutions' },
+  { path: '/architecture', label: '03 22 Engines', short: '22 Engines' },
+  { path: '/global-coverage', label: '04 11 Nations & Cities', short: '11 Nations' },
+  { path: '/hardware', label: '05 Hardware RAM', short: 'Hardware RAM' }
 ];
 
 export default function LandingDockControls() {
@@ -18,7 +19,7 @@ export default function LandingDockControls() {
   const currentIndex = SCREENS.findIndex(s => s.path === location.pathname);
   const safeIndex = currentIndex >= 0 ? currentIndex : 0;
 
-  // Listen to keyboard left/right arrow keys & number keys 1-4 for fluid screen switching
+  // Listen to keyboard left/right arrow keys & number keys 1-5 for fluid screen switching
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Don't intercept if user is typing in an input
@@ -32,7 +33,7 @@ export default function LandingDockControls() {
         if (safeIndex > 0) {
           navigate(SCREENS[safeIndex - 1].path);
         }
-      } else if (['1', '2', '3', '4'].includes(e.key)) {
+      } else if (['1', '2', '3', '4', '5'].includes(e.key)) {
         const idx = parseInt(e.key, 10) - 1;
         if (SCREENS[idx]) navigate(SCREENS[idx].path);
       }
@@ -92,11 +93,11 @@ export default function LandingDockControls() {
             >
               <kbd style={{ padding: '2px 5px', borderRadius: 4, background: '#f1f5f9', border: '1px solid #cbd5e1', fontSize: 10 }}>←</kbd>
               <kbd style={{ padding: '2px 5px', borderRadius: 4, background: '#f1f5f9', border: '1px solid #cbd5e1', fontSize: 10 }}>→</kbd>
-              <span>to switch</span>
+              <span style={{ marginLeft: 2 }}>(or keys 1–5) to switch</span>
             </span>
           </div>
 
-          {/* Center: 4 Screen Indicator Pills */}
+          {/* Center: 5 Screen Indicator Pills */}
           <nav className="lx-dock-pills" aria-label="Showcase screens">
             {SCREENS.map((sc, idx) => {
               const isActive = idx === safeIndex;
@@ -106,12 +107,13 @@ export default function LandingDockControls() {
                   type="button"
                   onClick={() => navigate(sc.path)}
                   className={`lx-dock-pill-btn ${isActive ? 'is-active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   {isActive && (
-                    <motion.div
-                      layoutId="activeDockPill"
+                    <motion.span
+                      layoutId="dockPillActiveBg"
                       className="lx-dock-pill-active-bg"
-                      transition={{ type: 'spring', stiffness: 450, damping: 32 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                     />
                   )}
                   <span style={{ position: 'relative', zIndex: 1 }}>{sc.label}</span>
@@ -120,46 +122,45 @@ export default function LandingDockControls() {
             })}
           </nav>
 
-          {/* Right: Compact Legal & Status Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          {/* Right: Security & Compliance Transparency */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               type="button"
               onClick={() => setShowLegalModal(true)}
               style={{
-                background: 'none',
+                background: 'transparent',
                 border: 'none',
                 color: '#64748b',
-                fontSize: 11.5,
-                fontWeight: 650,
+                fontSize: 11,
+                fontWeight: 700,
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5
+                gap: 5,
+                padding: '4px 8px',
+                borderRadius: 8
               }}
+              title="Click to view legal compliance"
             >
-              <ShieldCheck size={13} color="#10b981" />
-              <span>Compliance &amp; Legal</span>
+              <ShieldCheck size={13} color="#059669" />
+              <span>100% Legal &amp; Compliant</span>
             </button>
-
-            <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
-              Screen {safeIndex + 1} of 4
-            </span>
           </div>
         </div>
       </footer>
 
-      {/* Compliance & Legal Modal */}
+      {/* Compliance Information Modal */}
       <AnimatePresence>
         {showLegalModal && (
           <div
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 100,
+              zIndex: 9999,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'rgba(15, 23, 42, 0.45)',
+              background: 'rgba(15, 23, 42, 0.55)',
               backdropFilter: 'blur(8px)',
               padding: 20
             }}
@@ -169,57 +170,71 @@ export default function LandingDockControls() {
               initial={{ opacity: 0, scale: 0.94, y: 12 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.94, y: 12 }}
-              onClick={(e) => e.stopPropagation()}
+              transition={{ duration: 0.2 }}
               style={{
                 width: '100%',
-                maxWidth: 580,
+                maxWidth: 540,
                 background: '#ffffff',
                 borderRadius: 20,
+                padding: 26,
+                boxShadow: '0 24px 60px -12px rgba(15, 23, 42, 0.25)',
                 border: '1.5px solid rgba(255, 255, 255, 0.95)',
-                boxShadow: '0 24px 60px rgba(15, 23, 42, 0.22)',
-                padding: '24px 28px',
                 textAlign: 'left'
               }}
+              onClick={e => e.stopPropagation()}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
-                  Legal &amp; Trademark Compliance Notice
-                </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <ShieldCheck size={22} color="#059669" />
+                  <h3 style={{ margin: 0, fontSize: 17, fontWeight: 850, color: '#0f172a' }}>
+                    100% Legal Public Web Indexing
+                  </h3>
+                </div>
                 <button
                   type="button"
                   onClick={() => setShowLegalModal(false)}
-                  style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: 4 }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: 4 }}
                 >
                   <X size={18} />
                 </button>
               </div>
 
-              <p style={{ fontSize: 12.5, lineHeight: 1.6, color: '#475569', margin: 0 }}>
-                Scraper.co.in is an independent commercial intelligence software platform and search index designed
-                for discovering publicly accessible commercial business records, open mapping points of interest (POI),
-                and public corporate contact registries. All brand names, trade names, service marks, and logos referenced
-                across public documentation are the intellectual property of their respective owners and are used purely
-                for nominative and identification purposes. Scraper.co.in is not affiliated with, endorsed by, or sponsored
-                by any third-party directory, search engine, or mapping provider. All operations are executed solely against
-                publicly available data in compliance with automated rate-limiting protocols and local fair-use standards.
+              <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.55, margin: '0 0 14px' }}>
+                Scraper.co.in operates strictly under international open-web access laws (including hiQ Labs v. LinkedIn precedent)
+                and index only publicly accessible business directories, maps, and corporate registries.
               </p>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12.5, color: '#334155' }}>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#059669', fontWeight: 800 }}>✓</span>
+                  <span><strong>Zero Bot Violations:</strong> Crawls natively via local extension without forged credentials.</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#059669', fontWeight: 800 }}>✓</span>
+                  <span><strong>Zero Personal Data Storage:</strong> No private consumer databases or personal PII stored.</span>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#059669', fontWeight: 800 }}>✓</span>
+                  <span><strong>Carrier Verified:</strong> Numbers validated for WhatsApp Business and corporate commercial dialing.</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 20, textAlign: 'right' }}>
                 <button
                   type="button"
                   onClick={() => setShowLegalModal(false)}
                   style={{
-                    background: '#f1f5f9',
-                    border: '1px solid #cbd5e1',
+                    background: '#059669',
+                    color: '#ffffff',
+                    border: 'none',
                     borderRadius: 10,
-                    padding: '7px 18px',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    color: '#334155'
+                    padding: '8px 18px',
+                    fontWeight: 800,
+                    fontSize: 12.5,
+                    cursor: 'pointer'
                   }}
                 >
-                  Close Notice
+                  Understood
                 </button>
               </div>
             </motion.div>

@@ -46,7 +46,7 @@ const NAICS_SECTORS = {
     code: '31-33',
     title: 'Manufacturing & Industrial',
     patterns: [
-      /\b(manufacturing|manufacturer|factory|foundry|casting|machinery|cnc|precision\s*tooling|precision\s*machining|semiconductor|cleanroom|wafer|fabrication|powertrain|transmission\s*engineering|packaging\s*unit|chemical\s*plant|plastic\s*factory|industrial\s*equipment|marine\s*rigging|corrugated\s*box(?:es)?|watchmaking|micro-mechanics|leather\s*tanning|tannery|mining\s*equipment|dairy\s*processing|knitwear|hosiery|garments?|apparel|textiles?|fabrics?|cotton\s*knitwear|cotton\s*garments?)\b/i
+      /\b(manufacturing|manufacturer|factory|foundry|casting|machinery|cnc|precision\s*tooling|precision\s*machining|semiconductor|cleanroom|wafer|fabrication|powertrain|transmission\s*engineering|packaging\s*unit|chemical\s*plant|plastic\s*factory|industrial\s*equipment|marine\s*rigging|corrugated\s*box(?:es)?|watchmaking|micro-mechanics|leather\s*tanning|tannery|mining\s*equipment|dairy\s*processing|knitwear|hosiery|garments?|apparel|textiles?|fabrics?|cotton\s*knitwear|cotton\s*garments?|tmt(?:\s*steel)?|steel(?:\s*bars?|\s*strips?|\s*rolling|\s*mills?|\s*plants?)?|rolling\s*mills?|iron(?:\s*and\s*steel|\s*mills?)?|metal(?:\s*fabrication|\s*works?|\s*stores?)?|rebar|structural\s*steel|sheet\s*metal)\b/i
     ]
   },
   42: {
@@ -74,7 +74,7 @@ const NAICS_SECTORS = {
     code: '51',
     title: 'Information & Telecommunications',
     patterns: [
-      /\b(telecom|broadband|isp|data\s*centre|hosting|publishing|software\s*publisher|streaming|media\s*production|film\s*studio|recording\s*studio)\b/i
+      /\b(telecom|broadband|isp|data\s*centre|data\s*center|hosting|publishing|software\s*publisher|streaming|media\s*production|film\s*studio|recording\s*studio|cloud(?:\s*computing|\s*services)?)\b/i
     ]
   },
   52: {
@@ -95,7 +95,7 @@ const NAICS_SECTORS = {
     code: '54',
     title: 'Professional, Scientific & Technical Services',
     patterns: [
-      /\b(chartered\s*accountant|auditor|tax\s*consultant|lawyer|advocate|law\s*firm|architect|architecture|interior\s*designer|advertising\s*agency|digital\s*marketing|web\s*development|it\s*services|biotechnology|testing\s*lab|analytical\s*laboratory|research\s*institute|consulting\s*firm|surveyor)\b/i
+      /\b(chartered\s*accountant|auditor|tax\s*consultant|lawyer|advocate|law\s*firm|architect|architecture|interior\s*designer|advertising\s*agency|digital\s*marketing|web\s*development|it\s*services|biotechnology|testing\s*lab|analytical\s*laboratory|research\s*institute|consulting\s*firm|surveyor|software(?:\s*and\s*it\s*companies|\s*development|\s*company|\s*engineer(?:ing)?)?|cloud(?:\s*infrastructure|\s*native)?|ai(?:\s*software|\s*technolog(?:y|ies))?|artificial\s*intelligence|machine\s*learning|saas)\b/i
     ]
   },
   56: {

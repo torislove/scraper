@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, Check, Clock, Compass, Cpu, FolderOpen, Layers, Loader2, MapPin,
-  Search, SlidersHorizontal, Sparkles, Square, X, Zap
+  ArrowRight, Check, Clock, Cpu, FolderOpen, Globe, Layers, Loader2, MapPin, Phone, Search,
+  Shield, Sparkles, Square, Tag, X, Zap
 } from 'lucide-react';
-import { setDynamicFaviconState } from '../utils/dynamicFavicon';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
-import { examplesFor, placeholderFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
+import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER, industryClustersFor } from './data/searchExamples';
 import {
   detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
@@ -17,7 +16,7 @@ function useTypewriterPlaceholder(examples, active) {
   const listKey = useMemo(() => (examples || []).join('|'), [examples]);
 
   useEffect(() => {
-    const items = Array.isArray(examples) && examples.length ? examples : ['Software companies in HITEC City Hyderabad'];
+    const items = Array.isArray(examples) && examples.length ? examples : ['Computer shops in Hyderabad'];
     if (!active) {
       setText(`Search anywhere in 11 countries — Type service in place: e.g. ${items[0]}`);
       return undefined;
@@ -55,17 +54,10 @@ function useTypewriterPlaceholder(examples, active) {
   return text;
 }
 
-const PROPRIETARY_VECTORS = [
-  { id: 'geospatial_mesh', name: 'GPS Radar Mesh', badge: 'GPS RADAR' },
-  { id: 'direct_telecom', name: 'Direct Telecom Registry', badge: 'DIRECT MOBILES' },
-  { id: 'deep_serp', name: 'Deep Web SERP Index', badge: 'DEEP SERP' },
-  { id: 'b2b_network', name: 'Enterprise Supplier Network', badge: 'B2B NETWORK' },
-  { id: 'digital_footprint', name: 'Digital Footprint Scanner', badge: 'WEB & PORTALS' }
-];
-
-const localSuggestCache = new Map();
-const MAX_LOCAL_CACHE = 300;
-const RECENT_KEY = 'scraper_master_recent_v1';
+// Instant 0ms client-side LRU cache for backspace and repeat keystrokes
+const suggestCache = new Map();
+const MAX_CACHE = 300;
+const RECENT_KEY = 'scraper_recent_searches_v1';
 
 function loadRecent(country) {
   try {
@@ -84,11 +76,13 @@ function saveRecent(country, query) {
     const code = String(country || 'IN').toUpperCase();
     const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
     const prev = Array.isArray(raw[code]) ? raw[code] : [];
-    raw[code] = [clean, ...prev.filter(i => i.toLowerCase() !== clean.toLowerCase())].slice(0, 5);
+    const next = [clean, ...prev.filter(item => item.toLowerCase() !== clean.toLowerCase())].slice(0, 5);
+    raw[code] = next;
     localStorage.setItem(RECENT_KEY, JSON.stringify(raw));
-  } catch (e) {}
+  } catch (e) { }
 }
 
+// Google-style match highlighting inside dropdown rows
 function HighlightedLabel({ text, query }) {
   const str = String(text || '');
   const tokens = String(query || '')
@@ -96,7 +90,9 @@ function HighlightedLabel({ text, query }) {
     .toLowerCase()
     .split(/\s+/)
     .filter(t => t.length >= 2 && !['in', 'at', 'near', 'for', 'of'].includes(t));
+
   if (!tokens.length) return <>{str}</>;
+
   const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
   const parts = str.split(new RegExp(`(${escaped})`, 'gi'));
   return (
@@ -110,66 +106,71 @@ function HighlightedLabel({ text, query }) {
   );
 }
 
-function useDebouncedSuggestion(query, onResolve, country = 'IN') {
+function useFastSuggestions(query, country, onResolve) {
   const [response, setResponse] = useState(null);
   const [loading, setLoading] = useState(false);
-  const timer = useRef(null);
-  const requestRef = useRef(0);
-  const controllerRef = useRef(null);
+  const timerRef = useRef(null);
+  const reqIdRef = useRef(0);
+  const abortRef = useRef(null);
   const resolveRef = useRef(onResolve);
 
-  useEffect(() => { resolveRef.current = onResolve; }, [onResolve]);
+  useEffect(() => {
+    resolveRef.current = onResolve;
+  }, [onResolve]);
 
   useEffect(() => {
     const text = String(query || '').trim();
     if (text.length < 2) {
-      clearTimeout(timer.current);
-      if (controllerRef.current) controllerRef.current.abort();
+      clearTimeout(timerRef.current);
+      if (abortRef.current) abortRef.current.abort();
       setResponse(null);
       setLoading(false);
       return undefined;
     }
 
     const cacheKey = `${String(country || 'IN').toUpperCase()}|${text.toLowerCase()}`;
-    if (localSuggestCache.has(cacheKey)) {
-      const cached = localSuggestCache.get(cacheKey);
+    if (suggestCache.has(cacheKey)) {
+      const cached = suggestCache.get(cacheKey);
       setResponse(cached);
       setLoading(false);
       startTransition(() => resolveRef.current?.(cached));
       return undefined;
     }
 
-    clearTimeout(timer.current);
-    const requestId = ++requestRef.current;
+    clearTimeout(timerRef.current);
+    const reqId = ++reqIdRef.current;
 
-    timer.current = setTimeout(async () => {
-      if (controllerRef.current) controllerRef.current.abort();
-      const controller = new AbortController();
-      controllerRef.current = controller;
+    timerRef.current = setTimeout(async () => {
+      if (abortRef.current) abortRef.current.abort();
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
       setLoading(true);
       try {
-        const data = await suggestSearch({ q: text, isMaster: true, country, limit: 8 }, { signal: controller.signal });
-        if (requestRef.current !== requestId) return;
+        const data = await suggestSearch(
+          { q: text, isMaster: false, country, limit: 8 },
+          { signal: ctrl.signal }
+        );
+        if (reqIdRef.current !== reqId) return;
         if (data) {
-          localSuggestCache.set(cacheKey, data);
-          if (localSuggestCache.size > MAX_LOCAL_CACHE) {
-            localSuggestCache.delete(localSuggestCache.keys().next().value);
+          suggestCache.set(cacheKey, data);
+          if (suggestCache.size > MAX_CACHE) {
+            suggestCache.delete(suggestCache.keys().next().value);
           }
           startTransition(() => {
             setResponse(data);
             resolveRef.current?.(data);
           });
         }
-      } catch (error) {
-        if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return;
+      } catch (err) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
       } finally {
-        if (requestRef.current === requestId) setLoading(false);
+        if (reqIdRef.current === reqId) setLoading(false);
       }
     }, 70);
 
     return () => {
-      clearTimeout(timer.current);
-      if (controllerRef.current) controllerRef.current.abort();
+      clearTimeout(timerRef.current);
+      if (abortRef.current) abortRef.current.abort();
     };
   }, [query, country]);
 
@@ -177,24 +178,27 @@ function useDebouncedSuggestion(query, onResolve, country = 'IN') {
 }
 
 function SearchConsole({
+  country = 'IN',
+  onCountrySelect,
   value = '',
   onChange,
-  country = 'IN',
   category = '',
   location = '',
   onCategoryChange,
   onLocationChange,
-  targetLeads = 100,
+  strategy = 'balanced',
+  onStrategyChange,
   form = {},
+  onToggle,
   onDeploy,
   onStop,
   busy = false,
   running = false,
   compact = false,
   onResolve,
-  progress = null,
   runs = [],
   onOpenFolder,
+  progress = null,
   zonesDone = 0,
   zonesTotal = 0
 }) {
@@ -203,14 +207,10 @@ function SearchConsole({
   const [draft, setDraft] = useState(value || '');
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [selectedEngines, setSelectedEngines] = useState(form.engines || ['auto']);
-  const [radius, setRadius] = useState(form.radius || 5);
-  const [coverageMode, setCoverageMode] = useState(form.coverageMode === 'fast' ? 'fast' : 'deep');
   const [recentSearches, setRecentSearches] = useState(() => loadRecent(country));
 
-  const inputRef = useRef(null);
   const wrapRef = useRef(null);
+  const inputRef = useRef(null);
   const focusedRef = useRef(false);
   const lastExternalRef = useRef(value || '');
 
@@ -218,15 +218,12 @@ function SearchConsole({
     setRecentSearches(loadRecent(country));
   }, [country]);
 
-  useEffect(() => {
-    setDynamicFaviconState(running ? 'scraping' : 'idle');
-  }, [running]);
-
+  // Global / and Ctrl+K shortcut to jump straight to search bar
   useEffect(() => {
     const handleGlobalKey = (e) => {
       if ((e.key === '/' || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k')) &&
-          document.activeElement?.tagName !== 'INPUT' &&
-          document.activeElement?.tagName !== 'TEXTAREA') {
+        document.activeElement?.tagName !== 'INPUT' &&
+        document.activeElement?.tagName !== 'TEXTAREA') {
         e.preventDefault();
         inputRef.current?.focus();
         inputRef.current?.select();
@@ -236,30 +233,34 @@ function SearchConsole({
     return () => window.removeEventListener('keydown', handleGlobalKey);
   }, []);
 
+  // Sync only when external caller explicitly resets/changes query (never fight active typing)
   useEffect(() => {
     const incoming = String(value || '');
     if (incoming !== lastExternalRef.current) {
       lastExternalRef.current = incoming;
-      if (!focusedRef.current) setDraft(incoming);
+      if (!focusedRef.current) {
+        setDraft(incoming);
+      }
     }
   }, [value]);
 
-  const { response, loading } = useDebouncedSuggestion(draft, onResolve, country);
+  const { response, loading } = useFastSuggestions(draft, country, onResolve);
 
   const market = useMemo(() => examplesFor(country), [country]);
   const examples = useMemo(() => {
     if (country === 'IN') {
       return [
         'Computer shops in Guntur',
-        'Solar installers in Chennai',
+        'Interior designers in Mumbai',
         'Dental clinics in Hyderabad',
         'Mobile repair in Vijayawada',
-        'Flower shops in Pune'
+        'Flower shops in Chennai'
       ];
     }
     return (market?.prompts || []).slice(0, 5);
   }, [country, market]);
 
+  // Check if the user already has a saved folder matching this search
   const matchedSavedFolder = useMemo(() => {
     const q = draft.trim().toLowerCase();
     if (q.length < 4 || !Array.isArray(runs) || !runs.length) return null;
@@ -268,6 +269,20 @@ function SearchConsole({
       return title.includes(q) && (r.leadCount || 0) > 0;
     }) || null;
   }, [draft, runs]);
+
+  const industryClusters = useMemo(() => industryClustersFor(country), [country]);
+
+  // Auto-sync power directives if user typed directives into the query
+  useEffect(() => {
+    if (response?.directives) {
+      if (response.directives.phonesOnly && !form?.phonesOnly) {
+        onToggle?.('phonesOnly');
+      }
+      if (response.directives.websiteOnly && !form?.websiteOnly) {
+        onToggle?.('websiteOnly');
+      }
+    }
+  }, [response?.directives, form?.phonesOnly, form?.websiteOnly, onToggle]);
 
   const groups = useMemo(() => {
     if (draft.trim().length < 2) {
@@ -297,23 +312,49 @@ function SearchConsole({
       const key = `${item.type || 'category'}|${String(item.label || item.value || '').toLowerCase()}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (item.type === 'location') locations.push({ ...item, type: 'location' });
-      else categories.push({ ...item, type: 'category' });
+
+      if (item.type === 'location') {
+        locations.push({ ...item, type: 'location' });
+      } else {
+        categories.push({ ...item, type: 'category' });
+      }
     }
 
     const out = [];
-    if (categories.length) out.push({ title: 'Suggested Searches & Synonyms', icon: Sparkles, items: categories.slice(0, 6) });
-    if (locations.length) out.push({ title: 'Cities, Mandals, Districts & States', icon: MapPin, items: locations.slice(0, 6) });
+    if (categories.length) {
+      out.push({ title: 'Suggested Searches', icon: Sparkles, items: categories.slice(0, 6) });
+    }
+    if (locations.length) {
+      out.push({ title: 'Matching Places', icon: MapPin, items: locations.slice(0, 6) });
+    }
     return out;
-  }, [response, draft, recentSearches]);
+  }, [response, draft, recentSearches, examples]);
 
   const flatItems = useMemo(() => groups.flatMap(g => g.items), [groups]);
 
-  useEffect(() => { setActiveIdx(-1); }, [flatItems.length]);
+  const ghostText = useMemo(() => {
+    if (!draft || draft.trim().length < 2 || !open) return '';
+    const cleanDraft = draft.trim();
+    const topSuggestion = flatItems[0]?.label || flatItems[0]?.value || response?.query || '';
+    if (
+      topSuggestion &&
+      topSuggestion.toLowerCase().startsWith(cleanDraft.toLowerCase()) &&
+      topSuggestion.length > cleanDraft.length
+    ) {
+      return topSuggestion.slice(cleanDraft.length);
+    }
+    return '';
+  }, [draft, open, flatItems, response]);
 
   useEffect(() => {
-    const onOutside = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    setActiveIdx(-1);
+  }, [flatItems.length]);
+
+  useEffect(() => {
+    const onOutside = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', onOutside);
     return () => document.removeEventListener('mousedown', onOutside);
@@ -321,12 +362,12 @@ function SearchConsole({
 
   const parsedCategory = response?.category?.value || response?.fragments?.category || '';
   const parsedLocation = response?.location?.value || response?.fragments?.location || '';
-  const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
   const relatedSynonyms = Array.isArray(response?.relatedSynonyms) ? response.relatedSynonyms : [];
   const didYouMean = response?.didYouMean && response.didYouMean.toLowerCase() !== draft.trim().toLowerCase()
     ? response.didYouMean
     : null;
 
+  // Synchronous zero-lag input update (never blocks typing!)
   const handleInput = useCallback((text) => {
     focusedRef.current = true;
     setDraft(text);
@@ -362,13 +403,9 @@ function SearchConsole({
     onDeploy?.({
       query: queryText,
       category: finalCat,
-      location: finalLoc,
-      radius,
-      engines: selectedEngines,
-      targetLeads,
-      coverageMode
+      location: finalLoc
     });
-  }, [running, onStop, draft, busy, parsedCategory, parsedLocation, category, location, country, radius, selectedEngines, targetLeads, coverageMode, onChange, onCategoryChange, onLocationChange, onDeploy]);
+  }, [running, onStop, draft, busy, parsedCategory, parsedLocation, category, location, country, onChange, onCategoryChange, onLocationChange, onDeploy]);
 
   const pickSuggestion = useCallback((item) => {
     if (!item) return;
@@ -412,6 +449,29 @@ function SearchConsole({
   }, [draft, parsedCategory, parsedLocation, category, location, country, onChange, onCategoryChange, onLocationChange, commitAndDeploy]);
 
   const onKeyDown = useCallback((event) => {
+    // 1. Sovereign country switch on Tab when mismatch detected
+    if (event.key === 'Tab' && response?.detectedCountryMismatch && onCountrySelect && activeIdx < 0) {
+      event.preventDefault();
+      onCountrySelect(response.detectedCountryMismatch.detectedCountry);
+      return;
+    }
+    // 2. Ghost autocomplete on Tab or RightArrow at end of input
+    if (event.key === 'Tab' && ghostText) {
+      event.preventDefault();
+      const completed = draft + ghostText;
+      setDraft(completed);
+      lastExternalRef.current = completed;
+      onChange?.(completed);
+      return;
+    }
+    if (event.key === 'ArrowRight' && inputRef.current?.selectionStart === draft.length && ghostText) {
+      event.preventDefault();
+      const completed = draft + ghostText;
+      setDraft(completed);
+      lastExternalRef.current = completed;
+      onChange?.(completed);
+      return;
+    }
     if (event.key === 'Tab' && open && flatItems.length > 0) {
       event.preventDefault();
       pickSuggestion(flatItems[activeIdx >= 0 ? activeIdx : 0]);
@@ -436,14 +496,17 @@ function SearchConsole({
       setActiveIdx(prev => (prev - 1 + flatItems.length) % flatItems.length);
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (activeIdx >= 0 && flatItems[activeIdx]) pickSuggestion(flatItems[activeIdx]);
-      else commitAndDeploy();
+      if (activeIdx >= 0 && flatItems[activeIdx]) {
+        pickSuggestion(flatItems[activeIdx]);
+      } else {
+        commitAndDeploy();
+      }
     } else if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
       setActiveIdx(-1);
     }
-  }, [open, flatItems, activeIdx, pickSuggestion, commitAndDeploy]);
+  }, [open, flatItems, activeIdx, ghostText, draft, response, onCountrySelect, pickSuggestion, commitAndDeploy, onChange]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -455,28 +518,18 @@ function SearchConsole({
         commitAndDeploy(q);
       }
     };
-    window.addEventListener('leadharvest:search', handler);
-    return () => window.removeEventListener('leadharvest:search', handler);
+    window.addEventListener('leadharvest:run-suggestion', handler);
+    return () => window.removeEventListener('leadharvest:run-suggestion', handler);
   }, [onChange, commitAndDeploy]);
-
-  const toggleVector = (vectorId) => {
-    setSelectedEngines(prev => {
-      if (prev.includes('auto')) return [vectorId];
-      if (prev.includes(vectorId)) {
-        const next = prev.filter(id => id !== vectorId);
-        return next.length ? next : ['auto'];
-      }
-      return [...prev, vectorId];
-    });
-  };
 
   const hardware = useMemo(() => detectDeviceHardware(), []);
   const [ramCardOpen, setRamCardOpen] = useState(false);
   const [showAll11Countries, setShowAll11Countries] = useState(false);
   const omniExamples = useMemo(() => omniExamplesFor(country), [country]);
   const animatedPlaceholder = useTypewriterPlaceholder(omniExamples, !draft);
+  const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
   const displayService = parsedCategory || category || 'Any Business / Service';
-  const displayPlace = parsedLocation || location || 'City, Mandal, County or State';
+  const displayPlace = parsedLocation || location || 'City, Mandal or County';
   const precisionBadge = locClassification?.zoneCount
     ? `${locClassification.zoneCount} ${locClassification.type || 'Zone'} Pockets`
     : `${totalZones || 'Auto'} Zones`;
@@ -487,30 +540,65 @@ function SearchConsole({
   return (
     <section ref={wrapRef} className={cx('v2-console', (running || compact) && 'is-compact')}>
       <div className="v2-console-field" style={{ position: 'relative' }}>
-        <div className={cx('v2-console-bar', open && flatItems.length > 0 && 'is-open')}>
+        <div className={cx('v2-console-bar', open && (flatItems.length > 0 || !draft.trim() || response?.detectedCountryMismatch) && 'is-open')}>
           <span className="v2-console-glyph"><Search size={20} /></span>
-          <input
-            ref={inputRef}
-            id="cmd-console-query"
-            className="v2-console-input"
-            value={draft}
-            onChange={e => handleInput(e.target.value)}
-            onFocus={() => {
-              focusedRef.current = true;
-              setOpen(true);
-            }}
-            onBlur={() => {
-              setTimeout(() => { focusedRef.current = false; }, 180);
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={animatedPlaceholder || placeholderFor(country) || `Type service in place — e.g. ${examples[0]}`}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-          />
+          
+          <div className="v2-console-input-wrap">
+            {parsedCategory && parsedLocation && draft.includes(parsedLocation) && (
+              <span className="v2-entity-pill is-location" title="Current location target">
+                <MapPin size={11} />
+                <span>{parsedLocation}</span>
+                <button
+                  type="button"
+                  className="v2-entity-pill-remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newText = parsedCategory;
+                    setDraft(newText);
+                    lastExternalRef.current = newText;
+                    onChange?.(newText);
+                    onLocationChange?.('');
+                    inputRef.current?.focus();
+                  }}
+                  title="Remove location filter"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )}
 
-          {loading && <Loader2 size={16} className="v2-spin" style={{ color: '#4f46e5', flexShrink: 0 }} />}
+            <div className="v2-console-input-box">
+              <input
+                ref={inputRef}
+                id="cmd-console-query"
+                className="v2-console-input"
+                value={draft}
+                onChange={e => handleInput(e.target.value)}
+                onFocus={() => {
+                  focusedRef.current = true;
+                  setOpen(true);
+                }}
+                onBlur={() => {
+                  setTimeout(() => { focusedRef.current = false; }, 180);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder={animatedPlaceholder || `Type service in place — e.g. ${examples[0] || 'Computer shops in Hyderabad'}`}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+              />
+
+              {ghostText && (
+                <span className="v2-console-ghost" aria-hidden="true">
+                  <span style={{ opacity: 0 }}>{draft}</span>
+                  <span style={{ opacity: 0.38, color: '#0f172a' }}>{ghostText}</span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          {loading && <Loader2 size={16} className="v2-spin" style={{ color: '#059669', flexShrink: 0 }} />}
           {!loading && draft && (
             <button
               type="button"
@@ -530,16 +618,6 @@ function SearchConsole({
 
           <button
             type="button"
-            className={cx('lx-adv-toggle', showAdvanced && 'is-open')}
-            onClick={() => setShowAdvanced(prev => !prev)}
-            title="Master Sweep Radius & Engine Controls"
-          >
-            <SlidersHorizontal size={14} />
-            <span>{selectedEngines.includes('auto') ? 'Auto' : `${selectedEngines.length} Eng`} · {radius}km</span>
-          </button>
-
-          <button
-            type="button"
             className={cx('v2-console-go', (running || busy) && 'is-stop')}
             onClick={() => {
               if (running || busy) {
@@ -555,21 +633,13 @@ function SearchConsole({
               {(running || busy) ? 'B' : 'A'}
             </span>
             {(running || busy) ? <Square size={14} /> : <Zap size={16} />}
-            <span>
-              {(running || busy)
-                ? `Stop · ${doneZones}/${totalZones} Zones`
-                : locClassification?.type === 'district'
-                  ? 'Sweep District'
-                  : locClassification?.type === 'state'
-                    ? 'Sweep State'
-                    : 'Find Leads'}
-            </span>
+            <span>{(running || busy) ? `Stop · ${doneZones}/${totalZones} Zones` : 'Find Leads'}</span>
           </button>
         </div>
 
-        {/* Google-Grade Master Dropdown */}
+        {/* Instant Google-Grade Dropdown & Mission Palette */}
         <AnimatePresence>
-          {open && (flatItems.length > 0 || matchedSavedFolder) && (
+          {open && (flatItems.length > 0 || matchedSavedFolder || !draft.trim() || response?.detectedCountryMismatch) && (
             <motion.div
               className="v2-suggest"
               role="listbox"
@@ -578,6 +648,28 @@ function SearchConsole({
               exit={{ opacity: 0, y: -4, scale: 0.99 }}
               transition={{ duration: 0.09, ease: [0.22, 1, 0.36, 1] }}
             >
+              {/* Sovereign Country Mismatch Prompt */}
+              {response?.detectedCountryMismatch && (
+                <div className="v2-country-detect-banner">
+                  <div className="v2-country-detect-info">
+                    <span className="v2-country-detect-flag">{response.detectedCountryMismatch.flag}</span>
+                    <span>
+                      Detected <b>{response.detectedCountryMismatch.matchedPlace}</b> in <b>{response.detectedCountryMismatch.countryName}</b> ({response.detectedCountryMismatch.detectedCountry})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="v2-country-detect-btn"
+                    onClick={() => {
+                      onCountrySelect?.(response.detectedCountryMismatch.detectedCountry);
+                    }}
+                  >
+                    <span>Switch to {response.detectedCountryMismatch.countryName}</span>
+                    <kbd>Tab</kbd>
+                  </button>
+                </div>
+              )}
+
               {matchedSavedFolder && (
                 <div
                   className="v2-suggest-vault-bridge"
@@ -588,82 +680,179 @@ function SearchConsole({
                   }}
                 >
                   <div className="v2-vault-bridge-info">
-                    <span className="v2-vault-badge"><FolderOpen size={11} /> SAVED FOLDER MATCH</span>
+                    <span className="v2-vault-badge"><FolderOpen size={11} /> ALREADY IN YOUR SAVED LISTS</span>
                     <b>{matchedSavedFolder.customName || matchedSavedFolder.name || `${matchedSavedFolder.category} in ${matchedSavedFolder.location}`}</b>
-                    <small>{matchedSavedFolder.leadCount || 0} leads saved ({matchedSavedFolder.phoneCount || 0} with phones)</small>
+                    <small>{matchedSavedFolder.leadCount || 0} leads saved ({matchedSavedFolder.phoneCount || 0} with phone numbers)</small>
                   </div>
                   <button type="button" className="v2-btn-open-vault">
-                    Open Folder <ArrowRight size={12} />
+                    Open Saved List <ArrowRight size={12} />
                   </button>
                 </div>
               )}
 
-              <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.3fr 0.9fr' : '1fr' }}>
-                {groups.map(group => {
-                  const Icon = group.icon;
-                  return (
-                    <div key={group.title} className="v2-suggest-group">
-                      <header>
-                        <Icon size={12} />
-                        <span>{group.title}</span>
-                      </header>
-                      <div className="v2-suggest-items">
-                        {group.items.map((item, idx) => {
-                          const currentIdx = runningIdx++;
-                          const isSelected = currentIdx === activeIdx;
-                          return (
-                            <button
-                              key={`${item.type}-${item.label || item.value}-${idx}`}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              className={cx('v2-suggest-row', isSelected && 'is-active')}
-                              onMouseEnter={() => setActiveIdx(currentIdx)}
-                              onMouseDown={e => {
-                                e.preventDefault();
-                                pickSuggestion(item);
-                              }}
-                            >
-                              <span className="v2-suggest-mark">
-                                {item.type === 'location' ? <MapPin size={13} /> : item.type === 'recent' ? <Clock size={13} /> : <Search size={13} />}
-                              </span>
-                              <span className="v2-suggest-copy">
-                                <b className="v2-suggest-title">
-                                  <HighlightedLabel text={item.label || item.value} query={draft} />
-                                </b>
-                                {item.subtitle && <small>{item.subtitle}</small>}
-                              </span>
-                              {item.detail && (() => {
-                                const intentKind = item.type === 'location'
-                                  ? 'is-location'
-                                  : item.intentType
-                                    ? `is-${item.intentType}`
-                                    : /mall|complex/i.test(item.detail)
-                                      ? 'is-mall'
-                                      : /factory|manufacturer|oem/i.test(item.detail)
-                                        ? 'is-manufacturer'
-                                        : /store|shop|showroom|retail/i.test(item.detail)
-                                          ? 'is-store'
-                                          : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
-                                            ? 'is-product'
-                                            : /vendor|wholesale|distributor|b2b/i.test(item.detail)
-                                              ? 'is-vendor'
-                                              : 'is-service';
-                                return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
-                              })()}
-                            </button>
-                          );
-                        })}
+              {/* Zero-Keystroke Mission Palette 2.0 when draft is empty */}
+              {!draft.trim() ? (
+                <div className="v2-mission-palette">
+                  {recentSearches.length > 0 && (
+                    <div className="v2-mission-section">
+                      <div className="v2-mission-title">
+                        <Clock size={12} />
+                        <span>Recent Missions</span>
+                      </div>
+                      <div className="v2-mission-grid">
+                        {recentSearches.map(q => (
+                          <button
+                            key={q}
+                            type="button"
+                            className="v2-mission-chip"
+                            onClick={() => {
+                              setDraft(q);
+                              lastExternalRef.current = q;
+                              onChange?.(q);
+                              commitAndDeploy(q);
+                            }}
+                          >
+                            <span className="v2-mission-chip-label">{q}</span>
+                            <span className="v2-mission-chip-badge">Rerun ⚡</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+
+                  <div className="v2-mission-section">
+                    <div className="v2-mission-title">
+                      <Sparkles size={12} />
+                      <span>National Industry Clusters ({String(country || 'IN').toUpperCase()})</span>
+                    </div>
+                    <div className="v2-mission-grid">
+                      {industryClusters.map(item => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          className="v2-mission-chip"
+                          onClick={() => {
+                            if (item.country && item.country !== country) {
+                              onCountrySelect?.(item.country);
+                            }
+                            setDraft(item.query);
+                            lastExternalRef.current = item.query;
+                            onChange?.(item.query);
+                            commitAndDeploy(item.query);
+                          }}
+                        >
+                          <span className="v2-mission-chip-label">{item.label}</span>
+                          <span className="v2-mission-chip-badge">{item.sector}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.35fr 0.85fr' : '1fr' }}>
+                  {groups.map(group => {
+                    const Icon = group.icon;
+                    return (
+                      <div key={group.title} className="v2-suggest-group">
+                        <header>
+                          <Icon size={12} />
+                          <span>{group.title}</span>
+                        </header>
+                        <div className="v2-suggest-items">
+                          {group.items.map((item, idx) => {
+                            const currentIdx = runningIdx++;
+                            const isSelected = currentIdx === activeIdx;
+                            return (
+                              <button
+                                key={`${item.type}-${item.label || item.value}-${idx}`}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                className={cx('v2-suggest-row', isSelected && 'is-active')}
+                                onMouseEnter={() => setActiveIdx(currentIdx)}
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  pickSuggestion(item);
+                                }}
+                              >
+                                <span className="v2-suggest-mark">
+                                  {item.type === 'location' ? <MapPin size={13} /> : item.type === 'recent' ? <Clock size={13} /> : <Search size={13} />}
+                                </span>
+                                <span className="v2-suggest-copy">
+                                  <b className="v2-suggest-title">
+                                    <HighlightedLabel text={item.label || item.value} query={draft} />
+                                  </b>
+                                  {item.subtitle && <small>{item.subtitle}</small>}
+                                  {item.naics && (
+                                    <div className="v2-suggest-naics-badge">
+                                      <span className="v2-naics-tag">
+                                        <Shield size={10} color="#059669" /> NAICS {item.naics.code}: {item.naics.name}
+                                      </span>
+                                      <span className="v2-naics-pure">100% PURE</span>
+                                    </div>
+                                  )}
+                                </span>
+                                {item.detail && (() => {
+                                  const intentKind = item.type === 'location'
+                                    ? 'is-location'
+                                    : item.intentType
+                                      ? `is-${item.intentType}`
+                                      : /mall|complex/i.test(item.detail)
+                                        ? 'is-mall'
+                                        : /factory|manufacturer|oem/i.test(item.detail)
+                                          ? 'is-manufacturer'
+                                          : /store|shop|showroom|retail/i.test(item.detail)
+                                            ? 'is-store'
+                                            : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
+                                              ? 'is-product'
+                                              : /vendor|wholesale|distributor|b2b/i.test(item.detail)
+                                                ? 'is-vendor'
+                                                : 'is-service';
+                                  return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
+                                })()}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Directives Toolbar */}
+              <div className="v2-quick-filter-strip">
+                <span className="v2-qf-label">PRE-FLIGHT DIRECTIVES:</span>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', form?.phonesOnly && 'is-active')}
+                  onClick={() => onToggle?.('phonesOnly')}
+                  title="Filter only leads with direct phone numbers"
+                >
+                  <Phone size={11} /> Phones Only
+                </button>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', form?.websiteOnly && 'is-active')}
+                  onClick={() => onToggle?.('websiteOnly')}
+                  title="Filter only leads with verified websites"
+                >
+                  <Globe size={11} /> Websites Only
+                </button>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', strategy === 'turbo' && 'is-active')}
+                  onClick={() => onStrategyChange?.(strategy === 'turbo' ? 'balanced' : 'turbo')}
+                  title="Toggle multi-engine turbo scraping speed"
+                >
+                  <Zap size={11} /> Turbo Speed
+                </button>
               </div>
 
               <div className="lx-suggest-foot">
                 <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
                 <span><kbd>Tab</kbd> complete</span>
-                <span><kbd>Enter</kbd> launch</span>
+                <span><kbd>Enter</kbd> search</span>
                 <span><kbd>Esc</kbd> close</span>
               </div>
             </motion.div>
@@ -671,15 +860,14 @@ function SearchConsole({
         </AnimatePresence>
       </div>
 
-      {/* Animated Helper Strip: Live Service/Place/Precision, 3 Built-In Engines & Hardware RAM Guide */}
+      {/* Clean Game Boy Color 3D Liquid Glass Search Strip */}
       <div className="lx-search-helper-strip" role="region" aria-label="Search assistant and 11-country examples">
         <div className="lx-search-helper-row">
           <div className="lx-precision-badges">
-            <span className="lx-precision-pill is-scope">🌍 SEARCH ANYWHERE · ALL 11 COUNTRIES, CITIES, MANDALS &amp; COUNTIES</span>
-            <span className="lx-precision-pill is-service">🎯 SERVICE: <b>{displayService}</b></span>
-            <span className="lx-precision-pill is-place">📍 PLACE: <b>{displayPlace}</b></span>
-            <span className="lx-precision-pill is-scope">⚡ PRECISION: <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#0e7490" /> 20+ Lead Engines Auto: Satellite Maps · Directories · Websites · B2B Wholesale · Clean Excel</span>
+            <span className="lx-precision-pill is-service">🎯 <b>{displayService}</b></span>
+            <span className="lx-precision-pill is-place">📍 <b>{displayPlace}</b></span>
+            <span className="lx-precision-pill is-scope">⚡ <b>{precisionBadge}</b></span>
+            <span className="lx-precision-pill"><Layers size={12} color="#0e7490" /> 20+ Engines Auto On</span>
           </div>
 
           <button
@@ -691,7 +879,7 @@ function SearchConsole({
           >
             <Cpu size={13} />
             <span>
-              Your Hardware: {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Parallel Zones
+              {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Speed
             </span>
           </button>
         </div>
@@ -757,7 +945,9 @@ function SearchConsole({
               transition={{ duration: 0.14 }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
-                <b style={{ fontSize: 13 }}>💻 Master Hardware Swarm · Local RAM &amp; CPU System Requirements</b>
+                <b style={{ fontSize: 13 }}>
+                  💻 Your Device Powers the Speed · Zero Server Queues (Need an entire District, State or Country? Ask our Master Team)
+                </b>
                 <button
                   type="button"
                   onClick={() => setRamCardOpen(false)}
@@ -796,50 +986,6 @@ function SearchConsole({
           )}
         </AnimatePresence>
       </div>
-
-      {/* Expandable Master Engine & Radius Drawer */}
-      {showAdvanced && (
-        <div className="mc-adv-drawer">
-          <div className="mc-adv-group">
-            <span><Compass size={12} /> Radius:</span>
-            {[3, 5, 10, 25].map(r => (
-              <button
-                key={r}
-                type="button"
-                className={cx('lx-example-chip', radius === r && 'is-selected')}
-                onClick={() => setRadius(r)}
-              >
-                {r} km
-              </button>
-            ))}
-          </div>
-          <div className="mc-adv-group">
-            <span><Cpu size={12} /> Engines:</span>
-            <button
-              type="button"
-              className={cx('lx-example-chip', selectedEngines.includes('auto') && 'is-selected')}
-              onClick={() => setSelectedEngines(['auto'])}
-            >
-              Auto Router
-            </button>
-            {PROPRIETARY_VECTORS.map(v => (
-              <button
-                key={v.id}
-                type="button"
-                className={cx('lx-example-chip', selectedEngines.includes(v.id) && 'is-selected')}
-                onClick={() => toggleVector(v.id)}
-              >
-                {v.badge}
-              </button>
-            ))}
-          </div>
-          <div className="mc-adv-group">
-            <span>Depth:</span>
-            <button type="button" className={cx('lx-example-chip', coverageMode === 'deep' && 'is-selected')} onClick={() => setCoverageMode('deep')}>Deep Sweep</button>
-            <button type="button" className={cx('lx-example-chip', coverageMode === 'fast' && 'is-selected')} onClick={() => setCoverageMode('fast')}>Fast Burst</button>
-          </div>
-        </div>
-      )}
 
       {/* Only show compact typo-heal bar when there is a real typo correction */}
       {didYouMean && (

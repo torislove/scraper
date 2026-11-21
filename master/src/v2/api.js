@@ -443,6 +443,11 @@ export async function getMasterNotifications() {
   return Array.isArray(data?.notifications) ? data.notifications : [];
 }
 
+export async function getMasterLeads(params = {}) {
+  const { data } = await client.get('/master/leads', { params });
+  return data;
+}
+
 export async function sendMasterNotification(payload) {
   const { data } = await client.post('/master/notifications', payload);
   return data?.notification || null;

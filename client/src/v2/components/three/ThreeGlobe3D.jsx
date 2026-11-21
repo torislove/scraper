@@ -3,23 +3,24 @@ import * as THREE from 'three';
 
 /**
  * ThreeGlobe3D — Ultra-Precision Geographic Edition
+ * - Single persistent Three.js WebGL scene with zero context destruction
  * - Mathematical lat/lon spherical coordinates for all 11 sovereign nations
- * - High-precision latitude/longitude coordinate grid rings
- * - Smooth exponential rotation tweening to exact country coordinates
- * - Precision GPS beacon pins with vertical stems and target pulse rings
+ * - Shortest-arc spherical rotation interpolation to selected country
+ * - Dynamic pin beacon pulsing without tearing down the canvas
+ * - Responsive resize & inertia-damped manual drag rotation
  */
 const COUNTRY_COORDS = {
-  IN: { lat: 20.5937, lon: 78.9629, name: 'India', code: 'IN-IND' },
-  US: { lat: 37.0902, lon: -95.7129, name: 'United States', code: 'US-USA' },
-  GB: { lat: 55.3781, lon: -3.4360, name: 'United Kingdom', code: 'GB-GBR' },
-  CA: { lat: 56.1304, lon: -106.3468, name: 'Canada', code: 'CA-CAN' },
-  AU: { lat: -25.2744, lon: 133.7751, name: 'Australia', code: 'AU-AUS' },
-  AE: { lat: 23.4241, lon: 53.8478, name: 'United Arab Emirates', code: 'AE-ARE' },
-  SG: { lat: 1.3521, lon: 103.8198, name: 'Singapore', code: 'SG-SGP' },
-  NZ: { lat: -40.9006, lon: 174.8860, name: 'New Zealand', code: 'NZ-NZL' },
-  IE: { lat: 53.1424, lon: -7.6921, name: 'Ireland', code: 'IE-IRL' },
-  ZA: { lat: -30.5595, lon: 22.9375, name: 'South Africa', code: 'ZA-ZAF' },
-  DE: { lat: 51.1657, lon: 10.4515, name: 'Germany', code: 'DE-DEU' }
+  IN: { lat: 20.5937, lon: 78.9629, name: 'India', code: 'IN' },
+  US: { lat: 37.0902, lon: -95.7129, name: 'United States', code: 'US' },
+  GB: { lat: 55.3781, lon: -3.4360, name: 'United Kingdom', code: 'GB' },
+  CA: { lat: 56.1304, lon: -106.3468, name: 'Canada', code: 'CA' },
+  AU: { lat: -25.2744, lon: 133.7751, name: 'Australia', code: 'AU' },
+  AE: { lat: 23.4241, lon: 53.8478, name: 'United Arab Emirates', code: 'AE' },
+  SG: { lat: 1.3521, lon: 103.8198, name: 'Singapore', code: 'SG' },
+  NZ: { lat: -40.9006, lon: 174.8860, name: 'New Zealand', code: 'NZ' },
+  IE: { lat: 53.1424, lon: -7.6921, name: 'Ireland', code: 'IE' },
+  ZA: { lat: -30.5595, lon: 22.9375, name: 'South Africa', code: 'ZA' },
+  DE: { lat: 51.1657, lon: 10.4515, name: 'Germany', code: 'DE' }
 };
 
 function latLonToVector3(lat, lon, radius) {
@@ -34,10 +35,13 @@ function latLonToVector3(lat, lon, radius) {
 export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSelectCountry }) {
   const mountRef = useRef(null);
   const targetRotationRef = useRef({ x: 0, y: 0 });
+  const selectedCountryRef = useRef(selectedCountry);
 
+  // Update target rotation angles and current selection ref when selectedCountry prop changes
   useEffect(() => {
+    selectedCountryRef.current = selectedCountry;
     const coords = COUNTRY_COORDS[selectedCountry] || COUNTRY_COORDS.IN;
-    // Calculate exact target rotation to orient the country directly towards camera (z-axis)
+    // lon: rotate around Y so coordinates face z+ (camera)
     const targetY = -((coords.lon + 90) * (Math.PI / 180));
     const targetX = (coords.lat * (Math.PI / 180)) * 0.45;
     targetRotationRef.current = { x: targetX, y: targetY };
@@ -106,22 +110,21 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
     globeGroup.add(makeRing(GLOBE_RADIUS + 0.08, Math.PI / 2, 0, 0x06b6d4)); // Meridian
 
     // 3. 11 Sovereign Country Beacon Pins
-    const pinGeo = new THREE.SphereGeometry(0.36, 16, 16);
+    const pinGeo = new THREE.SphereGeometry(0.38, 16, 16);
     const pinMeshes = {};
 
     Object.entries(COUNTRY_COORDS).forEach(([code, data]) => {
       const isHome = code === 'IN';
-      const isSelected = code === selectedCountry;
-      const color = isHome ? 0x10b981 : isSelected ? 0x06b6d4 : 0x3b82f6;
+      const color = isHome ? 0x10b981 : 0x0284c7;
 
       const mat = new THREE.MeshBasicMaterial({ color });
       const pin = new THREE.Mesh(pinGeo, mat);
-      const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.28);
+      const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.32);
       pin.position.copy(pos);
       pin.userData = { code, name: data.name };
       globeGroup.add(pin);
 
-      // Elevated stem line
+      // Elevated stem line connecting surface to pin
       const stemGeo = new THREE.BufferGeometry().setFromPoints([
         latLonToVector3(data.lat, data.lon, GLOBE_RADIUS),
         pos
@@ -167,21 +170,40 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
     };
     window.addEventListener('resize', onResize);
 
+    // Initial position orientation
+    const initCoords = COUNTRY_COORDS[selectedCountryRef.current] || COUNTRY_COORDS.IN;
+    globeGroup.rotation.y = -((initCoords.lon + 90) * (Math.PI / 180));
+    globeGroup.rotation.x = (initCoords.lat * (Math.PI / 180)) * 0.45;
+
     let animId;
 
     const animate = () => {
       if (!isDragging) {
-        // Smooth exponential interpolation to selected target coordinates
-        globeGroup.rotation.y += (targetRotationRef.current.y - globeGroup.rotation.y) * 0.06 + 0.002;
-        globeGroup.rotation.x += (targetRotationRef.current.x - globeGroup.rotation.x) * 0.06;
+        // Shortest-arc interpolation for rotation Y
+        let diffY = (targetRotationRef.current.y - globeGroup.rotation.y) % (Math.PI * 2);
+        if (diffY > Math.PI) diffY -= Math.PI * 2;
+        if (diffY < -Math.PI) diffY += Math.PI * 2;
+        globeGroup.rotation.y += diffY * 0.085;
+
+        // Shortest-arc interpolation for rotation X
+        let diffX = (targetRotationRef.current.x - globeGroup.rotation.x) % (Math.PI * 2);
+        if (diffX > Math.PI) diffX -= Math.PI * 2;
+        if (diffX < -Math.PI) diffX += Math.PI * 2;
+        globeGroup.rotation.x += diffX * 0.085;
       }
 
-      // Pulse active country pin
-      const activePin = pinMeshes[selectedCountry];
-      if (activePin) {
-        const s = 1 + Math.sin(Date.now() * 0.006) * 0.28;
-        activePin.scale.set(s, s, s);
-      }
+      // Dynamic active country beacon pulse
+      const activeCode = selectedCountryRef.current;
+      Object.entries(pinMeshes).forEach(([code, pin]) => {
+        if (code === activeCode) {
+          const s = 1.35 + Math.sin(Date.now() * 0.008) * 0.35;
+          pin.scale.set(s, s, s);
+          pin.material.color.setHex(0x10b981);
+        } else {
+          pin.scale.set(1, 1, 1);
+          pin.material.color.setHex(code === 'IN' ? 0x059669 : 0x0284c7);
+        }
+      });
 
       renderer.render(scene, camera);
       animId = requestAnimationFrame(animate);
@@ -200,7 +222,7 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
       }
       renderer.dispose();
     };
-  }, [selectedCountry]);
+  }, []); // Run ONCE on mount; updates happen dynamically via refs
 
   return (
     <div

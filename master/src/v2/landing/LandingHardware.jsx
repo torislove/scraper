@@ -1,10 +1,11 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Cpu, Server, Zap, Rocket, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Cpu, Server, Zap, Rocket, ShieldCheck, CheckCircle2, Puzzle, Cloud, Lock, Building } from 'lucide-react';
 import { detectDeviceHardware } from '../utils/deviceRamEngine';
 import LiquidButton3D from '../components/LiquidButton3D';
 import ThreeHardwareProcessor3D from '../components/three/ThreeHardwareProcessor3D';
+import RollingCounter from '../components/RollingCounter';
 
 export default function LandingHardware() {
   const navigate = useNavigate();
@@ -21,26 +22,36 @@ export default function LandingHardware() {
     const ram = Number(simulatedRamGb) || 16;
     let lanes = 2;
     let speed = '120 leads/min';
+    let speedNum = 120;
     let tier = 'T1 Basic';
+    let citiesConcurrent = '4 Cities in Parallel';
     if (ram >= 64) {
       lanes = 16;
       speed = '600+ leads/min';
+      speedNum = 600;
       tier = 'T4 Extreme';
+      citiesConcurrent = '32 Cities in Parallel';
     } else if (ram >= 32) {
       lanes = 12;
       speed = '450+ leads/min';
+      speedNum = 450;
       tier = 'T3 Professional';
+      citiesConcurrent = '24 Cities in Parallel';
     } else if (ram >= 16) {
       lanes = 8;
       speed = '300+ leads/min';
+      speedNum = 300;
       tier = 'T2 Standard';
+      citiesConcurrent = '16 Cities in Parallel';
     } else if (ram >= 8) {
       lanes = 4;
       speed = '180+ leads/min';
+      speedNum = 180;
       tier = 'T1 Starter';
+      citiesConcurrent = '8 Cities in Parallel';
     }
     const headroom = Math.max(4.5, ram * 0.35).toFixed(1);
-    return { ram, lanes, speed, tier, headroom };
+    return { ram, lanes, speed, speedNum, tier, headroom, citiesConcurrent };
   }, [simulatedRamGb]);
 
   return (
@@ -53,103 +64,120 @@ export default function LandingHardware() {
       >
         <span className="lx-highlight-tag">
           <Cpu size={13} />
-          <span>ZERO CLOUD QUEUE LATENCY · 100% PRIVATE HARDWARE ENGINE</span>
+          <span>ZERO CLOUD SERVER OVERHEAD · NOMINAL ENGINE PRICING ONLY</span>
         </span>
       </motion.div>
 
       {/* 2. Headline & Simple Explainer */}
       <div style={{ maxWidth: 880 }}>
         <h1 className="lx-kinetic-title">
-          Your Workstation Drives the Speed.{' '}
-          <span className="lx-gradient-text">Safely.</span>
+          Cloud Brain + Your Device Muscle.{' '}
+          <span className="lx-gradient-text">Zero Server Markup for You.</span>
         </h1>
 
         <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
-          No waiting in shared cloud queues. The engine checks your computer's RAM, locks a safe 4.5 GB buffer
-          so your PC stays butter-smooth, and uses the rest for parallel multi-core scraping.
+          We provide 22 cloud discovery engines, but eliminate heavy server browser slots.
+          Your computer&apos;s RAM and residential IP sweep multiple cities in parallel via our safe extension —
+          slashing server costs by 95% so you only pay a nominal fee for the engines you run.
         </p>
       </div>
 
-      {/* 3. Interactive 3D WebGL Hardware Processor Stage */}
+      {/* 3. Interactive Stage: 3D Microchip + 3 Architecture Pillars with Laser Border-Beam */}
       <motion.div
-        className="lx-hardware-stage"
+        className="lx-hardware-stage lx-border-beam-box"
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.45, delay: 0.1 }}
       >
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 16, alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: 16, alignItems: 'center' }}>
           {/* Left: 3D WebGL Motherboard & RAM Banks */}
-          <div style={{ height: 210, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          <div style={{ height: 215, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             <ThreeHardwareProcessor3D simulatedRamGb={simSpecs.ram} parallelLanes={simSpecs.lanes} />
             <div style={{ position: 'absolute', bottom: 8, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
-              <span>🖱️ Drag to inspect 3D Silicon Wafer</span>
-              <span style={{ color: '#059669', fontWeight: 800 }}>{simSpecs.lanes} Parallel Lanes Active</span>
+              <span>🖱️ Drag to inspect 3D Silicon</span>
+              <span style={{ color: '#059669', fontWeight: 800 }}>{simSpecs.citiesConcurrent}</span>
             </div>
           </div>
 
-          {/* Right: Telemetry & Interactive Slider */}
-          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%', padding: '4px 0' }}>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 850, color: '#0f172a' }}>Simulate System RAM:</span>
-                <span style={{ fontSize: 14, fontWeight: 850, color: '#047857', background: '#ecfdf5', padding: '2px 10px', borderRadius: 999 }}>
-                  {simSpecs.ram} GB RAM
-                </span>
+          {/* Right: The 3 Architecture Pillars in Simple Language */}
+          <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* Pillar 1: Cloud Server Brain */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 2 }}>
+                <Cloud size={16} />
               </div>
-
-              {/* Slider Input */}
-              <input
-                type="range"
-                min="8"
-                max="64"
-                step="8"
-                value={simulatedRamGb}
-                onChange={(e) => setSimulatedRamGb(Number(e.target.value))}
-                style={{ width: '100%', accentColor: '#10b981', cursor: 'pointer', marginBottom: 14 }}
-              />
-
-              {/* Dynamic Stats Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Extraction Concurrency</span>
-                  <strong style={{ fontSize: 14, color: '#0f172a' }}>{simSpecs.lanes}x Parallel Lanes</strong>
-                </div>
-
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Estimated Speed</span>
-                  <strong style={{ fontSize: 14, color: '#059669' }}>{simSpecs.speed}</strong>
-                </div>
-
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Hardware Tier</span>
-                  <strong style={{ fontSize: 14, color: '#0284c7' }}>{simSpecs.tier}</strong>
-                </div>
-
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
-                  <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Guaranteed OS Headroom</span>
-                  <strong style={{ fontSize: 14, color: '#d97706' }}>&ge; {simSpecs.headroom} GB Free</strong>
-                </div>
+              <div>
+                <strong style={{ fontSize: 12, color: '#0f172a', display: 'block' }}>
+                  1. Cloud Brain Coordinates the Engines (Nominal Pricing)
+                </strong>
+                <span style={{ fontSize: 10.5, color: '#64748b', lineHeight: 1.35, display: 'block' }}>
+                  Our central server coordinates the 22 extraction protocols, queries 40,000+ cities and mandals, and feeds structured search tasks directly to your machine.
+                </span>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', marginTop: 12 }}>
-              <ShieldCheck size={13} color="#10b981" />
-              <span>Detected Device: {hardware.ramGb} GB RAM · {hardware.cpuCores} CPU Cores</span>
+            {/* Pillar 2: Local Hardware RAM */}
+            <div style={{ background: '#f8fafc', border: '1.5px solid #a7f3d0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f0fdf4', color: '#047857', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 2 }}>
+                <Cpu size={16} />
+              </div>
+              <div>
+                <strong style={{ fontSize: 12, color: '#065f46', display: 'block' }}>
+                  2. Multi-City Concurrency via Your Device RAM
+                </strong>
+                <span style={{ fontSize: 10.5, color: '#475569', lineHeight: 1.35, display: 'block' }}>
+                  Instead of paying $500/mo for cloud server RAM, your local computer renders pages natively across <strong>{simSpecs.citiesConcurrent}</strong> using your unmetered residential network.
+                </span>
+              </div>
+            </div>
+
+            {/* Pillar 3: Browser Extension Bridge */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 2 }}>
+                <Puzzle size={16} />
+              </div>
+              <div>
+                <strong style={{ fontSize: 12, color: '#0f172a', display: 'block' }}>
+                  3. Browser Extension Executes in Native Tabs
+                </strong>
+                <span style={{ fontSize: 10.5, color: '#64748b', lineHeight: 1.35, display: 'block' }}>
+                  A lightweight extension bridges the cloud engines to your browser tabs. Zero proxies required, zero bot blocks, and 100% private execution.
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Multi-Lane Concurrency Strip */}
-        <div className="lx-ram-lanes-track">
-          {Array.from({ length: 8 }, (_, idx) => {
-            const isActive = idx < simSpecs.lanes;
-            return (
-              <div key={idx} className={`lx-ram-lane-pipe ${isActive ? 'is-active' : ''}`}>
-                <span>Lane 0{idx + 1}</span>
-                {isActive && <div className="lx-ram-lane-pulse" />}
-              </div>
-            );
-          })}
+        {/* Live Device Hardware Status Bar with Slider */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f1f5f9', padding: '8px 14px', borderRadius: 12, fontSize: 11 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ color: '#0f172a', fontWeight: 800 }}>Simulate Local Device RAM:</span>
+            {[8, 16, 32, 64].map(ram => (
+              <button
+                key={ram}
+                type="button"
+                onClick={() => setSimulatedRamGb(ram)}
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  border: simulatedRamGb === ram ? '1.5px solid #10b981' : '1px solid #cbd5e1',
+                  background: simulatedRamGb === ram ? '#ffffff' : '#f8fafc',
+                  color: simulatedRamGb === ram ? '#047857' : '#64748b',
+                  fontWeight: 800,
+                  fontSize: 10.5,
+                  cursor: 'pointer'
+                }}
+              >
+                {ram} GB
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span>Concurrency: <strong style={{ color: '#047857' }}>{simSpecs.lanes} Parallel Lanes</strong></span>
+            <span>Speed: <strong style={{ color: '#0284c7' }}>{simSpecs.speed}</strong></span>
+            <span>Concurrent Cities: <strong style={{ color: '#059669' }}>{simSpecs.citiesConcurrent}</strong></span>
+          </div>
         </div>
       </motion.div>
 
@@ -160,33 +188,33 @@ export default function LandingHardware() {
           size="lg"
           icon={Rocket}
           pulse
-          onClick={() => navigate('/command?country=IN')}
+          onClick={() => navigate('/command')}
         >
-          Launch Full-Speed Workstation Sweep
+          Activate Precision Engine Sweep
         </LiquidButton3D>
 
         <LiquidButton3D
           variant="ghost"
           size="lg"
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/pricing')}
         >
-          ← Return to Overview
+          View Nominal Engine Pricing →
         </LiquidButton3D>
       </div>
 
       {/* 5. 4 Micro Value Pills */}
       <div className="lx-value-strip">
         <span className="lx-value-chip is-highlight">
-          <span>✓ Guaranteed &ge; 4.5 GB Headroom</span>
+          <span>✓ Nominal Engine Pricing Only</span>
         </span>
         <span className="lx-value-chip">
-          <span>✓ Up to 16x Hardware Lanes</span>
+          <span>✓ Zero Server RAM Surcharges</span>
         </span>
         <span className="lx-value-chip is-highlight">
-          <span>✓ 100% On-Device Memory Privacy</span>
+          <span>✓ Multi-City Concurrent Workers</span>
         </span>
         <span className="lx-value-chip">
-          <span>✓ Zero Cloud Queue Throttle</span>
+          <span>✓ 100% Machine Private Execution</span>
         </span>
       </div>
     </div>

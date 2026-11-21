@@ -2,25 +2,25 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 /**
- * ThreeGlobe3D
- * Interactive 3D WebGL Holographic Sovereign Globe
- * - Holographic wireframe earth sphere with atmospheric rim glow
- * - 11 3D sovereign beacon pins (India, US, UK, CA, AU, AE, SG, NZ, IE, ZA, DE)
- * - Smooth camera / rotation tweening to active selected country
- * - Mouse drag / orbit interaction
+ * ThreeGlobe3D — Ultra-Precision Geographic Edition
+ * - Single persistent Three.js WebGL scene with zero context destruction
+ * - Mathematical lat/lon spherical coordinates for all 11 sovereign nations
+ * - Shortest-arc spherical rotation interpolation to selected country
+ * - Dynamic pin beacon pulsing without tearing down the canvas
+ * - Responsive resize & inertia-damped manual drag rotation
  */
 const COUNTRY_COORDS = {
-  IN: { lat: 20.5937, lon: 78.9629, name: 'India' },
-  US: { lat: 37.0902, lon: -95.7129, name: 'United States' },
-  GB: { lat: 55.3781, lon: -3.4360, name: 'United Kingdom' },
-  CA: { lat: 56.1304, lon: -106.3468, name: 'Canada' },
-  AU: { lat: -25.2744, lon: 133.7751, name: 'Australia' },
-  AE: { lat: 23.4241, lon: 53.8478, name: 'United Arab Emirates' },
-  SG: { lat: 1.3521, lon: 103.8198, name: 'Singapore' },
-  NZ: { lat: -40.9006, lon: 174.8860, name: 'New Zealand' },
-  IE: { lat: 53.1424, lon: -7.6921, name: 'Ireland' },
-  ZA: { lat: -30.5595, lon: 22.9375, name: 'South Africa' },
-  DE: { lat: 51.1657, lon: 10.4515, name: 'Germany' }
+  IN: { lat: 20.5937, lon: 78.9629, name: 'India', code: 'IN' },
+  US: { lat: 37.0902, lon: -95.7129, name: 'United States', code: 'US' },
+  GB: { lat: 55.3781, lon: -3.4360, name: 'United Kingdom', code: 'GB' },
+  CA: { lat: 56.1304, lon: -106.3468, name: 'Canada', code: 'CA' },
+  AU: { lat: -25.2744, lon: 133.7751, name: 'Australia', code: 'AU' },
+  AE: { lat: 23.4241, lon: 53.8478, name: 'United Arab Emirates', code: 'AE' },
+  SG: { lat: 1.3521, lon: 103.8198, name: 'Singapore', code: 'SG' },
+  NZ: { lat: -40.9006, lon: 174.8860, name: 'New Zealand', code: 'NZ' },
+  IE: { lat: 53.1424, lon: -7.6921, name: 'Ireland', code: 'IE' },
+  ZA: { lat: -30.5595, lon: 22.9375, name: 'South Africa', code: 'ZA' },
+  DE: { lat: 51.1657, lon: 10.4515, name: 'Germany', code: 'DE' }
 };
 
 function latLonToVector3(lat, lon, radius) {
@@ -35,10 +35,13 @@ function latLonToVector3(lat, lon, radius) {
 export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSelectCountry }) {
   const mountRef = useRef(null);
   const targetRotationRef = useRef({ x: 0, y: 0 });
+  const selectedCountryRef = useRef(selectedCountry);
 
+  // Update target rotation angles and current selection ref when selectedCountry prop changes
   useEffect(() => {
+    selectedCountryRef.current = selectedCountry;
     const coords = COUNTRY_COORDS[selectedCountry] || COUNTRY_COORDS.IN;
-    // Target rotation to face the country towards camera (z-axis)
+    // lon: rotate around Y so coordinates face z+ (camera)
     const targetY = -((coords.lon + 90) * (Math.PI / 180));
     const targetX = (coords.lat * (Math.PI / 180)) * 0.45;
     targetRotationRef.current = { x: targetX, y: targetY };
@@ -52,32 +55,35 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
     let height = container.clientHeight || 280;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 1000);
     camera.position.set(0, 0, 24);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-    renderer.setSize(width, height);
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
     container.appendChild(renderer.domElement);
 
     const globeGroup = new THREE.Group();
     scene.add(globeGroup);
 
-    const GLOBE_RADIUS = 7.5;
+    const GLOBE_RADIUS = 7.6;
 
-    // 1. Holographic Wireframe Sphere
-    const sphereGeo = new THREE.SphereGeometry(GLOBE_RADIUS, 28, 28);
+    // 1. Primary Precision Holographic Wireframe
+    const sphereGeo = new THREE.SphereGeometry(GLOBE_RADIUS, 32, 32);
     const sphereMat = new THREE.MeshBasicMaterial({
       color: 0x10b981,
       wireframe: true,
       transparent: true,
       opacity: 0.18
     });
-    const sphereMesh = new THREE.Mesh(sphereGeo, sphereMat);
-    globeGroup.add(sphereMesh);
+    globeGroup.add(new THREE.Mesh(sphereGeo, sphereMat));
 
-    // Inner subtle glow sphere
-    const innerGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 0.98, 32, 32);
+    // Inner glowing atmospheric body
+    const innerGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 0.985, 32, 32);
     const innerMat = new THREE.MeshBasicMaterial({
       color: 0x06b6d4,
       transparent: true,
@@ -85,62 +91,68 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
     });
     globeGroup.add(new THREE.Mesh(innerGeo, innerMat));
 
-    // 2. Latitude / Longitude Equator Ring
-    const equatorGeo = new THREE.BufferGeometry();
-    const eqPoints = [];
-    for (let i = 0; i <= 64; i++) {
-      const th = (i / 64) * Math.PI * 2;
-      eqPoints.push(new THREE.Vector3(Math.cos(th) * (GLOBE_RADIUS + 0.1), 0, Math.sin(th) * (GLOBE_RADIUS + 0.1)));
-    }
-    equatorGeo.setFromPoints(eqPoints);
-    const eqMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.4 });
-    globeGroup.add(new THREE.Line(equatorGeo, eqMat));
+    // 2. Precision Coordinate Rings: Equator & Prime Meridian
+    const makeRing = (radius, tiltX = 0, tiltY = 0, color = 0x3b82f6) => {
+      const geo = new THREE.BufferGeometry();
+      const pts = [];
+      for (let i = 0; i <= 64; i++) {
+        const th = (i / 64) * Math.PI * 2;
+        pts.push(new THREE.Vector3(Math.cos(th) * radius, 0, Math.sin(th) * radius));
+      }
+      geo.setFromPoints(pts);
+      const ring = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.45 }));
+      ring.rotation.x = tiltX;
+      ring.rotation.y = tiltY;
+      return ring;
+    };
 
-    // 3. 11 3D Sovereign Beacon Pins
-    const pinGeo = new THREE.SphereGeometry(0.35, 12, 12);
+    globeGroup.add(makeRing(GLOBE_RADIUS + 0.08, 0, 0, 0x10b981)); // Equator
+    globeGroup.add(makeRing(GLOBE_RADIUS + 0.08, Math.PI / 2, 0, 0x06b6d4)); // Meridian
+
+    // 3. 11 Sovereign Country Beacon Pins
+    const pinGeo = new THREE.SphereGeometry(0.38, 16, 16);
     const pinMeshes = {};
 
     Object.entries(COUNTRY_COORDS).forEach(([code, data]) => {
       const isHome = code === 'IN';
-      const isSelected = code === selectedCountry;
-      const color = isHome ? 0x10b981 : isSelected ? 0x06b6d4 : 0x3b82f6;
+      const color = isHome ? 0x10b981 : 0x0284c7;
 
       const mat = new THREE.MeshBasicMaterial({ color });
       const pin = new THREE.Mesh(pinGeo, mat);
-      const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.25);
+      const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.32);
       pin.position.copy(pos);
       pin.userData = { code, name: data.name };
       globeGroup.add(pin);
 
-      // Elevated stem line
+      // Elevated stem line connecting surface to pin
       const stemGeo = new THREE.BufferGeometry().setFromPoints([
         latLonToVector3(data.lat, data.lon, GLOBE_RADIUS),
         pos
       ]);
-      const stemMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.7 });
+      const stemMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75 });
       globeGroup.add(new THREE.Line(stemGeo, stemMat));
 
       pinMeshes[code] = pin;
     });
 
-    // Mouse interaction
+    // Inertial Drag Interaction
     let isDragging = false;
-    let prevMouseX = 0;
-    let prevMouseY = 0;
+    let prevX = 0;
+    let prevY = 0;
 
     const onMouseDown = (e) => {
       isDragging = true;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
+      prevX = e.clientX;
+      prevY = e.clientY;
     };
     const onMouseMove = (e) => {
       if (!isDragging) return;
-      const deltaX = e.clientX - prevMouseX;
-      const deltaY = e.clientY - prevMouseY;
+      const deltaX = e.clientX - prevX;
+      const deltaY = e.clientY - prevY;
       globeGroup.rotation.y += deltaX * 0.008;
       globeGroup.rotation.x += deltaY * 0.008;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
+      prevX = e.clientX;
+      prevY = e.clientY;
     };
     const onMouseUp = () => { isDragging = false; };
 
@@ -148,41 +160,60 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
 
-    const handleResize = () => {
+    const onResize = () => {
       if (!container) return;
       width = container.clientWidth || 360;
       height = container.clientHeight || 280;
       camera.aspect = width / height;
-      camera.updateProjectionMatrix;
+      camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', onResize);
 
-    let animationFrameId;
+    // Initial position orientation
+    const initCoords = COUNTRY_COORDS[selectedCountryRef.current] || COUNTRY_COORDS.IN;
+    globeGroup.rotation.y = -((initCoords.lon + 90) * (Math.PI / 180));
+    globeGroup.rotation.x = (initCoords.lat * (Math.PI / 180)) * 0.45;
+
+    let animId;
 
     const animate = () => {
       if (!isDragging) {
-        // Smoothly rotate towards targeted country
-        globeGroup.rotation.y += (targetRotationRef.current.y - globeGroup.rotation.y) * 0.05 + 0.002;
-        globeGroup.rotation.x += (targetRotationRef.current.x - globeGroup.rotation.x) * 0.05;
+        // Shortest-arc interpolation for rotation Y
+        let diffY = (targetRotationRef.current.y - globeGroup.rotation.y) % (Math.PI * 2);
+        if (diffY > Math.PI) diffY -= Math.PI * 2;
+        if (diffY < -Math.PI) diffY += Math.PI * 2;
+        globeGroup.rotation.y += diffY * 0.085;
+
+        // Shortest-arc interpolation for rotation X
+        let diffX = (targetRotationRef.current.x - globeGroup.rotation.x) % (Math.PI * 2);
+        if (diffX > Math.PI) diffX -= Math.PI * 2;
+        if (diffX < -Math.PI) diffX += Math.PI * 2;
+        globeGroup.rotation.x += diffX * 0.085;
       }
 
-      // Gentle pulse on selected country pin
-      const activePin = pinMeshes[selectedCountry];
-      if (activePin) {
-        const s = 1 + Math.sin(Date.now() * 0.006) * 0.25;
-        activePin.scale.set(s, s, s);
-      }
+      // Dynamic active country beacon pulse
+      const activeCode = selectedCountryRef.current;
+      Object.entries(pinMeshes).forEach(([code, pin]) => {
+        if (code === activeCode) {
+          const s = 1.35 + Math.sin(Date.now() * 0.008) * 0.35;
+          pin.scale.set(s, s, s);
+          pin.material.color.setHex(0x10b981);
+        } else {
+          pin.scale.set(1, 1, 1);
+          pin.material.color.setHex(code === 'IN' ? 0x059669 : 0x0284c7);
+        }
+      });
 
       renderer.render(scene, camera);
-      animationFrameId = requestAnimationFrame(animate);
+      animId = requestAnimationFrame(animate);
     };
 
     animate();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', onResize);
       container.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
@@ -191,7 +222,7 @@ export default function ThreeGlobe3D({ style = {}, selectedCountry = 'IN', onSel
       }
       renderer.dispose();
     };
-  }, [selectedCountry]);
+  }, []); // Run ONCE on mount; updates happen dynamically via refs
 
   return (
     <div

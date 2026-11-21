@@ -1,0 +1,178 @@
+/* ============================================================================
+   MASTER EXECUTIVE ADMIN CONTROL PANEL & GLOBAL DATA VAULT
+   Ultra-premium executive dark/light glassmorphic control architecture.
+   ============================================================================ */
+
+.map-admin-container {
+  min-height: 100vh;
+  width: 100%;
+  background: radial-gradient(circle at 15% 10%, #f0fdf4 0%, #f8fafc 40%, #f1f5f9 100%);
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Plus Jakarta Sans", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-admin-header {
+  height: 64px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  padding: 0 24px;
+  box-shadow: 0 4px 20px -8px rgba(15, 23, 42, 0.06);
+}
+
+.map-admin-body {
+  flex: 1;
+  max-width: 1440px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Metric Cards Grid */
+.map-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.map-metric-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1.5px solid rgba(226, 232, 240, 0.85);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  justifyContent: space-between;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.map-metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -6px rgba(15, 23, 42, 0.1);
+  border-color: #a7f3d0;
+}
+
+.map-metric-card.is-highlight {
+  border-color: #10b981;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.map-metric-val {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 26px;
+  font-weight: 850;
+  color: #0f172a;
+  line-height: 1.1;
+  margin: 8px 0 4px;
+  letter-spacing: -0.03em;
+}
+
+/* Action Toolbar */
+.map-action-toolbar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+}
+
+/* Global Data Vault Table */
+.map-vault-panel {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 8px 28px -10px rgba(15, 23, 42, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.map-vault-header {
+  padding: 14px 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justifyContent: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.map-table-wrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.map-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+
+.map-data-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 750;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.map-data-table td {
+  padding: 11px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.map-data-table tr:hover td {
+  background: #f8fafc;
+}
+
+.map-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.map-source-badge.is-master {
+  background: #ecfeff;
+  color: #0891b2;
+  border-color: #a5f3fc;
+}
+
+.map-source-badge.is-client {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}

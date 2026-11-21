@@ -2231,6 +2231,7 @@ export default function CommandCenter() {
               mode={runMode}
               onModeChange={setRunMode}
               country={searchCountry}
+              onCountrySelect={handleCountrySelect}
               value={autoQuery}
               onChange={setAutoQuery}
               category={form.category}

@@ -2,8 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 /**
- * ThreeRadarDish3D — Ultra-Precision Edition
+ * ThreeRadarDish3D — Ultra-Precision Edition with Sonar Pulses
  * - 360-degree Azimuth coordinate ticks (0°, 90°, 180°, 270°)
+ * - Expanding concentric sonar pulse rings
  * - High-precision concentric range rings with distance markers
  * - Mathematical target acquisition beacons with live pulse
  * - Mouse drag & tilt with smooth inertial damping
@@ -77,7 +78,22 @@ export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) 
     focalMesh.rotation.x = -Math.PI / 2;
     radarGroup.add(focalMesh);
 
-    // 4. Sweeper Beam Sector with Smooth Angular Falloff
+    // 4. Expanding Sonar Wave Pulse Rings
+    const sonarRings = Array.from({ length: 3 }, (_, idx) => {
+      const geo = new THREE.RingGeometry(0.5, 0.7, 48);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x10b981,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      radarGroup.add(mesh);
+      return { mesh, mat, progress: idx * 0.33 };
+    });
+
+    // 5. Sweeper Beam Sector with Smooth Angular Falloff
     const sweepGeo = new THREE.RingGeometry(0.65, 13.0, 48, 1, 0, Math.PI / 3.2);
     const sweepMat = new THREE.MeshBasicMaterial({
       color: 0x10b981,
@@ -89,7 +105,7 @@ export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) 
     sweepMesh.rotation.x = -Math.PI / 2;
     radarGroup.add(sweepMesh);
 
-    // 5. High-Precision Coordinate Target Beacons
+    // 6. High-Precision Coordinate Target Beacons
     const beaconCoords = [
       { x: -5.2, z: -4.1, color: 0x10b981 },
       { x: 3.8, z: 6.2, color: 0x06b6d4 },
@@ -146,6 +162,15 @@ export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) 
 
       // Constant precision laser sweep
       sweepMesh.rotation.z -= 0.045;
+
+      // Sonar wave expansion
+      sonarRings.forEach(sr => {
+        sr.progress += 0.008;
+        if (sr.progress > 1) sr.progress = 0;
+        const scale = 1 + sr.progress * 18;
+        sr.mesh.scale.set(scale, scale, 1);
+        sr.mat.opacity = Math.max(0, (1 - sr.progress) * 0.45);
+      });
 
       // Pulse and bob coordinate beacons
       beaconMeshes.forEach((mesh, idx) => {

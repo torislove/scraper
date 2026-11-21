@@ -2,12 +2,12 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 /**
- * ThreeRadarDish3D
- * Interactive 3D WebGL Holographic Radar Station
- * - Holographic wireframe radar dish & scanner rings
- * - 360-degree rotating laser sweep beam
- * - 3D pulsing coordinate beacons
- * - Mouse drag/tilt rotation for full 3D interactive feel
+ * ThreeRadarDish3D — Ultra-Precision Edition with Sonar Pulses
+ * - 360-degree Azimuth coordinate ticks (0°, 90°, 180°, 270°)
+ * - Expanding concentric sonar pulse rings
+ * - High-precision concentric range rings with distance markers
+ * - Mathematical target acquisition beacons with live pulse
+ * - Mouse drag & tilt with smooth inertial damping
  */
 export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) {
   const mountRef = useRef(null);
@@ -19,96 +19,132 @@ export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) 
     let width = container.clientWidth || 320;
     let height = container.clientHeight || 260;
 
-    // Scene, Camera, Renderer
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 14, 28);
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+    camera.position.set(0, 15, 27);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
-    renderer.setSize(width, height);
+    const renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
     container.appendChild(renderer.domElement);
 
-    // Group for mouse tilt
     const radarGroup = new THREE.Group();
     scene.add(radarGroup);
 
-    // 1. Concentric Holographic Radar Rings
-    const ringMaterials = [
-      new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.65 }),
-      new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.5 }),
-      new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.35 })
-    ];
+    // 1. Precision Concentric Distance Rings (4km, 8km, 12km)
+    const ringRadii = [4.2, 8.4, 12.6];
+    const ringColors = [0x10b981, 0x06b6d4, 0x3b82f6];
 
-    [4, 8, 12].forEach((radius, idx) => {
+    ringRadii.forEach((radius, idx) => {
       const circleGeo = new THREE.BufferGeometry();
       const points = [];
-      for (let i = 0; i <= 64; i++) {
-        const theta = (i / 64) * Math.PI * 2;
+      const segments = 96;
+      for (let i = 0; i <= segments; i++) {
+        const theta = (i / segments) * Math.PI * 2;
         points.push(new THREE.Vector3(Math.cos(theta) * radius, 0, Math.sin(theta) * radius));
       }
       circleGeo.setFromPoints(points);
-      const ringLine = new THREE.Line(circleGeo, ringMaterials[idx % ringMaterials.length]);
+      const ringLine = new THREE.Line(
+        circleGeo,
+        new THREE.LineBasicMaterial({ color: ringColors[idx], transparent: true, opacity: 0.55 - idx * 0.1 })
+      );
       radarGroup.add(ringLine);
     });
 
-    // Crosshairs
-    const crossHairGeo = new THREE.BufferGeometry();
-    crossHairGeo.setFromPoints([
-      new THREE.Vector3(-13, 0, 0), new THREE.Vector3(13, 0, 0),
-      new THREE.Vector3(0, 0, -13), new THREE.Vector3(0, 0, 13)
-    ]);
-    const crossHairMat = new THREE.LineBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.25 });
-    const crossHairs = new THREE.LineSegments(crossHairGeo, crossHairMat);
-    radarGroup.add(crossHairs);
+    // 2. 12 Precision Radial Azimuth Spokes (Every 30 degrees)
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2;
+      const spokeGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(Math.cos(angle) * 1.5, 0, Math.sin(angle) * 1.5),
+        new THREE.Vector3(Math.cos(angle) * 13.2, 0, Math.sin(angle) * 13.2)
+      ]);
+      const spokeMat = new THREE.LineBasicMaterial({
+        color: i % 3 === 0 ? 0x10b981 : 0x06b6d4,
+        transparent: true,
+        opacity: i % 3 === 0 ? 0.45 : 0.2
+      });
+      radarGroup.add(new THREE.Line(spokeGeo, spokeMat));
+    }
 
-    // 2. Rotating Sweeper Beam (Conic Sector)
-    const sweepGeo = new THREE.RingGeometry(0.2, 12.5, 32, 1, 0, Math.PI / 3);
+    // 3. Central Focal Reticle
+    const focalGeo = new THREE.RingGeometry(0.3, 0.65, 32);
+    const focalMat = new THREE.MeshBasicMaterial({ color: 0x10b981, side: THREE.DoubleSide });
+    const focalMesh = new THREE.Mesh(focalGeo, focalMat);
+    focalMesh.rotation.x = -Math.PI / 2;
+    radarGroup.add(focalMesh);
+
+    // 4. Expanding Sonar Wave Pulse Rings
+    const sonarRings = Array.from({ length: 3 }, (_, idx) => {
+      const geo = new THREE.RingGeometry(0.5, 0.7, 48);
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0x10b981,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      radarGroup.add(mesh);
+      return { mesh, mat, progress: idx * 0.33 };
+    });
+
+    // 5. Sweeper Beam Sector with Smooth Angular Falloff
+    const sweepGeo = new THREE.RingGeometry(0.65, 13.0, 48, 1, 0, Math.PI / 3.2);
     const sweepMat = new THREE.MeshBasicMaterial({
       color: 0x10b981,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.24,
       side: THREE.DoubleSide
     });
     const sweepMesh = new THREE.Mesh(sweepGeo, sweepMat);
     sweepMesh.rotation.x = -Math.PI / 2;
     radarGroup.add(sweepMesh);
 
-    // 3. 3D Lead Beacons (Glowing floating spheres)
-    const beaconGeo = new THREE.SphereGeometry(0.35, 12, 12);
-    const beaconMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
-    const beaconMatCyan = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
-    const beaconMatAmber = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
-
+    // 6. High-Precision Coordinate Target Beacons
     const beaconCoords = [
-      { x: -5, z: -4, mat: beaconMat },
-      { x: 3, z: 6, mat: beaconMatCyan },
-      { x: 7, z: -3, mat: beaconMatAmber },
-      { x: -6, z: 5, mat: beaconMat },
-      { x: 2, z: -7, mat: beaconMatCyan }
+      { x: -5.2, z: -4.1, color: 0x10b981 },
+      { x: 3.8, z: 6.2, color: 0x06b6d4 },
+      { x: 7.4, z: -3.5, color: 0xf59e0b },
+      { x: -6.8, z: 5.1, color: 0x10b981 },
+      { x: 2.1, z: -7.6, color: 0x06b6d4 }
     ];
 
+    const beaconGeo = new THREE.SphereGeometry(0.38, 16, 16);
     const beaconMeshes = beaconCoords.map(coord => {
-      const mesh = new THREE.Mesh(beaconGeo, coord.mat);
-      mesh.position.set(coord.x, 0.5, coord.z);
+      const mat = new THREE.MeshBasicMaterial({ color: coord.color });
+      const mesh = new THREE.Mesh(beaconGeo, mat);
+      mesh.position.set(coord.x, 0.45, coord.z);
       radarGroup.add(mesh);
+
+      // Vertical coordinate tether line
+      const tetherGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(coord.x, 0, coord.z),
+        new THREE.Vector3(coord.x, 0.45, coord.z)
+      ]);
+      const tetherMat = new THREE.LineBasicMaterial({ color: coord.color, transparent: true, opacity: 0.6 });
+      radarGroup.add(new THREE.Line(tetherGeo, tetherMat));
+
       return mesh;
     });
 
-    // Mouse tilt interaction
+    // Inertial Mouse Tilt
     let mouseX = 0;
     let mouseY = 0;
-    const handleMouseMove = (e) => {
+    const onMouseMove = (e) => {
       const rect = container.getBoundingClientRect();
       const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const y = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
       mouseX = x * 0.45;
       mouseY = y * 0.35;
     };
-    container.addEventListener('mousemove', handleMouseMove, { passive: true });
+    container.addEventListener('mousemove', onMouseMove, { passive: true });
 
-    const handleResize = () => {
+    const onResize = () => {
       if (!container) return;
       width = container.clientWidth || 320;
       height = container.clientHeight || 260;
@@ -116,36 +152,47 @@ export default function ThreeRadarDish3D({ style = {}, activeScenario = null }) 
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', onResize);
 
-    // Animation Loop
-    let animationFrameId;
+    let animId;
     let time = 0;
+
     const animate = () => {
       time += 0.035;
 
-      // Rotate laser sweep beam
+      // Constant precision laser sweep
       sweepMesh.rotation.z -= 0.045;
 
-      // Bob beacons up and down
-      beaconMeshes.forEach((mesh, idx) => {
-        mesh.position.y = 0.5 + Math.sin(time * 2 + idx) * 0.25;
+      // Sonar wave expansion
+      sonarRings.forEach(sr => {
+        sr.progress += 0.008;
+        if (sr.progress > 1) sr.progress = 0;
+        const scale = 1 + sr.progress * 18;
+        sr.mesh.scale.set(scale, scale, 1);
+        sr.mat.opacity = Math.max(0, (1 - sr.progress) * 0.45);
       });
 
-      // Smooth mouse tilt
+      // Pulse and bob coordinate beacons
+      beaconMeshes.forEach((mesh, idx) => {
+        mesh.position.y = 0.45 + Math.sin(time * 2.5 + idx * 1.2) * 0.22;
+        const s = 1 + Math.sin(time * 3 + idx) * 0.18;
+        mesh.scale.set(s, s, s);
+      });
+
+      // Smooth inertial tilt damping
       radarGroup.rotation.y += (mouseX - radarGroup.rotation.y) * 0.06;
-      radarGroup.rotation.x += (mouseY + 0.35 - radarGroup.rotation.x) * 0.06;
+      radarGroup.rotation.x += (mouseY + 0.38 - radarGroup.rotation.x) * 0.06;
 
       renderer.render(scene, camera);
-      animationFrameId = requestAnimationFrame(animate);
+      animId = requestAnimationFrame(animate);
     };
 
     animate();
 
     return () => {
-      cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
-      container.removeEventListener('mousemove', handleMouseMove);
+      cancelAnimationFrame(animId);
+      window.removeEventListener('resize', onResize);
+      container.removeEventListener('mousemove', onMouseMove);
       if (renderer.domElement && container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
       }

@@ -15,8 +15,9 @@ export default function LandingNavbar() {
 
   const navLinks = [
     { to: '/', label: 'Overview', end: true },
-    { to: '/architecture', label: '22 Swarm Engines' },
-    { to: '/global-coverage', label: '11 Sovereign Markets' },
+    { to: '/solutions', label: "Who It's For" },
+    { to: '/architecture', label: '22 Engines' },
+    { to: '/global-coverage', label: '11 Nations & Cities' },
     { to: '/hardware', label: 'Hardware RAM' },
     { to: '/pricing', label: 'Pricing' }
   ];
@@ -30,7 +31,7 @@ export default function LandingNavbar() {
         </NavLink>
 
         {/* Center: Clean Nav Links with Active State */}
-        <nav style={{ display: 'flex', alignItems: 'center', gap: 6 }} aria-label="Main Navigation">
+        <nav style={{ display: 'flex', alignItems: 'center', gap: 5 }} aria-label="Main Navigation">
           {navLinks.map(item => (
             <NavLink
               key={item.to}
@@ -38,10 +39,10 @@ export default function LandingNavbar() {
               end={item.end}
               style={({ isActive }) => ({
                 textDecoration: 'none',
-                fontSize: 12.5,
+                fontSize: 12,
                 fontWeight: isActive ? 850 : 650,
                 color: isActive ? '#059669' : '#475569',
-                padding: '6px 14px',
+                padding: '5px 12px',
                 borderRadius: 999,
                 background: isActive ? '#ecfdf5' : 'transparent',
                 border: isActive ? '1px solid #a7f3d0' : '1px solid transparent',
@@ -62,17 +63,17 @@ export default function LandingNavbar() {
               background: 'transparent',
               border: 'none',
               color: '#475569',
-              fontSize: 12.5,
+              fontSize: 12,
               fontWeight: 700,
-              padding: '6px 14px',
+              padding: '5px 12px',
               borderRadius: 10,
               cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6
+              gap: 5
             }}
           >
-            <LogIn size={14} />
+            <LogIn size={13} />
             <span>Sign In</span>
           </button>
 

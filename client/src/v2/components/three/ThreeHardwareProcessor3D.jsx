@@ -2,10 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
 /**
- * ThreeHardwareProcessor3D — Ultra-Precision Silicon Edition
+ * ThreeHardwareProcessor3D — Ultra-Precision Silicon Edition with Dynamic Bus Speed
  * - 3D isometric silicon processor wafer with metallic circuit bus traces
  * - Dynamic 3D RAM memory banks lighting up according to simulated RAM Gb (8 to 64 GB)
- * - Animated kinetic light packets flowing across concurrency bus lines
+ * - Animated kinetic light packets flowing across concurrency bus lines with dynamic velocity
  * - Real-time memory lane calculation and bus frequency telemetry
  */
 export default function ThreeHardwareProcessor3D({ style = {}, simulatedRamGb = 16, parallelLanes = 8 }) {
@@ -94,7 +94,8 @@ export default function ThreeHardwareProcessor3D({ style = {}, simulatedRamGb = 
       boardGroup.add(new THREE.Line(traceGeo, traceMat));
     }
 
-    // 4. Kinetic Data Packets (Glowing traveling particles)
+    // 4. Kinetic Data Packets (Speed scales with RAM)
+    const baseSpeed = 0.012 + (parallelLanes / 16) * 0.024;
     const packetGeo = new THREE.SphereGeometry(0.22, 8, 8);
     const packetMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
     const packets = Array.from({ length: 14 }, (_, idx) => {
@@ -103,7 +104,7 @@ export default function ThreeHardwareProcessor3D({ style = {}, simulatedRamGb = 
       return {
         mesh: p,
         progress: (idx / 14),
-        speed: 0.018 + Math.random() * 0.01,
+        speed: baseSpeed + Math.random() * 0.008,
         isLeft: idx % 2 === 0,
         zTarget: -4.6 + (idx % 8) * 1.32
       };

@@ -6,14 +6,16 @@ import { useExtension } from '../context/ExtensionContext';
 import { detectDeviceHardware } from '../utils/deviceRamEngine';
 import LiquidButton3D from '../components/LiquidButton3D';
 import ThreeRadarDish3D from '../components/three/ThreeRadarDish3D';
+import RollingCounter from '../components/RollingCounter';
 
 const DEMO_SCENARIOS = [
   {
     id: 'tenali-turmeric',
-    pill: '🇮🇳 Turmeric · Tenali Mandals',
+    pill: '🇮🇳 Tenali & Guntur (Tier-2 AP)',
     title: 'Tenali Mandals & Guntur AP',
-    query: 'Wholesale Turmeric Suppliers in Tenali Guntur',
-    count: '384 verified leads',
+    query: 'Wholesale Turmeric Suppliers in Tenali Mandals AP',
+    countNum: 384,
+    countLabel: '384 verified leads',
     leads: [
       { name: 'Minar Traders & Turmeric Millers', area: 'Gopal Reddy St, Tenali · PIN 522201', rating: '5.0', reviews: 27, phone: '+91 98856 03754', tag: 'Direct WhatsApp' },
       { name: 'Sri Balaji Turmeric Processing Co', area: 'Burripalem Rd, Tenali · PIN 522201', rating: '5.0', reviews: 14, phone: '+91 94906 42816', tag: 'High Intent' }
@@ -21,10 +23,11 @@ const DEMO_SCENARIOS = [
   },
   {
     id: 'hyderabad-it',
-    pill: '🇮🇳 Tech · Hyderabad',
+    pill: '🇮🇳 Hyderabad Tech Metro',
     title: 'HITEC City & Gachibowli, Hyderabad',
     query: 'Software companies in HITEC City Hyderabad',
-    count: '1,194 leads',
+    countNum: 1194,
+    countLabel: '1,194 leads',
     leads: [
       { name: 'CyberTowers Cloud Systems', area: 'HITEC City, Hyderabad · PIN 500081', rating: '4.9', reviews: 318, phone: '+91 98490 12044', tag: 'Direct WhatsApp' },
       { name: 'Deccan Digital Solutions', area: 'Madhapur, Hyderabad · PIN 500081', rating: '4.8', reviews: 214, phone: '+91 94401 88921', tag: 'Enterprise Web' }
@@ -32,10 +35,11 @@ const DEMO_SCENARIOS = [
   },
   {
     id: 'dallas-hvac',
-    pill: '🇺🇸 HVAC · Dallas TX',
+    pill: '🇺🇸 Dallas & Collin TX',
     title: 'Harris & Dallas Counties, TX',
     query: 'HVAC Contractors in Dallas County TX',
-    count: '842 leads',
+    countNum: 842,
+    countLabel: '842 leads',
     leads: [
       { name: 'Lone Star Air & Heating Co.', area: 'Uptown Dallas, TX · ZIP 75201', rating: '4.9', reviews: 420, phone: '+1 (214) 555-0192', tag: 'Commercial' },
       { name: 'Metroplex Climate Solutions', area: 'Harris County, TX · ZIP 77002', rating: '4.8', reviews: 265, phone: '+1 (469) 555-4418', tag: 'Emergency' }
@@ -43,10 +47,11 @@ const DEMO_SCENARIOS = [
   },
   {
     id: 'munich-cnc',
-    pill: '🇩🇪 Precision · Munich',
+    pill: '🇩🇪 Munich & Garching B2B',
     title: 'Landkreis München & Oberbayern',
     query: 'Engineering Firms in Landkreis München',
-    count: '528 leads',
+    countNum: 528,
+    countLabel: '528 leads',
     leads: [
       { name: 'Bavaria Präzisionstechnik GmbH', area: 'Garching bei München · PLZ 85748', rating: '4.9', reviews: 164, phone: '+49 89 3290 210', tag: 'CNC Aerospace' },
       { name: 'München Automation & Robotik', area: 'Unterföhring · PLZ 85774', rating: '4.8', reviews: 98, phone: '+49 89 3290 740', tag: 'Robotics' }
@@ -88,27 +93,29 @@ export default function LandingHome() {
       >
         <span className="lx-highlight-tag">
           <span className="lx-status-dot-pulse" />
-          <span>⚡ 100% FREE · NO MONTHLY API BILLS · RUNS DIRECTLY ON YOUR MACHINE</span>
+          <span>⚡ 40,000+ CITIES &amp; TOWNS · NOMINAL ENGINE FEES ONLY · ZERO CLOUD RAM MARKUP</span>
         </span>
       </motion.div>
 
       {/* 2. Kinetic Typography Headline & Plain-English Explainer */}
       <div style={{ maxWidth: 880 }}>
         <h1 className="lx-kinetic-title">
-          Find Any Local Business.{' '}
-          <span className="lx-gradient-text">Zero API Bills Ever.</span>
+          Every Metro City. Every Mandal.{' '}
+          <span className="lx-gradient-text">Full Local Depth.</span>
         </h1>
 
         <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
           Extract verified phone numbers, direct WhatsApp contacts, and business profiles across{' '}
-          <strong style={{ color: '#047857', fontWeight: 800 }}>650,000+ towns and villages</strong> in India and 10 global nations —
-          with 100% machine privacy and zero monthly subscription bills.
+          <strong style={{ color: '#047857', fontWeight: 800 }}>
+            40,000+ cities &amp; towns, 6,000+ mandals, and <RollingCounter target={650000} suffix="+" /> local units
+          </strong> in India, US, UK, and 8 global nations —
+          paying only nominal engine fees with zero bloated SaaS database markups.
         </p>
       </div>
 
-      {/* 3. Interactive 3D WebGL Satellite Radar Cockpit */}
+      {/* 3. Interactive 3D WebGL Satellite Radar Cockpit with Glowing Border-Beam */}
       <motion.div
-        className="lx-compact-cockpit"
+        className="lx-compact-cockpit lx-border-beam-box"
         initial={{ opacity: 0, scale: 0.96 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.45, delay: 0.1 }}
@@ -123,7 +130,7 @@ export default function LandingHome() {
             </div>
             <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Radio size={14} color="#007aff" />
-              <span>3D WebGL Command Radar v2.4</span>
+              <span>3D WebGL Radar · Multi-City Territory Sweeper v2.4</span>
             </span>
           </div>
 
@@ -152,69 +159,79 @@ export default function LandingHome() {
           </div>
         </div>
 
-        {/* Cockpit Body: Left 3D WebGL Radar + Right Live Telemetry */}
+        {/* Cockpit Body: Radar Canvas + Live Streamed Lead Cards */}
         <div className="lx-compact-body">
-          {/* Left: Interactive 3D Three.js Radar Dish */}
+          {/* Left Sub-Column: 3D Radar Dish */}
           <div className="lx-radar-canvas-box">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ textAlign: 'left' }}>
-                <strong style={{ fontSize: 13, color: '#0f172a' }}>{activeScenario.title}</strong>
-                <div style={{ fontSize: 11, color: '#64748b' }}>&ldquo;{activeScenario.query}&rdquo;</div>
-              </div>
-              <span style={{ fontSize: 11, fontWeight: 800, color: '#047857', background: '#ecfdf5', padding: '3px 8px', borderRadius: 999 }}>
-                {activeScenario.count}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className="lx-precision-telemetry">AZIMUTH BEACON LOCK</span>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>
+                {activeScenario.title}
               </span>
             </div>
 
-            {/* 3D WebGL Canvas */}
-            <div style={{ height: 165, width: '100%', position: 'relative' }}>
-              <ThreeRadarDish3D activeScenario={activeScenario.id} />
+            <div style={{ height: 160, width: '100%', position: 'relative' }}>
+              <ThreeRadarDish3D />
+              <div style={{ position: 'absolute', bottom: 2, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b' }}>
+                <span>Radar Sweep: 360° Multi-City</span>
+                <span style={{ color: '#059669', fontWeight: 800 }}>&lt;300ms Ping</span>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b' }}>
-              <span>🖱️ Drag to rotate 3D radar</span>
-              <span style={{ color: '#10b981', fontWeight: 800 }}>● Live Micro-Zone Sweeper</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#475569', borderTop: '1px solid #f1f5f9', paddingTop: 6 }}>
+              <span>Local System RAM: <strong>{hardware.ramGb} GB</strong></span>
+              <span style={{ color: '#047857', fontWeight: 800 }}>
+                <RollingCounter target={activeScenario.countNum} /> Leads Extracted
+              </span>
             </div>
           </div>
 
-          {/* Right: Live Telemetry Stream */}
-          <div style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', textAlign: 'left', background: '#ffffff' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 850, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: '0.05em' }}>
-              Verified Decision-Maker Telemetry
+          {/* Right Sub-Column: Real-time Live Extracted Lead Cards */}
+          <div style={{ padding: '12px 14px', textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: '#0f172a' }}>
+                  City Search: &ldquo;{activeScenario.query}&rdquo;
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '2px 7px', borderRadius: 6 }}>
+                  LIVE REAL-TIME
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {activeScenario.leads.map((ld, i) => (
+                  <div
+                    key={ld.name + i}
+                    style={{
+                      padding: '7px 10px',
+                      borderRadius: 9,
+                      background: '#ffffff',
+                      border: '1px solid #e2e8f0',
+                      boxShadow: '0 1px 3px rgba(15, 23, 42, 0.04)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 8
+                    }}
+                  >
+                    <div>
+                      <strong style={{ fontSize: 11.5, color: '#0f172a', display: 'block' }}>{ld.name}</strong>
+                      <span style={{ fontSize: 10, color: '#64748b' }}>{ld.area}</span>
+                    </div>
+                    <div style={{ textAlign: 'right', flex: 'none' }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 800, color: '#059669', display: 'block' }}>{ld.phone}</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: '#0284c7', background: '#f0f9ff', padding: '1px 5px', borderRadius: 4 }}>
+                        {ld.tag}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '6px 0' }}>
-              {activeScenario.leads.map((ld, i) => (
-                <div
-                  key={ld.name + i}
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: 12,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 10
-                  }}
-                >
-                  <div>
-                    <strong style={{ fontSize: 12.5, color: '#0f172a', display: 'block' }}>{ld.name}</strong>
-                    <span style={{ fontSize: 11, color: '#64748b' }}>{ld.area}</span>
-                  </div>
-                  <div style={{ textAlign: 'right', flex: 'none' }}>
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: '#059669', display: 'block' }}>{ld.phone}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: '#0284c7', background: '#f0f9ff', padding: '2px 6px', borderRadius: 6 }}>
-                      {ld.tag}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ShieldCheck size={13} color="#10b981" />
-              <span>Direct WhatsApp verified · Dead lines stripped before export</span>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
+              <span>Deduplication: <strong>100% Zero Duplicates</strong></span>
+              <span>Export: <strong>Instant Excel .xlsx</strong></span>
             </div>
           </div>
         </div>
@@ -229,7 +246,7 @@ export default function LandingHome() {
           pulse
           onClick={handleLaunch}
         >
-          Launch Command Center Free
+          Launch Dedicated Engine Sweep
         </LiquidButton3D>
 
         <LiquidButton3D
@@ -246,16 +263,16 @@ export default function LandingHome() {
       <div className="lx-value-strip">
         <span className="lx-value-chip is-highlight">
           <CheckCircle2 size={13} color="#059669" />
-          <span>Zero Monthly API Bills</span>
+          <span>40,000+ Cities &amp; Micro-Zone Mandals</span>
         </span>
         <span className="lx-value-chip">
-          <span>🇮🇳 619,287 Indian Villages</span>
+          <span>🇮🇳 7,935 Indian Cities &amp; 6k+ Mandals</span>
         </span>
         <span className="lx-value-chip">
-          <span>🇺🇸 3,143 US Counties</span>
+          <span>🇺🇸 19,495 US Cities &amp; 3,143 Counties</span>
         </span>
         <span className="lx-value-chip is-highlight">
-          <span>⚡ &lt;300ms Excel &amp; vCard Export</span>
+          <span>⚡ Nominal Engine Pricing Only</span>
         </span>
       </div>
     </div>

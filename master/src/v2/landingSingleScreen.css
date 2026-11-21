@@ -1,7 +1,16 @@
 /* ============================================================================
-   LANDING SINGLE-SCREEN (100VH) & 3D LIQUID SYSTEM
-   Ultra-modern, center-aligned, immersive single-viewport presentation
+   LANDING SINGLE-SCREEN (100VH) & 3D LIQUID SYSTEM — ADVANCED KINETIC EDITION
+   Pixel-perfect center alignment, 3D perspective depth choreography,
+   cursor-tracking liquid buttons, and laser border-beams.
    ============================================================================ */
+
+/* ── 0. Subpixel Precision & High-DPI Font Smoothing ──────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
 
 /* ── 1. Animated Liquid Background & Plasma Orbs ──────────────────────────── */
 .lx-animated-bg-root {
@@ -17,9 +26,10 @@
   position: absolute;
   border-radius: 50%;
   filter: blur(80px);
-  opacity: 0.6;
+  opacity: 0.65;
   mix-blend-mode: multiply;
   pointer-events: none;
+  will-change: transform;
   animation: floatOrb 18s ease-in-out infinite alternate;
 }
 
@@ -28,7 +38,7 @@
   height: 520px;
   top: -120px;
   left: -80px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.28) 0%, rgba(6, 182, 212, 0.18) 60%, transparent 80%);
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(6, 182, 212, 0.18) 60%, transparent 80%);
   animation-duration: 22s;
 }
 
@@ -37,7 +47,7 @@
   height: 580px;
   top: 10%;
   right: -140px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.25) 0%, rgba(37, 99, 235, 0.16) 60%, transparent 80%);
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.28) 0%, rgba(37, 99, 235, 0.18) 60%, transparent 80%);
   animation-duration: 26s;
   animation-delay: -5s;
 }
@@ -47,7 +57,7 @@
   height: 480px;
   bottom: -100px;
   left: 25%;
-  background: radial-gradient(circle, rgba(245, 158, 11, 0.18) 0%, rgba(16, 185, 129, 0.14) 60%, transparent 80%);
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.2) 0%, rgba(16, 185, 129, 0.15) 60%, transparent 80%);
   animation-duration: 20s;
   animation-delay: -10s;
 }
@@ -57,15 +67,15 @@
   height: 440px;
   top: 45%;
   left: 48%;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(6, 182, 212, 0.12) 60%, transparent 80%);
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.18) 0%, rgba(6, 182, 212, 0.14) 60%, transparent 80%);
   animation-duration: 24s;
   animation-delay: -14s;
 }
 
 @keyframes floatOrb {
-  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
-  50% { transform: translate(60px, 45px) scale(1.12) rotate(45deg); }
-  100% { transform: translate(-45px, 70px) scale(0.92) rotate(-30deg); }
+  0% { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate3d(55px, 40px, 0) scale(1.1) rotate(35deg); }
+  100% { transform: translate3d(-40px, 65px, 0) scale(0.94) rotate(-25deg); }
 }
 
 .lx-blueprint-grid {
@@ -75,8 +85,8 @@
     linear-gradient(to right, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
   background-size: 32px 32px;
-  mask-image: radial-gradient(circle at 50% 45%, #000 25%, transparent 75%);
-  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 25%, transparent 75%);
+  mask-image: radial-gradient(circle at 50% 45%, #000 28%, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 28%, transparent 78%);
 }
 
 /* ── 2. Tactile 3D Liquid Buttons ─────────────────────────────────────────── */
@@ -104,7 +114,7 @@
 }
 
 @keyframes liquidPulseRing {
-  0% { transform: scale(0.95); opacity: 0.9; }
+  0% { transform: scale(0.96); opacity: 0.9; }
   60% { transform: scale(1.14); opacity: 0; }
   100% { transform: scale(1.18); opacity: 0; }
 }
@@ -153,10 +163,10 @@
   height: 60px;
   flex: none;
   z-index: 50;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.84);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.92);
   box-shadow: 0 4px 20px -8px rgba(15, 23, 42, 0.08);
   display: flex;
   align-items: center;
@@ -171,7 +181,7 @@
   gap: 16px;
 }
 
-/* Center Stage: exactly occupies calc(100vh - 116px) */
+/* Center Stage: exactly occupies calc(100vh - 116px) with 3D PERSPECTIVE DEPTH */
 .lx-single-stage {
   flex: 1 1 0;
   min-height: 0;
@@ -182,7 +192,9 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 8px 16px;
+  padding: 6px 16px;
+  perspective: 1400px;
+  transform-style: preserve-3d;
 }
 
 .lx-screen-container {
@@ -196,7 +208,7 @@
   justify-content: space-evenly;
   text-align: center;
   position: relative;
-  padding: 6px 0;
+  padding: 4px 0;
 }
 
 /* ── 4. Bottom Dock Controller (56px) ─────────────────────────────────────── */
@@ -207,7 +219,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.78);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   border-top: 1.5px solid rgba(255, 255, 255, 0.95);
@@ -225,9 +237,9 @@
 .lx-dock-pills {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(241, 245, 249, 0.85);
-  border: 1px solid rgba(203, 213, 225, 0.6);
+  gap: 6px;
+  background: rgba(241, 245, 249, 0.88);
+  border: 1px solid rgba(203, 213, 225, 0.65);
   padding: 4px;
   border-radius: 999px;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
@@ -260,8 +272,8 @@
   inset: 0;
   border-radius: 999px;
   background: #ffffff;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15), 0 1px 2px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.18), 0 1px 2px rgba(15, 23, 42, 0.06);
   z-index: 0;
 }
 
@@ -273,7 +285,7 @@
   align-items: center;
   justify-content: center;
   background: #ffffff;
-  border: 1.5px solid rgba(226, 232, 240, 0.9);
+  border: 1.5px solid rgba(226, 232, 240, 0.95);
   color: #334155;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
   cursor: pointer;
@@ -295,7 +307,7 @@
 /* ── 5. Kinetic Typography & Highlight Badges ─────────────────────────────── */
 .lx-kinetic-title {
   font-family: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
-  font-size: clamp(26px, 3.2vw, 46px);
+  font-size: clamp(24px, 3.1vw, 44px);
   font-weight: 850;
   line-height: 1.08;
   letter-spacing: -0.035em;
@@ -321,16 +333,16 @@
 }
 
 .lx-kinetic-subcopy {
-  font-size: clamp(13px, 1.25vw, 15.5px);
+  font-size: clamp(12.5px, 1.2vw, 15px);
   color: #475569;
-  line-height: 1.5;
+  line-height: 1.48;
   max-width: 68ch;
   margin: 0;
   font-weight: 500;
   text-wrap: balance;
 }
 
-/* High-Impact Highlight Badges */
+/* High-Precision Highlight Badges */
 .lx-highlight-tag {
   display: inline-flex;
   align-items: center;
@@ -338,13 +350,14 @@
   padding: 4px 13px;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(236, 253, 245, 0.95), rgba(207, 250, 254, 0.95));
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.38);
   box-shadow: 0 2px 10px rgba(16, 185, 129, 0.12), inset 0 1px 0 #ffffff;
   color: #047857;
   font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-family: "Space Grotesk", sans-serif;
 }
 
 .lx-status-dot-pulse {
@@ -368,7 +381,7 @@
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
 }
 
 .lx-value-chip {
@@ -377,7 +390,7 @@
   gap: 6px;
   padding: 4px 11px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.88);
   border: 1px solid rgba(226, 232, 240, 0.95);
   font-size: 11.5px;
   font-weight: 750;
@@ -391,11 +404,45 @@
   color: #065f46;
 }
 
-/* ── 6. Compact 3D Cockpit Radar (Screen 1) ───────────────────────────────── */
+/* ── 6. Glowing Laser Border-Beam Ray ──────────────────────────────────────── */
+.lx-border-beam-box {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.lx-border-beam-box::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--border-angle, 0deg), transparent 0deg, #10b981 90deg, #06b6d4 180deg, transparent 270deg);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderBeamSpin 6s linear infinite;
+  opacity: 0.75;
+}
+
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes borderBeamSpin {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+
+/* ── 7. Ultra-Precision 3D Radar Cockpit (Screen 1) ───────────────────────── */
 .lx-compact-cockpit {
   width: 100%;
   max-width: 980px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(28px);
   -webkit-backdrop-filter: blur(28px);
   border: 1.5px solid rgba(255, 255, 255, 0.95);
@@ -403,7 +450,7 @@
   box-shadow:
     0 24px 50px -12px rgba(15, 23, 42, 0.12),
     0 1px 0 rgba(255, 255, 255, 0.8) inset,
-    0 0 0 1px rgba(226, 232, 240, 0.8);
+    0 0 0 1px rgba(226, 232, 240, 0.85);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -431,7 +478,7 @@
 }
 
 .lx-radar-canvas-box {
-  padding: 14px;
+  padding: 12px 14px;
   background: radial-gradient(circle at center, #ffffff 30%, #f8fafc 100%);
   border-right: 1px solid #f1f5f9;
   display: flex;
@@ -440,43 +487,39 @@
   position: relative;
 }
 
-.lx-rotating-radar-sweep {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 220px;
-  height: 220px;
-  margin-top: -110px;
-  margin-left: -110px;
-  border-radius: 50%;
-  pointer-events: none;
-  background: conic-gradient(from 0deg, rgba(16, 185, 129, 0.35) 0deg, rgba(16, 185, 129, 0) 65deg, transparent 65deg);
-  animation: radarLaserSpin 4s linear infinite;
+.lx-precision-telemetry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 7px;
+  border-radius: 6px;
 }
 
-@keyframes radarLaserSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-/* ── 7. Screen 2: 22-Engine Hexagon Hub ───────────────────────────────────── */
+/* ── 8. Screen 2: 22-Engine Hexagon Hub ───────────────────────────────────── */
 .lx-engine-hub-stage {
   width: 100%;
   max-width: 980px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   border-radius: 20px;
-  padding: 16px 20px;
+  padding: 14px 18px;
   box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .lx-engine-categories-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  gap: 8px;
 }
 
 @media (max-width: 768px) {
@@ -486,8 +529,8 @@
 }
 
 .lx-engine-pod-card {
-  padding: 10px 14px;
-  border-radius: 14px;
+  padding: 8px 12px;
+  border-radius: 12px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
   text-align: left;
@@ -506,25 +549,66 @@
   box-shadow: 0 8px 20px -6px rgba(16, 185, 129, 0.18);
 }
 
-/* ── 8. Screen 3: Global Sovereign 3D Flags Stage ─────────────────────────── */
+/* ── 9. Screen 3: Global Sovereign 3D Flags Stage ─────────────────────────── */
 .lx-sovereign-stage {
   width: 100%;
   max-width: 980px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   border-radius: 20px;
-  padding: 16px 20px;
+  padding: 14px 18px;
   box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Auto-tour dynamic laser progress track spanning top of stage */
+.lx-tour-progress-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(16, 185, 129, 0.12);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.lx-tour-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+}
+
+.lx-chip-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  display: inline-block;
+  animation: chipLivePulse 1.2s infinite ease-in-out;
+}
+
+@keyframes chipLivePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.6;
+  }
 }
 
 .lx-flags-orbit-strip {
   display: flex;
-  gap: 8px;
+  gap: 7px;
   overflow-x: auto;
-  padding: 4px 2px 8px;
+  padding: 4px 2px 6px;
   scrollbar-width: thin;
 }
 
@@ -532,53 +616,60 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 7px;
+  padding: 5px 12px;
   border-radius: 999px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #334155;
-  transition: all 0.16s ease;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
-.lx-flag-orbit-chip:hover,
+.lx-flag-orbit-chip:hover {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+  color: #047857;
+  transform: translateY(-1px);
+}
+
 .lx-flag-orbit-chip.is-active {
   border-color: #10b981;
-  background: #ecfdf5;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
   color: #065f46;
-  transform: scale(1.04);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.18);
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.22), 0 0 0 1.5px rgba(16, 185, 129, 0.25);
 }
 
-/* ── 9. Screen 4: Hardware RAM Lanes Cockpit ──────────────────────────────── */
+/* ── 10. Screen 4: Hardware RAM Lanes Cockpit ─────────────────────────────── */
 .lx-hardware-stage {
   width: 100%;
   max-width: 980px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   border-radius: 20px;
-  padding: 18px 22px;
+  padding: 14px 20px;
   box-shadow: 0 20px 48px -12px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .lx-ram-lanes-track {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
-  gap: 8px;
-  padding: 12px;
-  border-radius: 14px;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 12px;
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
 }
 
 .lx-ram-lane-pipe {
-  height: 48px;
+  height: 42px;
   border-radius: 8px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -588,8 +679,9 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
+  font-family: "JetBrains Mono", monospace;
   color: #64748b;
 }
 

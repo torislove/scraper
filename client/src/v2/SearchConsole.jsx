@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, Check, Clock, Cpu, FolderOpen, Layers, Loader2, MapPin, Search,
-  Sparkles, Square, X, Zap
+  ArrowRight, Check, Clock, Cpu, FolderOpen, Globe, Layers, Loader2, MapPin, Phone, Search,
+  Shield, Sparkles, Square, Tag, X, Zap
 } from 'lucide-react';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
-import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER } from './data/searchExamples';
+import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER, industryClustersFor } from './data/searchExamples';
 import {
   detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
 } from './utils/deviceRamEngine';
@@ -179,12 +179,17 @@ function useFastSuggestions(query, country, onResolve) {
 
 function SearchConsole({
   country = 'IN',
+  onCountrySelect,
   value = '',
   onChange,
   category = '',
   location = '',
   onCategoryChange,
   onLocationChange,
+  strategy = 'balanced',
+  onStrategyChange,
+  form = {},
+  onToggle,
   onDeploy,
   onStop,
   busy = false,
@@ -265,6 +270,20 @@ function SearchConsole({
     }) || null;
   }, [draft, runs]);
 
+  const industryClusters = useMemo(() => industryClustersFor(country), [country]);
+
+  // Auto-sync power directives if user typed directives into the query
+  useEffect(() => {
+    if (response?.directives) {
+      if (response.directives.phonesOnly && !form?.phonesOnly) {
+        onToggle?.('phonesOnly');
+      }
+      if (response.directives.websiteOnly && !form?.websiteOnly) {
+        onToggle?.('websiteOnly');
+      }
+    }
+  }, [response?.directives, form?.phonesOnly, form?.websiteOnly, onToggle]);
+
   const groups = useMemo(() => {
     if (draft.trim().length < 2) {
       const out = [];
@@ -309,9 +328,23 @@ function SearchConsole({
       out.push({ title: 'Matching Places', icon: MapPin, items: locations.slice(0, 6) });
     }
     return out;
-  }, [response, draft, recentSearches]);
+  }, [response, draft, recentSearches, examples]);
 
   const flatItems = useMemo(() => groups.flatMap(g => g.items), [groups]);
+
+  const ghostText = useMemo(() => {
+    if (!draft || draft.trim().length < 2 || !open) return '';
+    const cleanDraft = draft.trim();
+    const topSuggestion = flatItems[0]?.label || flatItems[0]?.value || response?.query || '';
+    if (
+      topSuggestion &&
+      topSuggestion.toLowerCase().startsWith(cleanDraft.toLowerCase()) &&
+      topSuggestion.length > cleanDraft.length
+    ) {
+      return topSuggestion.slice(cleanDraft.length);
+    }
+    return '';
+  }, [draft, open, flatItems, response]);
 
   useEffect(() => {
     setActiveIdx(-1);
@@ -416,6 +449,29 @@ function SearchConsole({
   }, [draft, parsedCategory, parsedLocation, category, location, country, onChange, onCategoryChange, onLocationChange, commitAndDeploy]);
 
   const onKeyDown = useCallback((event) => {
+    // 1. Sovereign country switch on Tab when mismatch detected
+    if (event.key === 'Tab' && response?.detectedCountryMismatch && onCountrySelect && activeIdx < 0) {
+      event.preventDefault();
+      onCountrySelect(response.detectedCountryMismatch.detectedCountry);
+      return;
+    }
+    // 2. Ghost autocomplete on Tab or RightArrow at end of input
+    if (event.key === 'Tab' && ghostText) {
+      event.preventDefault();
+      const completed = draft + ghostText;
+      setDraft(completed);
+      lastExternalRef.current = completed;
+      onChange?.(completed);
+      return;
+    }
+    if (event.key === 'ArrowRight' && inputRef.current?.selectionStart === draft.length && ghostText) {
+      event.preventDefault();
+      const completed = draft + ghostText;
+      setDraft(completed);
+      lastExternalRef.current = completed;
+      onChange?.(completed);
+      return;
+    }
     if (event.key === 'Tab' && open && flatItems.length > 0) {
       event.preventDefault();
       pickSuggestion(flatItems[activeIdx >= 0 ? activeIdx : 0]);
@@ -450,7 +506,7 @@ function SearchConsole({
       setOpen(false);
       setActiveIdx(-1);
     }
-  }, [open, flatItems, activeIdx, pickSuggestion, commitAndDeploy]);
+  }, [open, flatItems, activeIdx, ghostText, draft, response, onCountrySelect, pickSuggestion, commitAndDeploy, onChange]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -484,28 +540,63 @@ function SearchConsole({
   return (
     <section ref={wrapRef} className={cx('v2-console', (running || compact) && 'is-compact')}>
       <div className="v2-console-field" style={{ position: 'relative' }}>
-        <div className={cx('v2-console-bar', open && flatItems.length > 0 && 'is-open')}>
+        <div className={cx('v2-console-bar', open && (flatItems.length > 0 || !draft.trim() || response?.detectedCountryMismatch) && 'is-open')}>
           <span className="v2-console-glyph"><Search size={20} /></span>
-          <input
-            ref={inputRef}
-            id="cmd-console-query"
-            className="v2-console-input"
-            value={draft}
-            onChange={e => handleInput(e.target.value)}
-            onFocus={() => {
-              focusedRef.current = true;
-              setOpen(true);
-            }}
-            onBlur={() => {
-              setTimeout(() => { focusedRef.current = false; }, 180);
-            }}
-            onKeyDown={onKeyDown}
-            placeholder={animatedPlaceholder || `Type service in place — e.g. ${examples[0] || 'Computer shops in Hyderabad'}`}
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck="false"
-          />
+          
+          <div className="v2-console-input-wrap">
+            {parsedCategory && parsedLocation && draft.includes(parsedLocation) && (
+              <span className="v2-entity-pill is-location" title="Current location target">
+                <MapPin size={11} />
+                <span>{parsedLocation}</span>
+                <button
+                  type="button"
+                  className="v2-entity-pill-remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newText = parsedCategory;
+                    setDraft(newText);
+                    lastExternalRef.current = newText;
+                    onChange?.(newText);
+                    onLocationChange?.('');
+                    inputRef.current?.focus();
+                  }}
+                  title="Remove location filter"
+                >
+                  <X size={10} />
+                </button>
+              </span>
+            )}
+
+            <div className="v2-console-input-box">
+              <input
+                ref={inputRef}
+                id="cmd-console-query"
+                className="v2-console-input"
+                value={draft}
+                onChange={e => handleInput(e.target.value)}
+                onFocus={() => {
+                  focusedRef.current = true;
+                  setOpen(true);
+                }}
+                onBlur={() => {
+                  setTimeout(() => { focusedRef.current = false; }, 180);
+                }}
+                onKeyDown={onKeyDown}
+                placeholder={animatedPlaceholder || `Type service in place — e.g. ${examples[0] || 'Computer shops in Hyderabad'}`}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
+              />
+
+              {ghostText && (
+                <span className="v2-console-ghost" aria-hidden="true">
+                  <span style={{ opacity: 0 }}>{draft}</span>
+                  <span style={{ opacity: 0.38, color: '#0f172a' }}>{ghostText}</span>
+                </span>
+              )}
+            </div>
+          </div>
 
           {loading && <Loader2 size={16} className="v2-spin" style={{ color: '#059669', flexShrink: 0 }} />}
           {!loading && draft && (
@@ -546,9 +637,9 @@ function SearchConsole({
           </button>
         </div>
 
-        {/* Instant Google-Grade Dropdown */}
+        {/* Instant Google-Grade Dropdown & Mission Palette */}
         <AnimatePresence>
-          {open && (flatItems.length > 0 || matchedSavedFolder) && (
+          {open && (flatItems.length > 0 || matchedSavedFolder || !draft.trim() || response?.detectedCountryMismatch) && (
             <motion.div
               className="v2-suggest"
               role="listbox"
@@ -557,6 +648,28 @@ function SearchConsole({
               exit={{ opacity: 0, y: -4, scale: 0.99 }}
               transition={{ duration: 0.09, ease: [0.22, 1, 0.36, 1] }}
             >
+              {/* Sovereign Country Mismatch Prompt */}
+              {response?.detectedCountryMismatch && (
+                <div className="v2-country-detect-banner">
+                  <div className="v2-country-detect-info">
+                    <span className="v2-country-detect-flag">{response.detectedCountryMismatch.flag}</span>
+                    <span>
+                      Detected <b>{response.detectedCountryMismatch.matchedPlace}</b> in <b>{response.detectedCountryMismatch.countryName}</b> ({response.detectedCountryMismatch.detectedCountry})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="v2-country-detect-btn"
+                    onClick={() => {
+                      onCountrySelect?.(response.detectedCountryMismatch.detectedCountry);
+                    }}
+                  >
+                    <span>Switch to {response.detectedCountryMismatch.countryName}</span>
+                    <kbd>Tab</kbd>
+                  </button>
+                </div>
+              )}
+
               {matchedSavedFolder && (
                 <div
                   className="v2-suggest-vault-bridge"
@@ -577,66 +690,163 @@ function SearchConsole({
                 </div>
               )}
 
-              <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.35fr 0.85fr' : '1fr' }}>
-                {groups.map(group => {
-                  const Icon = group.icon;
-                  return (
-                    <div key={group.title} className="v2-suggest-group">
-                      <header>
-                        <Icon size={12} />
-                        <span>{group.title}</span>
-                      </header>
-                      <div className="v2-suggest-items">
-                        {group.items.map((item, idx) => {
-                          const currentIdx = runningIdx++;
-                          const isSelected = currentIdx === activeIdx;
-                          return (
-                            <button
-                              key={`${item.type}-${item.label || item.value}-${idx}`}
-                              type="button"
-                              role="option"
-                              aria-selected={isSelected}
-                              className={cx('v2-suggest-row', isSelected && 'is-active')}
-                              onMouseEnter={() => setActiveIdx(currentIdx)}
-                              onMouseDown={e => {
-                                e.preventDefault();
-                                pickSuggestion(item);
-                              }}
-                            >
-                              <span className="v2-suggest-mark">
-                                {item.type === 'location' ? <MapPin size={13} /> : item.type === 'recent' ? <Clock size={13} /> : <Search size={13} />}
-                              </span>
-                              <span className="v2-suggest-copy">
-                                <b className="v2-suggest-title">
-                                  <HighlightedLabel text={item.label || item.value} query={draft} />
-                                </b>
-                                {item.subtitle && <small>{item.subtitle}</small>}
-                              </span>
-                              {item.detail && (() => {
-                                const intentKind = item.type === 'location'
-                                  ? 'is-location'
-                                  : item.intentType
-                                    ? `is-${item.intentType}`
-                                    : /mall|complex/i.test(item.detail)
-                                      ? 'is-mall'
-                                      : /factory|manufacturer|oem/i.test(item.detail)
-                                        ? 'is-manufacturer'
-                                        : /store|shop|showroom|retail/i.test(item.detail)
-                                          ? 'is-store'
-                                          : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
-                                            ? 'is-product'
-                                            : /vendor|wholesale|distributor|b2b/i.test(item.detail)
-                                              ? 'is-vendor'
-                                              : 'is-service';
-                                return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
-                              })()}
-                            </button>
-                          );
-                        })}
+              {/* Zero-Keystroke Mission Palette 2.0 when draft is empty */}
+              {!draft.trim() ? (
+                <div className="v2-mission-palette">
+                  {recentSearches.length > 0 && (
+                    <div className="v2-mission-section">
+                      <div className="v2-mission-title">
+                        <Clock size={12} />
+                        <span>Recent Missions</span>
+                      </div>
+                      <div className="v2-mission-grid">
+                        {recentSearches.map(q => (
+                          <button
+                            key={q}
+                            type="button"
+                            className="v2-mission-chip"
+                            onClick={() => {
+                              setDraft(q);
+                              lastExternalRef.current = q;
+                              onChange?.(q);
+                              commitAndDeploy(q);
+                            }}
+                          >
+                            <span className="v2-mission-chip-label">{q}</span>
+                            <span className="v2-mission-chip-badge">Rerun ⚡</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+
+                  <div className="v2-mission-section">
+                    <div className="v2-mission-title">
+                      <Sparkles size={12} />
+                      <span>National Industry Clusters ({String(country || 'IN').toUpperCase()})</span>
+                    </div>
+                    <div className="v2-mission-grid">
+                      {industryClusters.map(item => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          className="v2-mission-chip"
+                          onClick={() => {
+                            if (item.country && item.country !== country) {
+                              onCountrySelect?.(item.country);
+                            }
+                            setDraft(item.query);
+                            lastExternalRef.current = item.query;
+                            onChange?.(item.query);
+                            commitAndDeploy(item.query);
+                          }}
+                        >
+                          <span className="v2-mission-chip-label">{item.label}</span>
+                          <span className="v2-mission-chip-badge">{item.sector}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="v2-suggest-grid" style={{ gridTemplateColumns: groups.length > 1 ? '1.35fr 0.85fr' : '1fr' }}>
+                  {groups.map(group => {
+                    const Icon = group.icon;
+                    return (
+                      <div key={group.title} className="v2-suggest-group">
+                        <header>
+                          <Icon size={12} />
+                          <span>{group.title}</span>
+                        </header>
+                        <div className="v2-suggest-items">
+                          {group.items.map((item, idx) => {
+                            const currentIdx = runningIdx++;
+                            const isSelected = currentIdx === activeIdx;
+                            return (
+                              <button
+                                key={`${item.type}-${item.label || item.value}-${idx}`}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                className={cx('v2-suggest-row', isSelected && 'is-active')}
+                                onMouseEnter={() => setActiveIdx(currentIdx)}
+                                onMouseDown={e => {
+                                  e.preventDefault();
+                                  pickSuggestion(item);
+                                }}
+                              >
+                                <span className="v2-suggest-mark">
+                                  {item.type === 'location' ? <MapPin size={13} /> : item.type === 'recent' ? <Clock size={13} /> : <Search size={13} />}
+                                </span>
+                                <span className="v2-suggest-copy">
+                                  <b className="v2-suggest-title">
+                                    <HighlightedLabel text={item.label || item.value} query={draft} />
+                                  </b>
+                                  {item.subtitle && <small>{item.subtitle}</small>}
+                                  {item.naics && (
+                                    <div className="v2-suggest-naics-badge">
+                                      <span className="v2-naics-tag">
+                                        <Shield size={10} color="#059669" /> NAICS {item.naics.code}: {item.naics.name}
+                                      </span>
+                                      <span className="v2-naics-pure">100% PURE</span>
+                                    </div>
+                                  )}
+                                </span>
+                                {item.detail && (() => {
+                                  const intentKind = item.type === 'location'
+                                    ? 'is-location'
+                                    : item.intentType
+                                      ? `is-${item.intentType}`
+                                      : /mall|complex/i.test(item.detail)
+                                        ? 'is-mall'
+                                        : /factory|manufacturer|oem/i.test(item.detail)
+                                          ? 'is-manufacturer'
+                                          : /store|shop|showroom|retail/i.test(item.detail)
+                                            ? 'is-store'
+                                            : /product|gear|hardware|custom pc|accessory/i.test(item.detail)
+                                              ? 'is-product'
+                                              : /vendor|wholesale|distributor|b2b/i.test(item.detail)
+                                                ? 'is-vendor'
+                                                : 'is-service';
+                                  return <span className={cx('v2-suggest-fix', intentKind)}>{item.detail}</span>;
+                                })()}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Directives Toolbar */}
+              <div className="v2-quick-filter-strip">
+                <span className="v2-qf-label">PRE-FLIGHT DIRECTIVES:</span>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', form?.phonesOnly && 'is-active')}
+                  onClick={() => onToggle?.('phonesOnly')}
+                  title="Filter only leads with direct phone numbers"
+                >
+                  <Phone size={11} /> Phones Only
+                </button>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', form?.websiteOnly && 'is-active')}
+                  onClick={() => onToggle?.('websiteOnly')}
+                  title="Filter only leads with verified websites"
+                >
+                  <Globe size={11} /> Websites Only
+                </button>
+                <button
+                  type="button"
+                  className={cx('v2-qf-chip', strategy === 'turbo' && 'is-active')}
+                  onClick={() => onStrategyChange?.(strategy === 'turbo' ? 'balanced' : 'turbo')}
+                  title="Toggle multi-engine turbo scraping speed"
+                >
+                  <Zap size={11} /> Turbo Speed
+                </button>
               </div>
 
               <div className="lx-suggest-foot">

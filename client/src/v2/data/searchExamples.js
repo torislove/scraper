@@ -307,6 +307,41 @@ export function placeholderFor(countryCode) {
   return `Type service in place — e.g. ${market.prompts[0]}`;
 }
 
+export const INDUSTRY_CLUSTERS = {
+  IN: [
+    { label: '🌾 Turmeric & Spices', query: 'Wholesale Turmeric Suppliers in Tenali', sector: 'NAICS 11', badge: 'Agro' },
+    { label: '🌶️ Mirchi & Cold Storage', query: 'Red Chilli Exporters & Cold Storage in Guntur', sector: 'NAICS 11', badge: 'Commodities' },
+    { label: '🧵 Handloom Sarees', query: 'Pure Handloom Pattu Sarees Wholesale in Mangalagiri', sector: 'NAICS 31', badge: 'Handloom' },
+    { label: '👕 Knitwear Exports', query: 'Cotton Knitwear & Hosiery Garments Export in Tiruppur', sector: 'NAICS 31', badge: 'Textiles' },
+    { label: '💎 Diamond Polishing', query: 'Wholesale Diamond Polishing & Synthetic Diamonds in Surat', sector: 'NAICS 33', badge: 'Diamonds' },
+    { label: '🏗️ Steel Rolling Mills', query: 'TMT Steel Bars & Rolling Mills in Mandi Gobindgarh', sector: 'NAICS 33', badge: 'Steel' },
+    { label: '🌾 Rice Processing', query: 'Automated Rice Mills & Paddy Processing in Miryalaguda', sector: 'NAICS 31', badge: 'Mills' },
+    { label: '💻 Cloud & AI Software', query: 'Cloud Infrastructure & AI Software Development in Bengaluru', sector: 'NAICS 54', badge: 'Tech' }
+  ],
+  US: [
+    { label: '⚓ Marine Rigging', query: 'Commercial Marine Rigging in Seattle', sector: 'NAICS 33', badge: 'Marine' },
+    { label: '☀️ Solar PV Systems', query: 'Commercial Solar PV Contractors in Harris County TX', sector: 'NAICS 23', badge: 'Solar' },
+    { label: '❄️ Cold Storage Logistics', query: 'Cold Storage Logistics Warehousing in Chicago', sector: 'NAICS 49', badge: 'Cold Chain' },
+    { label: '🏥 Medical Equipment', query: 'Diagnostic Medical Equipment Distributors in Orange County CA', sector: 'NAICS 42', badge: 'Medical' }
+  ],
+  WORLD: [
+    { label: '☕ Specialty Coffee', query: 'Artisan Specialty Coffee Roasters in Manchester', sector: 'NAICS 31', country: 'GB', badge: 'UK' },
+    { label: '🌹 Luxury Perfumes', query: 'Wholesale Luxury Perfume Distributors in Dubai', sector: 'NAICS 42', country: 'AE', badge: 'UAE' },
+    { label: '☀️ Solar Energy', query: 'Commercial Solar PV Contractors in Brisbane', sector: 'NAICS 23', country: 'AU', badge: 'AU' },
+    { label: '🚗 Powertrain Eng.', query: 'Automotive Powertrain Engineering in Munich', sector: 'NAICS 33', country: 'DE', badge: 'DE' },
+    { label: '🔬 Cleanroom Tech', query: 'Semiconductor Cleanroom Equipment Suppliers in Singapore', sector: 'NAICS 33', country: 'SG', badge: 'SG' },
+    { label: '⚙️ CNC Machining', query: 'Precision CNC Tooling and Machining in Osaka', sector: 'NAICS 33', country: 'JP', badge: 'JP' },
+    { label: '🍷 Wine Cooperatives', query: 'Wholesale French Wine Cooperatives in Bordeaux', sector: 'NAICS 11', country: 'FR', badge: 'FR' },
+    { label: '⌚ Micro-Mechanics', query: 'Precision Watchmaking Micro-Mechanics in Geneva', sector: 'NAICS 33', country: 'CH', badge: 'CH' }
+  ]
+};
+
+export function industryClustersFor(countryCode) {
+  const code = String(countryCode || 'IN').toUpperCase();
+  if (INDUSTRY_CLUSTERS[code]) return INDUSTRY_CLUSTERS[code];
+  return INDUSTRY_CLUSTERS.WORLD;
+}
+
 /** Short vocabulary line for the examples strip. */
 export function scopeHintFor(countryCode) {
   return examplesFor(countryCode).units.join(' · ');

@@ -1,7 +1,7 @@
 /* ============================================================================
-   LANDING SINGLE-SCREEN (100VH) & 3D LIQUID SYSTEM — ULTRA-PRECISION EDITION
-   Pixel-perfect center alignment, sub-millisecond telemetry, PBR 3D shaders,
-   and mathematical golden-ratio visual geometry.
+   LANDING SINGLE-SCREEN (100VH) & 3D LIQUID SYSTEM — ADVANCED KINETIC EDITION
+   Pixel-perfect center alignment, 3D perspective depth choreography,
+   cursor-tracking liquid buttons, and laser border-beams.
    ============================================================================ */
 
 /* ── 0. Subpixel Precision & High-DPI Font Smoothing ──────────────────────── */
@@ -181,7 +181,7 @@
   gap: 16px;
 }
 
-/* Center Stage: exactly occupies calc(100vh - 116px) */
+/* Center Stage: exactly occupies calc(100vh - 116px) with 3D PERSPECTIVE DEPTH */
 .lx-single-stage {
   flex: 1 1 0;
   min-height: 0;
@@ -193,6 +193,8 @@
   justify-content: center;
   overflow: hidden;
   padding: 6px 16px;
+  perspective: 1400px;
+  transform-style: preserve-3d;
 }
 
 .lx-screen-container {
@@ -402,7 +404,41 @@
   color: #065f46;
 }
 
-/* ── 6. Ultra-Precision 3D Radar Cockpit (Screen 1) ───────────────────────── */
+/* ── 6. Glowing Laser Border-Beam Ray ──────────────────────────────────────── */
+.lx-border-beam-box {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.lx-border-beam-box::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(from var(--border-angle, 0deg), transparent 0deg, #10b981 90deg, #06b6d4 180deg, transparent 270deg);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: borderBeamSpin 6s linear infinite;
+  opacity: 0.75;
+}
+
+@property --border-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes borderBeamSpin {
+  from { --border-angle: 0deg; }
+  to { --border-angle: 360deg; }
+}
+
+/* ── 7. Ultra-Precision 3D Radar Cockpit (Screen 1) ───────────────────────── */
 .lx-compact-cockpit {
   width: 100%;
   max-width: 980px;
@@ -451,7 +487,6 @@
   position: relative;
 }
 
-/* Precision Telemetry Badge */
 .lx-precision-telemetry {
   display: inline-flex;
   align-items: center;
@@ -467,7 +502,7 @@
   border-radius: 6px;
 }
 
-/* ── 7. Screen 2: 22-Engine Hexagon Hub ───────────────────────────────────── */
+/* ── 8. Screen 2: 22-Engine Hexagon Hub ───────────────────────────────────── */
 .lx-engine-hub-stage {
   width: 100%;
   max-width: 980px;
@@ -514,7 +549,7 @@
   box-shadow: 0 8px 20px -6px rgba(16, 185, 129, 0.18);
 }
 
-/* ── 8. Screen 3: Global Sovereign 3D Flags Stage ─────────────────────────── */
+/* ── 9. Screen 3: Global Sovereign 3D Flags Stage ─────────────────────────── */
 .lx-sovereign-stage {
   width: 100%;
   max-width: 980px;
@@ -526,13 +561,54 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Auto-tour dynamic laser progress track spanning top of stage */
+.lx-tour-progress-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(16, 185, 129, 0.12);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.lx-tour-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #06b6d4 50%, #3b82f6 100%);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7);
+}
+
+.lx-chip-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  display: inline-block;
+  animation: chipLivePulse 1.2s infinite ease-in-out;
+}
+
+@keyframes chipLivePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.6);
+    opacity: 0.6;
+  }
 }
 
 .lx-flags-orbit-strip {
   display: flex;
   gap: 7px;
   overflow-x: auto;
-  padding: 3px 2px 6px;
+  padding: 4px 2px 6px;
   scrollbar-width: thin;
 }
 
@@ -541,7 +617,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 11px;
+  padding: 5px 12px;
   border-radius: 999px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
@@ -549,19 +625,26 @@
   font-size: 11.5px;
   font-weight: 800;
   color: #334155;
-  transition: all 0.16s ease;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
-.lx-flag-orbit-chip:hover,
+.lx-flag-orbit-chip:hover {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+  color: #047857;
+  transform: translateY(-1px);
+}
+
 .lx-flag-orbit-chip.is-active {
   border-color: #10b981;
-  background: #ecfdf5;
+  background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
   color: #065f46;
-  transform: scale(1.03);
-  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.18);
+  transform: translateY(-1px) scale(1.04);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.22), 0 0 0 1.5px rgba(16, 185, 129, 0.25);
 }
 
-/* ── 9. Screen 4: Hardware RAM Lanes Cockpit ──────────────────────────────── */
+/* ── 10. Screen 4: Hardware RAM Lanes Cockpit ─────────────────────────────── */
 .lx-hardware-stage {
   width: 100%;
   max-width: 980px;

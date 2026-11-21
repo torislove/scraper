@@ -17,6 +17,7 @@ import './v2/console3d.css';
 
 const LandingLayout = lazyRetry(() => import('./v2/landing/LandingLayout'));
 const LandingHome = lazyRetry(() => import('./v2/landing/LandingHome'));
+const LandingSolutions = lazyRetry(() => import('./v2/landing/LandingSolutions'));
 const LandingArchitecture = lazyRetry(() => import('./v2/landing/LandingArchitecture'));
 const LandingGlobalCoverage = lazyRetry(() => import('./v2/landing/LandingGlobalCoverage'));
 const LandingHardware = lazyRetry(() => import('./v2/landing/LandingHardware'));
@@ -183,6 +184,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingLayout />}>
               <Route index element={<LandingHome />} />
+              <Route path="solutions" element={<LandingSolutions />} />
               <Route path="architecture" element={<LandingArchitecture />} />
               <Route path="global-coverage" element={<LandingGlobalCoverage />} />
               <Route path="hardware" element={<LandingHardware />} />
