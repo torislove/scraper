@@ -15,7 +15,11 @@ import './v2/whiteTheme.css';
 import './v2/designSystem.css';
 import './v2/console3d.css';
 
-const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
+const LandingLayout = lazyRetry(() => import('./v2/landing/LandingLayout'));
+const LandingHome = lazyRetry(() => import('./v2/landing/LandingHome'));
+const LandingArchitecture = lazyRetry(() => import('./v2/landing/LandingArchitecture'));
+const LandingGlobalCoverage = lazyRetry(() => import('./v2/landing/LandingGlobalCoverage'));
+const LandingHardware = lazyRetry(() => import('./v2/landing/LandingHardware'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
 
@@ -177,7 +181,12 @@ export default function App() {
       <ExtensionProvider>
         <Suspense fallback={<PageLoader />}>
           <Routes>
-            <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingV2 />} />
+            <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingLayout />}>
+              <Route index element={<LandingHome />} />
+              <Route path="architecture" element={<LandingArchitecture />} />
+              <Route path="global-coverage" element={<LandingGlobalCoverage />} />
+              <Route path="hardware" element={<LandingHardware />} />
+            </Route>
             <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
             <Route path="/login" element={<LoginV2 initialMode="signin" />} />
             <Route path="/signup" element={<LoginV2 initialMode="signup" />} />

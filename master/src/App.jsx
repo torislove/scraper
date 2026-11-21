@@ -15,7 +15,11 @@ import './v2/whiteTheme.css';
 import './v2/designSystem.css';
 import './v2/console3d.css';
 
-const LandingV2 = lazyRetry(() => import('./v2/LandingV2'));
+const LandingLayout = lazyRetry(() => import('./v2/landing/LandingLayout'));
+const LandingHome = lazyRetry(() => import('./v2/landing/LandingHome'));
+const LandingArchitecture = lazyRetry(() => import('./v2/landing/LandingArchitecture'));
+const LandingGlobalCoverage = lazyRetry(() => import('./v2/landing/LandingGlobalCoverage'));
+const LandingHardware = lazyRetry(() => import('./v2/landing/LandingHardware'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
 const FeatureShell = lazyRetry(() => import('./v2/FeatureShell'));
@@ -204,7 +208,12 @@ export default function App() {
               <Route path="/command" element={<RequireMasterAuth><CommandCenter isMaster /></RequireMasterAuth>} />
               <Route path="/login" element={<LoginV2 variant="master" />} />
               <Route path="/logout" element={<LogoutRoute />} />
-              <Route path="/landing" element={<LandingV2 />} />
+              <Route path="/landing" element={<LandingLayout />}>
+                <Route index element={<LandingHome />} />
+                <Route path="architecture" element={<LandingArchitecture />} />
+                <Route path="global-coverage" element={<LandingGlobalCoverage />} />
+                <Route path="hardware" element={<LandingHardware />} />
+              </Route>
               <Route path="/whatsapp" element={<Navigate to="/command" replace />} />
               <Route path="/clients" element={<RequireMasterAuth><MasterClients /></RequireMasterAuth>} />
               <Route path="/learning" element={<RequireMasterAuth><LearningRoute /></RequireMasterAuth>} />
