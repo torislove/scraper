@@ -42,7 +42,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-co-in' }}
+  FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
   VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
   VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
   VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}

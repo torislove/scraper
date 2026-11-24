@@ -1,18 +1,18 @@
 {
   "projects": {
-    "default": "scraper-co-in"
+    "default": "scraper-37c72"
   },
   "targets": {
-    "scraper-co-in": {
+    "scraper-37c72": {
       "hosting": {
         "client": [
-          "scraper-co-in-app"
+          "scraper-37c72"
         ],
         "master": [
-          "scraper-co-in-master"
+          "scraper-37c72-master"
         ],
         "admin": [
-          "scraper-co-in-admin"
+          "scraper-37c72-admin"
         ]
       }
     }

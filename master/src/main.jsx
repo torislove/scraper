@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css'
 import App from './App.jsx'
 import { IS_DESKTOP } from './desktop'
 import { installChunkErrorRecovery } from './v2/lazyRetry'
+import './firebase'
 
 installChunkErrorRecovery()
 
