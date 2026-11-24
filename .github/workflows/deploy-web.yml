@@ -41,20 +41,18 @@ concurrency:
   group: deploy-web-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
-  VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
-  VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
-  VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}
-  VITE_MASTER_URL: ${{ vars.VITE_MASTER_URL || 'https://master.scraper.co.in' }}
-  VITE_AUTH_REQUIRED: ${{ vars.VITE_AUTH_REQUIRED || '1' }}
-
 jobs:
   deploy-client:
     name: Build & Deploy Client + Landing
     if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'client'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
+      VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
+      VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}
+      VITE_MASTER_URL: ${{ vars.VITE_MASTER_URL || 'https://master.scraper.co.in' }}
+      VITE_AUTH_REQUIRED: ${{ vars.VITE_AUTH_REQUIRED || '1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +67,8 @@ jobs:
 
       - name: Lint Client source
         working-directory: client
-        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+        run: |
+          npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
 
       - name: Build Client production bundle
         run: npm run build --prefix client
@@ -80,7 +79,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: client
           expires: 7d
 
@@ -90,7 +89,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: client
           channelId: live
 
@@ -99,6 +98,12 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'master'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
+      VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
+      VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}
+      VITE_MASTER_URL: ${{ vars.VITE_MASTER_URL || 'https://master.scraper.co.in' }}
+      VITE_AUTH_REQUIRED: ${{ vars.VITE_AUTH_REQUIRED || '1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -113,7 +118,8 @@ jobs:
 
       - name: Lint Master source
         working-directory: master
-        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+        run: |
+          npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
 
       - name: Build Master production bundle
         run: npm run build --prefix master
@@ -126,7 +132,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: master
           expires: 7d
 
@@ -136,7 +142,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: master
           channelId: live
 
@@ -145,6 +151,12 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'admin'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
+      VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
+      VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}
+      VITE_MASTER_URL: ${{ vars.VITE_MASTER_URL || 'https://master.scraper.co.in' }}
+      VITE_AUTH_REQUIRED: ${{ vars.VITE_AUTH_REQUIRED || '1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -166,7 +178,7 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: admin
           expires: 7d
 
@@ -176,6 +188,6 @@ jobs:
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: admin
           channelId: live

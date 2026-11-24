@@ -33,7 +33,8 @@ jobs:
 
       - name: Client ESLint check
         working-directory: client
-        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+        run: |
+          npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
 
       - name: Client production build
         run: npm run build --prefix client
@@ -56,7 +57,8 @@ jobs:
 
       - name: Master ESLint check
         working-directory: master
-        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+        run: |
+          npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
 
       - name: Master production build
         run: npm run build --prefix master
