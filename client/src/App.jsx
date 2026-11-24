@@ -1,7 +1,6 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import PricingPage from './pages/PricingPage';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import { IS_DESKTOP } from './desktop';
@@ -21,8 +20,11 @@ const LandingSolutions = lazyRetry(() => import('./v2/landing/LandingSolutions')
 const LandingArchitecture = lazyRetry(() => import('./v2/landing/LandingArchitecture'));
 const LandingGlobalCoverage = lazyRetry(() => import('./v2/landing/LandingGlobalCoverage'));
 const LandingHardware = lazyRetry(() => import('./v2/landing/LandingHardware'));
+const LandingFounderStory = lazyRetry(() => import('./v2/landing/LandingFounderStory'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
+const SeoLandingPage = lazyRetry(() => import('./pages/SeoLandingPage'));
+const DirectoryPage = lazyRetry(() => import('./pages/DirectoryPage'));
 
 function PageLoader() {
   return (
@@ -157,6 +159,25 @@ function LogoutRoute() {
   return <Navigate to="/login" replace />;
 }
 
+function AdminRedirect() {
+  useEffect(() => {
+    const isDev = window.location.port === '5173' || window.location.port === '5174';
+    if (isDev) {
+      const subpath = window.location.pathname.replace(/^\/admin/, '') || '';
+      window.location.href = `http://${window.location.hostname}:5175${subpath}${window.location.search}`;
+    } else {
+      window.location.href = `/admin/${window.location.search}`;
+    }
+  }, []);
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, background: '#f8fafc', color: '#0f172a' }}>
+      <div style={{ width: 44, height: 44, borderRadius: '50%', border: '3px solid rgba(5, 150, 105, 0.2)', borderTopColor: '#059669', animation: 'v2-spin 0.8s linear infinite' }} />
+      <span style={{ fontSize: 12, fontWeight: 800, color: '#0f172a', letterSpacing: '0.1em' }}>LAUNCHING ADMIN CONSOLE</span>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -188,6 +209,7 @@ export default function App() {
               <Route path="architecture" element={<LandingArchitecture />} />
               <Route path="global-coverage" element={<LandingGlobalCoverage />} />
               <Route path="hardware" element={<LandingHardware />} />
+              <Route path="story" element={<LandingFounderStory />} />
             </Route>
             <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
             <Route path="/login" element={<LoginV2 initialMode="signin" />} />
@@ -195,9 +217,19 @@ export default function App() {
             <Route path="/forgot-password" element={<LoginV2 initialMode="reset" />} />
             <Route path="/logout" element={<LogoutRoute />} />
 
-            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/directory" element={<DirectoryPage />} />
+            <Route path="/categories" element={<DirectoryPage />} />
+
+            {/* Dynamic Programmatic SEO Engine Hubs */}
+            <Route path="/leads/:countryCode" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug/:citySlug" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug/:citySlug/:subvectorSlug" element={<SeoLandingPage />} />
+
+            <Route path="/admin" element={<AdminRedirect />} />
+            <Route path="/admin/*" element={<AdminRedirect />} />
 
             <Route path="/app/*" element={<Navigate to="/command" replace />} />
             <Route path="/marketplace/*" element={<Navigate to="/command" replace />} />

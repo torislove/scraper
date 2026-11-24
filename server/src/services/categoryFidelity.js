@@ -15,7 +15,7 @@
  *    rejection when there is no evidence.
  */
 
-const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me|top\s+\d+.*|best\s+\d+.*|\d+\s+best.*|list\s+of\s+.*)$/i;
+const GENERIC_NAME = /^(?:results?|search results?|top results?|sponsored(?: listing| by)?|advertisement|ad\b|featured(?: listing)?|listing(?: results?)?|view all|load more|show more|booking\.com\??|justdial|indiamart|weddingbazaar|mandap\.com|sulekha|near me|best .* near me|top\s+\d+.*|best\s+\d+.*|\d+\s+best.*|list\s+of\s+.*|home|homepage|under construction|your domain is expired|domain expired|domain for sale|buy this domain|coming soon|default page|welcome to nginx|apache2 default page|404 not found|untitled|index of \/?|website under construction)$/i;
 
 const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
 const naicsTaxonomy = require('../utils/naicsTaxonomy');
@@ -260,7 +260,7 @@ const ROLES = [
   {
     id: 'dental',
     label: 'Dental & Dentist',
-    match: ['dentist', 'dental', 'orthodont', 'teeth', 'root canal', 'dental clinic'],
+    match: ['dentist', 'dental', 'orthodont', 'teeth', 'root canal', 'dental clinic', 'dental hospital', 'dental hospitals', 'dentistry'],
     wants: ['dental', 'dentist', 'teeth', 'tooth', 'orthodont', 'oral', 'implant', 'smile'],
     // Strict carry-forward matching: only unambiguous dental anchors. A bare
     // "smile" would pull a photo studio ("Smile Studio") into a dentist folder,
@@ -329,7 +329,7 @@ const ROLES = [
     label: 'Hospital & Healthcare & Specialist Medical Centers',
     match: [
       'hospital', 'hospitals', 'multispeciality hospital', 'super speciality hospital',
-      'nursing home', 'medical college hospital', 'general hospital', 'dental hospital',
+      'nursing home', 'medical college hospital', 'general hospital',
       'eye hospital', 'children hospital', 'maternity hospital', 'orthopedic hospital',
       'ent hospital', 'cancer hospital', 'heart hospital', 'health center'
     ],
@@ -730,6 +730,21 @@ function isVendorRelevant(vendor, requestedCategory) {
     }
   }
 
+  // 1a. Specific Niche Mandatory Positive Anchor Guard:
+  // When user searches for a specific micro-niche (Dental, Plumber, CCTV, Biryani, CAs, etc.),
+  // the candidate lead MUST possess a positive anchor token of that niche, and must not hit niche avoids!
+  const specificNiche = indiaTradeIntelligence.extractSpecificNiche(requestedCategory);
+  if (specificNiche) {
+    const combined = `${norm(vendor.name)} ${norm(vendor.subcategory || '')} ${norm(vendor.placeCategory || '')} ${norm(vendor.description || '')}`;
+    const hasNicheAnchor = hasAny(combined, (specificNiche.anchors || []).map(norm));
+    if (!hasNicheAnchor) {
+      return false; // REJECT: zero positive evidence for the specific niche requested
+    }
+    if (specificNiche.avoids && hasAny(combined, specificNiche.avoids.map(norm))) {
+      return false; // REJECT: contains explicit conflicting sibling sector keywords
+    }
+  }
+
   // 2. Closed-World NAICS Sector Mutual Exclusion Check:
   // Deterministically verify whether candidate vendor belongs to a mathematically incompatible sector
   const queryNaics = naicsTaxonomy.classifyToNaics(requestedCategory);
@@ -895,6 +910,37 @@ function isVendorRelevant(vendor, requestedCategory) {
     if (hasAny(text, photographyWants)) return true;
 
     return wants;
+  }
+
+  // Special high-fidelity rule for Dental Clinics & Dentists:
+  // ABSOLUTELY NEVER allow general hospitals, pathology labs, diagnostic centers,
+  // maternity homes, or eye clinics into a Dental result list!
+  if (requestedRole.id === 'dental') {
+    const combinedName = `${norm(vendor.name)} ${norm(vendor.subcategory || '')} ${norm(vendor.placeCategory || '')}`;
+    
+    // Hard negative check: drop non-dental medical facilities
+    if (hasAny(combinedName, [
+      'laboratory', 'pathology', 'diagnostic', 'scan cent', 'x ray', 'x-ray',
+      'blood test', 'ultrasound', 'maternity', 'gynec', 'gynaec', 'child hospital',
+      'pediatric hospital', 'paediatric hospital', 'eye hospital', 'ophthalm',
+      'orthopedic hospital', 'fracture hospital', 'cancer', 'dialysis', 'ent hospital',
+      'nursing home', 'psychiatry', 'rehabilitation'
+    ])) {
+      return false;
+    }
+    
+    // Mandatory positive dental anchor
+    const hasDentalAnchor = hasAny(combinedName, [
+      'dent', 'dental', 'dentist', 'dentists', 'teeth', 'tooth', 'orthodont', 'implant',
+      'root canal', 'oral care', 'oral health', 'oral surgery', 'bds', 'mds', 'dentistry'
+    ]) || hasAny(norm(vendor.name), ['smile dental', 'smile clinic', 'dentelite', 'smiles', 'dent plus', 'roots super'])
+       || /\b(b\.?d\.?s|m\.?d\.?s)\b/i.test(vendor.name || '');
+    
+    if (!hasDentalAnchor) {
+      return false;
+    }
+    if (avoids) return false;
+    return true;
   }
 
   // Special high-fidelity rule for Doctors & Physicians:

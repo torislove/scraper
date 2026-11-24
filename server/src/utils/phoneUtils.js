@@ -63,8 +63,15 @@ function isObviousSequence(national) {
 }
 
 function cleanRawPhone(raw) {
-  return String(raw == null ? '' : raw)
-    .replace(/^\s*tel:/i, '')
+  const str = String(raw == null ? '' : raw).trim();
+  if (/requires\s*(?:manual\s*lookup|login|\d+\s*credit)|not\s*available|^n\/?a$|^none$|^undefined$|^null$/i.test(str)) {
+    return '';
+  }
+  return str
+    .replace(/^https?:\/\/(?:www\.)?(?:api\.)?whatsapp\.com\/send\?phone=/i, '')
+    .replace(/^https?:\/\/(?:www\.)?wa\.me\//i, '')
+    .replace(/^wa\.me\//i, '')
+    .replace(/^\s*(?:tel|wph):/i, '')
     .replace(/^\s*phone:\s*/i, '')
     .replace(/^\s*mobile:\s*/i, '')
     .replace(/(?:ext\.?|extension|x)\s*\d{1,6}\s*$/i, '')
@@ -87,6 +94,8 @@ function normalizePhone(raw, opts = {}) {
   if (!compact) return null;
 
   // Reject obvious non-phone identifiers before normalization.
+  const numDigits = compact.replace(/\D/g, '').length;
+  if (numDigits < 7) return null;
   if (/^\d{6}$/.test(compact)) return null;                 // pincode / order fragment
   if (/^(?:19|20)\d{2}$/.test(compact)) return null;        // year
   if (/^0{3,}/.test(compact)) return null;
@@ -125,6 +134,30 @@ function normalizePhone(raw, opts = {}) {
       if (compact.startsWith('0') && (compact.length === 10 || compact.length === 9)) {
         compact = '+971' + compact.slice(1);
       }
+    } else if (defaultCountry === 'DE') {
+      if (compact.startsWith('0') && compact.length >= 10) {
+        compact = '+49' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'FR') {
+      if (compact.startsWith('0') && compact.length === 10) {
+        compact = '+33' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'IE') {
+      if (compact.startsWith('0') && (compact.length === 10 || compact.length === 9)) {
+        compact = '+353' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'NZ') {
+      if (compact.startsWith('0') && (compact.length === 10 || compact.length === 9)) {
+        compact = '+64' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'ZA') {
+      if (compact.startsWith('0') && compact.length === 10) {
+        compact = '+27' + compact.slice(1);
+      }
+    } else if (defaultCountry === 'SG') {
+      if (compact.length === 8 && /^[3689]/.test(compact)) {
+        compact = '+65' + compact;
+      }
     }
     // Everywhere else the national form is passed through unchanged.
     // libphonenumber applies the default country and its own trunk-prefix
@@ -141,14 +174,17 @@ function normalizePhone(raw, opts = {}) {
 
   const country = parsed.country || 'IN';
   const targetCountry = String(opts.defaultCountry || 'IN').toUpperCase();
-  if (country !== 'IN' && !opts.allowInternational) return null;
+  if (country !== 'IN' && !opts.allowInternational && country !== targetCountry) return null;
 
   // A run for one market must never save another market's number. This is the
   // rule that keeps a +91 Instagram snippet out of a US lead. India keeps its
   // historical international acceptance, and an explicit `allowedCountry`
   // override lets a caller widen the rule when it really means to.
   const requiredCountry = opts.allowedCountry ? String(opts.allowedCountry).toUpperCase() : targetCountry;
-  if (requiredCountry && requiredCountry !== 'IN' && country !== requiredCountry) return null;
+  const isMatch = country === requiredCountry ||
+    (requiredCountry === 'GB' && ['GB', 'GG', 'JE', 'IM'].includes(country)) ||
+    ((requiredCountry === 'US' || requiredCountry === 'CA') && (country === 'US' || country === 'CA'));
+  if (requiredCountry && requiredCountry !== 'IN' && !isMatch) return null;
 
   const national = parsed.nationalNumber || '';
   const type = parsed.getType ? (parsed.getType() || 'UNKNOWN') : 'UNKNOWN';
@@ -267,9 +303,16 @@ function extractPhones(text, opts = {}) {
     if (!candidates.has(key)) candidates.set(key, context);
   };
 
+  let m;
+
+  // WhatsApp links in text/markup: wa.me/919959282819, wa.me/9959282819, api.whatsapp.com/send?phone=...
+  const waRegex = /(?:https?:\/\/)?(?:wa\.me|api\.whatsapp\.com\/send\?phone=)\/?(?:\+?91)?([6-9]\d{9})/gi;
+  while ((m = waRegex.exec(source)) !== null) {
+    addCandidate(m[1], m.index);
+  }
+
   // Broad run of digits with separators. Validation below rejects noise.
   const broad = /(?:\+?\s?\d[\d\s().-]{5,22}\d)/g;
-  let m;
   while ((m = broad.exec(source)) !== null) {
     const raw = m[0].replace(/\s+/g, ' ').trim();
     const d = digitsOnly(raw);
@@ -572,6 +615,83 @@ function syncPhoneFlags(lead) {
   return lead;
 }
 
+/**
+ * Specialized extractor for social snippets, bios, and profile URLs.
+ * Extracts phones, WhatsApp links, link-in-bio URLs, and social handles across all 11 countries.
+ */
+function extractSocialContacts(text = '', url = '', defaultCountry = 'IN') {
+  const result = {
+    phones: [],
+    whatsapp: '',
+    linkInBio: '',
+    socialHandle: ''
+  };
+
+  const combined = `${text || ''} ${url || ''}`;
+  if (!combined.trim()) return result;
+
+  // 1. WhatsApp link detection (international support for all 11 countries)
+  const waMatch = combined.match(/(?:https?:\/\/)?(?:wa\.me|api\.whatsapp\.com\/send\?phone=)\/?(?:\+?(\d{7,15}))/i);
+  if (waMatch) {
+    const rawDigits = waMatch[1];
+    const norm = normalizePhone(rawDigits, { defaultCountry, trusted: true });
+    if (norm) {
+      result.whatsapp = `https://wa.me/${norm.digits}`;
+      const disp = norm.displayPhone || norm.national;
+      if (disp && !result.phones.includes(disp)) result.phones.push(disp);
+      if (norm.national && !result.phones.includes(norm.national)) result.phones.push(norm.national);
+    } else {
+      result.whatsapp = `https://wa.me/${rawDigits}`;
+      result.phones.push(rawDigits);
+    }
+  }
+
+  // 2. Link-in-bio (Linktree, Bio.link, Beacons, Taplink, Campsite, Carrd, Solo.to, etc.)
+  const bioMatch = combined.match(/https?:\/\/(?:linktr\.ee|bio\.link|beacons\.ai|heylink\.me|campsite\.bio|taplink\.(?:cc|at)|instabio\.cc|lnk\.bio|linkin\.bio|direct\.me|solo\.to|carrd\.co|bio\.fm|snipfeed\.co|flowcode\.com|link\.me|msha\.ke)\/[a-zA-Z0-9_.-]+/i);
+  if (bioMatch) {
+    result.linkInBio = bioMatch[0];
+  }
+
+  // 3. Instagram / Facebook / TikTok / Social handle & embedded phone number in slug
+  const handleMatch = combined.match(/(?:@|instagram\.com\/|facebook\.com\/|tiktok\.com\/@?)([a-zA-Z0-9_.-]+)/i);
+  if (handleMatch && !['p', 'reel', 'reels', 'explore', 'stories', 'about', 'pages', 'watch', 'share', 'groups', 'events'].includes(handleMatch[1].toLowerCase())) {
+    result.socialHandle = `@${handleMatch[1].replace(/^@/, '')}`;
+    
+    // Check if the username itself embeds a business phone number (e.g. surendra9866074242)
+    const slugPhones = extractPhones(handleMatch[1], { defaultCountry, trusted: true, context: 'social handle' });
+    for (const sp of slugPhones) {
+      if (sp.isMobile) {
+        const val = sp.displayPhone || sp.national || sp.e164;
+        if (!result.phones.includes(val)) result.phones.push(val);
+        if (!result.whatsapp) result.whatsapp = `https://wa.me/${sp.digits}`;
+      }
+    }
+  }
+
+  // Detect explicit TikTok profile URL
+  const tiktokMatch = combined.match(/https?:\/\/(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.-]+)/i);
+  if (tiktokMatch) {
+    result.tiktok = `https://www.tiktok.com/@${tiktokMatch[1]}`;
+  }
+
+  // 4. Comprehensive phone extraction from both text AND url
+  const parsedPhones = extractPhones(combined, { defaultCountry, trusted: false, context: 'social bio' });
+  for (const p of parsedPhones) {
+    const val = p.displayPhone || p.national || p.e164;
+    if (val && !result.phones.includes(val)) {
+      result.phones.push(val);
+    }
+    if (p.national && !result.phones.includes(p.national)) {
+      result.phones.push(p.national);
+    }
+    if (!result.whatsapp && p.isMobile) {
+      result.whatsapp = `https://wa.me/${p.digits || ('91' + p.national)}`;
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   INDIAN_MOBILE_RE,
   isIndianMobile,
@@ -579,6 +699,7 @@ module.exports = {
   normalizePhone,
   syncPhoneFlags,
   extractPhones,
+  extractSocialContacts,
   pickBestPhone,
   toWhatsAppLink,
   isValidEmail,

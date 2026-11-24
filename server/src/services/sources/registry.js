@@ -311,9 +311,9 @@ const SOURCES = [
     engine: 'trustpilot',
     homepage: 'https://www.trustpilot.com',
     countries: C('US', 'GB', 'CA', 'AU', 'IE', 'NZ', 'SG', 'ZA'),
-    access: 'public-html',
-    enabled: true,
-    note: 'Public verified business search with reputation, address, and contact details.'
+    access: 'blocked',
+    enabled: false,
+    note: 'Removed from bundle: Trustpilot answers both search API and website with HTTP 403 to non-browser clients.'
   },
 
   /* ── Australia / New Zealand ─────────────────────────────────────────── */
@@ -562,13 +562,12 @@ function enginesForCountry(code) {
 function engineSupportedInCountry(engine, code) {
   const country = normaliseCountry(code) || 'IN';
   if (!engine) return false;
-  const canonical = canonicalEngine(engine) || String(engine).toLowerCase().replace(/[^a-z0-9]/g, '');
+  let canonical = canonicalEngine(engine) || String(engine).toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (country !== 'IN' && canonical === 'social') canonical = 'social-dork-intl';
   if (country !== 'IN' && INDIA_ONLY_ENGINES.has(canonical)) return false;
 
   // Outside India the country bundle is the whole truth: an engine that is not
-  // part of it (Instagram/social dorks, Google SERP, JustDial aliases) must be
-  // refused, not silently allowed. This is what used to leak `social` into US
-  // runs and return Instagram profiles with Indian numbers.
+  // part of it (Google SERP, JustDial aliases) must be refused, not silently allowed.
   if (country !== 'IN') {
     const bundle = bundleForCountry(country).map(key => canonicalEngine(key) || key);
     return bundle.includes(canonical);

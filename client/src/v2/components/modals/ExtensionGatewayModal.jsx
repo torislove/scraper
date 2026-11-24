@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
   ArrowRight,
@@ -7,10 +7,10 @@ import {
   CheckCircle2,
   Copy,
   Cpu,
-  Download,
+  ExternalLink,
   Folder,
-  FolderInput,
   Layers,
+  Lock,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -20,29 +20,29 @@ import {
 import { useExtension } from '../../context/ExtensionContext';
 import {
   ALL_BUILTIN_ENGINES,
-  DEVICE_REQUIREMENTS,
-  EXTENSION_DOWNLOAD_URL,
-  EXTENSION_STORE_URL
+  DEVICE_REQUIREMENTS
 } from '../../utils/deviceRamEngine';
 
 /**
  * ExtensionGatewayModal.jsx
+ * ==============================================================================
+ * High-Retention Store Onboarding & Auto Browser Detection Gateway
  *
- * Unified 3D Crystal Ceramic × Emerald Hardware modal powered by ExtensionContext.
- * Supports two crisp modes:
- *   1. 'setup'     — ONLY shown when no extension is detected on the system.
- *                    Guides 1-click ZIP download + 3-step Chrome Load Unpacked
- *                    and auto-launches the pending action the instant connected.
- *   2. 'telemetry' — Opened intentionally when clicking the green status pill
- *                    while already connected; shows RAM lanes, relayed count,
- *                    device tiers, and the 22 built-in engines.
+ * Core Principles:
+ *   1. Auto Browser Detection: Tailors official store badges & links for Edge,
+ *      Chrome, and Firefox.
+ *   2. Never a Hard Wall (Customer Retention): Features a prominent 1-click
+ *      "Continue on Web Server Engine" button so no user is ever blocked.
+ *   3. 3D Crystal Ceramic Alignment: High contrast typography, emerald glass
+ *      benefit cards, and smooth animations.
+ *   4. Zero Developer Clutter: Hides raw local file paths inside an optional
+ *      developer accordion.
+ * ==============================================================================
  */
+
 export default function ExtensionGatewayModal() {
   const ctx = useExtension();
-  const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [demoToggle, setDemoToggle] = useState(true);
 
   if (!ctx || !ctx.gatewayOpen) return null;
 
@@ -57,18 +57,20 @@ export default function ExtensionGatewayModal() {
     isMaster,
     gatewayMode,
     closeGateway,
-    completeProceed
+    completeProceed,
+    userBrowser
   } = ctx;
 
-  const localExtPath = 'c:\\Users\\manoj\\Desktop\\gomandap-scraper\\extension';
-
-  const copyChromeUrl = () => {
-    try {
-      navigator.clipboard.writeText('chrome://extensions');
-      setCopiedUrl(true);
-      setTimeout(() => setCopiedUrl(false), 2500);
-    } catch (e) {}
+  const browserInfo = userBrowser || {
+    name: 'Microsoft Edge',
+    slug: 'edge',
+    storeName: 'Microsoft Edge Add-ons',
+    storeUrl: 'https://microsoftedge.microsoft.com/addons/detail/gcmknikiliglejekhghkdplkjgkjjkdm',
+    hasDirectStore: true,
+    badge: 'Edge'
   };
+
+  const localExtPath = 'C:\\Users\\manoj\\Desktop\\scraper\\extension';
 
   const copyLocalPath = () => {
     try {
@@ -78,21 +80,26 @@ export default function ExtensionGatewayModal() {
     } catch (e) {}
   };
 
-  const handleDownload = () => {
-    setDownloading(true);
-    const link = document.createElement('a');
-    link.href = EXTENSION_DOWNLOAD_URL;
-    link.setAttribute('download', 'scraper-co-in-ram-turbo-extension.zip');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => setDownloading(false), 1800);
-  };
-
   const showTelemetry = gatewayMode === 'telemetry' && ready;
 
+  const handleContinueOnWeb = () => {
+    if (ctx.skipAndRunLocal) {
+      ctx.skipAndRunLocal();
+    } else {
+      completeProceed();
+    }
+  };
+
   return (
-    <div className="lx-ext-gateway-backdrop" role="dialog" aria-modal="true" aria-label="Browser Extension Gateway">
+    <div
+      className="lx-ext-gateway-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Browser Extension Gateway"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) closeGateway();
+      }}
+    >
       <motion.div
         className="lx-ext-gateway-card"
         initial={{ opacity: 0, scale: 0.96, y: 14 }}
@@ -100,21 +107,22 @@ export default function ExtensionGatewayModal() {
         exit={{ opacity: 0, scale: 0.96, y: 10 }}
         transition={{ duration: 0.18, ease: 'easeOut' }}
       >
+        {/* Top Header */}
         <header className="lx-ext-gateway-header">
           <div className="lx-ext-gateway-brand">
             <span className={`lx-ext-bezel-tag ${isMaster ? 'is-master' : ''}`}>
-              {isMaster ? 'MASTER CONTROL · RAM TURBO HARDWARE' : 'SCRAPER.CO.IN · RAM TURBO HARDWARE'}
+              🛡️ {browserInfo.name.toUpperCase()} CERTIFIED COMPANION
             </span>
             <div className="lx-ext-head-row">
               <div className="lx-ext-icon-orb">
-                <Cpu size={20} color="#059669" />
+                <Cpu size={22} color="#059669" />
               </div>
               <div>
-                <h2>{showTelemetry ? 'RAM Turbo Telemetry & Engines' : 'Connect Browser Extension'}</h2>
+                <h2>{showTelemetry ? 'RAM Turbo Telemetry & Engines' : 'Accelerate Your Search with RAM Turbo'}</h2>
                 <p>
                   {showTelemetry
-                    ? 'Connected and persistent across tabs — every search routes cleanly through your hardware.'
-                    : 'Install once in 30 seconds. After that it stays connected automatically with zero server queues.'}
+                    ? 'Connected and persistent — every search routes cleanly through your local hardware.'
+                    : `Official extension for ${browserInfo.name}. Run unlimited searches across 11 sovereign countries with zero cloud waiting queues.`}
                 </p>
               </div>
             </div>
@@ -123,21 +131,23 @@ export default function ExtensionGatewayModal() {
             type="button"
             className="lx-ext-close-btn"
             onClick={closeGateway}
-            aria-label="Close extension gateway"
+            aria-label="Close extension modal"
+            title="Close"
           >
             <X size={18} />
           </button>
         </header>
 
+        {/* Live Status Bar */}
         <div className={`lx-ext-status-bar ${ready ? 'is-connected' : 'is-pending'}`}>
           <div className="lx-ext-status-info">
             <span className={`cb-led ${ready ? 'is-live' : 'is-warn'}`} />
             <b>
               {ready
-                ? `RAM Turbo Active · v${version || '1.2.0'} · ${connected ? 'Heartbeat Live' : 'Bridge Ready'}`
+                ? `RAM Turbo Active · v${version || '1.3.0'} · ${connected ? 'Heartbeat Live' : 'Bridge Ready'}`
                 : checking
                   ? 'Detecting Extension Bridge…'
-                  : 'Extension Not Installed Yet'}
+                  : 'Official Store Companion Available'}
             </b>
           </div>
           {ready ? (
@@ -145,10 +155,11 @@ export default function ExtensionGatewayModal() {
               <CheckCircle2 size={13} /> Always On · {relayed || 0} relayed
             </span>
           ) : (
-            <span className="lx-ext-badge-amber">One-Time Setup (30s)</span>
+            <span className="lx-ext-badge-green">100% Free · One-Click Install</span>
           )}
         </div>
 
+        {/* Case 1: Telemetry View (when opened intentionally while connected) */}
         {showTelemetry ? (
           <div className="lx-ext-telemetry-view">
             <div className="lx-ext-hw-grid">
@@ -207,14 +218,15 @@ export default function ExtensionGatewayModal() {
             </button>
           </div>
         ) : ready ? (
+          /* Case 2: Already connected */
           <div className="lx-ext-connected-view">
             <div className="lx-ext-success-banner">
-              <Sparkles size={26} color="#059669" />
+              <Sparkles size={28} color="#059669" />
               <div>
-                <h3>Extension Connected! Launching Workspace…</h3>
+                <h3>Extension Connected! Launching Sweep…</h3>
                 <p>
-                  Your browser extension is verified and locked in ({hardware.ramGb} GB RAM · {hardware.parallelZones} Parallel Lanes).
-                  It stays permanently connected across reloads, new tabs, and browser restarts.
+                  Your browser extension is active ({hardware.ramGb} GB RAM · {hardware.parallelZones} Parallel Lanes).
+                  Your sweep will run with residential IP bypass and zero server queues.
                 </p>
               </div>
             </div>
@@ -229,143 +241,94 @@ export default function ExtensionGatewayModal() {
             </button>
           </div>
         ) : (
+          /* Case 3: High-Retention Store Onboarding View */
           <div className="lx-ext-setup-flow">
-            <div className="lx-ext-value-prop">
-              <div className="lx-ext-prop-item">
-                <Zap size={14} color="#059669" />
-                <span>Zero Server Waiting Queues</span>
+            {/* 3 High-Impact Value Cards */}
+            <div className="lx-ext-benefit-grid">
+              <div className="lx-ext-benefit-card">
+                <div className="lx-ext-benefit-icon">
+                  <Zap size={18} color="#059669" />
+                </div>
+                <b>Zero Server Queues</b>
+                <p>Runs on your local PC RAM across {hardware.parallelZones}x parallel lanes for instant execution.</p>
               </div>
-              <div className="lx-ext-prop-item">
-                <ShieldCheck size={14} color="#059669" />
-                <span>All 20+ Engines Via Your Connection</span>
+
+              <div className="lx-ext-benefit-card">
+                <div className="lx-ext-benefit-icon">
+                  <ShieldCheck size={18} color="#059669" />
+                </div>
+                <b>Residential IP Bypass</b>
+                <p>Discovers direct WhatsApp numbers and owner profiles with zero Cloudflare or rate-limit blocks.</p>
               </div>
-              <div className="lx-ext-prop-item">
-                <Cpu size={14} color="#0e7490" />
-                <span>{hardware.parallelZones}x Parallel Zones ({hardware.ramGb} GB RAM)</span>
+
+              <div className="lx-ext-benefit-card">
+                <div className="lx-ext-benefit-icon">
+                  <Lock size={18} color="#0284c7" />
+                </div>
+                <b>100% Zero-Knowledge</b>
+                <p>Strictly private. No passwords, no browsing history, and zero personal data stored.</p>
               </div>
             </div>
 
-            {/* Step 1: Download & Extract */}
-            <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">01</div>
-              <div className="lx-ext-step-content">
-                <b>Download &amp; Extract the Extension Folder</b>
-                <p>One lightweight ZIP package containing the complete extension folder:</p>
-                <div className="lx-ext-folder-pill">
-                  <Folder size={14} color="#059669" />
-                  <span>Folder: <b>Scraper-RAM-Turbo-Extension</b></span>
+            {/* Dual Action Cluster for Maximum Retention */}
+            <div className="lx-ext-actions-cluster">
+              {/* Primary 1-Click Store Action */}
+              <a
+                href={browserInfo.storeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="lx-ext-store-primary-btn"
+                onClick={() => {
+                  // Listen for return from store
+                }}
+              >
+                <div className="lx-ext-btn-inner">
+                  <ExternalLink size={18} />
+                  <span>Add to {browserInfo.name}</span>
                 </div>
-                <div className="lx-ext-warn-note">
-                  <span>💡 <b>No .exe or setup program needed!</b> Chrome extensions load directly from this folder. Do NOT double-click <code>manifest.json</code>.</span>
-                </div>
-                <div className="lx-ext-step-actions">
-                  {EXTENSION_STORE_URL ? (
-                    <a
-                      href={EXTENSION_STORE_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="lx-btn lx-btn-primary lx-ext-dl-btn"
-                    >
-                      <Download size={15} />
-                      <span>Add to Chrome (Free)</span>
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      className="lx-btn lx-btn-primary lx-ext-dl-btn"
-                      onClick={handleDownload}
-                      disabled={downloading}
-                    >
-                      <Download size={15} />
-                      <span>{downloading ? 'Downloading ZIP…' : 'Download Extension (.zip)'}</span>
-                    </button>
-                  )}
-                </div>
+                <small>Free · Official {browserInfo.storeName}</small>
+              </a>
+
+              {/* Secondary Instant Web Bypass Action (Customer Retention Protection) */}
+              <button
+                type="button"
+                className="lx-ext-web-fallback-btn"
+                onClick={handleContinueOnWeb}
+                title="Run search directly on the web server without installing the extension"
+              >
+                <Zap size={15} color="#047857" />
+                <span>⚡ Continue on Web Server Engine (Instant Preview · No Install)</span>
+                <ArrowRight size={14} />
+              </button>
+            </div>
+
+            {/* Auto-Detection Live Radar Indicator */}
+            <div className="lx-ext-auto-detect-footer">
+              <div className="lx-ext-radar-orb">
+                <span className="lx-ext-radar-ping" />
+                <RefreshCw size={13} className="lx-ext-spin" color="#059669" />
+              </div>
+              <div className="lx-ext-radar-text">
+                <span>Listening for {browserInfo.name} extension in real-time…</span>
+                <small>As soon as you add it, this window automatically connects and starts your search.</small>
+              </div>
+            </div>
+
+            {/* Collapsible Local Developer Accordion (Discreetly kept for devs) */}
+            <details className="lx-ext-dev-accordion">
+              <summary>🛠️ Local Developer? Click to view unpacked folder path</summary>
+              <div className="lx-ext-dev-body">
+                <p>For local developer testing, you can load unpacked directly from:</p>
                 <div className="lx-ext-path-box">
                   <code>{localExtPath}</code>
                   <button type="button" className="lx-ext-copy-btn" onClick={copyLocalPath}>
                     {copiedPath ? <Check size={12} color="#059669" /> : <Copy size={12} />}
-                    <span>{copiedPath ? 'Copied Path!' : 'Copy Folder Path'}</span>
+                    <span>{copiedPath ? 'Copied!' : 'Copy Path'}</span>
                   </button>
                 </div>
               </div>
-            </div>
-
-            {/* Step 2: Open Chrome Extensions */}
-            <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">02</div>
-              <div className="lx-ext-step-content">
-                <b>Open Chrome Extensions in a New Tab</b>
-                <p>Paste this URL into Google Chrome, Microsoft Edge, or Brave:</p>
-                <div className="lx-ext-url-box">
-                  <code>chrome://extensions</code>
-                  <button type="button" className="lx-ext-copy-btn" onClick={copyChromeUrl}>
-                    {copiedUrl ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                    <span>{copiedUrl ? 'Copied!' : 'Copy URL'}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Step 3: Developer Mode & Load Unpacked */}
-            <div className="lx-ext-step-card">
-              <div className="lx-ext-step-number">03</div>
-              <div className="lx-ext-step-content">
-                <b>Turn ON &ldquo;Developer mode&rdquo; &amp; Click &ldquo;Load unpacked&rdquo;</b>
-                <p>
-                  1. Turn ON <b>Developer mode</b> (top-right switch on <code>chrome://extensions</code>).<br />
-                  2. Click <b>Load unpacked</b> (top-left) and select the unzipped <b>Scraper-RAM-Turbo-Extension</b> folder.
-                </p>
-                <div className="lx-ext-interactive-demo">
-                  <div className="lx-ext-demo-toggle">
-                    <span>Developer mode:</span>
-                    <div
-                      className={`lx-ext-switch ${demoToggle ? 'is-on' : ''}`}
-                      onClick={() => setDemoToggle(!demoToggle)}
-                      title="Click to toggle demo"
-                    >
-                      <div className="lx-ext-switch-knob" />
-                    </div>
-                    <small>{demoToggle ? '✓ ON (Ready for Unpacked)' : 'OFF (Click to toggle)'}</small>
-                  </div>
-                  <div className="lx-ext-demo-load">
-                    <div className="lx-ext-demo-btn">
-                      <FolderInput size={13} color="#059669" />
-                      <span>Load unpacked</span>
-                    </div>
-                    <span className="lx-ext-arrow-hint">← Pick the <b>Scraper-RAM-Turbo-Extension</b> folder</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Auto-detect Live Radar Footer */}
-            <div className="lx-ext-auto-detect-footer">
-              <div className="lx-ext-radar-orb">
-                <span className="lx-ext-radar-ping" />
-                <RefreshCw size={14} className="lx-ext-spin" color="#059669" />
-              </div>
-              <div className="lx-ext-radar-text">
-                <b>Silently listening for your extension…</b>
-                <span>As soon as you select the folder in Chrome, this window detects it automatically and starts your search.</span>
-              </div>
-            </div>
+            </details>
           </div>
-        )}
-
-        {!ready && (
-          <footer className="lx-ext-gateway-footer">
-            <button
-              type="button"
-              className="lx-ext-bypass-link"
-              onClick={ctx.skipAndRunLocal || completeProceed}
-              title="Bypass extension requirement and run search directly on your local server"
-            >
-              <Zap size={14} color="#10b981" />
-              <span>⚡ Skip Extension · Run on Local Server Engine</span>
-              <ArrowRight size={13} />
-            </button>
-          </footer>
         )}
       </motion.div>
     </div>

@@ -15,127 +15,128 @@
 
 const brandIntel = require('./brandIntel');
 const indiaTradeIntelligence = require('../utils/indiaTradeIntelligence');
+const querySpecificityClassifier = require('../utils/querySpecificityClassifier');
 
 const FAMILY_DEFINITIONS = {
   agriculture_spices: {
     label: 'Agriculture, Spices & Commodities',
     description: 'Turmeric, chilli, agro commodities, mandi merchants, rice mills and cold storage',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   textiles: {
     label: 'Textiles, Sarees & Apparel',
     description: 'Saree showrooms, handlooms, fabrics, spinning mills and wholesale garments',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   metals: {
     label: 'Iron, Steel & Metals',
     description: 'TMT bars, structural steel, sheet metal, fabrication and industrial metal stores',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   technology: {
     label: 'IT, Computers & Electronics',
     description: 'Computer shops, laptop dealers, mobile stores, CCTV, software and electronics',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   photography: {
     label: 'Photography, Studios & Media',
     description: 'Photo studios, wedding photographers, candid shoots, drone videography and digital labs',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   wedding: {
     label: 'Weddings & events',
     description: 'Venues, decor, photography, catering and wedding services',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'weddingbazaar', 'weddingwire', 'mandap', 'openstreetmap', 'social']
   },
   'home-services': {
     label: 'Home services',
     description: 'Plumbers, electricians, carpenters, painters and repair services',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   retail: {
     label: 'Retail & showrooms',
     description: 'Stores, showrooms, boutiques and consumer brands',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   health: {
     label: 'Health & medical',
     description: 'Clinics, hospitals, dentists, pharmacies and diagnostics',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   beauty: {
     label: 'Beauty & wellness',
     description: 'Salons, spas, makeup artists and wellness studios',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   food: {
     label: 'Food & dining',
     description: 'Restaurants, cafes, bakeries, caterers and cloud kitchens',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   auto: {
     label: 'Automotive',
     description: 'Car and bike showrooms, garages, service centres and parts',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   'real-estate': {
     label: 'Real estate & property',
     description: 'Builders, property dealers, architects and construction',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   education: {
     label: 'Education & training',
     description: 'Schools, colleges, coaching centres and skill institutes',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   professional: {
     label: 'Professional services',
     description: 'Lawyers, accountants, agencies, IT and business services',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   industrial: {
     label: 'Industrial & B2B',
     description: 'Manufacturers, wholesalers, distributors and suppliers',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'indiamart', 'openstreetmap'],
-    cityEngines: ['google-serp', 'justdial', 'indiamart', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   logistics: {
     label: 'Logistics & Transport',
     description: 'Packers, movers, transport companies, couriers, freight and warehouses',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'indiamart'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'indiamart']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
+    cityEngines: ['justdial', 'openstreetmap']
   },
   hospitality: {
     label: 'Hotels & Travel',
     description: 'Hotels, resorts, lodges, travel agencies, tours and rentals',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   fitness: {
     label: 'Fitness & Sports',
     description: 'Gyms, yoga studios, fitness clubs, swimming and sports academies',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   },
   generic: {
     label: 'General vendors',
     description: 'Any local business, service or supplier',
-    engines: ['google-local-finder', 'maps', 'google-serp', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['google-serp', 'justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'social']
   }
 };
 
@@ -370,7 +371,7 @@ function scoreFamily(text, family) {
  * Classify any category text into a family.
  * @returns {{family:string,label:string,description:string,engines:string[],cityEngines:string[],confidence:number,matched:string[],wedding:boolean}}
  */
-function classifyCategory(category) {
+function classifyCategory(category, countryCode = 'IN') {
   const raw = clean(category, 240);
   const text = normalize(raw);
 
@@ -381,7 +382,13 @@ function classifyCategory(category) {
       confidence: 0,
       matched: [],
       wedding: false,
-      category: ''
+      category: '',
+      isGeneric: true,
+      isParticular: false,
+      specificityMode: 'multi_vector_expansion',
+      nicheKey: null,
+      microSynonyms: [],
+      avoids: []
     };
   }
 
@@ -480,6 +487,8 @@ function classifyCategory(category) {
     if (!cityEngines.includes('weddingwire')) cityEngines.push('weddingwire');
   }
 
+  const specificity = querySpecificityClassifier.classifyQuerySpecificity(raw, countryCode);
+
   return {
     family: bestFamily,
     label: definition.label,
@@ -491,7 +500,13 @@ function classifyCategory(category) {
     matched: bestMatched,
     wedding: bestFamily === 'wedding' || isWeddingIntent,
     category: raw,
-    intent
+    intent,
+    isGeneric: specificity.isGeneric,
+    isParticular: specificity.isParticular,
+    specificityMode: specificity.mode,
+    nicheKey: specificity.nicheKey,
+    microSynonyms: specificity.microSynonyms,
+    avoids: specificity.avoids
   };
 }
 
@@ -1304,6 +1319,67 @@ function getCategorySubvectors(category) {
   return [category];
 }
 
+/**
+ * Synthesizes natural, high-intent colloquial search phrases that customers
+ * regularly type (e.g. "Best wedding photographers in Sydney", "Top dental clinic in Guntur").
+ */
+function getColloquialIntentQueries(category, location, countryCode = 'IN') {
+  if (!category || !location) return [];
+  const normCat = String(category).trim();
+  const normLoc = String(location).trim();
+  const classification = classifyCategory(normCat);
+  const family = classification.family || '';
+
+  const out = [];
+
+  // Universal high-intent customer patterns
+  out.push(`Best ${normCat} in ${normLoc}`);
+  out.push(`Top rated ${normCat} in ${normLoc}`);
+  out.push(`Affordable ${normCat} in ${normLoc}`);
+
+  // Family-specific colloquial seeds
+  if (family === 'photography') {
+    out.push(`Wedding photographers in ${normLoc}`);
+    out.push(`Candid wedding photography in ${normLoc}`);
+    out.push(`Photo studio near me in ${normLoc}`);
+    out.push(`Pre wedding photoshoot in ${normLoc}`);
+  } else if (family === 'wedding') {
+    out.push(`Banquet halls in ${normLoc}`);
+    out.push(`Wedding function halls in ${normLoc}`);
+    out.push(`Event caterers in ${normLoc}`);
+    out.push(`Bridal makeup in ${normLoc}`);
+  } else if (family === 'health') {
+    out.push(`Best clinics in ${normLoc}`);
+    out.push(`Top doctors in ${normLoc}`);
+    out.push(`Specialist hospital in ${normLoc}`);
+  } else if (family === 'home-services') {
+    out.push(`Plumbers near me in ${normLoc}`);
+    out.push(`Electricians in ${normLoc}`);
+    out.push(`Interior designers in ${normLoc}`);
+  } else if (family === 'food') {
+    out.push(`Best restaurants in ${normLoc}`);
+    out.push(`Top cafes in ${normLoc}`);
+    out.push(`Family dining in ${normLoc}`);
+  } else if (family === 'beauty') {
+    out.push(`Beauty parlour in ${normLoc}`);
+    out.push(`Hair salon in ${normLoc}`);
+    out.push(`Spa and wellness in ${normLoc}`);
+  } else if (family === 'real-estate') {
+    out.push(`Real estate agents in ${normLoc}`);
+    out.push(`Property dealers in ${normLoc}`);
+    out.push(`Flats for sale in ${normLoc}`);
+  } else if (family === 'auto') {
+    out.push(`Car repair service in ${normLoc}`);
+    out.push(`Auto mechanics in ${normLoc}`);
+  } else if (family === 'education') {
+    out.push(`Top schools in ${normLoc}`);
+    out.push(`Coaching institutes in ${normLoc}`);
+  }
+
+  // Deduplicate and return top 5
+  return Array.from(new Set(out)).slice(0, 5);
+}
+
 module.exports = {
   CATEGORY_CATALOG,
   FAMILY_DEFINITIONS,
@@ -1314,5 +1390,6 @@ module.exports = {
   buildAutoPlan,
   isWeddingCategory,
   suggestCategories,
-  getCategorySubvectors
+  getCategorySubvectors,
+  getColloquialIntentQueries
 };

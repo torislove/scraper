@@ -110,7 +110,7 @@ export default function AccountMenu({ variant = 'client' }) {
         <span className="lx-account-avatar">{initials}</span>
         <span className="lx-account-meta">
           <b>{user.name || 'Account'}</b>
-          <small>{isMaster ? 'Master' : String(user.plan || 'Starter').toUpperCase()}</small>
+          <small>{isMaster ? 'Master' : 'ENTERPRISE'}</small>
         </span>
       </button>
 
@@ -126,13 +126,11 @@ export default function AccountMenu({ variant = 'client' }) {
 
           <div className="lx-account-badges">
             <span className="lx-acct-tag is-atomic">
-              <ShieldCheck size={11} /> {user.role === 'master' ? 'Sovereign Master' : 'Verified Account'}
+              <ShieldCheck size={11} /> {user.role === 'master' ? 'Sovereign Master' : 'Verified Workspace'}
             </span>
-            {user.plan && (
-              <span className="lx-acct-tag is-kiwi">
-                <Sparkles size={11} /> {String(user.plan).toUpperCase()}
-              </span>
-            )}
+            <span className="lx-acct-tag is-kiwi">
+              <Sparkles size={11} /> ENTERPRISE
+            </span>
           </div>
 
           <button
@@ -150,10 +148,10 @@ export default function AccountMenu({ variant = 'client' }) {
               type="button"
               role="menuitem"
               className="lx-account-item"
-              onClick={() => { setOpen(false); navigate('/pricing'); }}
+              onClick={() => { setOpen(false); navigate('/story'); }}
             >
               <UserCheck size={14} />
-              <span>Plans &amp; Upgrade</span>
+              <span>Founder &amp; 20% Equity Allocation</span>
             </button>
           )}
 

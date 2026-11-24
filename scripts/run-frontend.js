@@ -21,8 +21,9 @@ const { freePorts, isPortListening } = require('./free-port');
 const ROOT = path.resolve(__dirname, '..');
 const LOCK_FILE = path.join(ROOT, 'server', 'data', '.store.lock');
 const TARGETS = {
-  client: { port: 5173, otherPort: 5174, label: 'Client Console' },
-  master: { port: 5174, otherPort: 5173, label: 'Master Console' }
+  client: { port: 5173, otherPort: 5174, label: 'Client Scraper' },
+  master: { port: 5174, otherPort: 5173, label: 'Master Scraper (11 Countries)' },
+  admin: { port: 5175, otherPort: 5173, label: 'Admin Panel' }
 };
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

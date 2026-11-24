@@ -196,7 +196,7 @@ function attachSessionCookie(req, res, token, ttlSeconds) {
     `scraper_session=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
-    'SameSite=Lax',
+    isSecure ? 'SameSite=None' : 'SameSite=Lax',
     `Max-Age=${Math.max(60, Math.floor(ttlSeconds))}`
   ];
   if (isSecure) parts.push('Secure');

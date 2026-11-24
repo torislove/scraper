@@ -1,65 +1,66 @@
 const fs = require('fs');
 const path = require('path');
 const { geocodeLocation } = require('./olaMaps');
+const { subDistrictTerm } = require('../services/indiaAdminUnits');
 
 // Known high-precision coordinates for primary regional hubs and major cities
 const KNOWN_COORDS = {
   // Telangana
-  'nalgonda': { lat: 17.0504, lng: 79.2669, district: 'Nalgonda', mandal: 'Nalgonda', state: 'Telangana', isDual: true },
-  'hyderabad': { lat: 17.3850, lng: 78.4867, district: 'Hyderabad', mandal: 'Hyderabad', state: 'Telangana', isDual: true },
-  'secunderabad': { lat: 17.4399, lng: 78.4983, district: 'Hyderabad', mandal: 'Secunderabad', state: 'Telangana', isDual: false },
-  'warangal': { lat: 17.9689, lng: 79.5941, district: 'Warangal', mandal: 'Warangal', state: 'Telangana', isDual: true },
-  'khammam': { lat: 17.2473, lng: 80.1514, district: 'Khammam', mandal: 'Khammam', state: 'Telangana', isDual: true },
-  'karimnagar': { lat: 18.4386, lng: 79.1288, district: 'Karimnagar', mandal: 'Karimnagar', state: 'Telangana', isDual: true },
-  'nizamabad': { lat: 18.6725, lng: 78.0941, district: 'Nizamabad', mandal: 'Nizamabad', state: 'Telangana', isDual: true },
-  'suryapet': { lat: 17.1439, lng: 79.6239, district: 'Suryapet', mandal: 'Suryapet', state: 'Telangana', isDual: true },
-  'miryalaguda': { lat: 16.8741, lng: 79.5638, district: 'Nalgonda', mandal: 'Miryalaguda', state: 'Telangana', isDual: false },
-  'devarakonda': { lat: 16.6974, lng: 78.9242, district: 'Nalgonda', mandal: 'Devarakonda', state: 'Telangana', isDual: false },
-  'nakrekal': { lat: 17.1656, lng: 79.4287, district: 'Nalgonda', mandal: 'Nakrekal', state: 'Telangana', isDual: false },
-  'narketpally': { lat: 17.1958, lng: 79.1972, district: 'Nalgonda', mandal: 'Narketpally', state: 'Telangana', isDual: false },
-  'chityal': { lat: 17.2343, lng: 79.1245, district: 'Nalgonda', mandal: 'Chityal', state: 'Telangana', isDual: false },
-  'munugode': { lat: 17.0658, lng: 79.0345, district: 'Nalgonda', mandal: 'Munugode', state: 'Telangana', isDual: false },
-  'chandur': { lat: 17.0035, lng: 78.9868, district: 'Nalgonda', mandal: 'Chandur', state: 'Telangana', isDual: false },
-  'haliya': { lat: 16.7428, lng: 79.3248, district: 'Nalgonda', mandal: 'Anumula (Haliya)', state: 'Telangana', isDual: false },
+  'nalgonda': { lat: 17.0504, lng: 79.2669, district: 'Nalgonda', mandal: 'Nalgonda', state: 'Telangana', isDual: true, isDualMandal: true },
+  'hyderabad': { lat: 17.3850, lng: 78.4867, district: 'Hyderabad', mandal: 'Hyderabad', state: 'Telangana', isDual: true, isDualMandal: true },
+  'secunderabad': { lat: 17.4399, lng: 78.4983, district: 'Hyderabad', mandal: 'Secunderabad', state: 'Telangana', isDual: false, isDualMandal: true },
+  'warangal': { lat: 17.9689, lng: 79.5941, district: 'Warangal', mandal: 'Warangal', state: 'Telangana', isDual: true, isDualMandal: true },
+  'khammam': { lat: 17.2473, lng: 80.1514, district: 'Khammam', mandal: 'Khammam', state: 'Telangana', isDual: true, isDualMandal: true },
+  'karimnagar': { lat: 18.4386, lng: 79.1288, district: 'Karimnagar', mandal: 'Karimnagar', state: 'Telangana', isDual: true, isDualMandal: true },
+  'nizamabad': { lat: 18.6725, lng: 78.0941, district: 'Nizamabad', mandal: 'Nizamabad', state: 'Telangana', isDual: true, isDualMandal: true },
+  'suryapet': { lat: 17.1439, lng: 79.6239, district: 'Suryapet', mandal: 'Suryapet', state: 'Telangana', isDual: true, isDualMandal: true },
+  'miryalaguda': { lat: 16.8741, lng: 79.5638, district: 'Nalgonda', mandal: 'Miryalaguda', state: 'Telangana', isDual: false, isDualMandal: true },
+  'devarakonda': { lat: 16.6974, lng: 78.9242, district: 'Nalgonda', mandal: 'Devarakonda', state: 'Telangana', isDual: false, isDualMandal: true },
+  'nakrekal': { lat: 17.1656, lng: 79.4287, district: 'Nalgonda', mandal: 'Nakrekal', state: 'Telangana', isDual: false, isDualMandal: true },
+  'narketpally': { lat: 17.1958, lng: 79.1972, district: 'Nalgonda', mandal: 'Narketpally', state: 'Telangana', isDual: false, isDualMandal: true },
+  'chityal': { lat: 17.2343, lng: 79.1245, district: 'Nalgonda', mandal: 'Chityal', state: 'Telangana', isDual: false, isDualMandal: true },
+  'munugode': { lat: 17.0658, lng: 79.0345, district: 'Nalgonda', mandal: 'Munugode', state: 'Telangana', isDual: false, isDualMandal: true },
+  'chandur': { lat: 17.0035, lng: 78.9868, district: 'Nalgonda', mandal: 'Chandur', state: 'Telangana', isDual: false, isDualMandal: true },
+  'haliya': { lat: 16.7428, lng: 79.3248, district: 'Nalgonda', mandal: 'Anumula (Haliya)', state: 'Telangana', isDual: false, isDualMandal: true },
   
   // Andhra Pradesh (Post-2022 Districts & Hubs)
-  'guntur': { lat: 16.3067, lng: 80.4365, district: 'Guntur', mandal: 'Guntur', state: 'Andhra Pradesh', isDual: true },
-  'guntur east': { lat: 16.3067, lng: 80.4480, district: 'Guntur', mandal: 'Guntur East', state: 'Andhra Pradesh', isDual: false },
-  'guntur west': { lat: 16.3115, lng: 80.4280, district: 'Guntur', mandal: 'Guntur West', state: 'Andhra Pradesh', isDual: false },
-  'medikonduru': { lat: 16.3312, lng: 80.2974, district: 'Guntur', mandal: 'Medikonduru', state: 'Andhra Pradesh', isDual: false },
-  'pedanandipadu': { lat: 16.0373, lng: 80.3015, district: 'Guntur', mandal: 'Pedanandipadu', state: 'Andhra Pradesh', isDual: false },
-  'phirangipuram': { lat: 16.3023, lng: 80.2608, district: 'Guntur', mandal: 'Phirangipuram', state: 'Andhra Pradesh', isDual: false },
-  'prathipadu': { lat: 16.1772, lng: 80.3725, district: 'Guntur', mandal: 'Prathipadu', state: 'Andhra Pradesh', isDual: false },
-  'tadikonda': { lat: 16.4258, lng: 80.4486, district: 'Guntur', mandal: 'Tadikonda', state: 'Andhra Pradesh', isDual: false },
-  'thullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false },
-  'tullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false },
-  'vatticherukuru': { lat: 16.1950, lng: 80.4410, district: 'Guntur', mandal: 'Vatticherukuru', state: 'Andhra Pradesh', isDual: false },
-  'chebrolu': { lat: 16.2008, lng: 80.5312, district: 'Guntur', mandal: 'Chebrolu', state: 'Andhra Pradesh', isDual: false },
-  'duggirala': { lat: 16.3262, lng: 80.6272, district: 'Guntur', mandal: 'Duggirala', state: 'Andhra Pradesh', isDual: false },
-  'kakumanu': { lat: 16.0380, lng: 80.4040, district: 'Guntur', mandal: 'Kakumanu', state: 'Andhra Pradesh', isDual: false },
-  'kollipara': { lat: 16.2862, lng: 80.7228, district: 'Guntur', mandal: 'Kollipara', state: 'Andhra Pradesh', isDual: false },
-  'mangalagiri': { lat: 16.4326, lng: 80.5645, district: 'Guntur', mandal: 'Mangalagiri', state: 'Andhra Pradesh', isDual: false },
-  'ponnur': { lat: 16.0682, lng: 80.5542, district: 'Guntur', mandal: 'Ponnur', state: 'Andhra Pradesh', isDual: false },
-  'tadepalle': { lat: 16.4789, lng: 80.6014, district: 'Guntur', mandal: 'Tadepalle', state: 'Andhra Pradesh', isDual: false },
-  'tenali': { lat: 16.2435, lng: 80.6400, district: 'Guntur', mandal: 'Tenali', state: 'Andhra Pradesh', isDual: false },
-  'pedakakani': { lat: 16.3458, lng: 80.4952, district: 'Guntur', mandal: 'Pedakakani', state: 'Andhra Pradesh', isDual: false },
-  'vijayawada': { lat: 16.5062, lng: 80.6480, district: 'NTR', mandal: 'Vijayawada', state: 'Andhra Pradesh', isDual: true },
-  'chirala': { lat: 15.8281, lng: 80.3524, district: 'Bapatla', mandal: 'Chirala', state: 'Andhra Pradesh', isDual: false },
-  'bapatla': { lat: 15.9042, lng: 80.4674, district: 'Bapatla', mandal: 'Bapatla', state: 'Andhra Pradesh', isDual: true },
-  'narasaraopet': { lat: 16.2359, lng: 80.0499, district: 'Palnadu', mandal: 'Narasaraopet', state: 'Andhra Pradesh', isDual: true },
-  'chilakaluripet': { lat: 16.0892, lng: 80.1670, district: 'Palnadu', mandal: 'Chilakaluripet', state: 'Andhra Pradesh', isDual: false },
-  'macherla': { lat: 16.4800, lng: 79.4300, district: 'Palnadu', mandal: 'Macherla', state: 'Andhra Pradesh', isDual: false },
-  'piduguralla': { lat: 16.4820, lng: 79.8880, district: 'Palnadu', mandal: 'Piduguralla', state: 'Andhra Pradesh', isDual: false },
-  'sattenapalle': { lat: 16.3961, lng: 80.1793, district: 'Palnadu', mandal: 'Sattenapalle', state: 'Andhra Pradesh', isDual: false },
-  'vinukonda': { lat: 16.0520, lng: 79.7420, district: 'Palnadu', mandal: 'Vinukonda', state: 'Andhra Pradesh', isDual: false },
-  'ongole': { lat: 15.5057, lng: 80.0499, district: 'Prakasam', mandal: 'Ongole', state: 'Andhra Pradesh', isDual: true },
-  'visakhapatnam': { lat: 17.6868, lng: 83.2185, district: 'Visakhapatnam', mandal: 'Visakhapatnam', state: 'Andhra Pradesh', isDual: true },
-  'tirupati': { lat: 13.6288, lng: 79.4192, district: 'Tirupati', mandal: 'Tirupati', state: 'Andhra Pradesh', isDual: true },
-  'kurnool': { lat: 15.8281, lng: 78.0373, district: 'Kurnool', mandal: 'Kurnool', state: 'Andhra Pradesh', isDual: true },
-  'nellore': { lat: 14.4426, lng: 79.9865, district: 'Sri Potti Sriramulu Nellore', mandal: 'Nellore', state: 'Andhra Pradesh', isDual: true },
-  'rajahmundry': { lat: 17.0005, lng: 81.8040, district: 'East Godavari', mandal: 'Rajahmundry', state: 'Andhra Pradesh', isDual: true },
-  'kakinada': { lat: 16.9891, lng: 82.2475, district: 'Kakinada', mandal: 'Kakinada', state: 'Andhra Pradesh', isDual: true },
-  'eluru': { lat: 16.7107, lng: 81.0952, district: 'Eluru', mandal: 'Eluru', state: 'Andhra Pradesh', isDual: true },
+  'guntur': { lat: 16.3067, lng: 80.4365, district: 'Guntur', mandal: 'Guntur', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'guntur east': { lat: 16.3067, lng: 80.4480, district: 'Guntur', mandal: 'Guntur East', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'guntur west': { lat: 16.3115, lng: 80.4280, district: 'Guntur', mandal: 'Guntur West', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'medikonduru': { lat: 16.3312, lng: 80.2974, district: 'Guntur', mandal: 'Medikonduru', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'pedanandipadu': { lat: 16.0373, lng: 80.3015, district: 'Guntur', mandal: 'Pedanandipadu', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'phirangipuram': { lat: 16.3023, lng: 80.2608, district: 'Guntur', mandal: 'Phirangipuram', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'prathipadu': { lat: 16.1772, lng: 80.3725, district: 'Guntur', mandal: 'Prathipadu', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'tadikonda': { lat: 16.4258, lng: 80.4486, district: 'Guntur', mandal: 'Tadikonda', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'thullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'tullur': { lat: 16.5369, lng: 80.4722, district: 'Guntur', mandal: 'Thullur', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'vatticherukuru': { lat: 16.1950, lng: 80.4410, district: 'Guntur', mandal: 'Vatticherukuru', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'chebrolu': { lat: 16.2008, lng: 80.5312, district: 'Guntur', mandal: 'Chebrolu', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'duggirala': { lat: 16.3262, lng: 80.6272, district: 'Guntur', mandal: 'Duggirala', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'kakumanu': { lat: 16.0380, lng: 80.4040, district: 'Guntur', mandal: 'Kakumanu', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'kollipara': { lat: 16.2862, lng: 80.7228, district: 'Guntur', mandal: 'Kollipara', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'mangalagiri': { lat: 16.4326, lng: 80.5645, district: 'Guntur', mandal: 'Mangalagiri', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'ponnur': { lat: 16.0682, lng: 80.5542, district: 'Guntur', mandal: 'Ponnur', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'tadepalle': { lat: 16.4789, lng: 80.6014, district: 'Guntur', mandal: 'Tadepalle', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'tenali': { lat: 16.2435, lng: 80.6400, district: 'Guntur', mandal: 'Tenali', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'pedakakani': { lat: 16.3458, lng: 80.4952, district: 'Guntur', mandal: 'Pedakakani', state: 'Andhra Pradesh', isDual: false, isDualMandal: true },
+  'vijayawada': { lat: 16.5062, lng: 80.6480, district: 'NTR', mandal: 'Vijayawada', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'chirala': { lat: 15.8281, lng: 80.3524, district: 'Bapatla', mandal: 'Chirala', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'bapatla': { lat: 15.9042, lng: 80.4674, district: 'Bapatla', mandal: 'Bapatla', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'narasaraopet': { lat: 16.2359, lng: 80.0499, district: 'Palnadu', mandal: 'Narasaraopet', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'chilakaluripet': { lat: 16.0892, lng: 80.1670, district: 'Palnadu', mandal: 'Chilakaluripet', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'macherla': { lat: 16.4800, lng: 79.4300, district: 'Palnadu', mandal: 'Macherla', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'piduguralla': { lat: 16.4820, lng: 79.8880, district: 'Palnadu', mandal: 'Piduguralla', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'sattenapalle': { lat: 16.3961, lng: 80.1793, district: 'Palnadu', mandal: 'Sattenapalle', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'vinukonda': { lat: 16.0520, lng: 79.7420, district: 'Palnadu', mandal: 'Vinukonda', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'ongole': { lat: 15.5057, lng: 80.0499, district: 'Prakasam', mandal: 'Ongole', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'visakhapatnam': { lat: 17.6868, lng: 83.2185, district: 'Visakhapatnam', mandal: 'Visakhapatnam', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'tirupati': { lat: 13.6288, lng: 79.4192, district: 'Tirupati', mandal: 'Tirupati', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'kurnool': { lat: 15.8281, lng: 78.0373, district: 'Kurnool', mandal: 'Kurnool', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'nellore': { lat: 14.4426, lng: 79.9865, district: 'Sri Potti Sriramulu Nellore', mandal: 'Nellore', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'rajahmundry': { lat: 17.0005, lng: 81.8040, district: 'East Godavari', mandal: 'Rajahmundry', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'kakinada': { lat: 16.9891, lng: 82.2475, district: 'Kakinada', mandal: 'Kakinada', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
+  'eluru': { lat: 16.7107, lng: 81.0952, district: 'Eluru', mandal: 'Eluru', state: 'Andhra Pradesh', isDual: true, isDualMandal: true },
 
   // Key Pan-India Metros and Cities
   'bengaluru': { lat: 12.9716, lng: 77.5946, district: 'Bengaluru', mandal: 'Bengaluru Urban', state: 'Karnataka', isDual: true },
@@ -394,37 +395,66 @@ class IndiaGeoIndex {
     for (const [key, known] of Object.entries(KNOWN_COORDS)) {
       const score = matches(key, cityBaseWeight, known.district, known.state);
       if (!score) continue;
+      const term = subDistrictTerm(known.state) || 'Mandal';
+      const isDualMandal = Boolean(known.isDualMandal || this.subDistrictsMap.has(key));
+      const placeName = known.mandal === known.district ? known.district : known.mandal;
+
+      // 1. Urban Town / Municipality / City entry (Top priority for Client searches)
       add({
-        name: known.mandal === known.district ? known.district : known.mandal,
-        type: known.isDual ? 'city' : 'town',
+        name: placeName,
+        label: isDualMandal ? `${placeName} (Town & Municipality)` : placeName,
+        type: 'city',
         mandal: known.mandal,
         subDistrict: known.mandal,
         district: known.district,
         state: known.state,
-        detail: known.isDual ? 'City' : 'Town',
+        detail: isDualMandal ? 'Town & Municipality' : (known.isDual ? 'City' : 'Town'),
         scope: 'city',
         lat: known.lat,
         lng: known.lng,
-        display: `${known.mandal === known.district ? known.district : `${known.mandal}, ${known.district}`}, ${known.state}`,
+        display: isDualMandal
+          ? `${placeName} (Town & Municipality), ${known.district}, ${known.state}`
+          : `${placeName}, ${known.district}, ${known.state}`,
         source: 'authoritative_coords'
-      }, score + 5);
+      }, score + (isMaster ? 5 : 18));
+
+      // 2. Rural Administrative Mandal / Tehsil / Taluk entry (Dual status for Chilakaluripet, Tenali, Chirala, etc.)
+      if (isDualMandal) {
+        add({
+          name: `${known.mandal} ${term}`,
+          label: `${known.mandal} ${term}`,
+          type: 'subdistrict',
+          mandal: known.mandal,
+          subDistrict: known.mandal,
+          district: known.district,
+          state: known.state,
+          detail: term,
+          scope: 'mandal',
+          lat: known.lat,
+          lng: known.lng,
+          display: `${known.mandal} ${term}, ${known.district}, ${known.state}`,
+          source: 'authoritative_coords'
+        }, score + (isMaster ? 20 : 10));
+      }
     }
 
-    // Mandals / tehsils / sub-districts
+    // Mandals / tehsils / sub-districts from subDistrictsMap
     const mandalBaseWeight = isMaster ? 195 : 160;
     for (const [key, list] of this.subDistrictsMap.entries()) {
       const score = matches(key, mandalBaseWeight, list[0]?.district || '', list[0]?.state || '');
       if (!score) continue;
       for (const sub of list.slice(0, 3)) {
+        const term = subDistrictTerm(sub.state) || 'Mandal';
         add({
-          name: `${sub.subDistrict} Mandal`,
+          name: `${sub.subDistrict} ${term}`,
+          label: `${sub.subDistrict} ${term}`,
           type: 'subdistrict',
           subDistrict: sub.subDistrict,
           district: sub.district,
           state: sub.state,
-          detail: 'Mandal',
+          detail: term,
           scope: 'mandal',
-          display: `${sub.subDistrict} Mandal, ${sub.district}, ${sub.state}`,
+          display: `${sub.subDistrict} ${term}, ${sub.district}, ${sub.state}`,
           source: 'india_villages'
         }, score);
       }

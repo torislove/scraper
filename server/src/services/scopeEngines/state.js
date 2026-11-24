@@ -41,6 +41,22 @@ function buildPlan(ctx) {
     }
   }
 
+  // Swarm Social Discovery across major state district cities
+  if (ctx.hasEngine && (ctx.hasEngine('social') || ctx.hasEngine('social-dork') || ctx.hasEngine('social-dork-intl'))) {
+    const stateCities = buildSwarmTowns(ctx).slice(0, 2);
+    if (stateCities.length) {
+      notes.push(`[Orchestrator] 🌐 Swarming Social Discovery across ${stateCities.length} state cities: ${stateCities.slice(0, 10).join(', ')}${stateCities.length > 10 ? ` +${stateCities.length - 10} more` : ''}`);
+      for (const city of stateCities) {
+        for (const p of ['instagram.com', 'facebook.com', 'x.com']) {
+          swarmJobs.push({
+            task: 'scrapeDuckDuckGoDork',
+            args: [p, `${ctx.category} ${city}`, ctx.category, city, ctx.sessionId, ctx.countryCode || 'IN', ctx.userId || 'admin_1', { zoneName: city }]
+          });
+        }
+      }
+    }
+  }
+
   const jobs = [...serp, ...swarmJobs, ...baseDirectoryJobs(ctx, { skipSerp: true })];
   return { scope: 'state', jobs, swarmTowns, notes, limits: LIMITS };
 }

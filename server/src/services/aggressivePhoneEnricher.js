@@ -19,8 +19,9 @@ const fs = require('fs');
 
 const dbAdapter = require('../config/dbAdapter');
 const { SESSIONS_DIR } = require('../config/paths');
-const { normalizePhone, extractPhones, extractEmails } = require('../utils/phoneUtils');
+const { normalizePhone, extractPhones, extractEmails, extractSocialContacts } = require('../utils/phoneUtils');
 const { detectCountry, COUNTRIES } = require('../services/localBrain/countries');
+const { scrapeSocialProfile, scrapeFacebookPage, scrapeInstagramProfile, crawlSocialViaOpenGraph, crawlTikTokViaOpenGraph } = require('../scrapers/socialMediaScraper');
 
 const httpsAgent = new https.Agent({
   rejectUnauthorized: false,
@@ -236,7 +237,7 @@ async function dorkPhoneFromSearch(vendorName, locationName, countryCode = 'IN')
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9'
         },
-        timeout: 5000
+        timeout: 2500
       });
 
       const html = typeof res.data === 'string' ? res.data : '';
@@ -279,7 +280,342 @@ async function dorkPhoneFromSearch(vendorName, locationName, countryCode = 'IN')
 }
 
 /**
- * 3. Enrich a Single Vendor Record Aggressively
+ * 3. Static Link-in-Bio Resolver (Linktree, Bio.link, Beacons)
+ * Lightweight HTTP GET against public bio hubs to harvest WhatsApp and phone numbers.
+ */
+async function resolveLinkInBio(bioUrl, countryCode = 'IN') {
+  const result = {
+    phones: [],
+    whatsapp: '',
+    email: '',
+    socials: []
+  };
+
+  if (!bioUrl || !bioUrl.startsWith('http')) return result;
+
+  try {
+    const res = await axios.get(bioUrl, {
+      headers: {
+        'User-Agent': getRandomUserAgent(),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      timeout: 6000
+    });
+
+    const html = typeof res.data === 'string' ? res.data : '';
+    if (!html) return result;
+
+    const $ = cheerio.load(html);
+
+    // Check all anchor links
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr('href') || '';
+      // WhatsApp
+      const waMatch = href.match(/(?:wa\.me|api\.whatsapp\.com\/send\?phone=)\/?(?:\+?91)?([6-9]\d{9})/i);
+      if (waMatch) {
+        result.whatsapp = `https://wa.me/91${waMatch[1]}`;
+        result.phones.push(waMatch[1]);
+      }
+      // Tel:
+      if (/^tel:/i.test(href)) {
+        const tel = href.replace(/^tel:/i, '').trim();
+        const extracted = extractPhones(tel, { defaultCountry: countryCode });
+        for (const p of extracted) {
+          result.phones.push(p.displayPhone || p.national || p.e164);
+        }
+      }
+      // Mailto:
+      if (/^mailto:/i.test(href)) {
+        const mail = href.replace(/^mailto:/i, '').split('?')[0].trim();
+        if (mail && !result.email) result.email = mail;
+      }
+      // Socials
+      if (/instagram\.com|facebook\.com/i.test(href)) {
+        result.socials.push(href);
+      }
+    });
+
+    // Also check page text
+    const text = $('body').text() || '';
+    const extractedTextPhones = extractPhones(text, { defaultCountry: countryCode });
+    for (const p of extractedTextPhones) {
+      if (p.isMobile || p.isLandline) {
+        result.phones.push(p.displayPhone || p.national || p.e164);
+      }
+    }
+  } catch (e) {
+    // Non-fatal
+  }
+
+  return result;
+}
+
+/**
+ * Synthesizes high-probability social handles for a business name to enable
+ * instant Direct Handle Probing in ~200ms without search engine dependencies.
+ */
+function generateCandidateSocialHandles(vendorName, locationName = '') {
+  if (!vendorName) return [];
+  const clean = String(vendorName)
+    .toLowerCase()
+    .replace(/\b(and|the|pvt|ltd|limited|services|service|enterprise|enterprises|studio|studios|photography|films|digital)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  const rawWords = String(vendorName).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const coreWords = clean.split(/\s+/).filter(Boolean);
+  const loc = String(locationName || '').toLowerCase().replace(/[^a-z0-9]+/g, '').trim();
+
+  const candidates = new Set();
+  
+  if (rawWords.length) {
+    candidates.add(rawWords.join(''));
+    candidates.add(rawWords.join('_'));
+  }
+  
+  if (coreWords.length) {
+    const core = coreWords.join('');
+    candidates.add(core);
+    candidates.add(`studio_${core}`);
+    candidates.add(`studio_${coreWords.join('_')}`);
+    candidates.add(`${core}_studio`);
+    candidates.add(`${core}_photography`);
+    if (loc) {
+      candidates.add(`${core}_${loc}`);
+      candidates.add(`${core}${loc}`);
+    }
+    // Handle Telugu / Indian phonetic variants (h-dropping and vowel doubling: sandhyaragam <-> sandyaraagam)
+    const noH = core.replace(/h/g, '');
+    candidates.add(noH);
+    candidates.add(`studio_${noH}`);
+    const raagam = noH.replace(/ragam/g, 'raagam');
+    candidates.add(`studio_${raagam}`); // studio_sandyaraagam!
+    candidates.add(raagam);
+    const doubleLastA = noH.replace(/am$/, 'aam');
+    candidates.add(`studio_${doubleLastA}`);
+    candidates.add(`studio_${noH.replace(/a+/g, 'aa')}`);
+  }
+
+  return Array.from(candidates).slice(0, 10);
+}
+
+/**
+ * 4. Targeted Social Bio & WhatsApp Hunter (Instagram, Facebook, JustDial, TikTok)
+ * Specially hunts down local vendors whose primary footprint is an Instagram, Facebook or TikTok page.
+ */
+async function huntSocialBioContacts(vendorName, locationName, countryCode = 'IN', zoneName = '', options = {}) {
+  const result = {
+    phones: [],
+    whatsapp: '',
+    instagram: '',
+    facebook: '',
+    tiktok: '',
+    instagramFollowers: '',
+    facebookFollowers: '',
+    tiktokFollowers: '',
+    bio: '',
+    emails: [],
+    address: '',
+    linkInBio: '',
+    justdialUrl: ''
+  };
+
+  if (!vendorName) return result;
+
+  const isIndia = String(countryCode || 'IN').toUpperCase() === 'IN';
+  const loc = [zoneName, locationName].filter(Boolean).join(' ') || locationName || '';
+  const cleanVendor = String(vendorName).trim();
+
+  const foundSocialUrls = {
+    instagram: options.instagram || '',
+    facebook: options.facebook || '',
+    tiktok: options.tiktok || ''
+  };
+
+  // Pass 0: Direct Handle Probing (How Studio Sandhyaragam was discovered in <250ms)
+  // Synthesizes high-probability social slugs directly from the vendor name
+  const candidateHandles = generateCandidateSocialHandles(cleanVendor, loc);
+  for (const handle of candidateHandles) {
+    if (result.phones.length > 0 && result.whatsapp) break;
+    const igProbeUrl = `https://www.instagram.com/${handle}/`;
+    try {
+      const igData = await crawlSocialViaOpenGraph(igProbeUrl, countryCode);
+      if (igData && igData.ok) {
+        const bioTokens = `${igData.name} ${igData.bio}`.toLowerCase();
+        const vendorTokens = cleanVendor.toLowerCase().split(/\s+/).filter(t => t.length >= 3);
+        const tokenHits = vendorTokens.filter(t => bioTokens.includes(t)).length;
+        const postCount = Number(String(igData.posts || '').replace(/\D/g, '')) || 0;
+        const followerCount = Number(String(igData.followers || '').replace(/\D/g, '')) || 0;
+        const hasContactInfo = (igData.phones && igData.phones.length > 0) || Boolean(igData.whatsappLink);
+        const isCommercialProfile = hasContactInfo || postCount >= 5 || followerCount >= 50;
+
+        if ((tokenHits >= 1 || hasContactInfo) && isCommercialProfile) {
+          foundSocialUrls.instagram = igProbeUrl;
+          result.instagram = igProbeUrl;
+          if (igData.phones && igData.phones.length > 0) result.phones.push(...igData.phones);
+          if (igData.whatsappLink && !result.whatsapp) result.whatsapp = igData.whatsappLink;
+          if (igData.bio && !result.bio) result.bio = igData.bio;
+          if (igData.followers && !result.instagramFollowers) result.instagramFollowers = igData.followers;
+          if (igData.linkInBio && !result.linkInBio) result.linkInBio = igData.linkInBio;
+          if (igData.emails && igData.emails.length > 0) result.emails.push(...igData.emails);
+          if (hasContactInfo) break;
+        }
+      }
+    } catch (e) {}
+
+    // For international countries, also probe TikTok handle directly
+    if (!isIndia && !result.tiktok) {
+      try {
+        const ttProbeUrl = `https://www.tiktok.com/@${handle}`;
+        const ttData = await crawlTikTokViaOpenGraph(ttProbeUrl, countryCode);
+        if (ttData && ttData.ok) {
+          foundSocialUrls.tiktok = ttProbeUrl;
+          result.tiktok = ttProbeUrl;
+          if (ttData.phones && ttData.phones.length > 0) result.phones.push(...ttData.phones);
+          if (ttData.whatsappLink && !result.whatsapp) result.whatsapp = ttData.whatsappLink;
+          if (ttData.bio && !result.bio) result.bio = ttData.bio;
+          if (ttData.followers && !result.tiktokFollowers) result.tiktokFollowers = ttData.followers;
+          if (ttData.linkInBio && !result.linkInBio) result.linkInBio = ttData.linkInBio;
+          if (ttData.emails && ttData.emails.length > 0) result.emails.push(...ttData.emails);
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Pass 1: Precision Dork Queries
+  const queries = [
+    `site:instagram.com "${cleanVendor}" "${loc}"`,
+    `site:facebook.com "${cleanVendor}" "${loc}"`,
+    `site:instagram.com "${cleanVendor}" ("wa.me" OR "+91" OR "call" OR "contact" OR "ph:")`,
+    `site:facebook.com "${cleanVendor}" ("phone" OR "mobile" OR "+91" OR "whatsapp")`
+  ];
+
+  if (!isIndia) {
+    queries.push(`site:tiktok.com/@ "${cleanVendor}" "${loc}"`);
+  }
+
+  if (isIndia) {
+    queries.push(`site:justdial.com "${cleanVendor}" "${loc}"`);
+  }
+
+  for (const q of queries) {
+    if (foundSocialUrls.instagram && (result.phones.length > 0 || result.whatsapp)) break;
+    try {
+      const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+      const res = await axios.get(url, {
+        headers: {
+          'User-Agent': getRandomUserAgent(),
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 2500
+      });
+
+      const html = typeof res.data === 'string' ? res.data : '';
+      if (!html) continue;
+
+      const $ = cheerio.load(html);
+
+      $('.result').each((_, el) => {
+        const title = $(el).find('.result__title').text() || '';
+        const snippet = $(el).find('.result__snippet').text() || '';
+        let link = $(el).find('a.result__url').attr('href') || $(el).find('.result__title a').attr('href') || '';
+
+        // Unwrap redirect link if present (/l/?uddg=...)
+        if (link.includes('uddg=')) {
+          const m = link.match(/uddg=([^&]+)/);
+          if (m) {
+            try { link = decodeURIComponent(m[1]); } catch (e) {}
+          }
+        }
+
+        const parsed = extractSocialContacts(`${title} ${snippet}`, link, countryCode);
+        if (parsed.phones.length > 0) result.phones.push(...parsed.phones);
+        if (parsed.whatsapp && !result.whatsapp) result.whatsapp = parsed.whatsapp;
+        if (parsed.linkInBio && !result.linkInBio) result.linkInBio = parsed.linkInBio;
+
+        if (link.includes('instagram.com') && !foundSocialUrls.instagram && !/\/(p|reel|stories|explore)\//.test(link)) {
+          foundSocialUrls.instagram = link.split('?')[0];
+          result.instagram = foundSocialUrls.instagram;
+        }
+        if (link.includes('facebook.com') && !foundSocialUrls.facebook && !/\/(login|share|events|watch|policies)\//.test(link)) {
+          foundSocialUrls.facebook = link.split('?')[0];
+          result.facebook = foundSocialUrls.facebook;
+        }
+        if (!isIndia && link.includes('tiktok.com/@') && !foundSocialUrls.tiktok) {
+          foundSocialUrls.tiktok = link.split('?')[0];
+          result.tiktok = foundSocialUrls.tiktok;
+        }
+        if (link.includes('justdial.com') && !result.justdialUrl) {
+          result.justdialUrl = link;
+        }
+      });
+
+      if (result.phones.length > 0 && result.whatsapp && foundSocialUrls.instagram) break;
+    } catch (e) {
+      // Continue to next query
+    }
+  }
+
+  // Direct Profile Inspection via Fast OpenGraph & Polaris JSON Parser (0ms Playwright overhead)
+  if (foundSocialUrls.instagram && !result.bio) {
+    try {
+      const igData = await crawlSocialViaOpenGraph(foundSocialUrls.instagram, countryCode);
+      if (igData && igData.ok) {
+        if (igData.phones && igData.phones.length > 0) result.phones.push(...igData.phones);
+        if (igData.whatsappLink && !result.whatsapp) result.whatsapp = igData.whatsappLink;
+        if (igData.bio && !result.bio) result.bio = igData.bio;
+        if (igData.followers && !result.instagramFollowers) result.instagramFollowers = igData.followers;
+        if (igData.linkInBio && !result.linkInBio) result.linkInBio = igData.linkInBio;
+        if (igData.emails && igData.emails.length > 0) result.emails.push(...igData.emails);
+      }
+    } catch (e) {}
+  }
+
+  if (foundSocialUrls.facebook && (!result.phones.length || !result.bio)) {
+    try {
+      const fbData = await crawlSocialViaOpenGraph(foundSocialUrls.facebook, countryCode);
+      if (fbData && fbData.ok) {
+        if (fbData.phones && fbData.phones.length > 0) result.phones.push(...fbData.phones);
+        if (fbData.whatsappLink && !result.whatsapp) result.whatsapp = fbData.whatsappLink;
+        if (fbData.bio && !result.bio) result.bio = fbData.bio;
+        if (fbData.followers && !result.facebookFollowers) result.facebookFollowers = fbData.followers;
+        if (fbData.address && !result.address) result.address = fbData.address;
+        if (fbData.emails && fbData.emails.length > 0) result.emails.push(...fbData.emails);
+      }
+    } catch (e) {}
+  }
+
+  if (!isIndia && foundSocialUrls.tiktok && (!result.phones.length || !result.bio)) {
+    try {
+      const ttData = await crawlTikTokViaOpenGraph(foundSocialUrls.tiktok, countryCode);
+      if (ttData && ttData.ok) {
+        if (ttData.phones && ttData.phones.length > 0) result.phones.push(...ttData.phones);
+        if (ttData.whatsappLink && !result.whatsapp) result.whatsapp = ttData.whatsappLink;
+        if (ttData.bio && !result.bio) result.bio = ttData.bio;
+        if (ttData.followers && !result.tiktokFollowers) result.tiktokFollowers = ttData.followers;
+        if (ttData.linkInBio && !result.linkInBio) result.linkInBio = ttData.linkInBio;
+        if (ttData.emails && ttData.emails.length > 0) result.emails.push(...ttData.emails);
+      }
+    } catch (e) {}
+  }
+
+  // If a link-in-bio (Linktree) was found, resolve it directly
+  if (result.linkInBio) {
+    const bioData = await resolveLinkInBio(result.linkInBio, countryCode);
+    if (bioData.phones.length > 0) result.phones.push(...bioData.phones);
+    if (bioData.whatsapp && !result.whatsapp) result.whatsapp = bioData.whatsapp;
+    if (bioData.email && (!result.emails || !result.emails.length)) result.emails.push(bioData.email);
+  }
+
+  // Deduplicate contact lists
+  result.phones = Array.from(new Set(result.phones.filter(Boolean)));
+  result.emails = Array.from(new Set(result.emails.filter(Boolean)));
+
+  return result;
+}
+
+/**
+ * 5. Enrich a Single Vendor Record Aggressively
  */
 async function enrichSingleVendorAggressive(vendor, options = {}) {
   if (!vendor || !vendor.name) return { ok: false, error: 'Invalid vendor record' };
@@ -291,9 +627,86 @@ async function enrichSingleVendorAggressive(vendor, options = {}) {
   const rawPhones = [];
   const rawEmails = [];
 
-  // Pass 1: Crawl website if known
+  // Pass 0: Instant URL & Slug Phone Mining (0 ms)
+  // Extracts embedded 10-12 digit mobile numbers from usernames/slugs (e.g. facebook.com/surendra9866074242)
+  const candidateUrls = [vendor.website, vendor.facebook, vendor.instagram, vendor.mapsLink, options.website].filter(Boolean);
+  for (const rawUrl of candidateUrls) {
+    const slugData = extractSocialContacts('', rawUrl, countryCode);
+    if (slugData.phones && slugData.phones.length > 0) {
+      for (const p of slugData.phones) {
+        if (!rawPhones.includes(p)) rawPhones.push(p);
+      }
+      enrichedFields.push('slug_phones');
+    }
+    if (slugData.whatsapp && !vendor.whatsappLink) {
+      vendor.whatsappLink = slugData.whatsapp;
+      vendor.whatsappAvailable = true;
+      enrichedFields.push('slug_whatsapp');
+    }
+  }
+
+  // Normalize vendor.website if it's missing scheme
+  if (vendor.website && !/^https?:\/\//i.test(vendor.website)) {
+    vendor.website = `https://${vendor.website}`;
+  }
+
+  // Pass 0.5: Playwright Stealth Social Profile Scraping (Instagram & Facebook Login-Bypass)
+  const isFacebook = (vendor.website && vendor.website.includes('facebook.com')) || Boolean(vendor.facebook);
+  const isInstagram = (vendor.website && vendor.website.includes('instagram.com')) || Boolean(vendor.instagram);
+
+  if (isFacebook || isInstagram) {
+    const targetSocial = vendor.facebook || (vendor.website && (vendor.website.includes('facebook.com') || vendor.website.includes('instagram.com')) ? vendor.website : vendor.instagram);
+    if (targetSocial) {
+      try {
+        const socialIntel = await scrapeSocialProfile(targetSocial, countryCode);
+        if (socialIntel && socialIntel.ok) {
+          if (socialIntel.phones && socialIntel.phones.length > 0) {
+            for (const sp of socialIntel.phones) {
+              if (!rawPhones.includes(sp)) rawPhones.push(sp);
+            }
+            enrichedFields.push('social_phones');
+          }
+          if (socialIntel.emails && socialIntel.emails.length > 0) {
+            for (const se of socialIntel.emails) {
+              if (!rawEmails.includes(se)) rawEmails.push(se);
+            }
+            enrichedFields.push('social_emails');
+          }
+          if (socialIntel.whatsappLink && !vendor.whatsappLink) {
+            vendor.whatsappLink = socialIntel.whatsappLink;
+            vendor.whatsappAvailable = true;
+            enrichedFields.push('social_whatsapp');
+          }
+          if (socialIntel.address && (!vendor.address || vendor.address.length < 10)) {
+            vendor.address = socialIntel.address;
+            enrichedFields.push('social_address');
+          }
+          if (socialIntel.bio && !vendor.description) {
+            vendor.description = socialIntel.bio;
+            enrichedFields.push('social_bio');
+          }
+          if (socialIntel.followers) {
+            vendor.socialFollowers = socialIntel.followers;
+            enrichedFields.push('social_followers');
+          }
+          if (socialIntel.linkInBio) {
+            vendor.linkInBio = socialIntel.linkInBio;
+            if (!vendor.website || vendor.website.includes('facebook.com') || vendor.website.includes('instagram.com')) {
+              vendor.website = socialIntel.linkInBio;
+              enrichedFields.push('link_in_bio_website');
+            }
+          }
+        }
+      } catch (err) {
+        // Non-fatal
+      }
+    }
+  }
+
+  // Pass 1: Crawl standalone website if known (skip if already a social media URL)
   const websiteToCrawl = vendor.website || options.website;
-  if (websiteToCrawl && websiteToCrawl.startsWith('http')) {
+  const isSocialWebsite = websiteToCrawl && (websiteToCrawl.includes('facebook.com') || websiteToCrawl.includes('instagram.com'));
+  if (websiteToCrawl && websiteToCrawl.startsWith('http') && !isSocialWebsite) {
     try {
       const webData = await crawlWebsiteForContacts(websiteToCrawl, countryCode);
       if (webData.phones.length > 0) {
@@ -336,6 +749,51 @@ async function enrichSingleVendorAggressive(vendor, options = {}) {
         const subWebData = await crawlWebsiteForContacts(dorkData.website, countryCode);
         if (subWebData.phones.length > 0) rawPhones.push(...subWebData.phones);
         if (subWebData.emails.length > 0) rawEmails.push(...subWebData.emails);
+      }
+    } catch (e) {}
+  }
+
+  // Pass 2.5: If still no mobile, run targeted Social & Instagram Bio Hunter
+  if (!hasExistingMobile && rawPhones.length === 0) {
+    try {
+      const location = vendor.city || vendor.district || vendor.state || '';
+      const zone = vendor.locality || vendor.zoneName || '';
+      const socialData = await huntSocialBioContacts(vendor.name, location, countryCode, zone, {
+        instagram: vendor.instagram,
+        facebook: vendor.facebook
+      });
+      if (socialData.phones.length > 0) {
+        rawPhones.push(...socialData.phones);
+        enrichedFields.push('social_phones');
+      }
+      if (socialData.whatsapp && !vendor.whatsappLink) {
+        vendor.whatsappLink = socialData.whatsapp;
+        vendor.whatsappAvailable = true;
+        enrichedFields.push('whatsapp');
+      }
+      if (socialData.instagram && !vendor.instagram) {
+        vendor.instagram = socialData.instagram;
+        enrichedFields.push('instagram');
+      }
+      if (socialData.instagramFollowers && !vendor.instagramFollowers) {
+        vendor.instagramFollowers = socialData.instagramFollowers;
+        enrichedFields.push('instagram_followers');
+      }
+      if (socialData.facebook && !vendor.facebook) {
+        vendor.facebook = socialData.facebook;
+        enrichedFields.push('facebook');
+      }
+      if (socialData.facebookFollowers && !vendor.facebookFollowers) {
+        vendor.facebookFollowers = socialData.facebookFollowers;
+        enrichedFields.push('facebook_followers');
+      }
+      if (socialData.bio && (!vendor.bio || vendor.bio.length < 15)) {
+        vendor.bio = socialData.bio;
+        enrichedFields.push('bio');
+      }
+      if (socialData.emails && socialData.emails.length > 0) {
+        rawEmails.push(...socialData.emails);
+        enrichedFields.push('social_emails');
       }
     } catch (e) {}
   }
@@ -535,5 +993,7 @@ module.exports = {
   enrichSessionAggressive,
   crawlWebsiteForContacts,
   dorkPhoneFromSearch,
+  huntSocialBioContacts,
+  resolveLinkInBio,
   countryForLead
 };

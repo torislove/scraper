@@ -1,9 +1,0 @@
-{
-	"id": "z3tTtwiXtRaEJGm",
-	"json": "{\"id\":\"z3tTtwiXtRaEJGm\",\"url\":\"http://www.manualmedia.in/\",\"loadedUrl\":\"http://www.manualmedia.in/\",\"uniqueKey\":\"http://www.manualmedia.in\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2026-06-12T19:42:00.160Z\"}",
-	"method": "GET",
-	"orderNo": null,
-	"retryCount": 0,
-	"uniqueKey": "http://www.manualmedia.in",
-	"url": "http://www.manualmedia.in/"
-}

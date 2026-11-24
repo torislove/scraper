@@ -44,6 +44,25 @@ function buildPlan(ctx) {
     for (const town of swarmTowns) {
       swarmJobs.push({ task: 'scrapeJustDial', args: [ctx.category, town, 'omni', ctx.sessionId] });
     }
+    if (ctx.hasEngine('openstreetmap')) {
+      const osmTowns = swarmTowns.slice(0, 6);
+      notes.push(`[Orchestrator] 🗺️ Clustering OpenStreetMap across mandal centers: ${osmTowns.join(', ')}`);
+      for (const town of osmTowns) {
+        swarmJobs.push({ task: 'scrapeOpenStreetMap', args: [ctx.category, town, 'omni', ctx.sessionId] });
+      }
+    }
+    if (ctx.hasEngine('social') || ctx.hasEngine('social-dork') || ctx.hasEngine('social-dork-intl')) {
+      const socialTowns = swarmTowns.slice(0, 2);
+      notes.push(`[Orchestrator] 🌐 Swarming Social Discovery across ${socialTowns.length} district towns: ${socialTowns.slice(0, 10).join(', ')}${socialTowns.length > 10 ? ` +${socialTowns.length - 10} more` : ''}`);
+      for (const town of socialTowns) {
+        for (const p of ['instagram.com', 'facebook.com', 'x.com']) {
+          swarmJobs.push({
+            task: 'scrapeDuckDuckGoDork',
+            args: [p, `${ctx.category} ${town}`, ctx.category, town, ctx.sessionId, ctx.countryCode || 'IN', ctx.userId || 'admin_1', { zoneName: town }]
+          });
+        }
+      }
+    }
   }
 
   // Same dispatch order as before the split: search, JustDial swarm, then the

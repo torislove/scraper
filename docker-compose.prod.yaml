@@ -1,3 +1,8 @@
+# ==============================================================================
+# Scraper.co.in - Production Docker Compose Orchestration
+# Ultra-Slim Resource Footprint with Client-Hardware Distributed Compute
+# ==============================================================================
+
 services:
   scraper-server:
     build:
@@ -16,29 +21,33 @@ services:
       - SCRAPER_ALLOW_REMOTE=1
       - SCRAPER_BROWSER_SLOTS=0
       - PLAYWRIGHT_CONCURRENCY=0
-      - NODE_OPTIONS=--max-old-space-size=1536
+      - NODE_OPTIONS=--max-old-space-size=1024
       - AUTH_REQUIRED=1
-      - SESSION_SECRET=${SESSION_SECRET:-scraper-super-secure-session-secret-change-me}
-      - MASTER_KEY=${MASTER_KEY:-master-admin-secret-key-change-me}
+      - SESSION_SECRET=${SESSION_SECRET:-scraper-production-secure-session-secret-change-me}
+      - MASTER_KEY=${MASTER_KEY:-master-admin-production-key-change-me}
     deploy:
       resources:
         limits:
-          cpus: '4.0'
-          memory: 4096M
+          cpus: '1.5'
+          memory: 1024M
         reservations:
-          cpus: '0.5'
-          memory: 384M
+          cpus: '0.2'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     volumes:
       # Persistent storage for vaults, lead database, and users
       - scraper_data:/app/server/data
       - scraper_db:/app/server/db
-    shm_size: "1gb" # Essential: Chromium requires >=1GB shared memory to avoid crashes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5002/api/health"]
-      interval: 30s
-      timeout: 5s
+      interval: 20s
+      timeout: 4s
       retries: 3
-      start_period: 15s
+      start_period: 10s
 
   scraper-client:
     build:
@@ -48,6 +57,19 @@ services:
     restart: unless-stopped
     ports:
       - "8081:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
     depends_on:
       scraper-server:
         condition: service_healthy
@@ -60,6 +82,19 @@ services:
     restart: unless-stopped
     ports:
       - "8082:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
     depends_on:
       scraper-server:
         condition: service_healthy

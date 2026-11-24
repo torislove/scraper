@@ -6,51 +6,51 @@ import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, Sparkles, Filter } from
  * CategoryFidelityAnimation
  * Interactive visual demonstration of server/src/services/categoryFidelity.js
  * Shows how Universal Trade Context Mutual Exclusion stops off-topic cross-bleed
- * (e.g. Sarees during Turmeric sweeps, CCTV in DSLR camera sweeps, Banquet halls in Photographer sweeps)
+ * across B2B categories before any lead reaches export.
  */
 const SCENARIOS = [
   {
-    id: 'turmeric',
-    label: 'Turmeric & Agri Wholesale',
-    query: 'Wholesale Turmeric in Tenali Guntur',
-    targetCategory: 'Raw Spices & Curcumin Processing',
-    avoidCategories: ['Sarees & Textiles', 'General Retail', 'Jewelry'],
+    id: 'saas',
+    label: 'B2B Cloud & AI Agencies',
+    query: 'B2B Cloud & AI Agencies in Bengaluru',
+    targetCategory: 'Enterprise Cloud & AI Engineering',
+    avoidCategories: ['Phone Repair', 'Consumer Electronics', 'Cables Retail'],
     leads: [
       {
         id: 1,
-        name: 'Minar Traders & Turmeric Millers',
-        category: 'Spices & Agri Millers',
+        name: 'Silicon Corridors Cloud Labs',
+        category: 'Enterprise Cloud & AI Engineering',
         phone: '+91 98856 03754',
-        locality: 'Gopal Reddy St, Tenali',
+        locality: '100ft Rd, Indiranagar, Bengaluru',
         isPure: true,
-        reason: 'Direct match on Curcumin, Turmeric milling & wholesale licensing'
+        reason: '✓ Matched: Verified B2B cloud architecture & AI engineering partner'
       },
       {
         id: 2,
-        name: 'Sri Lakshmi Saree Emporium',
-        category: 'Textiles & Sarees',
+        name: 'QuickFix Mobile Glass Repair',
+        category: 'Phone Hardware Service',
         phone: '+91 94401 12984',
-        locality: 'Main Bazaar, Tenali',
+        locality: 'Koramangala 4th Block, Bengaluru',
         isPure: false,
-        reason: 'REJECTED: Cross-bleed keyword avoidance (Textile / Retail Saree store)'
+        reason: '✕ Filtered Out: Consumer smartphone glass repair shop (Off-topic)'
       },
       {
         id: 3,
-        name: 'Kisan Bio Turmeric Cultivators Hub',
-        category: 'Export-Grade Agri Spices',
+        name: 'Koramangala AI Systems Pvt Ltd',
+        category: 'B2B SaaS & Automation',
         phone: '+91 99494 29934',
-        locality: 'Sivaji Circle, Tenali',
+        locality: 'Sony World Junction, Koramangala',
         isPure: true,
-        reason: 'Direct match on Organic Curcumin & Farmer Producer Organisation'
+        reason: '✓ Matched: Commercial AI automation & B2B SaaS consultancy'
       },
       {
         id: 4,
-        name: 'New Modern Plastic & Kitchen Store',
-        category: 'General Household Retail',
+        name: 'Metro Computer Cables Retail',
+        category: 'Peripherals & Accessories',
         phone: '+91 98480 54120',
-        locality: 'Station Rd, Tenali',
+        locality: 'SP Road, Bengaluru',
         isPure: false,
-        reason: 'REJECTED: Off-topic retail merchant (No agricultural trade license)'
+        reason: '✕ Filtered Out: Retail cables & hardware accessories shop (Off-topic)'
       }
     ]
   },
@@ -68,7 +68,7 @@ const SCENARIOS = [
         phone: '+91 98490 88124',
         locality: 'Secunderabad',
         isPure: true,
-        reason: 'Direct authorized dealer for Sony Alpha, Canon Cinema & Red cameras'
+        reason: '✓ Matched: Authorized dealer for Sony Cinema & DSLR cameras'
       },
       {
         id: 2,
@@ -77,7 +77,7 @@ const SCENARIOS = [
         phone: '+91 97001 44219',
         locality: 'Ameerpet, Hyderabad',
         isPure: false,
-        reason: 'REJECTED: Negative avoidance token "cctv / surveillance / biometric"'
+        reason: '✕ Filtered Out: CCTV & security equipment store'
       },
       {
         id: 3,
@@ -86,7 +86,7 @@ const SCENARIOS = [
         phone: '+91 90005 32187',
         locality: 'Banjara Hills',
         isPure: true,
-        reason: 'Verified supplier for telephoto glass, cinema primes & gimbals'
+        reason: '✓ Matched: Professional camera lenses and cinema gear'
       },
       {
         id: 4,
@@ -95,52 +95,52 @@ const SCENARIOS = [
         phone: '+91 99887 66541',
         locality: 'Madhapur',
         isPure: false,
-        reason: 'REJECTED: Unrelated mobile phone hardware repair shop'
+        reason: '✕ Filtered Out: Mobile phone glass & screen repair shop'
       }
     ]
   },
   {
-    id: 'photo',
-    label: 'Wedding Cinematography',
-    query: 'Wedding Photographers in Vijayawada',
-    targetCategory: 'Candid Photography & 4K Cinema',
-    avoidCategories: ['Banquet Halls', 'Catering', 'Makeup Artists'],
+    id: 'legal',
+    label: 'Corporate Legal & CA Firms',
+    query: 'Corporate Law & Advisory in Mumbai BKC',
+    targetCategory: 'Corporate Law, M&A & Chartered Accountancy',
+    avoidCategories: ['Office Stationery', 'Property Brokers', 'Printing Shops'],
     leads: [
       {
         id: 1,
-        name: 'Sri Krishna Photography & 4K Cinema',
-        category: 'Wedding Cinematography',
+        name: 'BKC Corporate Legal Chambers',
+        category: 'Corporate Law & M&A Advisory',
         phone: '+91 98480 23419',
-        locality: 'Benz Circle, Vijayawada',
+        locality: 'G Block, Bandra Kurla Complex, Mumbai',
         isPure: true,
-        reason: 'Direct match on Candid Wedding Photography, 4K Drone & Cinematography'
+        reason: '✓ Matched: Verified corporate law & venture transaction advisory'
       },
       {
         id: 2,
-        name: 'Grand Royal Kalyana Mandapam & AC Hall',
-        category: 'Function Hall & Venue',
+        name: 'Prime Commercial Office Stationery',
+        category: 'Office Supplies & Paper',
         phone: '+91 94901 88712',
-        locality: 'MG Road, Vijayawada',
+        locality: 'Kurla West, Mumbai',
         isPure: false,
-        reason: 'REJECTED: Venue directory cross-bleed (Banquet / Convention hall)'
+        reason: '✕ Filtered Out: Commercial stationery & paper supplier (Off-topic)'
       },
       {
         id: 3,
-        name: 'DreamArt Bridal Studio & Portfolios',
-        category: 'Candid & Pre-Wedding Films',
+        name: 'Nariman Tax & Compliance Partners',
+        category: 'Chartered Accountants & Tax',
         phone: '+91 99890 41250',
-        locality: 'Governorpet',
+        locality: 'Nariman Point, Mumbai',
         isPure: true,
-        reason: 'Verified candid photographers with direct WhatsApp mobile contact'
+        reason: '✓ Matched: Institutional audit, tax & FEMA compliance firm'
       },
       {
         id: 4,
-        name: 'Swagath Pure Ghee Sweets & Caterers',
-        category: 'Wedding Food Catering',
+        name: 'Bandra Property Brokers & Rentals',
+        category: 'Residential Brokerage',
         phone: '+91 98850 77123',
-        locality: 'Eluru Rd, Vijayawada',
+        locality: 'Bandra West, Mumbai',
         isPure: false,
-        reason: 'REJECTED: Catering / confectioner mutual exclusion boundary'
+        reason: '✕ Filtered Out: Real estate brokerage & rental agency (Off-topic)'
       }
     ]
   }
@@ -334,7 +334,7 @@ export default function CategoryFidelityAnimation() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: '#64748b', flexWrap: 'wrap', gap: 8 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <ShieldCheck size={14} color="#10b981" />
-          <span>Zero Hallucinations · Turmeric searches never return sarees or grocery stores</span>
+          <span>Zero Off-Topic Noise · Unrelated business categories are filtered before export</span>
         </span>
         <span style={{ fontWeight: 700, color: '#0f172a' }}>
           Guaranteed 100% Commercial Intent in Every Export

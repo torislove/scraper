@@ -1,4 +1,5 @@
 import React, { useId } from 'react';
+import ThreeGoldenPinLogo from './three/ThreeGoldenPinLogo';
 
 /**
  * Scraper.co.in brand mark: a map pin with a bold "S".
@@ -30,28 +31,29 @@ export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
       aria-hidden="true"
     >
       <defs>
-        {/* Pin body: emerald glass, lit from the upper left */}
-        <linearGradient id={bodyId} x1="20%" y1="2%" x2="80%" y2="98%">
-          <stop offset="0%" stopColor="#63F0B8" />
-          <stop offset="40%" stopColor="#19C58C" />
-          <stop offset="100%" stopColor="#0B8A6B" />
+        {/* Pin body: 24k polished gold gradient lit from upper left */}
+        <linearGradient id={bodyId} x1="15%" y1="0%" x2="85%" y2="100%">
+          <stop offset="0%" stopColor="#FDE68A" />
+          <stop offset="25%" stopColor="#F59E0B" />
+          <stop offset="65%" stopColor="#D97706" />
+          <stop offset="100%" stopColor="#92400E" />
         </linearGradient>
 
         {/* Specular sheen */}
         <linearGradient id={sheenId} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.70" />
+          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.85" />
           <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
         </linearGradient>
 
         {/* Depth under the letter */}
         <radialGradient id={vignetteId} cx="62%" cy="40%" r="70%">
-          <stop offset="58%" stopColor="#023B2C" stopOpacity="0" />
-          <stop offset="100%" stopColor="#023B2C" stopOpacity="0.24" />
+          <stop offset="58%" stopColor="#78350F" stopOpacity="0" />
+          <stop offset="100%" stopColor="#78350F" stopOpacity="0.32" />
         </radialGradient>
 
         <filter id={shadowId} x="-28%" y="-22%" width="156%" height="156%" filterUnits="userSpaceOnUse">
-          <feDropShadow dx="0" dy="2.8" stdDeviation="3.2" floodColor="#04624C" floodOpacity="0.40" />
-          <feDropShadow dx="0" dy="1" stdDeviation="1.1" floodColor="#023B2C" floodOpacity="0.32" />
+          <feDropShadow dx="0" dy="2.8" stdDeviation="3.2" floodColor="#78350F" floodOpacity="0.45" />
+          <feDropShadow dx="0" dy="1" stdDeviation="1.1" floodColor="#451A03" floodOpacity="0.35" />
         </filter>
 
         <clipPath id={clipId}>
@@ -63,22 +65,22 @@ export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
       <path
         d="M32 4.4C19.5 4.4 9.3 14.6 9.3 27.1C9.3 39 20.3 49.4 32 60.6C43.7 49.4 54.7 39 54.7 27.1C54.7 14.6 44.5 4.4 32 4.4Z"
         fill={`url(#${bodyId})`}
-        stroke="#04503E"
+        stroke="#78350F"
         strokeWidth="1.3"
         filter={`url(#${shadowId})`}
       />
 
       <g clipPath={`url(#${clipId})`}>
         {/* Curved sheen across the top-left shoulder */}
-        <ellipse cx="22.5" cy="12.5" rx="14" ry="8" fill={`url(#${sheenId})`} opacity="0.62" />
-        {/* Mint rim light on the upper edge */}
+        <ellipse cx="22.5" cy="12.5" rx="14" ry="8" fill={`url(#${sheenId})`} opacity="0.75" />
+        {/* Golden rim light on the upper edge */}
         <path
           d="M12.4 27.5C12.6 19.4 17.6 12.8 25.4 10.2"
           fill="none"
-          stroke="#B8FBE0"
+          stroke="#FEF3C7"
           strokeWidth="1.7"
           strokeLinecap="round"
-          opacity="0.42"
+          opacity="0.65"
         />
         {/* Depth toward the lower right */}
         <rect x="0" y="0" width="64" height="64" fill={`url(#${vignetteId})`} />
@@ -86,7 +88,7 @@ export function BrandIcon({ size = 34, className = '', idPrefix = 'sc' }) {
 
       {/* Bold S */}
       <path
-        d="M40.4 20.7C38.8 17.8 35.7 16.2 32.1 16.2C27.1 16.2 23.4 19.1 23.4 23C23.4 26.9 26.6 28.3 31.3 29.1C36.1 29.9 39.3 31.4 39.3 35.3C39.3 39.2 35.4 42.1 30.6 42.1C26.6 42.1 23.4 40.4 21.5 37.6"
+        d="M39.8 19.4C38.4 16.8 35.6 15.6 32 15.6C27.1 15.6 23.8 18 23.8 21.4C23.8 25 27 26.4 32 27.4C37 28.4 40.4 29.9 40.4 33.4C40.4 37 36.9 39.4 32 39.4C28.1 39.4 25.1 38 23.6 35.4"
         fill="none"
         stroke="#FFFFFF"
         strokeWidth="5.6"
@@ -110,6 +112,7 @@ export default function BrandLogo({
   theme = 'light',  // 'light' (default) | 'dark'
   showTagline = false,
   tagline = 'Autonomous Lead Radar',
+  use3d = true,
   className = '',
   style = {},
   onClick
@@ -134,7 +137,11 @@ export default function BrandLogo({
       }}
       aria-label="Scraper.co.in"
     >
-      <BrandIcon size={iconSize} />
+      {use3d ? (
+        <ThreeGoldenPinLogo size={iconSize + 2} />
+      ) : (
+        <BrandIcon size={iconSize} />
+      )}
 
       {!isIconOnly && (
         <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, textAlign: 'left' }}>
@@ -153,7 +160,7 @@ export default function BrandLogo({
             <span>Scraper</span>
             <span
               style={{
-                background: 'linear-gradient(120deg, #0E9F6E 0%, #12B886 55%, #2DD4BF 100%)',
+                background: 'linear-gradient(125deg, #92400E 0%, #D97706 42%, #F59E0B 76%, #FBBF24 100%)',
                 WebkitBackgroundClip: 'text',
                 backgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',

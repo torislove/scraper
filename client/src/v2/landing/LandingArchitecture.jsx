@@ -1,53 +1,54 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, Rocket, ShieldCheck, Filter, Cpu } from 'lucide-react';
+import { Layers, Rocket, ShieldCheck, Filter, Cpu, PlayCircle } from 'lucide-react';
 import LiquidButton3D from '../components/LiquidButton3D';
 import ThreeSwarmCluster3D from '../components/three/ThreeSwarmCluster3D';
 import CategoryFidelityAnimation from '../components/CategoryFidelityAnimation';
 import RollingCounter from '../components/RollingCounter';
+import ScrapeProgressionFlow from '../components/ScrapeProgressionFlow';
 
 const ENGINE_CATEGORIES = [
   {
     id: 'geo',
     name: 'Maps & Geospatial (4 Cores)',
-    tagline: 'Micro-Zone Territory Sweepers',
-    desc: 'Breaks any city, mandal, or county into micro-coordinates to completely bypass Google listing caps (120+ limit).',
+    tagline: 'Territory Micro-Sweeper',
+    desc: 'Breaks any city or district into micro-coordinates to bypass Google Maps search caps completely.',
     color: '#10b981'
   },
   {
     id: 'dirs',
-    name: 'National Directories (7 Cores)',
-    tagline: 'Verified Commercial Registries',
-    desc: 'Cross-checks official local business directories, MCA filings, and chamber of commerce records for corporate registration.',
+    name: 'Business Registries (7 Cores)',
+    tagline: 'Official Commercial Records',
+    desc: 'Cross-checks national trade databases and registrar filings for active corporate registration.',
     color: '#06b6d4'
   },
   {
     id: 'b2b',
     name: 'B2B & Wholesale (1 Core)',
-    tagline: 'Bulk Traders & Agri-Distributors',
-    desc: 'Uncovers unlisted wholesale suppliers, mandi commission agents, raw material stockists, and industrial manufacturers.',
+    tagline: 'Agri & Industrial Stockists',
+    desc: 'Discovers unlisted wholesale suppliers, commodity commission agents, and manufacturers.',
     color: '#3b82f6'
   },
   {
     id: 'hospitality',
     name: 'Hospitality & Venues (4 Cores)',
-    tagline: 'Event & Banquet Infrastructure',
-    desc: 'Scrapes banquet halls, convention centers, wedding venues, catering suppliers, and hotels with seating capacities.',
+    tagline: 'Event & Hall Infrastructure',
+    desc: 'Extracts banquet halls, convention centers, and wedding vendors with verified capacity.',
     color: '#f59e0b'
   },
   {
     id: 'web',
-    name: 'Web & Direct Crawlers (3 Cores)',
-    tagline: 'Direct Decision-Maker Scraping',
-    desc: 'Deep-crawls company websites, "About" and "Contact" pages to harvest verified founder emails and direct mobile numbers.',
+    name: 'Live Web Crawlers (3 Cores)',
+    tagline: 'Direct Decision-Maker Contacts',
+    desc: 'Deep-crawls company websites to extract direct owner mobile numbers and verified WhatsApp.',
     color: '#8b5cf6'
   },
   {
     id: 'clean',
-    name: 'Deduplication & Quality (3 Cores)',
-    tagline: 'Carrier Validator & CRM Formatter',
-    desc: 'Strips dead landlines, tags WhatsApp numbers, eliminates duplicates across engines, and formats directly for Excel (.xlsx).',
+    name: 'Data Cleaner & Quality (3 Cores)',
+    tagline: 'Zero Duplicates · Phone Validator',
+    desc: 'Removes dead landlines, tags WhatsApp numbers, eliminates duplicates, and formats for Excel.',
     color: '#ec4899'
   }
 ];
@@ -55,7 +56,7 @@ const ENGINE_CATEGORIES = [
 export default function LandingArchitecture() {
   const navigate = useNavigate();
   const [selectedCatId, setSelectedCatId] = useState('geo');
-  const [activeTab, setActiveTab] = useState('swarm'); // 'swarm' | 'fidelity'
+  const [activeTab, setActiveTab] = useState('pipeline'); // 'pipeline' | 'swarm' | 'fidelity'
 
   const selectedCat = ENGINE_CATEGORIES.find(c => c.id === selectedCatId) || ENGINE_CATEGORIES[0];
 
@@ -66,14 +67,14 @@ export default function LandingArchitecture() {
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}
       >
         <span className="lx-highlight-tag">
           <Layers size={13} />
-          <span>PARALLEL SWARM TECHNOLOGY · 22 EXTRACTION CORES &amp; ZERO-BLEED FIDELITY</span>
+          <span>✦ HOW IT WORKS UNDER THE HOOD</span>
         </span>
 
-        {/* 3D Tab Switcher: Swarm vs Categorisation */}
+        {/* 3D Tab Switcher: Parallel Pipeline vs Swarm vs Categorisation */}
         <div
           style={{
             display: 'inline-flex',
@@ -86,6 +87,28 @@ export default function LandingArchitecture() {
         >
           <button
             type="button"
+            onClick={() => setActiveTab('pipeline')}
+            style={{
+              padding: '4px 12px',
+              borderRadius: 999,
+              border: 'none',
+              fontSize: 11,
+              fontWeight: 800,
+              cursor: 'pointer',
+              background: activeTab === 'pipeline' ? '#ffffff' : 'transparent',
+              color: activeTab === 'pipeline' ? '#047857' : '#64748b',
+              boxShadow: activeTab === 'pipeline' ? '0 2px 6px rgba(15, 23, 42, 0.08)' : 'none',
+              transition: 'all 0.16s ease',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5
+            }}
+          >
+            <PlayCircle size={12} />
+            <span>Parallel Scrape Pipeline</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('swarm')}
             style={{
               padding: '4px 12px',
@@ -95,7 +118,7 @@ export default function LandingArchitecture() {
               fontWeight: 800,
               cursor: 'pointer',
               background: activeTab === 'swarm' ? '#ffffff' : 'transparent',
-              color: activeTab === 'swarm' ? '#047857' : '#64748b',
+              color: activeTab === 'swarm' ? '#0891b2' : '#64748b',
               boxShadow: activeTab === 'swarm' ? '0 2px 6px rgba(15, 23, 42, 0.08)' : 'none',
               transition: 'all 0.16s ease',
               display: 'inline-flex',
@@ -104,7 +127,7 @@ export default function LandingArchitecture() {
             }}
           >
             <Cpu size={12} />
-            <span>22-Engine Swarm</span>
+            <span>22-Engine Parallel Swarm</span>
           </button>
           <button
             type="button"
@@ -117,7 +140,7 @@ export default function LandingArchitecture() {
               fontWeight: 800,
               cursor: 'pointer',
               background: activeTab === 'fidelity' ? '#ffffff' : 'transparent',
-              color: activeTab === 'fidelity' ? '#047857' : '#64748b',
+              color: activeTab === 'fidelity' ? '#8b5cf6' : '#64748b',
               boxShadow: activeTab === 'fidelity' ? '0 2px 6px rgba(15, 23, 42, 0.08)' : 'none',
               transition: 'all 0.16s ease',
               display: 'inline-flex',
@@ -126,7 +149,7 @@ export default function LandingArchitecture() {
             }}
           >
             <Filter size={12} />
-            <span>Zero-Bleed Categorisation</span>
+            <span>Zero Off-Topic Filter</span>
           </button>
         </div>
       </motion.div>
@@ -134,30 +157,47 @@ export default function LandingArchitecture() {
       {/* 2. Headline & Simple Explainer */}
       <div style={{ maxWidth: 880 }}>
         <h1 className="lx-kinetic-title">
-          {activeTab === 'swarm' ? (
+          {activeTab === 'pipeline' ? (
             <>
-              <RollingCounter target={22} suffix=" Specialized Engines" />{' '}
-              <span className="lx-gradient-text">Working in Real-Time.</span>
+              22 Engines Run In Parallel.{' '}
+              <span className="lx-gradient-text">For Every Single Search.</span>
+            </>
+          ) : activeTab === 'swarm' ? (
+            <>
+              22 Specialized Sources.{' '}
+              <span className="lx-gradient-text">Zero Search Caps.</span>
             </>
           ) : (
             <>
-              Zero-Bleed Categorisation.{' '}
-              <span className="lx-gradient-text">Zero Off-Topic Waste.</span>
+              Zero Off-Topic Waste.{' '}
+              <span className="lx-gradient-text">100% Pure Leads.</span>
             </>
           )}
         </h1>
 
         <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
-          {activeTab === 'swarm' ? (
-            'Instead of searching one single website, our swarm queries 22 specialized sources simultaneously — Maps, B2B wholesale hubs, public directories, and company websites — removing search caps completely.'
+          {activeTab === 'pipeline' ? (
+            'Zero sequential waiting. Google Maps, corporate registries, official websites, Instagram, Facebook, X, and TikTok are scraped simultaneously in one lightning-fast parallel sweep.'
+          ) : activeTab === 'swarm' ? (
+            'Instead of searching just one website, our engine queries Maps, commercial registries, and live websites simultaneously—giving you complete local depth.'
           ) : (
-            'Universal trade mutual exclusion prevents cross-category contamination. When you search for wholesale turmeric, our categorisation gate deflects sarees, jewelry, and grocery stores away, keeping only genuine agri millers.'
+            'Searching for Dentists? You will never get general clinics. Searching for B2B Cloud Agencies? You will never get phone repair shops. Our smart filters reject all off-topic noise.'
           )}
         </p>
       </div>
 
-      {/* 3. Stage Content: Swarm Core or Categorisation Funnel */}
-      {activeTab === 'swarm' ? (
+      {/* 3. Stage Content: Parallel Pipeline, Swarm Core, or Categorisation Funnel */}
+      {activeTab === 'pipeline' ? (
+        <motion.div
+          key="pipeline"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35 }}
+          style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}
+        >
+          <ScrapeProgressionFlow onLaunch={() => navigate('/command?country=IN')} />
+        </motion.div>
+      ) : activeTab === 'swarm' ? (
         <motion.div
           key="swarm"
           className="lx-engine-hub-stage lx-border-beam-box"
@@ -170,7 +210,7 @@ export default function LandingArchitecture() {
             <div style={{ height: 210, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
               <ThreeSwarmCluster3D selectedEngine={selectedCatId} />
               <div style={{ position: 'absolute', bottom: 8, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
-                <span>🖱️ Drag to rotate 3D Swarm Core</span>
+                <span>22-Core Live Topology</span>
                 <span style={{ color: '#059669', fontWeight: 800 }}>22 Cores Synchronized</span>
               </div>
             </div>
@@ -232,10 +272,10 @@ export default function LandingArchitecture() {
         </motion.div>
       )}
 
-      {/* 4. Tactile 3D Action Row */}
+      {/* 4. Tactile 3D Liquid Gold Action Row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
         <LiquidButton3D
-          variant="emerald"
+          variant="gold"
           size="lg"
           icon={Rocket}
           pulse
@@ -245,7 +285,7 @@ export default function LandingArchitecture() {
         </LiquidButton3D>
 
         <LiquidButton3D
-          variant="ghost"
+          variant="glass-gold"
           size="lg"
           onClick={() => navigate('/global-coverage')}
         >

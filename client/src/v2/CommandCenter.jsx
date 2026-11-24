@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import CommandMap from './CommandMap';
 import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
+import CommandPalette from './components/CommandPalette';
 import NotificationBell from './NotificationBell';
 import CountryFlagStrip from './components/CountryFlagStrip';
 import DeepJobsView from './components/views/DeepJobsView';
@@ -21,7 +22,7 @@ import TrashModal from './components/TrashModal';
 import { findCountry } from './data/countries';
 import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
-  deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
+  deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth, pingHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
   startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
@@ -43,11 +44,13 @@ import { MetricCard, ToggleTile, VendorAvatar, EmptyState, MapLegend, DeepJobRow
 import FilterBar from './components/cards/FilterBar';
 import RenameModal from './components/modals/RenameModal';
 import MergeModal from './components/modals/MergeModal';
+import MissionCompleteDrawer from './components/popups/MissionCompleteDrawer';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
 import LeadsTableView from './components/views/LeadsTableView';
 import AccountMenu from './components/AccountMenu';
+import CommandCenterHeader from './components/CommandCenterHeader';
 import RetroDigitalTimer from './components/RetroDigitalTimer';
 import SystemCheckPill from './components/SystemCheckPill';
 import { API_URL } from '../apiConfig';
@@ -225,7 +228,7 @@ export default function CommandCenter() {
     ensureConnected,
     openTelemetry,
     openSetup
-  } = useExtension();
+  } = useExtension() || {};
   const [hwTurboEnabled] = useState(true);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
@@ -585,8 +588,6 @@ export default function CommandCenter() {
         setSelectedVendor(null);
         setTrashOpen(false);
         setToolsOpen(false);
-        setMergeOpen(false);
-        setRenameTarget(null);
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -698,6 +699,7 @@ export default function CommandCenter() {
               !incomingSid
               || incomingSid === activeSid
               || (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(activeSid))
+              || (runRef.current?.status === 'running')
             )
           );
 
@@ -708,7 +710,7 @@ export default function CommandCenter() {
 
           // STRICT CROSS-INDUSTRY PURITY GUARD:
           // Defend client stream and Leaflet map pins against off-category bleed
-          const activeCat = String(category || runRef.current?.category || '').toLowerCase();
+          const activeCat = String(runRef.current?.category || '').toLowerCase();
           const vName = String(vendor.name || '').toLowerCase();
           const vSub = String(vendor.subcategory || vendor.category || '').toLowerCase();
           const vComb = `${vName} ${vSub}`;
@@ -748,8 +750,18 @@ export default function CommandCenter() {
           }
           setProgress(data);
           if (typeof data?.sessionActive === 'boolean') {
-            if (activeSessionIdRef.current) {
-              setScanning(Boolean(data.sessionActive));
+            if (!data.sessionActive) {
+              setScanning(false);
+              const explicitStop = data.aborted === true
+                || ['aborted', 'failed', 'interrupted'].includes(String(data.status || '').toLowerCase());
+              const totalZ = Number(data.totalMandals || data.totalMandalsAcrossAll) || 0;
+              const doneZ = Number(data.completedMandals ?? data.overallCompletedMandals) || 0;
+              const incomplete = totalZ > 0 && doneZ < totalZ;
+              if (runRef.current?.status === 'running' && (explicitStop || incomplete)) {
+                finishRun(explicitStop ? (String(data.status || '').toLowerCase() || 'aborted') : 'interrupted', { serverConfirmed: true });
+              }
+            } else {
+              setScanning(true);
             }
           }
           if (data?.activeZone) {
@@ -884,8 +896,8 @@ export default function CommandCenter() {
     flushTimer = setInterval(flushBuffers, 300);
 
     const stream = createLiveStream({
-      url: streamUrl(),
-      fallbackUrl: fallbackStreamUrl(),
+      url: () => streamUrl(),
+      fallbackUrl: () => fallbackStreamUrl(),
       onSource: bindSource,
       onStatus: status => {
         if (!mountedRef.current) return;
@@ -903,7 +915,10 @@ export default function CommandCenter() {
         if (mountedRef.current) setReconnectAttempts(count);
       }
     });
-    reconnectStreamRef.current = () => stream.reconnect();
+    reconnectStreamRef.current = (forceRefresh = false) => {
+      stream.reconnect();
+      if (forceRefresh) refresh();
+    };
 
     const onServerOnline = () => {
       if (!mountedRef.current) return;
@@ -917,9 +932,21 @@ export default function CommandCenter() {
     window.addEventListener('leadharvest:server_online', onServerOnline);
     window.addEventListener('leadharvest:server_offline', onServerOffline);
 
+    const pingId = setInterval(async () => {
+      if (!mountedRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+      if (stream.status !== 1) {
+        const ok = await pingHealth();
+        if (ok && mountedRef.current) {
+          loadHealth();
+          if (stream.status !== 1) stream.reconnect();
+        }
+      }
+    }, 10000);
+
     stream.start();
 
     return () => {
+      clearInterval(pingId);
       if (flushTimer) clearInterval(flushTimer);
       if (microFlushTimer) clearTimeout(microFlushTimer);
       window.removeEventListener('leadharvest:server_online', onServerOnline);
@@ -977,29 +1004,22 @@ export default function CommandCenter() {
     }, 800);
   }, [refresh]);
 
-  // Progress completion: only finish when this run's session is strictly finished
+  // Progress completion: finish when session is finished OR all allotted zones are complete
   useEffect(() => {
-    if (run?.status === 'running' && progress && progress.sessionActive === false) {
+    if (run?.status === 'running' && progress) {
       // Guard: strictly ensure progress event belongs to current run
       if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
         const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
         const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
         const isAllZonesDone = tot > 0 && comp >= tot;
-        // The server's terminal flag is authoritative. Without it a run that
-        // ends with skipped zones (a stalled engine, an empty village) could
-        // never satisfy `comp >= tot`, and the Stop button would stay armed
-        // forever after the sweep had actually finished.
-        const serverSaysFinished = progress.finished === true || progress.status === 'completed';
-        // A "sessionActive: false" event also arrives between phases. Only treat
-        // it as the end of the run when the server says it is finished, every
-        // zone is done, the run was aborted, the server reported an error, or
-        // the stream has been silent so long that it cannot still be working.
+        // The server's terminal flag or completion of all zones is authoritative.
+        const serverSaysFinished = progress.finished === true || progress.status === 'completed' || progress.sessionActive === false;
         const lastEventAt = Number(lastEventRef.current) || 0;
-        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 90_000;
+        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 60_000;
         if (isAllZonesDone || serverSaysFinished || progress.aborted || progress.error || streamIsStale) {
           finishRun(
             progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete',
-            { serverConfirmed: serverSaysFinished }
+            { serverConfirmed: serverSaysFinished || isAllZonesDone }
           );
         }
       }
@@ -1156,6 +1176,9 @@ export default function CommandCenter() {
           hardware: currentHw,
           runLocal: Boolean(skippedExtension)
         });
+        const serverSid = response?.sessionId || sessionId;
+        activeSessionIdRef.current = serverSid;
+        setSessionFilter(serverSid);
         const plan = response?.plan || {};
         if (plan.category) resolvedCategory = plan.category;
         if (plan.location) resolvedLocation = plan.location;
@@ -1180,8 +1203,8 @@ export default function CommandCenter() {
         }));
         setRun(prev => ({
           ...(prev || {}),
-          id: sessionId,
-          sessionId,
+          id: serverSid,
+          sessionId: serverSid,
           category: plan.category || runQuery,
           location: plan.location || '',
           familyLabel: plan.familyLabel || 'Auto',
@@ -1213,6 +1236,9 @@ export default function CommandCenter() {
           hardware: currentHw,
           runLocal: Boolean(skippedExtension)
         });
+        const serverSid = response?.sessionId || sessionId;
+        activeSessionIdRef.current = serverSid;
+        setSessionFilter(serverSid);
         const plan = response?.plan || {};
         if (plan.category) resolvedCategory = plan.category;
         if (plan.location) resolvedLocation = plan.location;
@@ -1232,8 +1258,8 @@ export default function CommandCenter() {
         }
         setRun(prev => ({
           ...(prev || {}),
-          id: sessionId,
-          sessionId,
+          id: serverSid,
+          sessionId: serverSid,
           category: plan.category || runCategory,
           location: plan.location || runLocation,
           strategy: form.strategy,
@@ -2056,7 +2082,7 @@ export default function CommandCenter() {
           </span>
           <button
             type="button"
-            onClick={() => { if (reconnectStreamRef.current) reconnectStreamRef.current(); }}
+            onClick={() => { if (reconnectStreamRef.current) reconnectStreamRef.current(true); }}
             style={{
               background: '#FFFFFF',
               color: '#B45309',
@@ -2076,110 +2102,27 @@ export default function CommandCenter() {
         </div>
       )}
 
-      <header className="v2-cmd-top">
-        <div className="v2-cmd-brand">
-          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Workspace' : 'Back to home'}>
-            <Logo compact />
-          </button>
-          <div className="lx-top-nav">
-            <button
-              type="button"
-              className={cx('lx-nav-chip', activeTab === 'cockpit' && 'is-active')}
-              onClick={() => setActiveTab('cockpit')}
-            >
-              <LayoutDashboard size={13} /> Workspace
-            </button>
-            <button
-              type="button"
-              className={cx('lx-nav-chip', activeTab === 'runs' && 'is-active')}
-              onClick={() => setActiveTab('runs')}
-            >
-              <FolderArchive size={13} /> Saved Lists <b>{formatNumber(effectiveRuns.length)}</b>
-            </button>
-          </div>
-        </div>
-
-        <div className="v2-cmd-top-status">
-          <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
-            {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
-          </StatusPill>
-
-          <button
-            type="button"
-            className={cx('v2-gbc-cartridge-pill', extReady && 'is-on')}
-            onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
-            title={skippedExtension ? 'Running on Local Node.js Server Engine' : 'RAM Turbo status and your hardware lanes'}
-          >
-            <Cpu size={12} />
-            <span>
-              {skippedExtension
-                ? `LOCAL SERVER · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-                : extReady
-                  ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-                  : 'CONNECT RAM TURBO'}
-            </span>
-          </button>
-
-          <SystemCheckPill variant="client" />
-          <NotificationBell />
-          <DesktopBadge />
-          <AccountMenu variant="client" />
-          <div className="v2-tools" ref={toolsRef}>
-            <button
-              type="button"
-              className={cx('v2-btn v2-btn-ghost v2-btn-sm v2-tools-trigger', toolsOpen && 'is-open')}
-              onClick={() => setToolsOpen(open => !open)}
-              aria-expanded={toolsOpen}
-              aria-haspopup="menu"
-            >
-              <Settings size={13} /> Menu <ChevronDown size={12} className="v2-tools-caret" />
-            </button>
-            {toolsOpen && (
-              <div className="v2-tools-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
-                  <MapPin size={14} />
-                  <span><b>Full Screen Map</b><small>Explore every discovered business on the map</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
-                  <Sparkles size={14} />
-                  <span><b>Find Missing Contacts</b><small>Look up missing phones, emails &amp; websites</small></span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setToolsOpen(false);
-                    const target = run || sessions[0];
-                    if (target?.id) exportFolder(target, 'xlsx');
-                    else toast.error('Run a search first to download Excel.');
-                  }}
-                >
-                  <FileSpreadsheet size={14} />
-                  <span><b>Download Excel (.xlsx)</b><small>Export current lead list as a spreadsheet</small></span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setToolsOpen(false);
-                    const target = run || sessions[0];
-                    if (target?.id) exportFolder(target, 'csv');
-                    else toast.error('Run a search first to export CSV.');
-                  }}
-                >
-                  <Download size={14} />
-                  <span><b>Download CSV</b><small>Export clean CSV table of leads</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Workspace updated.'); }}>
-                  <RefreshCw size={14} />
-                  <span><b>Refresh Leads</b><small>Sync latest businesses and lists</small></span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <CommandCenterHeader
+        navigate={navigate}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        effectiveRuns={effectiveRuns}
+        isEngineReady={isEngineReady}
+        sseStatus={sseStatus}
+        extReady={extReady}
+        openTelemetry={openTelemetry}
+        openSetup={openSetup}
+        searchCountry={searchCountry}
+        skippedExtension={skippedExtension}
+        hardware={hardware}
+        toolsRef={toolsRef}
+        toolsOpen={toolsOpen}
+        setToolsOpen={setToolsOpen}
+        run={run}
+        sessions={sessions}
+        exportFolder={exportFolder}
+        refresh={refresh}
+      />
 
       {!extReady && !bannerDismissed && (
         <div className="v2-ext-top-banner">
@@ -2250,13 +2193,28 @@ export default function CommandCenter() {
               busy={launching}
               running={(() => {
                 if (!run || finishingRef.current) return false;
-                if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
-                if (run.status === 'running') return true;
+                if (['stopped', 'complete', 'aborted'].includes(run.status)) return false;
+
                 const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
                 const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
+                const hasActiveAuxJobs = Boolean(
+                  (progress?.pendingJobs && progress.pendingJobs > 0) ||
+                  (progress?.runningJobs && progress.runningJobs > 0)
+                );
+
+                // If all allotted zones are complete, stay running if background auxiliary/social jobs are still draining
+                if (total > 0 && done >= total) {
+                  if (hasActiveAuxJobs || progress?.sessionActive || run.status === 'running') {
+                    return true;
+                  }
+                  return false;
+                }
+
+                if (run.status === 'running') return true;
                 return Boolean(
                   (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
-                  (total > 0 && done < total)
+                  (total > 0 && done < total) ||
+                  hasActiveAuxJobs
                 );
               })()}
               compact={activeTab === 'cockpit'}
@@ -2714,6 +2672,33 @@ export default function CommandCenter() {
           </button>
         </div>
       )}
+
+      {/* Non-Disruptive Mission Complete Bottom-Right Drawer */}
+      <MissionCompleteDrawer
+        isOpen={!scanning && run?.status !== 'running' && Boolean(run && run.totalZones > 0 && run.completedZones >= run.totalZones && runLeadCount > 0)}
+        leadsCount={runLeadCount}
+        mobilesCount={vendors?.filter(l => l.isMobile || l.phoneType === 'mobile').length || 0}
+        whatsappCount={vendors?.filter(l => l.whatsappAvailable || l.whatsappLink).length || 0}
+        onExportCsv={() => (run ? exportFolder(run, 'csv') : null)}
+        onOpenFolder={() => (run ? openFolder(run) : null)}
+      />
+
+      <CommandPalette
+        workspaceActions={{
+          onFocusSearch: () => {
+            setActiveTab('cockpit');
+            setTimeout(() => {
+              const el = document.getElementById('cmd-console-query');
+              if (el) {
+                el.focus();
+                el.select?.();
+              }
+            }, 60);
+          },
+          onSwitchTab: setActiveTab,
+          onRefresh: () => refresh()
+        }}
+      />
     </div>
   );
 }

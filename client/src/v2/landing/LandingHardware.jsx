@@ -47,7 +47,7 @@ export default function LandingHardware() {
       lanes = 4;
       speed = '180+ leads/min';
       speedNum = 180;
-      tier = 'T1 Starter';
+      tier = 'T1 Edge Core';
       citiesConcurrent = '8 Cities in Parallel';
     }
     const headroom = Math.max(4.5, ram * 0.35).toFixed(1);
@@ -64,21 +64,19 @@ export default function LandingHardware() {
       >
         <span className="lx-highlight-tag">
           <Cpu size={13} />
-          <span>ZERO CLOUD SERVER OVERHEAD · NOMINAL ENGINE PRICING ONLY</span>
+          <span>✦ DISTRIBUTED CLIENT-SIDE COMPUTE ARCHITECTURE</span>
         </span>
       </motion.div>
 
       {/* 2. Headline & Simple Explainer */}
       <div style={{ maxWidth: 880 }}>
         <h1 className="lx-kinetic-title">
-          Cloud Brain + Your Device Muscle.{' '}
-          <span className="lx-gradient-text">Zero Server Markup for You.</span>
+          Cloud Brain. Your Browser.{' '}
+          <span className="lx-gradient-text">Zero Server Queues.</span>
         </h1>
 
         <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
-          We provide 22 cloud discovery engines, but eliminate heavy server browser slots.
-          Your computer&apos;s RAM and residential IP sweep multiple cities in parallel via our safe extension —
-          slashing server costs by 95% so you only pay a nominal fee for the engines you run.
+          Cloud orchestration plans the geographic grid while your local browser executes parallel discovery lanes directly on your machine—delivering low latency and private execution.
         </p>
       </div>
 
@@ -94,7 +92,7 @@ export default function LandingHardware() {
           <div style={{ height: 215, width: '100%', position: 'relative', background: '#f8fafc', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
             <ThreeHardwareProcessor3D simulatedRamGb={simSpecs.ram} parallelLanes={simSpecs.lanes} />
             <div style={{ position: 'absolute', bottom: 8, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: '#64748b' }}>
-              <span>🖱️ Drag to inspect 3D Silicon</span>
+              <span>Live RAM Concurrency Model</span>
               <span style={{ color: '#059669', fontWeight: 800 }}>{simSpecs.citiesConcurrent}</span>
             </div>
           </div>
@@ -108,10 +106,10 @@ export default function LandingHardware() {
               </div>
               <div>
                 <strong style={{ fontSize: 12, color: '#0f172a', display: 'block' }}>
-                  1. Cloud Brain Coordinates the Engines (Nominal Pricing)
+                  1. Cloud AI Coordinates the Search
                 </strong>
                 <span style={{ fontSize: 10.5, color: '#64748b', lineHeight: 1.35, display: 'block' }}>
-                  Our central server coordinates the 22 extraction protocols, queries 40,000+ cities and mandals, and feeds structured search tasks directly to your machine.
+                  Our central server coordinates 22 discovery sources, scans 40,000+ cities, and strips off-topic noise before scraping.
                 </span>
               </div>
             </div>
@@ -123,25 +121,25 @@ export default function LandingHardware() {
               </div>
               <div>
                 <strong style={{ fontSize: 12, color: '#065f46', display: 'block' }}>
-                  2. Multi-City Concurrency via Your Device RAM
+                  2. Your Browser Sweeps Locally
                 </strong>
                 <span style={{ fontSize: 10.5, color: '#475569', lineHeight: 1.35, display: 'block' }}>
-                  Instead of paying $500/mo for cloud server RAM, your local computer renders pages natively across <strong>{simSpecs.citiesConcurrent}</strong> using your unmetered residential network.
+                  Your computer renders search results natively across <strong>{simSpecs.citiesConcurrent}</strong> using your unmetered connection with zero bot blocks.
                 </span>
               </div>
             </div>
 
-            {/* Pillar 3: Browser Extension Bridge */}
+            {/* Pillar 3: Zero Server Markup */}
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: '#f0f9ff', color: '#0284c7', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', marginTop: 2 }}>
-                <Puzzle size={16} />
+                <Zap size={16} />
               </div>
               <div>
                 <strong style={{ fontSize: 12, color: '#0f172a', display: 'block' }}>
-                  3. Browser Extension Executes in Native Tabs
+                  3. Private Local Execution &amp; Full Speed
                 </strong>
                 <span style={{ fontSize: 10.5, color: '#64748b', lineHeight: 1.35, display: 'block' }}>
-                  A lightweight extension bridges the cloud engines to your browser tabs. Zero proxies required, zero bot blocks, and 100% private execution.
+                  Zero shared server queues, native residential routing, and complete data privacy directly on your workstation.
                 </span>
               </div>
             </div>
@@ -184,7 +182,7 @@ export default function LandingHardware() {
       {/* 4. Action Row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
         <LiquidButton3D
-          variant="emerald"
+          variant="gold"
           size="lg"
           icon={Rocket}
           pulse
@@ -194,21 +192,21 @@ export default function LandingHardware() {
         </LiquidButton3D>
 
         <LiquidButton3D
-          variant="ghost"
+          variant="glass-gold"
           size="lg"
-          onClick={() => navigate('/pricing')}
+          onClick={() => navigate('/story')}
         >
-          View Nominal Engine Pricing →
+          Explore 20% Strategic Equity Allocation →
         </LiquidButton3D>
       </div>
 
       {/* 5. 4 Micro Value Pills */}
       <div className="lx-value-strip">
         <span className="lx-value-chip is-highlight">
-          <span>✓ Nominal Engine Pricing Only</span>
+          <span>✓ Zero Shared Server Queues</span>
         </span>
         <span className="lx-value-chip">
-          <span>✓ Zero Server RAM Surcharges</span>
+          <span>✓ Hardware-Adaptive Parallel Lanes</span>
         </span>
         <span className="lx-value-chip is-highlight">
           <span>✓ Multi-City Concurrent Workers</span>

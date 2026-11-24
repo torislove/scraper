@@ -7,17 +7,17 @@
     "start:server": "cd server && npm start",
     "start:client": "cd client && npm run dev",
     "start:master": "cd master && npm run dev",
+    "start:admin": "cd admin && npm run dev",
     "dev": "node dev.js",
     "dev:master": "cd master && npm run dev",
-    "stop": "node scripts/free-port.js 5002 5173 5174",
-    "build": "cd client && npm run build",
+    "dev:admin": "cd admin && npm run dev",
+    "stop": "node scripts/free-port.js 5002 5173 5174 5175",
+    "build": "cd client && npm run build && cd ../master && npm run build && cd ../admin && npm run build",
     "build:client": "cd client && npm run build",
     "build:master": "cd master && npm run build",
-    "benchmark": "node server/src/utils/benchmarkScraperFidelity.js",
-    "bild": "npm run build",
+    "build:admin": "cd admin && npm run build",
+    "deploy:web": "npm run build && firebase deploy --only hosting",
+    "package:extension": "node scripts/package-extension.cjs",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix master install"
-  },
-  "dependencies": {
-    "fuse.js": "^7.4.2"
   }
 }

@@ -4734,6 +4734,38 @@ button.v2-chip:hover {
   }
 }
 
+/* Tactical Micro-Dot for Queued Zones (Zero Clutter) */
+.v2-tactical-dot-wrap {
+  background: transparent !important;
+  border: 0 !important;
+}
+.v2-tactical-radar-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(56, 189, 248, 0.25);
+  border: 1.5px solid rgba(56, 189, 248, 0.7);
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+.v2-tactical-radar-dot:hover {
+  transform: scale(1.6);
+  background: #38bdf8;
+  border-color: #ffffff;
+  box-shadow: 0 0 12px #38bdf8;
+  z-index: 5000;
+}
+.v2-tactical-radar-dot i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #38bdf8;
+}
+
 .v2-map-legend {
   display: flex;
   flex-wrap: wrap;

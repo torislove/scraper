@@ -1,0 +1,181 @@
+name: deploy-web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "master/**"
+      - "admin/**"
+      - "firebase.json"
+      - ".firebaserc"
+      - ".github/workflows/deploy-web.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "client/**"
+      - "master/**"
+      - "admin/**"
+      - "firebase.json"
+      - ".firebaserc"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Firebase Hosting target to build & deploy"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - client
+          - master
+          - admin
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: deploy-web-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-co-in' }}
+  VITE_API_URL: ${{ vars.VITE_API_URL || 'https://api.scraper.co.in/api' }}
+  VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL || 'https://api.scraper.co.in' }}
+  VITE_CLIENT_URL: ${{ vars.VITE_CLIENT_URL || 'https://scraper.co.in' }}
+  VITE_MASTER_URL: ${{ vars.VITE_MASTER_URL || 'https://master.scraper.co.in' }}
+  VITE_AUTH_REQUIRED: ${{ vars.VITE_AUTH_REQUIRED || '1' }}
+
+jobs:
+  deploy-client:
+    name: Build & Deploy Client + Landing
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'client'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install Client dependencies
+        run: npm install --prefix client --no-audit --no-fund
+
+      - name: Lint Client source
+        working-directory: client
+        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+
+      - name: Build Client production bundle
+        run: npm run build --prefix client
+
+      - name: Deploy PR Preview (Client)
+        if: github.event_name == 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: client
+          expires: 7d
+
+      - name: Deploy Live (Client -> scraper.co.in)
+        if: github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: client
+          channelId: live
+
+  deploy-master:
+    name: Build & Deploy Master Fleet
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: master/package-lock.json
+
+      - name: Install Master dependencies
+        run: npm install --prefix master --no-audit --no-fund
+
+      - name: Lint Master source
+        working-directory: master
+        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+
+      - name: Build Master production bundle
+        run: npm run build --prefix master
+        env:
+          VITE_EDITION: master
+
+      - name: Deploy PR Preview (Master)
+        if: github.event_name == 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: master
+          expires: 7d
+
+      - name: Deploy Live (Master -> master.scraper.co.in)
+        if: github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: master
+          channelId: live
+
+  deploy-admin:
+    name: Build & Deploy Admin Panel
+    if: github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == 'admin'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install Admin dependencies
+        run: npm install --prefix admin --no-audit --no-fund
+
+      - name: Build Admin production bundle
+        run: npm run build --prefix admin
+
+      - name: Deploy PR Preview (Admin)
+        if: github.event_name == 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: admin
+          expires: 7d
+
+      - name: Deploy Live (Admin -> admin.scraper.co.in)
+        if: github.event_name != 'pull_request'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          target: admin
+          channelId: live

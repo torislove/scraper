@@ -369,14 +369,25 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
   return url;
 }
 
+export function getUserId() {
+  try {
+    return window.localStorage.getItem('scraper_master_user_id') || 'master';
+  } catch (e) {
+    return 'master';
+  }
+}
+
 export function streamUrl() {
-  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream?scope=master`);
+  const uid = getUserId();
+  const sep = SSE_STREAM_BASE.includes('?') ? '&' : '?';
+  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream${sep}scope=master&uid=${encodeURIComponent(uid)}`);
 }
 
 export function fallbackStreamUrl() {
+  const uid = getUserId();
   const primary = streamUrl();
-  const direct = withStreamToken(`${DIRECT_BACKEND_URL || BACKEND_URL}/api/logs/stream?scope=master`);
-  const proxied = withStreamToken(`${API_URL}/logs/stream?scope=master`);
+  const direct = withStreamToken(`${DIRECT_BACKEND_URL || BACKEND_URL}/api/logs/stream?scope=master&uid=${encodeURIComponent(uid)}`);
+  const proxied = withStreamToken(`${API_URL}/logs/stream?scope=master&uid=${encodeURIComponent(uid)}`);
   return primary === direct ? proxied : direct;
 }
 
@@ -384,16 +395,6 @@ export function sessionStreamUrl(sessionId) {
   const base = streamUrl();
   const sep = base.includes('?') ? '&' : '?';
   return `${base}${sep}sessionId=${encodeURIComponent(sessionId)}`;
-}
-
-export async function getLiveClientSessions() {
-  try {
-    const { data } = await client.get('/scrape/active?all=1');
-    const jobs = Array.isArray(data?.jobs) ? data.jobs : (Array.isArray(data) ? data : []);
-    return jobs.filter(j => j && (j.scope === 'client' || j.source === 'client' || (!j.scope && !j.type?.includes('master'))));
-  } catch (e) {
-    return [];
-  }
 }
 
 export async function getGeoHierarchy(params = {}) {

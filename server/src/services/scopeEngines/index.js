@@ -57,7 +57,7 @@ function planScopeEngines(ctx = {}) {
 
   if (!ctx.isMaster && MASTER_ONLY.has(requested)) {
     scope = 'city';
-    notes.push(`[Scope Engines] "${requested}" sweeps are Master-only. This client search runs the ${scope} plan instead.`);
+    notes.push(`[Notice] "${requested}" resolution is an exclusive Master Edition capability. This sweep will execute at city and mandal resolution.`);
   }
 
   const module = MODULES[scope] || city;
@@ -73,8 +73,48 @@ function planScopeEngines(ctx = {}) {
     ...plan,
     requestedScope: requested,
     clientAllowed: !MASTER_ONLY.has(requested) || Boolean(ctx.isMaster),
+    scopeNotice: (!ctx.isMaster && MASTER_ONLY.has(requested))
+      ? `Notice: "${requested}" resolution is an exclusive Master Edition capability. This search is running at city and mandal resolution.`
+      : null,
     notes: [...notes, ...plan.notes]
   };
 }
 
-module.exports = { planScopeEngines, normaliseScope, MASTER_ONLY, MODULES };
+function listScopeEngines() {
+  return [
+    {
+      id: 'city',
+      label: 'City & Municipality Sweep',
+      unitTerm: 'Commercial Zone',
+      coverage: 'Localities, commercial centres, street grid, and peripheral rings',
+      clientAllowed: true,
+      maxZones: 400
+    },
+    {
+      id: 'mandal',
+      label: 'Mandal & Tehsil Sweep',
+      unitTerm: 'Revenue Village',
+      coverage: 'Mandal headquarter, commercial wards, and every revenue village',
+      clientAllowed: true,
+      maxZones: 400
+    },
+    {
+      id: 'district',
+      label: 'Whole District Master Sweep',
+      unitTerm: 'Mandal & Village',
+      coverage: 'Every mandal HQ, every revenue village, with surveyed boundary containment',
+      clientAllowed: false,
+      maxZones: 2600
+    },
+    {
+      id: 'state',
+      label: 'State-Wide Master Sweep',
+      unitTerm: 'District & Tehsil',
+      coverage: 'Every district HQ, major sub-district centres, and high-density trade hubs',
+      clientAllowed: false,
+      maxZones: 2600
+    }
+  ];
+}
+
+module.exports = { planScopeEngines, normaliseScope, MASTER_ONLY, MODULES, listScopeEngines };

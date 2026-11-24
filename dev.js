@@ -103,7 +103,10 @@ if (process.platform === 'win32') {
 
 async function main() {
   const skipMaster = process.argv.includes('--no-master') || process.argv.includes('--client-only');
-  const ports = skipMaster ? [5002, 5173] : [5002, 5173, 5174];
+  const skipAdmin = process.argv.includes('--no-admin');
+  const ports = [5002, 5173];
+  if (!skipMaster) ports.push(5174);
+  if (!skipAdmin) ports.push(5175);
 
   await freePorts(ports);
   if (shuttingDown) return;
@@ -119,17 +122,24 @@ async function main() {
 
   const clientVite = path.join(root, 'client', 'node_modules', 'vite', 'bin', 'vite.js');
   const masterVite = path.join(root, 'master', 'node_modules', 'vite', 'bin', 'vite.js');
+  const adminVite = path.join(root, 'admin', 'node_modules', 'vite', 'bin', 'vite.js');
 
-  console.log('[dev.js] Starting Client Console on http://localhost:5173 ...');
+  console.log('[dev.js] Starting Client Scraper on http://localhost:5173 ...');
   startNode('client', path.join(root, 'client'), [clientVite]);
 
   if (!skipMaster) {
-    console.log('[dev.js] Starting Master Console on http://localhost:5174 ...');
+    console.log('[dev.js] Starting Master Scraper (11 Countries) on http://localhost:5174 ...');
     startNode('master', path.join(root, 'master'), [masterVite]);
+  }
+
+  if (!skipAdmin) {
+    console.log('[dev.js] Starting Admin Panel on http://localhost:5175 ...');
+    startNode('admin', path.join(root, 'admin'), [adminVite]);
   }
 
   await waitForPort(5173, 20000);
   if (!skipMaster) await waitForPort(5174, 20000);
+  if (!skipAdmin) await waitForPort(5175, 20000);
   if (shuttingDown) return;
 
   console.log('');
@@ -137,9 +147,12 @@ async function main() {
   console.log('│  Scraper.co.in — All Services Connected & Ready          │');
   console.log('├──────────────────────────────────────────────────────────┤');
   console.log('│  Backend Engine : http://localhost:5002/api/health       │');
-  console.log('│  Client Console : http://localhost:5173/command          │');
+  console.log('│  Client Scraper : http://localhost:5173/command          │');
   if (!skipMaster) {
-    console.log('│  Master Console : http://localhost:5174/command          │');
+    console.log('│  Master Scraper : http://localhost:5174/command (11 Ctr) │');
+  }
+  if (!skipAdmin) {
+    console.log('│  Admin Panel    : http://localhost:5175/                 │');
   }
   console.log('│  Press Ctrl+C to cleanly stop all processes.             │');
   console.log('└──────────────────────────────────────────────────────────┘');

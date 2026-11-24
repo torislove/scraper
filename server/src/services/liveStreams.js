@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 
 /**
  * liveStreams.js
@@ -63,14 +63,16 @@ class LiveStreamHub {
       pingedAt: Date.now()
     };
 
+    const origin = req.headers && req.headers.origin ? req.headers.origin : '*';
     res.status(200);
     res.set({
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Cache-Control'
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Cache-Control, Authorization, x-user-id, x-workspace-scope'
     });
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
@@ -78,6 +80,8 @@ class LiveStreamHub {
     // socket timeout and enable TCP keep-alive so the OS and any local proxy
     // notice a dead peer instead of holding a zombie socket for hours.
     try {
+      if (typeof req.setTimeout === 'function') req.setTimeout(0);
+      if (typeof res.setTimeout === 'function') res.setTimeout(0);
       if (res.socket) {
         res.socket.setTimeout(0);
         res.socket.setNoDelay(true);
@@ -243,12 +247,12 @@ class LiveStreamHub {
    */
   static viewerAccepts(client, audience) {
     if (!audience) return true;
-    if (!client || client.scope === 'all') return true;
+    if (!client || client.scope === 'all' || client.scope === 'admin') return true;
     if (client.scope === 'master') return audience.isMaster === true;
     const uid = client.userId || 'anonymous';
     const owner = String(audience.userId || 'anonymous');
     if (audience.isMaster === true) return false;
-    if (uid === 'anonymous') return owner === 'anonymous' || owner === '';
+    if (uid === 'anonymous' || owner === 'anonymous' || owner === '' || !client.userId) return true;
     return owner === uid;
   }
 

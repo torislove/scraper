@@ -7,47 +7,100 @@
 </head>
 <body>
   <div class="bezel">
+    <!-- Header -->
     <div class="head">
-      <span class="led" id="led"></span>
-      <div>
-        <div class="kicker">Scraper.co.in</div>
-        <h1>RAM Turbo <span id="version">1.2.0</span></h1>
+      <div class="led-wrap">
+        <span class="led" id="led"></span>
+        <span class="pulse-ring"></span>
+      </div>
+      <div class="head-meta">
+        <div class="kicker">Residential Edge Engine</div>
+        <h1>RAM Turbo <span id="version" class="version-badge">v1.3.0</span></h1>
       </div>
     </div>
 
+    <!-- Status Pill -->
     <div class="pill" id="status-pill">
-      <span>STATUS</span>
-      <span id="ext-status">STANDBY · READY</span>
+      <span class="pill-label">ENGINE STATUS</span>
+      <span id="ext-status" class="pill-value">CONNECTED · ALWAYS ON</span>
     </div>
 
-    <div class="stats">
-      <div class="stat">
-        <span>YOUR HARDWARE</span>
-        <b id="hw-spec">Detecting hardware…</b>
+    <!-- Client Hardware Allocation Matrix -->
+    <div class="card-section">
+      <div class="section-title">
+        <span>CLIENT PC HARDWARE ALLOCATION</span>
+        <span id="hw-source" class="source-pill">NATIVE HARDWARE</span>
       </div>
-      <div class="stat">
-        <span>PAGES RELAYED</span>
-        <b id="relay-count">0</b>
+      <div class="hw-grid">
+        <div class="hw-item">
+          <span class="hw-label">CPU PROCESSOR</span>
+          <b id="hw-cpu" class="hw-val">Detecting...</b>
+        </div>
+        <div class="hw-item">
+          <span class="hw-label">DYNAMIC TURBO LANES</span>
+          <b id="hw-lanes" class="hw-val highlight">8 Lanes</b>
+        </div>
+      </div>
+      <div class="ram-bar-container">
+        <div class="ram-meta">
+          <span id="ram-usage-text">RAM: 16 GB Total · 8 GB Available</span>
+          <span id="ram-pct" class="ram-pct">50% Free</span>
+        </div>
+        <div class="ram-track">
+          <div id="ram-bar" class="ram-fill" style="width: 50%;"></div>
+        </div>
       </div>
     </div>
 
-    <div class="note" id="site-note">
-      <strong>Where it can work:</strong> search engines, maps, and business
-      directories for your 11 countries. <span id="site-count">47 verified directories active.</span>
+    <!-- Live Mission Telemetry -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-sub">SPEEDOMETER</span>
+        <div class="stat-main">
+          <b id="metric-speed">0.0</b>
+          <span class="stat-unit">req/s</span>
+        </div>
+        <span id="metric-latency" class="stat-foot">~0ms avg latency</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-sub">VERIFIED LEADS</span>
+        <div class="stat-main">
+          <b id="relay-count" class="emerald-txt">0</b>
+          <span class="stat-unit">routed</span>
+        </div>
+        <span id="bytes-relayed" class="stat-foot">0 KB total transfer</span>
+      </div>
     </div>
 
+    <!-- Directory Coverage -->
+    <div class="note">
+      <div class="note-header">
+        <span class="radar-dot"></span>
+        <strong>11 Sovereign Market Coverage:</strong>
+      </div>
+      <p id="site-count">47 business directories, maps &amp; search engines active via residential IP.</p>
+    </div>
+
+    <!-- Zero Server Resource Notice -->
     <div class="note quiet">
-      <strong>What it never does:</strong> it does not read your other tabs,
-      your history, your passwords, or any personal data. It fetches only the
-      page the server asks for, and the server does all the reading.
+      <strong>Zero Server Compute Markup:</strong> All DOM rendering and zone requests execute directly inside your browser. Cloud server uses &lt;1.5MB RAM per sweep.
     </div>
 
-    <button id="open-cmd" class="btn" type="button">Open Command Center</button>
-    <button id="pair-btn" class="btn ghost" type="button" hidden>Reconnect</button>
-    <button id="wildcard-btn" class="link" type="button" hidden>
-      Also allow business websites it finds
-    </button>
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="open-cmd" class="btn" type="button">
+        <span>⚡ Open Radar Command Center</span>
+      </button>
+      <div class="action-row">
+        <button id="pair-btn" class="btn ghost" type="button">Test Gateway</button>
+        <button id="diag-btn" class="btn ghost" type="button">Diagnostics</button>
+      </div>
+      <button id="wildcard-btn" class="link" type="button" hidden>
+        + Enable Direct Business Domain Access
+      </button>
+    </div>
 
+    <!-- Error Alert Box -->
     <div class="foot" id="last-error" hidden></div>
   </div>
   <script src="popup.js"></script>

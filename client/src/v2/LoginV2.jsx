@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Eye, EyeOff,
@@ -67,8 +67,6 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
   const navigate = useNavigate();
   const location = useLocation();
 
-  const params = new URLSearchParams(location.search);
-  const selectedPlan = params.get('plan') || 'starter';
   const [mode, setMode] = useState(isMaster ? 'signin' : (initialMode || 'signin'));
 
   const [name, setName] = useState('');
@@ -87,10 +85,11 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
   const googleSlot = useRef(null);
   const googleInit = useRef(false);
 
-  const nextPath = (() => {
+  const nextPath = useMemo(() => {
+    const params = new URLSearchParams(location.search);
     const target = params.get('next') || location.state?.from || '/command';
     return typeof target === 'string' && target.startsWith('/') ? target : '/command';
-  })();
+  }, [location.search, location.state?.from]);
 
   useEffect(() => {
     if (!isMaster && initialMode) setMode(initialMode);
@@ -115,26 +114,28 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
 
   useEffect(() => {
     if (!config.googleEnabled || !config.googleClientId || mode === 'reset') return;
-    if (googleInit.current) return;
 
     const render = () => {
       if (!window.google?.accounts?.id || !googleSlot.current) return;
-      googleInit.current = true;
-      window.google.accounts.id.initialize({
-        client_id: config.googleClientId,
-        callback: async (response) => {
-          setBusy(true);
-          setError('');
-          try {
-            const session = await loginWithGoogle(response.credential);
-            finish(session);
-          } catch (err) {
-            setError(err.message || 'Google sign-in failed.');
-          } finally {
-            setBusy(false);
+      if (!googleInit.current) {
+        googleInit.current = true;
+        window.google.accounts.id.initialize({
+          client_id: config.googleClientId,
+          callback: async (response) => {
+            setBusy(true);
+            setError('');
+            try {
+              const session = await loginWithGoogle(response.credential);
+              finish(session);
+            } catch (err) {
+              setError(err.message || 'Google sign-in failed.');
+            } finally {
+              setBusy(false);
+            }
           }
-        }
-      });
+        });
+      }
+      googleSlot.current.innerHTML = '';
       window.google.accounts.id.renderButton(googleSlot.current, {
         theme: isMaster ? 'filled_black' : 'outline',
         size: 'large',
@@ -207,7 +208,7 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
           email: email.trim(),
           password,
           company: company.trim(),
-          plan: selectedPlan,
+          plan: 'enterprise',
           remember
         });
         finish(session);
@@ -287,9 +288,7 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
     },
     signup: {
       title: 'Create your workspace',
-      sub: selectedPlan && selectedPlan !== 'starter'
-        ? `Starting with the ${selectedPlan.toUpperCase()} workspace — ready in seconds.`
-        : 'Start finding verified business leads across 11 markets in seconds.'
+      sub: 'Launch distributed business intelligence across 11 sovereign markets in seconds.'
     },
     reset: {
       title: 'Reset your password',

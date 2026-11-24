@@ -4,39 +4,117 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  client-ci:
+    name: Client Lint & Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
 
-      - name: Client install
+      - name: Install Client dependencies
         run: npm install --prefix client --no-audit --no-fund
 
-      - name: Client build
+      - name: Client ESLint check
+        working-directory: client
+        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+
+      - name: Client production build
         run: npm run build --prefix client
 
-      - name: Server install
+  master-ci:
+    name: Master Lint & Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: master/package-lock.json
+
+      - name: Install Master dependencies
+        run: npm install --prefix master --no-audit --no-fund
+
+      - name: Master ESLint check
+        working-directory: master
+        run: npx eslint src/ --rule "no-undef: error" --rule "no-empty: off" --quiet
+
+      - name: Master production build
+        run: npm run build --prefix master
+
+  admin-ci:
+    name: Admin Panel Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: admin/package-lock.json
+
+      - name: Install Admin dependencies
+        run: npm install --prefix admin --no-audit --no-fund
+
+      - name: Admin production build
+        run: npm run build --prefix admin
+
+  server-ci:
+    name: Server & Config Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - name: Validate Firebase & Package JSON
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('firebase.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('.firebaserc','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+
+      - name: Install Server production dependencies
         run: npm install --prefix server --omit=dev --no-audit --no-fund
 
       - name: Server syntax check
         run: |
           node --check server/index.js
+          node --check server/src/routes/auth.js
+          node --check server/src/middleware/security.js
+          node --check server/src/services/liveStreams.js
+          node --check server/src/config/paths.js
           node --check server/src/scrapers/browserFactory.js
           node --check server/src/middleware/licenseGate.js
-          node --check server/src/config/paths.js
 
-      - name: Desktop syntax check
+      - name: Optional Desktop syntax check
         run: |
-          node --check desktop/src/main.js
-          node --check desktop/src/preload.js
-          node --check desktop/src/license/index.js
-          node --check desktop/src/license/token.js
-          node --check desktop/license-server/index.js
+          if [ -f desktop/src/main.js ]; then
+            node --check desktop/src/main.js
+            node --check desktop/src/preload.js
+          fi

@@ -321,13 +321,16 @@ export function sessionExportUrl(sessionId, format = 'csv', options = {}) {
 }
 
 export function streamUrl() {
-  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream`);
+  const uid = getUserId() || 'anonymous';
+  const sep = SSE_STREAM_BASE.includes('?') ? '&' : '?';
+  return withStreamToken(`${SSE_STREAM_BASE}/logs/stream${sep}scope=client&uid=${encodeURIComponent(uid)}`);
 }
 
 export function fallbackStreamUrl() {
+  const uid = getUserId() || 'anonymous';
   const primary = streamUrl();
-  const direct = withStreamToken(`${DIRECT_BACKEND_URL || BACKEND_URL}/api/logs/stream`);
-  const proxied = withStreamToken(`${API_URL}/logs/stream`);
+  const direct = withStreamToken(`${DIRECT_BACKEND_URL || BACKEND_URL}/api/logs/stream?scope=client&uid=${encodeURIComponent(uid)}`);
+  const proxied = withStreamToken(`${API_URL}/logs/stream?scope=client&uid=${encodeURIComponent(uid)}`);
   return primary === direct ? proxied : direct;
 }
 

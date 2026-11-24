@@ -331,11 +331,11 @@ export function LocationField({
                 {item.type === 'state' ? <Globe2 size={14} /> : item.type === 'district' ? <Building2 size={14} /> : <MapPin size={14} />}
               </span>
               <span className="v2-location-copy">
-                <b>{item.name}</b>
+                <b>{item.label || item.name}</b>
                 <small>{item.display}</small>
               </span>
               <span className={cx('v2-location-type', `type-${item.type}`)}>
-                {TYPE_LABEL[item.type] || String(item.type || '').toUpperCase()}
+                {item.detail ? item.detail.toUpperCase() : (TYPE_LABEL[item.type] || String(item.type || '').toUpperCase())}
               </span>
               <ChevronRight size={13} />
             </button>

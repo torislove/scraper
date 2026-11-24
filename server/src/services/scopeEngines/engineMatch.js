@@ -13,6 +13,16 @@ function normaliseEngines(engines) {
 }
 
 /**
+ * Engines that are registered for telemetry/history but must never be
+ * dispatched: the source hard-blocks automated clients (HTTP 403 / consent
+ * wall) or the engine is retired. Checking this in BOTH auto and explicit mode
+ * is what stops a paused engine from still firing in the Tier-0 burst —
+ * `makeHasEngine` used to return `true` for every key except `brave` in auto
+ * mode, so a "paused" Trustpilot ran on every sweep.
+ */
+const NEVER_DISPATCH = new Set(['brave', 'trustpilot', 'google-serp', 'serp', 'indiamart']);
+
+/**
  * @param {string[]} engines engine labels chosen by the operator
  * @returns {(key: string) => boolean}
  */
@@ -21,13 +31,11 @@ function makeHasEngine(engines) {
   const isAutoMode = normEngines.length === 0 || normEngines.includes('auto');
 
   return (key) => {
+    if (NEVER_DISPATCH.has(String(key).toLowerCase())) return false;
     if (isAutoMode) {
-      // Brave is rate-limited (HTTP 429) and is not part of any country bundle,
-      // so it only ever runs when the operator selects it explicitly. Every
-      // other bundled engine — including the India social dorks — runs by
-      // default, so the engine board never advertises an engine that auto mode
-      // silently refuses to dispatch.
-      if (key === 'brave') return false;
+      // Every remaining bundled engine — including the India social dorks —
+      // runs by default, so the engine board never advertises an engine that
+      // auto mode silently refuses to dispatch.
       return true;
     }
     switch (key) {
@@ -77,6 +85,7 @@ function makeHasEngine(engines) {
       case 'trustpilot':
         return normEngines.some(e => e.includes('trustpilot') || e.includes('tp'));
       case 'social-dork':
+      case 'social-dork-intl':
         return normEngines.some(e => e.includes('dork') || e.includes('social') || e.includes('duckduckgo') || e.includes('ddg') || e.includes('instagram') || e.includes('facebook') || e.includes('footprint') || e.includes('digital'));
       default:
         return normEngines.includes(String(key).toLowerCase().replace(/[^a-z0-9]/g, ''));

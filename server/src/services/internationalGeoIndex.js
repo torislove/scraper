@@ -302,9 +302,7 @@ const EXTENDED_ENTITIES = [
   { name: 'Prague', state: 'Prague', district: 'Bohemia', country: 'CZ', level: 'city', lat: 50.0755, lng: 14.4378 }
 ];
 
-const SUPPORTED_COUNTRY_CODES = new Set([
-  'IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'
-]);
+const { getCountryTaxonomy } = require('../utils/internationalAdminUnits');
 
 const GERMANY_STATES = [
   'Baden-Württemberg', 'Bavaria', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
@@ -321,14 +319,12 @@ function buildCompiledCatalog() {
   const catalog = [];
   const countryNameByCode = new Map();
   for (const c of WORLD_COUNTRIES) {
-    if (SUPPORTED_COUNTRY_CODES.has(c.code)) {
-      countryNameByCode.set(c.code, c.name);
-    }
+    countryNameByCode.set(c.code, c.name);
   }
 
-  // 1. Add the locked 11 supported countries (except IN, handled by indiaGeoIndex)
+  // 1. Add all countries from COUNTRIES & WORLD_COUNTRIES (except IN, handled by indiaGeoIndex)
   for (const country of COUNTRIES) {
-    if (country.code === 'IN' || !SUPPORTED_COUNTRY_CODES.has(country.code)) continue;
+    if (country.code === 'IN') continue;
     const cName = country.name || countryNameByCode.get(country.code) || country.code;
     catalog.push({
       name: cName,
@@ -342,9 +338,9 @@ function buildCompiledCatalog() {
     });
   }
 
-  // 2. Add all Regions / States / Provinces for the locked 11 markets
+  // 2. Add all Regions / States / Provinces for all global markets
   for (const country of COUNTRIES) {
-    if (country.code === 'IN' || !SUPPORTED_COUNTRY_CODES.has(country.code)) continue;
+    if (country.code === 'IN') continue;
     const cName = country.name || countryNameByCode.get(country.code) || country.code;
     const regions = country.code === 'DE' && (!country.regions || !country.regions.length)
       ? GERMANY_STATES
@@ -364,9 +360,9 @@ function buildCompiledCatalog() {
     }
   }
 
-  // 3. Add all entries from CITY_ALIASES for locked 11 markets
+  // 3. Add all entries from CITY_ALIASES across all countries
   for (const [aliasKey, info] of Object.entries(CITY_ALIASES)) {
-    if (info.country === 'IN' || !SUPPORTED_COUNTRY_CODES.has(info.country)) continue;
+    if (info.country === 'IN') continue;
     const cName = countryNameByCode.get(info.country) || info.country;
     const cityName = titleCase(aliasKey);
     const display = `${cityName}${info.region ? ', ' + info.region : ''}, ${cName}`;
@@ -382,9 +378,8 @@ function buildCompiledCatalog() {
     });
   }
 
-  // 4. Add all EXTENDED_ENTITIES for locked 11 markets
+  // 4. Add all EXTENDED_ENTITIES across global capitals & commercial hubs
   for (const entity of EXTENDED_ENTITIES) {
-    if (!SUPPORTED_COUNTRY_CODES.has(entity.country)) continue;
     const cName = countryNameByCode.get(entity.country) || entity.country;
     const display = [
       entity.name,
@@ -407,18 +402,19 @@ function buildCompiledCatalog() {
     });
   }
 
-  // Deduplicate entries by norm(name) + level + country
-  const seen = new Set();
-  const deduped = [];
+  // Deduplicate entries by norm(name) + level + country, preferring items with coordinates
+  const dedupedMap = new Map();
   for (const item of catalog) {
     const id = `${item.key}|${item.level}|${item.country}`;
-    if (!seen.has(id)) {
-      seen.add(id);
-      deduped.push(item);
+    const existing = dedupedMap.get(id);
+    if (!existing) {
+      dedupedMap.set(id, item);
+    } else if (!existing.lat && item.lat) {
+      dedupedMap.set(id, { ...existing, ...item });
     }
   }
 
-  COMPILED_CATALOG = deduped;
+  COMPILED_CATALOG = Array.from(dedupedMap.values());
   return COMPILED_CATALOG;
 }
 
@@ -433,7 +429,6 @@ function searchInternationalPlaces(rawQuery, options = {}) {
 
   const catalog = buildCompiledCatalog();
   const country = String(options.country || '').toUpperCase().slice(0, 2);
-  if (country && !SUPPORTED_COUNTRY_CODES.has(country)) return [];
   const isMaster = Boolean(options.isMaster);
   const limit = Math.max(1, Math.min(25, Number(options.limit) || 6));
 
@@ -441,7 +436,7 @@ function searchInternationalPlaces(rawQuery, options = {}) {
   const queryWords = query.split(/\s+/).filter(Boolean);
 
   for (const item of catalog) {
-    // Country filter: if caller requested specific country (e.g. US, AE, GB), strictly match it
+    // Country filter: if caller requested specific country (e.g. US, AE, GB, FR, JP), strictly match it
     if (country && item.country !== country) continue;
 
     // Client mode safety: Client operators search for specific cities/towns to scrape vendors.
@@ -480,6 +475,14 @@ function searchInternationalPlaces(rawQuery, options = {}) {
   scored.sort((a, b) => b.score - a.score || a.item.name.length - b.item.name.length);
 
   const results = scored.slice(0, limit).map(({ item }) => {
+    const countryTaxonomy = getCountryTaxonomy(item.country);
+    const terms = countryTaxonomy?.terms || {};
+    let detail = LEVEL_LABEL[item.level] || titleCase(item.level);
+    if (item.level === 'state' && terms.stateLabel) detail = terms.stateLabel;
+    else if (item.level === 'district' && terms.districtLabel) detail = terms.districtLabel;
+    else if (item.level === 'city' && terms.subdistrictLabel) detail = terms.subdistrictLabel;
+    else if (item.level === 'village' && terms.localityLabel) detail = terms.localityLabel;
+
     const subtitle = [
       item.district && norm(item.district) !== norm(item.name) ? item.district : '',
       item.state && norm(item.state) !== norm(item.name) ? item.state : '',
@@ -495,7 +498,7 @@ function searchInternationalPlaces(rawQuery, options = {}) {
       district: item.district || '',
       state: item.state || '',
       subtitle,
-      detail: LEVEL_LABEL[item.level] || titleCase(item.level),
+      detail,
       level: item.level,
       scope: item.level === 'village' ? 'city' : item.level,
       lat: item.lat,

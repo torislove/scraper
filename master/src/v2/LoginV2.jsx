@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, Eye, EyeOff,
@@ -37,11 +37,11 @@ export default function LoginV2({ variant = 'master' }) {
   const googleSlot = useRef(null);
   const googleInit = useRef(false);
 
-  const nextPath = (() => {
+  const nextPath = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const target = params.get('next') || location.state?.from || '/command';
     return typeof target === 'string' && target.startsWith('/') ? target : '/command';
-  })();
+  }, [location.search, location.state?.from]);
 
   useEffect(() => {
     let alive = true;
@@ -62,26 +62,28 @@ export default function LoginV2({ variant = 'master' }) {
 
   useEffect(() => {
     if (!config.googleEnabled || !config.googleClientId) return;
-    if (googleInit.current) return;
 
     const render = () => {
       if (!window.google?.accounts?.id || !googleSlot.current) return;
-      googleInit.current = true;
-      window.google.accounts.id.initialize({
-        client_id: config.googleClientId,
-        callback: async (response) => {
-          setBusy(true);
-          setError('');
-          try {
-            const session = await loginWithGoogle(response.credential);
-            finish(session);
-          } catch (err) {
-            setError(err.message || 'Google sign-in failed.');
-          } finally {
-            setBusy(false);
+      if (!googleInit.current) {
+        googleInit.current = true;
+        window.google.accounts.id.initialize({
+          client_id: config.googleClientId,
+          callback: async (response) => {
+            setBusy(true);
+            setError('');
+            try {
+              const session = await loginWithGoogle(response.credential);
+              finish(session);
+            } catch (err) {
+              setError(err.message || 'Google sign-in failed.');
+            } finally {
+              setBusy(false);
+            }
           }
-        }
-      });
+        });
+      }
+      googleSlot.current.innerHTML = '';
       window.google.accounts.id.renderButton(googleSlot.current, {
         theme: 'filled_black',
         size: 'large',
@@ -95,6 +97,12 @@ export default function LoginV2({ variant = 'master' }) {
     if (window.google?.accounts?.id) {
       render();
       return;
+    }
+
+    const existing = document.querySelector('script[data-gsi]');
+    if (existing) {
+      existing.addEventListener('load', render);
+      return () => existing.removeEventListener('load', render);
     }
 
     const script = document.createElement('script');

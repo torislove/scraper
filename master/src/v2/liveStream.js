@@ -37,10 +37,17 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
   let stopped = true;
   let lastActivity = Date.now();
   let useFallback = false;
+  let currentStatus = '';
 
-  const activeUrl = () => (useFallback && fallbackUrl ? fallbackUrl : url);
+  const resolveUrl = (target) => (typeof target === 'function' ? target() : target);
+  const activeUrl = () => {
+    const fb = resolveUrl(fallbackUrl);
+    return (useFallback && fb) ? fb : resolveUrl(url);
+  };
 
   const emitStatus = status => {
+    if (status === currentStatus) return;
+    currentStatus = status;
     try { onStatus?.(status); } catch (e) { /* UI must never break transport */ }
   };
   const emitAttempt = count => {
@@ -86,21 +93,20 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
       emitStatus('open');
     };
 
-    next.onopen = markOpen;
     next.addEventListener('open', markOpen);
 
-    // Named heartbeat or any incoming data frame proves the pipe is live
+    // Named heartbeat or any incoming data frame proves the pipe is live (without re-emitting open)
     next.addEventListener('heartbeat', () => {
       touch();
-      markOpen();
+      if (currentStatus !== 'open') markOpen();
     });
     next.addEventListener('init', () => {
       touch();
-      markOpen();
+      if (currentStatus !== 'open') markOpen();
     });
     next.addEventListener('message', () => {
       touch();
-      markOpen();
+      if (currentStatus !== 'open') markOpen();
     });
 
     if (next.readyState === 1) {
@@ -115,7 +121,9 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
       if (stopped || source !== next) return;
       clearTimeout(checkTimer);
       let overrideDelayMs = null;
-      if (fallbackUrl && fallbackUrl !== url) {
+      const fb = resolveUrl(fallbackUrl);
+      const primary = resolveUrl(url);
+      if (fb && fb !== primary) {
         if (!useFallback && attempt === 0) {
           useFallback = true;
           overrideDelayMs = 300;
@@ -191,6 +199,7 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
 
   function stop() {
     stopped = true;
+    currentStatus = '';
     if (retryTimer) {
       clearTimeout(retryTimer);
       retryTimer = null;
@@ -212,7 +221,12 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
   return {
     start,
     stop,
-    reconnect: () => scheduleReconnect(true),
+    reconnect: () => {
+      attempt = 0;
+      emitAttempt(0);
+      currentStatus = '';
+      scheduleReconnect(true);
+    },
     touch,
     get status() { return source ? source.readyState : 2; },
     get attempt() { return attempt; }

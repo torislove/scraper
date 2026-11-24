@@ -70,7 +70,18 @@ async function sleep(ms) {
 
 const USER_AGENT = 'LeadHarvestAutonomousGeo/3.2 (+https://leadharvest.local/geo-policy)';
 
+// Token bucket rate limiter: enforces 1 req/sec policy to prevent HTTP 429/629 rate limiting
+let lastNominatimCallTime = 0;
+const NOMINATIM_MIN_INTERVAL_MS = 1000;
+
 async function nominatim(query, countryCode) {
+  const now = Date.now();
+  const elapsed = now - lastNominatimCallTime;
+  if (elapsed < NOMINATIM_MIN_INTERVAL_MS) {
+    await sleep(NOMINATIM_MIN_INTERVAL_MS - elapsed);
+  }
+  lastNominatimCallTime = Date.now();
+
   const params = {
     q: query,
     format: 'json',
@@ -85,12 +96,20 @@ async function nominatim(query, countryCode) {
   if (countryCode && /^[A-Z]{2}$/.test(countryCode)) {
     params.countrycodes = countryCode.toLowerCase();
   }
-  const response = await axios.get('https://nominatim.openstreetmap.org/search', {
-    params,
-    headers: { 'User-Agent': USER_AGENT },
-    timeout: 10000
-  });
-  return Array.isArray(response.data) ? response.data : [];
+  try {
+    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+      params,
+      headers: { 'User-Agent': USER_AGENT },
+      timeout: 10000
+    });
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (err) {
+    if (err.response && (err.response.status === 429 || err.response.status === 629)) {
+      console.warn(`[OSM Geocoding] Nominatim rate limit (${err.response.status}). Backing off for 1.5s...`);
+      await sleep(1500);
+    }
+    return [];
+  }
 }
 
 const SETTLEMENT_CLASSES = new Set(['place', 'boundary']);

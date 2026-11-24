@@ -25,7 +25,8 @@ const saveUpdatedVendor = (vendors, updated) => {
 router.get('/', (req, res) => {
   try {
     const { userId, since, sessionId } = req.query;
-    const isMaster = req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master';
+    const isAdmin = req.headers['x-workspace-scope'] === 'admin' || req.query.scope === 'admin' || req.headers['x-admin-key'];
+    const isMaster = !isAdmin && (req.headers['x-workspace-scope'] === 'master' || req.query.scope === 'master');
     const requestingUserId = req.headers['x-user-id'] || userId;
     let data = (dbAdapter.getVendors() || []).slice();
 
@@ -37,13 +38,26 @@ router.get('/', (req, res) => {
         || v.lastSessionId === sessionId
         || (Array.isArray(v.sessionIds) && v.sessionIds.includes(sessionId))
       );
-    } else if (!isMaster && requestingUserId && requestingUserId !== 'anonymous') {
-      // Multi-tenant protection: non-master callers without sessionId only see their own leads
+    } else if (isAdmin) {
+      // Admin sees ALL leads across both Master and Client
+    } else if (isMaster) {
+      // Master is STRICTLY a heavy scraper and CANNOT see client leads.
+      // Master only sees Master's territorial sweeps.
       data = data.filter(v =>
-        v.userId === requestingUserId
-        || v.clientId === requestingUserId
-        || (Array.isArray(v.userIds) && v.userIds.includes(requestingUserId))
+        v.isMasterSweep === true || v.userId === 'master' || v.clientId === 'master' || (v.sessionId && v.sessionId.startsWith('master_'))
       );
+    } else if (requestingUserId && requestingUserId !== 'anonymous') {
+      // Multi-tenant protection: client callers only see their own leads (non-master)
+      data = data.filter(v =>
+        !v.isMasterSweep && (
+          v.userId === requestingUserId
+          || v.clientId === requestingUserId
+          || (Array.isArray(v.userIds) && v.userIds.includes(requestingUserId))
+        )
+      );
+    } else {
+      // Anonymous client callers only see anonymous non-master leads
+      data = data.filter(v => !v.isMasterSweep && (!v.userId || v.userId === 'anonymous'));
     }
 
     if (since && Number(since) > 0) {

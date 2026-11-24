@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <!-- Pin body: 24k polished gold gradient lit from upper left -->
+    <linearGradient id="goldPinBody" x1="15%" y1="0%" x2="85%" y2="100%">
+      <stop offset="0%" stop-color="#FDE68A" />
+      <stop offset="25%" stop-color="#F59E0B" />
+      <stop offset="65%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#92400E" />
+    </linearGradient>
+
+    <!-- Specular golden sheen -->
+    <linearGradient id="goldSheen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+
+    <radialGradient id="goldVignette" cx="62%" cy="40%" r="70%">
+      <stop offset="58%" stop-color="#78350F" stop-opacity="0" />
+      <stop offset="100%" stop-color="#78350F" stop-opacity="0.32" />
+    </radialGradient>
+
+    <filter id="goldPinShadow" x="-28%" y="-22%" width="156%" height="156%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="2.8" stdDeviation="3.2" flood-color="#78350F" flood-opacity="0.45" />
+      <feDropShadow dx="0" dy="1" stdDeviation="1.1" flood-color="#451A03" flood-opacity="0.35" />
+    </filter>
+
+    <clipPath id="goldPinClip">
+      <path d="M32 4.4C19.5 4.4 9.3 14.6 9.3 27.1C9.3 39 20.3 49.4 32 60.6C43.7 49.4 54.7 39 54.7 27.1C54.7 14.6 44.5 4.4 32 4.4Z" />
+    </clipPath>
+  </defs>
+
+  <!-- Map pin in polished 24k gold -->
+  <path
+    d="M32 4.4C19.5 4.4 9.3 14.6 9.3 27.1C9.3 39 20.3 49.4 32 60.6C43.7 49.4 54.7 39 54.7 27.1C54.7 14.6 44.5 4.4 32 4.4Z"
+    fill="url(#goldPinBody)"
+    stroke="#78350F"
+    stroke-width="1.3"
+    filter="url(#goldPinShadow)"
+  />
+
+  <g clip-path="url(#goldPinClip)">
+    <ellipse cx="22.5" cy="12.5" rx="14" ry="8" fill="url(#goldSheen)" opacity="0.75" />
+    <path d="M12.4 27.5C12.6 19.4 17.6 12.8 25.4 10.2" fill="none" stroke="#FEF3C7" stroke-width="1.7" stroke-linecap="round" opacity="0.65" />
+    <rect x="0" y="0" width="64" height="64" fill="url(#goldVignette)" />
+  </g>
+
+  <!-- Bold Platinum S in center -->
+  <path
+    d="M39.8 19.4C38.4 16.8 35.6 15.6 32 15.6C27.1 15.6 23.8 18 23.8 21.4C23.8 25 27 26.4 32 27.4C37 28.4 40.4 29.9 40.4 33.4C40.4 37 36.9 39.4 32 39.4C28.1 39.4 25.1 38 23.6 35.4"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="5.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

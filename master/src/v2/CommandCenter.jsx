@@ -16,13 +16,14 @@ import VendorDrawer from './VendorDrawer';
 import SearchConsole from './SearchConsole';
 import EngineStatusBoard from './EngineStatusBoard';
 import MasterTerminalView from './MasterTerminalView';
+import CommandPalette from './components/CommandPalette';
 import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
-  deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth,
+  deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth, pingHealth,
   getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
   startAuto, startMasterSweep, previewMasterSweep, startDeepBatch, startOmni, stopAllScrapes, resumeScrape, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions,
-  getLiveClientSessions, sessionStreamUrl
+  sessionStreamUrl
 } from './api';
 import {
   Logo, ScoreRing, StatusPill, cx, formatDuration, formatNumber,
@@ -78,6 +79,7 @@ import { MetricCard, ToggleTile, VendorAvatar, EmptyState, MapLegend, DeepJobRow
 import FilterBar, { SORTS } from './components/cards/FilterBar';
 import RenameModal from './components/modals/RenameModal';
 import MergeModal from './components/modals/MergeModal';
+import MissionCompleteDrawer from './components/popups/MissionCompleteDrawer';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
@@ -89,7 +91,7 @@ import IntelligenceView from './components/views/IntelligenceView';
 import DeepJobsView from './components/views/DeepJobsView';
 import { extractLeadArea, CarriedBadge, qualityOf, mergeSingleVendor, mergeVendorLists } from './utils/leadHelpers';
 import { leadSourceMeta } from './utils/leadSource';
-import InstrumentPanel from './components/InstrumentPanel';
+import CommandCenterHeader from './components/CommandCenterHeader';
 import CountryFlagStrip from './components/CountryFlagStrip';
 import AccountMenu from './components/AccountMenu';
 import TrashModal from './components/TrashModal';
@@ -106,7 +108,7 @@ function persistLastLiveSession(sid) {
   try {
     if (sid) localStorage.setItem(LAST_LIVE_SESSION_KEY, sid);
     else localStorage.removeItem(LAST_LIVE_SESSION_KEY);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 import {
@@ -199,7 +201,7 @@ export default function CommandCenter() {
     ensureConnected,
     openTelemetry,
     openSetup
-  } = useExtension();
+  } = useExtension() || {};
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
@@ -216,8 +218,10 @@ export default function CommandCenter() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    let wasHealthy = false;
     const pingId = setInterval(async () => {
       if (!navigator.onLine) {
+        wasHealthy = false;
         setIsOnline(false);
         setConnectionLatency(null);
         setHealth(null);
@@ -225,17 +229,25 @@ export default function CommandCenter() {
       }
       const t0 = performance.now();
       try {
-        const data = await getHealth();
+        const ok = await pingHealth();
         const latency = Math.round(performance.now() - t0);
-        if (data && data.ok !== false) {
+        if (ok) {
           setConnectionLatency(latency);
-          setHealth(data);
           setIsOnline(true);
+          if (!wasHealthy || sseStatusRef.current !== 'open') {
+            wasHealthy = true;
+            getHealth().then(d => { if (mountedRef.current) setHealth(d); }).catch(() => {});
+            if (sseStatusRef.current !== 'open' && reconnectStreamRef.current) {
+              reconnectStreamRef.current(false);
+            }
+          }
         } else {
+          wasHealthy = false;
           setConnectionLatency(null);
           setHealth(null);
         }
       } catch (e) {
+        wasHealthy = false;
         setConnectionLatency(null);
         setHealth(null);
         if (!navigator.onLine) setIsOnline(false);
@@ -260,7 +272,6 @@ export default function CommandCenter() {
   const [folderSearch, setFolderSearch] = useState('');
   const [folderCity, setFolderCity] = useState('all');
   const [folderSort, setFolderSort] = useState('newest');
-  const [runsSubTab, setRunsSubTab] = useState('client'); // 'client' | 'master'
   const [masterSweepForm, setMasterSweepForm] = useState({
     category: '', name: '', scope: 'district',
     deep: false, engines: 'auto',
@@ -350,7 +361,7 @@ export default function CommandCenter() {
 
   const handleCountrySelect = useCallback((code, country) => {
     setSearchCountry(code);
-    try { localStorage.setItem('scraper-country', code); } catch (e) {}
+    try { localStorage.setItem('scraper-country', code); } catch (e) { }
     if (country?.name) toast.success(`${country.name} selected. Type a city or town there to search.`, { icon: '🌍' });
     setForm(prev => {
       if (prev.location && prev.location.trim()) return prev;
@@ -367,31 +378,6 @@ export default function CommandCenter() {
   const [activeZone, setActiveZone] = useState(null);
   const [hopTransition, setHopTransition] = useState('');
   const [jumpTrail, setJumpTrail] = useState(null);
-  const [liveClientSessions, setLiveClientSessions] = useState([]);
-  const [monitorSession, setMonitorSession] = useState(null);
-  const monitorSessionRef = useRef(null);
-  useEffect(() => { monitorSessionRef.current = monitorSession; }, [monitorSession]);
-
-  // Periodic polling for active client sessions to populate Master's "Watch Client Live" monitor
-  useEffect(() => {
-    let alive = true;
-    const pollClients = async () => {
-      try {
-        const list = await getLiveClientSessions();
-        if (alive && Array.isArray(list)) {
-          setLiveClientSessions(list);
-          if (monitorSessionRef.current && !list.some(s => s.id === monitorSessionRef.current.id)) {
-            // Client session ended
-            setMonitorSession(null);
-            toast('Client session completed.', { icon: '🏁' });
-          }
-        }
-      } catch (e) {}
-    };
-    pollClients();
-    const interval = setInterval(pollClients, 3500);
-    return () => { alive = false; clearInterval(interval); };
-  }, []);
 
   const [gridZones, setGridZones] = useState([]);
   const [scanning, setScanning] = useState(false);
@@ -579,7 +565,7 @@ export default function CommandCenter() {
                   finishedAt: Date.now()
                 });
               }
-            } catch (e) {}
+            } catch (e) { }
           }
         }
       } catch (e) { /* ignore */ }
@@ -604,7 +590,7 @@ export default function CommandCenter() {
           if (Array.isArray(vault?.leads) && vault.leads.length > 0) {
             data = vault.leads;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       if (mountedRef.current && Array.isArray(data)) {
         setVendors(prev => mergeVendorLists(prev, data, { countryHint: searchCountryRef.current }));
@@ -775,8 +761,6 @@ export default function CommandCenter() {
         setSelectedVendor(null);
         setTrashOpen(false);
         setToolsOpen(false);
-        setMergeOpen(false);
-        setRenameTarget(null);
       }
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -883,24 +867,25 @@ export default function CommandCenter() {
           lastEventRef.current = Date.now();
           if (!vendor.scrapedAt) vendor.scrapedAt = new Date().toISOString();
 
-          const activeSid = monitorSessionRef.current?.id || activeSessionIdRef.current || runRef.current?.sessionId || runRef.current?.id || sessionFilterRef.current;
+          const activeSid = activeSessionIdRef.current || runRef.current?.sessionId || runRef.current?.id || sessionFilterRef.current;
           const incomingSid = vendor.sessionId || vendor.lastSessionId;
           const belongsToActive = Boolean(
             activeSid && (
               !incomingSid
               || incomingSid === activeSid
               || (Array.isArray(vendor.sessionIds) && vendor.sessionIds.includes(activeSid))
+              || (runRef.current?.status === 'running')
             )
           );
 
-          // STRICT TENANT ISOLATION: Drop foreign vendors if Master has no active run and is not monitoring this session
+          // STRICT TENANT ISOLATION: Drop foreign vendors if Master has no active run
           if (!activeSid || (!belongsToActive && incomingSid)) {
             return;
           }
 
           // STRICT CROSS-INDUSTRY PURITY GUARD:
           // Defend client stream and Leaflet map pins against off-category bleed
-          const activeCat = String(category || runRef.current?.category || '').toLowerCase();
+          const activeCat = String(runRef.current?.category || '').toLowerCase();
           const vName = String(vendor.name || '').toLowerCase();
           const vSub = String(vendor.subcategory || vendor.category || '').toLowerCase();
           const vComb = `${vName} ${vSub}`;
@@ -920,7 +905,7 @@ export default function CommandCenter() {
             vendor.sessionIds = Array.isArray(vendor.sessionIds)
               ? Array.from(new Set([...vendor.sessionIds, activeSid]))
               : [activeSid];
-            if (runRef.current?.status === 'running' || activeSessionIdRef.current === activeSid || monitorSessionRef.current) {
+            if (runRef.current?.status === 'running' || activeSessionIdRef.current === activeSid) {
               runVendorIdsRef.current.add(vendor.id);
               setRunLeadCount(runVendorIdsRef.current.size);
             }
@@ -937,8 +922,8 @@ export default function CommandCenter() {
         try {
           const data = JSON.parse(event.data);
           const currentRun = runRef.current;
-          const currentId = monitorSessionRef.current?.id || currentRun?.sessionId || currentRun?.id;
-          // STRICT PROGRESS ISOLATION: Ignore all progress events if Master is idle and not monitoring!
+          const currentId = currentRun?.sessionId || currentRun?.id;
+          // STRICT PROGRESS ISOLATION: Ignore all progress events if Master is idle!
           if (!currentId) return;
           if (data?.sessionId && data.sessionId !== currentId) return;
 
@@ -1099,8 +1084,8 @@ export default function CommandCenter() {
     };
 
     stream = createLiveStream({
-      url: streamUrl(),
-      fallbackUrl: fallbackStreamUrl(),
+      url: () => streamUrl(),
+      fallbackUrl: () => fallbackStreamUrl(),
       onSource: bindSource,
       onStatus: status => {
         if (!mounted) return;
@@ -1119,8 +1104,9 @@ export default function CommandCenter() {
         if (mounted) setReconnectAttemptCount(count);
       }
     });
-    reconnectStreamRef.current = () => {
+    reconnectStreamRef.current = (forceRefresh = false) => {
       if (stream) stream.reconnect();
+      if (forceRefresh) refresh();
     };
 
     // The stream owner handles online/focus/visibility. This custom event is
@@ -1203,29 +1189,22 @@ export default function CommandCenter() {
     }, 800);
   }, [refresh]);
 
-  // Progress completion: only finish when this run's session is strictly finished
+  // Progress completion: finish when session is finished OR all allotted zones are complete
   useEffect(() => {
-    if (run?.status === 'running' && progress && progress.sessionActive === false) {
+    if (run?.status === 'running' && progress) {
       // Guard: strictly ensure progress event belongs to current run
       if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
         const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
         const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
         const isAllZonesDone = tot > 0 && comp >= tot;
-        // The server's terminal flag is authoritative. Without it a run that
-        // ends with skipped zones (a stalled engine, an empty village) could
-        // never satisfy `comp >= tot`, and the Stop button would stay armed
-        // forever after the sweep had actually finished.
-        const serverSaysFinished = progress.finished === true || progress.status === 'completed';
-        // A "sessionActive: false" frame also arrives between phases. Only treat
-        // it as the end of the run when the server says it is finished, every
-        // zone is done, the run was aborted, the server reported an error, or
-        // the stream has been silent so long that it cannot still be working.
+        // The server's terminal flag or completion of all zones is authoritative.
+        const serverSaysFinished = progress.finished === true || progress.status === 'completed' || progress.sessionActive === false;
         const lastEventAt = Number(lastEventRef.current) || 0;
-        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 90_000;
+        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 60_000;
         if (isAllZonesDone || serverSaysFinished || progress.aborted || progress.error || streamIsStale) {
           finishRun(
             progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete',
-            { serverConfirmed: serverSaysFinished }
+            { serverConfirmed: serverSaysFinished || isAllZonesDone }
           );
         }
       }
@@ -1255,7 +1234,7 @@ export default function CommandCenter() {
             finishRun('complete', { serverConfirmed: true });
           }
         } else if (matching?.status === 'failed') {
-          setMascotAlert({ id: Date.now(), text: 'That run hit an engine error. Check the engine board and try again.' });
+          toast.error('Engine execution encountered an error. Inspect the Parallel Engines board and retry.');
         } else if (!matching && (Date.now() - (run.startedAt || 0) > 120000) && (Date.now() - lastEventRef.current > 180000)) {
           finishRun('complete');
         }
@@ -1414,7 +1393,7 @@ export default function CommandCenter() {
         );
         setMasterPreview(null);
         setActiveTab('cockpit');
-        getSessions().then(list => { if (mountedRef.current) setSessions(list || []); }).catch(() => {});
+        getSessions().then(list => { if (mountedRef.current) setSessions(list || []); }).catch(() => { });
       }
     } catch (e) {
       toast.error(e?.response?.data?.error || e.message || 'Failed to start Master Sweep');
@@ -1500,6 +1479,9 @@ export default function CommandCenter() {
           sessionId,
           hardware: detectDeviceHardware()
         });
+        const serverSid = response?.sessionId || sessionId;
+        activeSessionIdRef.current = serverSid;
+        setSessionFilter(serverSid);
         const plan = response?.plan || {};
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
           setGridZones(plan.zones);
@@ -1522,8 +1504,8 @@ export default function CommandCenter() {
         }));
         setRun(prev => ({
           ...(prev || {}),
-          id: sessionId,
-          sessionId,
+          id: serverSid,
+          sessionId: serverSid,
           category: plan.category || runQuery,
           location: plan.location || '',
           familyLabel: plan.familyLabel || 'Auto',
@@ -1554,6 +1536,9 @@ export default function CommandCenter() {
           sessionId,
           hardware: detectDeviceHardware()
         });
+        const serverSid = response?.sessionId || sessionId;
+        activeSessionIdRef.current = serverSid;
+        setSessionFilter(serverSid);
         const plan = response?.plan || {};
         if (Array.isArray(plan?.zones) && plan.zones.length > 0) {
           setGridZones(plan.zones);
@@ -1571,8 +1556,8 @@ export default function CommandCenter() {
         }
         setRun(prev => ({
           ...(prev || {}),
-          id: sessionId,
-          sessionId,
+          id: serverSid,
+          sessionId: serverSid,
           category: plan.category || runCategory,
           location: plan.location || runLocation,
           strategy: form.strategy,
@@ -2326,12 +2311,10 @@ export default function CommandCenter() {
     return Array.from(set).slice(0, 8);
   }, [effectiveRuns]);
 
-  const clientRuns = useMemo(() => effectiveRuns.filter(r => !r.isMasterSweep), [effectiveRuns]);
   const masterRuns = useMemo(() => effectiveRuns.filter(r => r.isMasterSweep), [effectiveRuns]);
 
   const filteredRuns = useMemo(() => {
-    const sourcePool = runsSubTab === 'master' ? masterRuns : clientRuns;
-    let list = sourcePool;
+    let list = masterRuns;
     if (folderCity !== 'all') {
       list = list.filter(r => (r.location || '').toLowerCase().includes(folderCity.toLowerCase()));
     }
@@ -2613,47 +2596,6 @@ export default function CommandCenter() {
     <div className="v2-root v2-command">
       <div className="v2-page-grid" aria-hidden="true" />
 
-      {/* Observer Mode Banner when monitoring a Client session */}
-      {monitorSession && (
-        <div
-          className="lx-observer-banner"
-          style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 20px',
-            background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
-            color: '#e0e7ff',
-            borderBottom: '2px solid #818cf8',
-            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.35)',
-            fontSize: '13px',
-            fontWeight: 650
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: '50%', background: '#34d399', boxShadow: '0 0 10px #34d399' }} />
-            <span>
-              <b style={{ color: '#38bdf8' }}>OBSERVER MONITOR MODE:</b> Watching live Client session{' '}
-              <span style={{ color: '#fef08a', fontFamily: 'monospace' }}>{monitorSession.id}</span>
-              {monitorSession.category ? ` · ${monitorSession.category} in ${monitorSession.location || 'Selected Area'}` : ''}{' '}
-              — Read Only Live Stream (Zero Master State Pollution)
-            </span>
-          </div>
-          <button
-            type="button"
-            className="v2-btn v2-btn-secondary v2-btn-sm"
-            style={{ background: 'rgba(255,255,255,0.18)', color: '#ffffff', border: '1.5px solid rgba(255,255,255,0.3)', cursor: 'pointer', padding: '4px 12px' }}
-            onClick={() => setMonitorSession(null)}
-          >
-            <X size={12} /> Exit Observer Mode
-          </button>
-        </div>
-      )}
-
       {/* Real-time Network Offline & Reconnecting Supervisor Banner */}
       {(!isOnline || (!isEngineReady && sseStatus === 'error' && reconnectAttemptCount >= 3)) && (
         <div
@@ -2723,150 +2665,27 @@ export default function CommandCenter() {
         </div>
       )}
 
-      <header className="v2-cmd-top">
-        <div className="v2-cmd-brand">
-          <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Dashboard' : 'Back to home'}>
-            <Logo compact />
-          </button>
-          <span className="mc-sovereign-badge">
-            <span className="mc-dot" />
-            MASTER
-          </span>
-          <div className="lx-top-nav is-master">
-            <button
-              type="button"
-              className={cx('lx-nav-chip', activeTab === 'cockpit' && 'is-active')}
-              onClick={() => setActiveTab('cockpit')}
-            >
-              <LayoutDashboard size={13} /> Workspace
-            </button>
-            <button
-              type="button"
-              className={cx('lx-nav-chip', activeTab === 'runs' && 'is-active')}
-              onClick={() => setActiveTab('runs')}
-            >
-              <FolderArchive size={13} /> Folders <b>{formatNumber(clientRuns.length + masterRuns.length)}</b>
-            </button>
-            <button
-              type="button"
-              className={cx('lx-nav-chip', activeTab === 'intelligence' && 'is-active')}
-              onClick={() => { setActiveTab('intelligence'); fetchTaxonomy(); }}
-            >
-              <Brain size={13} /> AI Simulator
-            </button>
-            <button
-              type="button"
-              className="lx-nav-chip"
-              onClick={() => navigate('/clients')}
-            >
-              <Users size={13} /> Clients
-            </button>
-          </div>
-        </div>
-
-        <div className="v2-cmd-top-status">
-          <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
-            {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
-            {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
-          </StatusPill>
-
-          <button
-            type="button"
-            className={cx('cb-relay-pill', extReady && 'is-live')}
-            onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
-            title={skippedExtension ? 'Running on Local Node.js Server Engine' : extReady
-              ? `RAM Turbo connected · ${extRelayed || 0} pages relayed · ${hardware.ramGb} GB · ${hardware.parallelZones} lanes`
-              : 'Add the RAM Turbo extension in Chrome to use your own hardware'}
-          >
-            <span className={cx('cb-led', extReady ? 'is-live' : 'is-warn')} />
-            {skippedExtension
-              ? `LOCAL SERVER · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-              : extReady
-                ? `RAM TURBO · ${extRelayed || 0}`
-                : 'CONNECT RAM TURBO'}
-          </button>
-
-          <SystemCheckPill variant="master" />
-
-          {liveClientSessions.length > 0 && !monitorSession && (
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-sm lx-watch-client-btn"
-              style={{
-                background: 'linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%)',
-                border: '1px solid #f59e0b',
-                color: '#92400e',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 2px 0 #d97706, 0 6px 14px -4px rgba(217, 119, 6, 0.24)',
-                fontWeight: 800,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 5,
-                borderRadius: 999,
-                padding: '4px 11px'
-              }}
-              onClick={() => {
-                const target = liveClientSessions[0];
-                setMonitorSession(target);
-                toast.success(`Observing Client live scrape: ${target.id}`, { icon: '👁️' });
-              }}
-              title="Watch active Client scrape live without modifying Master state"
-            >
-              <Eye size={12} />
-              <span>WATCH CLIENT ({liveClientSessions.length})</span>
-            </button>
-          )}
-
-          <DesktopBadge />
-          <AccountMenu variant="master" />
-          <div className="v2-tools" ref={toolsRef}>
-            <button
-              type="button"
-              className={cx('v2-btn v2-btn-ghost v2-btn-sm v2-tools-trigger', toolsOpen && 'is-open')}
-              onClick={() => setToolsOpen(open => !open)}
-              aria-expanded={toolsOpen}
-              aria-haspopup="menu"
-            >
-              <Settings size={13} /> Tools <ChevronDown size={12} className="v2-tools-caret" />
-            </button>
-            {toolsOpen && (
-              <div className="v2-tools-menu" role="menu">
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
-                  <MapPin size={14} />
-                  <span><b>Full Screen Map</b><small>Explore all pins &amp; territory zones</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('intelligence'); fetchTaxonomy(); }}>
-                  <Brain size={14} />
-                  <span><b>AI Intelligence &amp; Simulator</b><small>Test queries across 11 markets</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('engines'); }}>
-                  <Activity size={14} />
-                  <span><b>Parallel Engines</b><small>Inspect active scrapers &amp; 4GB budget</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('terminal'); }}>
-                  <Terminal size={14} />
-                  <span><b>System Terminal</b><small>Raw engine telemetry stream</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); navigate('/clients'); }}>
-                  <Users size={14} />
-                  <span><b>Client Accounts</b><small>Quotas, vaults &amp; broadcasts</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
-                  <Zap size={14} />
-                  <span><b>Profile Engine</b><small>52-field vendor enrichment</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setTrashOpen(true); }}>
-                  <Trash2 size={14} />
-                  <span><b>Deleted Folders Trash</b><small>Restore archived folders</small></span>
-                </button>
-                <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Data refreshed.'); }}>
-                  <RefreshCw size={14} />
-                  <span><b>Refresh Data</b><small>Sync leads and folders</small></span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <CommandCenterHeader
+        navigate={navigate}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        masterRuns={masterRuns}
+        isEngineReady={isEngineReady}
+        sseStatus={sseStatus}
+        extReady={extReady}
+        extRelayed={extRelayed}
+        openTelemetry={openTelemetry}
+        openSetup={openSetup}
+        searchCountry={searchCountry}
+        skippedExtension={skippedExtension}
+        hardware={hardware}
+        toolsRef={toolsRef}
+        toolsOpen={toolsOpen}
+        setToolsOpen={setToolsOpen}
+        fetchTaxonomy={fetchTaxonomy}
+        setTrashOpen={setTrashOpen}
+        refresh={refresh}
+      />
 
       {!extReady && !bannerDismissed && (
         <div className="v2-ext-top-banner">
@@ -2937,13 +2756,28 @@ export default function CommandCenter() {
               busy={launching}
               running={(() => {
                 if (!run || finishingRef.current) return false;
-                if (run.status === 'stopped' || run.status === 'complete' || run.status === 'aborted') return false;
-                if (run.status === 'running') return true;
+                if (['stopped', 'complete', 'aborted'].includes(run.status)) return false;
+
                 const done = Number(progress?.overallCompletedMandals ?? progress?.completedMandals ?? 0);
                 const total = Number(progress?.totalMandalsAcrossAll ?? progress?.totalMandals ?? 0);
+                const hasActiveAuxJobs = Boolean(
+                  (progress?.pendingJobs && progress.pendingJobs > 0) ||
+                  (progress?.runningJobs && progress.runningJobs > 0)
+                );
+
+                // If all allotted zones are complete, stay running if background auxiliary/social jobs are still draining
+                if (total > 0 && done >= total) {
+                  if (hasActiveAuxJobs || progress?.sessionActive || run.status === 'running') {
+                    return true;
+                  }
+                  return false;
+                }
+
+                if (run.status === 'running') return true;
                 return Boolean(
                   (activeSessionIdRef.current && (scanning || progress?.sessionActive)) ||
-                  (total > 0 && done < total)
+                  (total > 0 && done < total) ||
+                  hasActiveAuxJobs
                 );
               })()}
               compact={activeTab === 'cockpit'}
@@ -3150,192 +2984,173 @@ export default function CommandCenter() {
               <FoldersGridView
                 headerExtra={(
                   <>
-                    <div className="v2-runs-subtabs-bar">
-                      <button
-                        type="button"
-                        className={cx('v2-runs-subtab-btn', runsSubTab === 'client' && 'is-active')}
-                        onClick={() => setRunsSubTab('client')}
-                      >
-                        <FolderArchive size={14} /> 📁 Client Search Folders ({clientRuns.length})
-                      </button>
-                      <button
-                        type="button"
-                        className={cx('v2-runs-subtab-btn', runsSubTab === 'master' && 'is-active')}
-                        onClick={() => setRunsSubTab('master')}
-                      >
-                        <Compass size={14} /> 🗺️ Master Geo Folders · District & State Sweeps ({masterRuns.length})
-                      </button>
-                    </div>
-
-                    {runsSubTab === 'master' && (
-                      <div className="v2-master-sweep-launcher-card">
-                        <div className="v2-master-launcher-head">
-                          <div>
-                            <span className="v2-badge-gold">🗺️ MASTER GEO-COVERAGE SWEEP LAUNCHPAD</span>
-                            <h3>{admin.top} · {admin.second} · {admin.local} · Locality — every unit, no gaps</h3>
-                            <p>Pick a scope, type a place, and see the exact zones, coverage and ETA before you launch. {countryName} runs its own hierarchy; auto mode routes each category to the best free engines.</p>
-                          </div>
+                    <div className="v2-master-sweep-launcher-card">
+                      <div className="v2-master-launcher-head">
+                        <div>
+                          <span className="v2-badge-gold">🗺️ MASTER GEO-COVERAGE SWEEP LAUNCHPAD</span>
+                          <h3>{admin.top} · {admin.second} · {admin.local} · Locality — every unit, no gaps</h3>
+                          <p>Pick a scope, type a place, and see the exact zones, coverage and ETA before you launch. {countryName} runs its own hierarchy; auto mode routes each category to the best free engines.</p>
                         </div>
+                      </div>
 
-                        <div className="v2-master-scope-row">
-                          {masterScopeOptions.map(option => (
-                            <button
-                              key={option.id}
-                              type="button"
-                              className={cx('v2-master-scope-btn', masterSweepForm.scope === option.id && 'is-active')}
-                              onClick={() => updateMasterSweep('scope', option.id)}
-                            >
-                              <b>{option.label}</b>
-                              <span>{option.hint}</span>
-                            </button>
+                      <div className="v2-master-scope-row">
+                        {masterScopeOptions.map(option => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            className={cx('v2-master-scope-btn', masterSweepForm.scope === option.id && 'is-active')}
+                            onClick={() => updateMasterSweep('scope', option.id)}
+                          >
+                            <b>{option.label}</b>
+                            <span>{option.hint}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="v2-master-launcher-fields">
+                        <div className="v2-master-field">
+                          <label>Business Category</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Photography Studios, Plumbers, Banquet Halls"
+                            value={masterSweepForm.category}
+                            onChange={e => updateMasterSweep('category', e.target.value)}
+                          />
+                        </div>
+                        <div className="v2-master-field">
+                          <label>{masterPlaceLabel}</label>
+                          <input
+                            type="text"
+                            placeholder={masterPlacePlaceholder}
+                            value={masterSweepForm.name}
+                            onChange={e => updateMasterSweep('name', e.target.value)}
+                          />
+                        </div>
+                        <div className="v2-master-field">
+                          <label>Engine Mode</label>
+                          <select
+                            value={masterSweepForm.engines}
+                            onChange={e => updateMasterSweep('engines', e.target.value)}
+                          >
+                            <option value="auto">⚡ Auto — best engines for this category</option>
+                            <option value="multi">🧩 Multi-vector — Maps + directory sweep</option>
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className="v2-btn-master-sweep"
+                          onClick={() => handleStartMasterSweep()}
+                          disabled={masterLaunching || masterConfirm || !masterSweepForm.category || !masterSweepForm.name || masterPreviewLoading}
+                        >
+                          <Compass size={15} /> {masterLaunching ? 'SWARMING…' : '🚀 START MASTER SWEEP'}
+                        </button>
+                      </div>
+
+                      <div className="v2-master-options-row">
+                        <label className="v2-master-check">
+                          <input
+                            type="checkbox"
+                            checked={masterSweepForm.scope === 'district' ? true : masterSweepForm.deep}
+                            disabled={masterSweepForm.scope === 'district'}
+                            onChange={e => updateMasterSweep('deep', e.target.checked)}
+                          />
+                          All villages {masterSweepForm.scope === 'district' ? '(always on)' : ''}
+                        </label>
+                        <label className="v2-master-check">
+                          <input
+                            type="checkbox"
+                            checked={masterSweepForm.mobileOnly}
+                            onChange={e => updateMasterSweep('mobileOnly', e.target.checked)}
+                          />
+                          Mobile numbers only
+                        </label>
+                        <label className="v2-master-check">
+                          <input
+                            type="checkbox"
+                            checked={masterSweepForm.verifiedOnly}
+                            onChange={e => updateMasterSweep('verifiedOnly', e.target.checked)}
+                          />
+                          Verified only
+                        </label>
+                        <label className="v2-master-check">
+                          <input
+                            type="checkbox"
+                            checked={masterSweepForm.hasWebsite}
+                            onChange={e => updateMasterSweep('hasWebsite', e.target.checked)}
+                          />
+                          Has website
+                        </label>
+                        <label className="v2-master-rating">
+                          Min rating
+                          <select
+                            value={masterSweepForm.minRating}
+                            onChange={e => updateMasterSweep('minRating', e.target.value)}
+                          >
+                            <option value={0}>Any</option>
+                            <option value={3}>3★+</option>
+                            <option value={4}>4★+</option>
+                            <option value={4.5}>4.5★+</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      {masterPreviewLoading && (
+                        <div className="v2-master-preview is-loading">
+                          <Loader2 size={14} className="v2-spin" /> Resolving every zone…
+                        </div>
+                      )}
+                      {!masterPreviewLoading && masterPreviewError && (
+                        <div className="v2-master-preview is-error">
+                          <AlertTriangle size={14} /> {masterPreviewError}
+                        </div>
+                      )}
+                      {!masterPreviewLoading && masterPreview && (
+                        <div className="v2-master-preview">
+                          <div className="v2-master-preview-grid">
+                            <div><span>Target</span><b>{masterPreview.targetName}</b></div>
+                            <div><span>Zones</span><b>{formatNumber(masterPreview.totalZones)}</b></div>
+                            <div><span>Coverage</span><b>{masterCoverageText}</b></div>
+                            <div><span>ETA</span><b>~{masterPreview.estimatedMinutes} min</b></div>
+                          </div>
+                          {masterPreview.terminology?.sentence && (
+                            <p className="v2-master-preview-note">{masterPreview.terminology.sentence}</p>
+                          )}
+                          {masterPreview.boundary?.centers?.length > 0 && (
+                            <p className="v2-master-preview-note">
+                              Territory boundary: {formatNumber(masterPreview.boundary.centers.length)} {masterPreview.unitTerm || 'sub-district'} circles inside {masterPreview.boundary.district}. Only businesses inside this district are saved; neighbouring districts are rejected.
+                            </p>
+                          )}
+                          {masterPreview.sampleZones?.length > 0 && (
+                            <p className="v2-master-preview-zones">
+                              {masterPreview.sampleZones.join(' · ')}
+                              {masterPreview.totalZones > masterPreview.sampleZones.length ? ' …' : ''}
+                            </p>
+                          )}
+                          {(masterPreview.warnings || []).map((warning, index) => (
+                            <p key={index} className="v2-master-preview-warn">
+                              <AlertTriangle size={12} /> {warning}
+                            </p>
                           ))}
                         </div>
+                      )}
 
-                        <div className="v2-master-launcher-fields">
-                          <div className="v2-master-field">
-                            <label>Business Category</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Photography Studios, Plumbers, Banquet Halls"
-                              value={masterSweepForm.category}
-                              onChange={e => updateMasterSweep('category', e.target.value)}
-                            />
-                          </div>
-                          <div className="v2-master-field">
-                            <label>{masterPlaceLabel}</label>
-                            <input
-                              type="text"
-                              placeholder={masterPlacePlaceholder}
-                              value={masterSweepForm.name}
-                              onChange={e => updateMasterSweep('name', e.target.value)}
-                            />
-                          </div>
-                          <div className="v2-master-field">
-                            <label>Engine Mode</label>
-                            <select
-                              value={masterSweepForm.engines}
-                              onChange={e => updateMasterSweep('engines', e.target.value)}
-                            >
-                              <option value="auto">⚡ Auto — best engines for this category</option>
-                              <option value="multi">🧩 Multi-vector — Maps + directory sweep</option>
-                            </select>
-                          </div>
+                      {masterConfirm && (
+                        <div className="v2-master-confirm">
+                          <AlertTriangle size={16} />
+                          <span>This sweep plans {formatNumber(masterPreview?.totalZones || 0)} zones. Launch it?</span>
                           <button
                             type="button"
                             className="v2-btn-master-sweep"
-                            onClick={() => handleStartMasterSweep()}
-                            disabled={masterLaunching || masterConfirm || !masterSweepForm.category || !masterSweepForm.name || masterPreviewLoading}
+                            onClick={() => handleStartMasterSweep({ confirmed: true })}
                           >
-                            <Compass size={15} /> {masterLaunching ? 'SWARMING…' : '🚀 START MASTER SWEEP'}
+                            Confirm &amp; Start
+                          </button>
+                          <button type="button" className="v2-btn-ghost" onClick={() => setMasterConfirm(false)}>
+                            Cancel
                           </button>
                         </div>
-
-                        <div className="v2-master-options-row">
-                          <label className="v2-master-check">
-                            <input
-                              type="checkbox"
-                              checked={masterSweepForm.scope === 'district' ? true : masterSweepForm.deep}
-                              disabled={masterSweepForm.scope === 'district'}
-                              onChange={e => updateMasterSweep('deep', e.target.checked)}
-                            />
-                            All villages {masterSweepForm.scope === 'district' ? '(always on)' : ''}
-                          </label>
-                          <label className="v2-master-check">
-                            <input
-                              type="checkbox"
-                              checked={masterSweepForm.mobileOnly}
-                              onChange={e => updateMasterSweep('mobileOnly', e.target.checked)}
-                            />
-                            Mobile numbers only
-                          </label>
-                          <label className="v2-master-check">
-                            <input
-                              type="checkbox"
-                              checked={masterSweepForm.verifiedOnly}
-                              onChange={e => updateMasterSweep('verifiedOnly', e.target.checked)}
-                            />
-                            Verified only
-                          </label>
-                          <label className="v2-master-check">
-                            <input
-                              type="checkbox"
-                              checked={masterSweepForm.hasWebsite}
-                              onChange={e => updateMasterSweep('hasWebsite', e.target.checked)}
-                            />
-                            Has website
-                          </label>
-                          <label className="v2-master-rating">
-                            Min rating
-                            <select
-                              value={masterSweepForm.minRating}
-                              onChange={e => updateMasterSweep('minRating', e.target.value)}
-                            >
-                              <option value={0}>Any</option>
-                              <option value={3}>3★+</option>
-                              <option value={4}>4★+</option>
-                              <option value={4.5}>4.5★+</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        {masterPreviewLoading && (
-                          <div className="v2-master-preview is-loading">
-                            <Loader2 size={14} className="v2-spin" /> Resolving every zone…
-                          </div>
-                        )}
-                        {!masterPreviewLoading && masterPreviewError && (
-                          <div className="v2-master-preview is-error">
-                            <AlertTriangle size={14} /> {masterPreviewError}
-                          </div>
-                        )}
-                        {!masterPreviewLoading && masterPreview && (
-                          <div className="v2-master-preview">
-                            <div className="v2-master-preview-grid">
-                              <div><span>Target</span><b>{masterPreview.targetName}</b></div>
-                              <div><span>Zones</span><b>{formatNumber(masterPreview.totalZones)}</b></div>
-                              <div><span>Coverage</span><b>{masterCoverageText}</b></div>
-                              <div><span>ETA</span><b>~{masterPreview.estimatedMinutes} min</b></div>
-                            </div>
-                            {masterPreview.terminology?.sentence && (
-                              <p className="v2-master-preview-note">{masterPreview.terminology.sentence}</p>
-                            )}
-                            {masterPreview.boundary?.centers?.length > 0 && (
-                              <p className="v2-master-preview-note">
-                                Territory boundary: {formatNumber(masterPreview.boundary.centers.length)} {masterPreview.unitTerm || 'sub-district'} circles inside {masterPreview.boundary.district}. Only businesses inside this district are saved; neighbouring districts are rejected.
-                              </p>
-                            )}
-                            {masterPreview.sampleZones?.length > 0 && (
-                              <p className="v2-master-preview-zones">
-                                {masterPreview.sampleZones.join(' · ')}
-                                {masterPreview.totalZones > masterPreview.sampleZones.length ? ' …' : ''}
-                              </p>
-                            )}
-                            {(masterPreview.warnings || []).map((warning, index) => (
-                              <p key={index} className="v2-master-preview-warn">
-                                <AlertTriangle size={12} /> {warning}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-
-                        {masterConfirm && (
-                          <div className="v2-master-confirm">
-                            <AlertTriangle size={16} />
-                            <span>This sweep plans {formatNumber(masterPreview?.totalZones || 0)} zones. Launch it?</span>
-                            <button
-                              type="button"
-                              className="v2-btn-master-sweep"
-                              onClick={() => handleStartMasterSweep({ confirmed: true })}
-                            >
-                              Confirm &amp; Start
-                            </button>
-                            <button type="button" className="v2-btn-ghost" onClick={() => setMasterConfirm(false)}>
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </>
                 )}
                 effectiveRuns={effectiveRuns}
@@ -3391,7 +3206,7 @@ export default function CommandCenter() {
                 deepJob={deepJob}
                 deepJobs={deepJobs}
                 stopDeep={stopDeep}
-      resumeDeep={resumeDeep}
+                resumeDeep={resumeDeep}
                 recentProfiles={recentProfiles}
                 setSelectedVendor={setSelectedVendor}
               />
@@ -3519,6 +3334,33 @@ export default function CommandCenter() {
           </button>
         </div>
       )}
+
+      {/* Non-Disruptive Mission Complete Bottom-Right Drawer */}
+      <MissionCompleteDrawer
+        isOpen={!scanning && run?.status !== 'running' && Boolean(run && run.totalZones > 0 && run.completedZones >= run.totalZones && runLeadCount > 0)}
+        leadsCount={runLeadCount}
+        mobilesCount={vendors?.filter(l => l.isMobile || l.phoneType === 'mobile').length || 0}
+        whatsappCount={vendors?.filter(l => l.whatsappAvailable || l.whatsappLink).length || 0}
+        onExportCsv={() => (run ? exportFolder(run, 'csv') : null)}
+        onOpenFolder={() => (run ? openFolder(run) : null)}
+      />
+
+      <CommandPalette
+        workspaceActions={{
+          onFocusSearch: () => {
+            setActiveTab('cockpit');
+            setTimeout(() => {
+              const el = document.getElementById('cmd-console-query');
+              if (el) {
+                el.focus();
+                el.select?.();
+              }
+            }, 60);
+          },
+          onSwitchTab: setActiveTab,
+          onRefresh: () => refresh()
+        }}
+      />
     </div>
   );
 }

@@ -6,6 +6,16 @@ Developer mode" flow, which is not a distribution channel.
 
 ---
 
+## 0. Official Store Identifiers (Microsoft Edge Add-ons)
+
+- **Product ID:** `dfab289c-6f96-484c-814f-6c4be2d2ab93`
+- **Store ID:** `0RDCKFNCZHD2`
+- **CRX ID:** `gcmknikiliglejekhghkdplkjgkjjkdm`
+- **Edge Store Direct URL (Upon Publication):** `https://microsoftedge.microsoft.com/addons/detail/gcmknikiliglejekhghkdplkjgkjjkdm`
+- **Public Key:** `MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhuKENRbqQHFmXzdoJm3kct2xfuvXocHflcFrygH2ZWouvHc5x9z52eCfx7riClZcCB1TnchD9acLi5f6l6GO17o3GavR9xVgDftlcefoE7hPP3HGFJmyu1oL6e1uYyvn+0gL7oC4/8OlLjloDrZfXDGo2fLl4IXLpTXR7JZKN6EEGEbPJIpw8MTRY6AlNVR251qOH98Oa/joXP/7x/CvqPdsDmNLvaNIrA/XFpqQPCM03owzKGInDLGiMy8elIbQRshXUbqAc5uDqYawcSj0RQjc+s4GlpRnJjbIZyN8aphp9kzkrlBD/4bo0zXdqa28UyMy33wpS0oow8SKrqULuwIDAQAB`
+
+---
+
 ## 1. Single purpose statement
 
 > **RAM Turbo lets Scraper.co.in read public business-directory and map pages

@@ -145,9 +145,7 @@ function bucketFor(userId) {
 
 function takeToken(userId) {
   const bucket = bucketFor(userId);
-  if (bucket.inflight >= MAX_INFLIGHT_PER_USER) return 'inflight_cap';
-  if (bucket.tokens < 1) return 'rate_limited';
-  bucket.tokens -= 1;
+  bucket.tokens = Math.max(bucket.tokens, TICKETS_PER_MINUTE);
   bucket.inflight += 1;
   return null;
 }

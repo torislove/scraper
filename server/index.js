@@ -1,4 +1,4 @@
-﻿process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
+process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -39,7 +39,6 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // Configs
-const localDb = require('./src/config/localDb');
 const paths = require('./src/config/paths');
 const credits = require('./src/services/credits');
 const vendorStore = require('./src/config/vendorStore');
@@ -67,7 +66,9 @@ const { createLicenseGate } = require('./src/middleware/licenseGate');
 const clientGate = require('./src/middleware/clientGate');
 const resolveIdentity = require('./src/middleware/resolveIdentity');
 const masterRoutes = require('./src/routes/master');
+const adminRoutes = require('./src/routes/admin');
 const notificationRoutes = require('./src/routes/notifications');
+const popupConfigService = require('./src/services/popupConfigService');
 
 paths.ensureAll();
 credits.init();
@@ -86,6 +87,7 @@ const searchRoutes = require('./src/routes/search');
 const openApiV2Routes = require('./src/routes/openApiV2');
 const diagnosticsRoutes = require('./src/routes/diagnostics');
 const mapTilesRoutes = require('./src/routes/mapTiles');
+const { seoRouter, getSsrMeta } = require('./src/routes/seo');
 const { sanitizeLogForUi } = require('./src/utils/engineErrors');
 
 const app = express();
@@ -341,6 +343,11 @@ app.use('/api', resolveIdentity);
 app.use('/api', apiRouter);
 app.use('/api/scrape', createLicenseGate(), clientGate(), scrapeRouter);
 app.use('/api/master', masterRoutes);
+app.use('/api/admin', adminRoutes);
+app.get('/api/popups', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json(popupConfigService.getPopups());
+});
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/vendors', vendorsRoutes);
 app.use('/api/upload', uploadRoutes);
@@ -356,6 +363,7 @@ app.use('/api/search', searchRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
 app.use('/api/map-tiles', mapTilesRoutes);
 app.use('/api/v2', openApiV2Routes);
+app.use(seoRouter);
 
 // Territory & Sample Excel Endpoints (All 633 Districts & 600,000 Villages)
 const { getTerritorySummary, searchTerritory } = require('./src/utils/territoryHelper');
@@ -604,7 +612,45 @@ app.get('/api/scrape/stream/:sessionId', (req, res) => {
 // origin, so there is no CORS layer, no file:// restrictions and no need to
 // duplicate the API base URL.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Single-origin SPA hosting & Universal Admin Portal
+// ---------------------------------------------------------------------------
+const adminDist = path.join(__dirname, '../admin/dist');
+const adminIndex = path.join(adminDist, 'index.html');
+if (fs.existsSync(adminIndex)) {
+  app.use('/admin', express.static(adminDist, {
+    index: false,
+    maxAge: '7d',
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store');
+      }
+    }
+  }));
+
+  app.get('/admin', (req, res) => {
+    res.redirect(301, '/admin/');
+  });
+
+  app.get(/^\/admin\/.*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(adminIndex);
+  });
+}
+
 const clientIndex = path.join(paths.CLIENT_DIST, 'index.html');
+let cachedClientHtml = null;
+function getClientHtml() {
+  if (!cachedClientHtml && fs.existsSync(clientIndex)) {
+    try {
+      cachedClientHtml = fs.readFileSync(clientIndex, 'utf8');
+    } catch (e) {
+      cachedClientHtml = null;
+    }
+  }
+  return cachedClientHtml;
+}
+
 if (fs.existsSync(clientIndex)) {
   app.use(express.static(paths.CLIENT_DIST, {
     index: false,
@@ -616,8 +662,48 @@ if (fs.existsSync(clientIndex)) {
     }
   }));
 
-  app.get(/^\/(?!api\/|api$|logs\/|downloads\/).*/, (req, res) => {
+  app.get(/^\/(?!api\/|api$|admin\/|admin$|logs\/|downloads\/).*/, (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
+
+    // Server-Side SEO Pre-Rendering & Metadata Injection for /leads/* or /directory routes
+    if (req.path.startsWith('/leads/') || req.path === '/leads' || req.path.startsWith('/directory') || req.path === '/directory') {
+      const rawHtml = getClientHtml();
+      if (rawHtml) {
+        try {
+          const meta = getSsrMeta(req.path);
+          let injectedHtml = rawHtml;
+
+          // Replace Title
+          if (meta.title) {
+            injectedHtml = injectedHtml.replace(/<title>[\s\S]*?<\/title>/i, `<title>${meta.title}</title>`);
+          }
+          // Replace Meta Description
+          if (meta.description) {
+            injectedHtml = injectedHtml.replace(/<meta\s+name="description"\s+content="[\s\S]*?"\s*\/?>/i, `<meta name="description" content="${meta.description.replace(/"/g, '&quot;')}" />`);
+          }
+          // Replace Canonical Link
+          if (meta.canonical) {
+            injectedHtml = injectedHtml.replace(/<link\s+rel="canonical"\s+href="[\s\S]*?"\s*\/?>/i, `<link rel="canonical" href="${meta.canonical}" />`);
+          }
+
+          // Inject Hreflang alternates & Schema.org Structured Data
+          const headInjections = [
+            meta.hreflangLinks ? `\n    ${meta.hreflangLinks}` : '',
+            meta.jsonLd ? `\n    <script type="application/ld+json">\n    ${JSON.stringify(meta.jsonLd, null, 2)}\n    </script>` : ''
+          ].filter(Boolean).join('');
+
+          if (headInjections && injectedHtml.includes('</head>')) {
+            injectedHtml = injectedHtml.replace('</head>', `${headInjections}\n  </head>`);
+          }
+
+          res.setHeader('Content-Type', 'text/html; charset=utf-8');
+          return res.send(injectedHtml);
+        } catch (ssrErr) {
+          console.warn('[SSR Meta Injector Error]', ssrErr.message);
+        }
+      }
+    }
+
     res.sendFile(clientIndex);
   });
 }

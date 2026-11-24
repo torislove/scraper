@@ -34,8 +34,10 @@
   function stampDom(version, paired) {
     try {
       if (document.documentElement) {
+        document.documentElement.setAttribute('data-scraper-ext-installed', 'true');
         document.documentElement.dataset.scraperExtension = version;
         document.documentElement.dataset.scraperExtensionPaired = paired ? '1' : '0';
+        window.dispatchEvent(new CustomEvent('scraper-extension-ready', { detail: { version, paired } }));
       }
     } catch (error) {
       // documentElement can be null very early.

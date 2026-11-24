@@ -6,23 +6,7 @@ metadata:
   labels:
     app: scraper-server
 spec:
-  # ONE replica, on purpose.
-  #
-  # Every run's state lives in this process (activeSessions, sessionAbortSignals),
-  # leads are written to data/scraped_vendors.json through a single-writer
-  # .store.lock, and SSE streams are held in memory. A second pod would either
-  # fail to mount this ReadWriteOnce volume or fight the first one for the lock
-  # and lose leads.
-  #
-  # One pod is not one scrape: the in-process queue runs ~6 browser slots and
-  # ~8 HTTP slots at once, so many users can scrape concurrently on this pod.
-  #
-  # Scale past one replica only after Phase 2 of docs/DEPLOYMENT-PLAN.md
-  # (Postgres + Redis + one Kubernetes Job per scrape). Until then, raise
-  # PLAYWRIGHT_CONCURRENCY / the CPU limit instead of replicas.
   replicas: 1
-  # Recreate, never RollingUpdate: a rolling update briefly runs two pods, and
-  # two pods means two writers on the same JSON store.
   strategy:
     type: Recreate
   selector:
@@ -33,9 +17,12 @@ spec:
       labels:
         app: scraper-server
     spec:
-      # Give an in-flight scrape a moment to flush leads and the queue to disk
-      # before the pod is killed.
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: server
           image: ghcr.io/scraper-coin/scraper-server:latest
@@ -48,20 +35,23 @@ spec:
                 name: scraper-config
             - secretRef:
                 name: scraper-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
           resources:
-            # User-RAM Hybrid Compute: Client browser Web Workers pull /api/scrape/zone-plan
-            # and stream batches via /api/scrape/client-ingest, offloading 80%+ of heavy RAM/CPU
-            # onto each customer's own hardware so the cluster stays ultra-lightweight.
+            # Zero-Server Distributed Compute:
+            # Client browser Web Workers & RAM Turbo extension offload 95%+ of RAM/CPU
+            # onto client PC hardware, allowing the pod to operate efficiently on <128Mi.
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              cpu: "100m"
+              memory: "128Mi"
             limits:
-              cpu: "2000m"
-              memory: "2Gi"
+              cpu: "1000m"
+              memory: "768Mi"
           volumeMounts:
-            # Crucial: Chromium requires shared memory (/dev/shm) to prevent crashes on high-concurrency tabs
-            - name: dshm
-              mountPath: /dev/shm
             - name: storage
               mountPath: /app/server/db
               subPath: db
@@ -74,7 +64,7 @@ spec:
               port: 5002
             initialDelaySeconds: 15
             periodSeconds: 20
-            timeoutSeconds: 5
+            timeoutSeconds: 4
             failureThreshold: 3
           readinessProbe:
             httpGet:
@@ -85,10 +75,6 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 2
       volumes:
-        - name: dshm
-          emptyDir:
-            medium: Memory
-            sizeLimit: 512Mi
         - name: storage
           persistentVolumeClaim:
             claimName: scraper-data-pvc

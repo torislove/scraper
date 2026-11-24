@@ -25,16 +25,16 @@ export default function AnimatedLiquidBackground() {
     };
     window.addEventListener('resize', handleResize);
 
-    // Generate 45 light-weight floating particles
+    // Generate 45 light-weight floating particles in 24K Liquid Gold & Champagne tones
     const particleCount = Math.min(45, Math.floor(window.innerWidth / 30));
     const particles = Array.from({ length: particleCount }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
       radius: Math.random() * 2 + 1,
-      vx: (Math.random() - 0.5) * 0.45,
-      vy: (Math.random() - 0.5) * 0.45 - 0.15, // slight upward float
-      alpha: Math.random() * 0.55 + 0.2,
-      color: Math.random() > 0.5 ? '#10b981' : Math.random() > 0.5 ? '#06b6d4' : '#3b82f6'
+      vx: (Math.random() - 0.5) * 0.42,
+      vy: (Math.random() - 0.5) * 0.42 - 0.14,
+      alpha: Math.random() * 0.52 + 0.2,
+      color: Math.random() > 0.65 ? '#F59E0B' : Math.random() > 0.35 ? '#D97706' : Math.random() > 0.5 ? '#FBBF24' : '#94A3B8'
     }));
 
     // Mouse coordinates for gentle interactive attraction
@@ -90,8 +90,8 @@ export default function AnimatedLiquidBackground() {
             ctx.beginPath();
             ctx.moveTo(p1.x, p1.y);
             ctx.lineTo(p2.x, p2.y);
-            ctx.strokeStyle = '#10b981';
-            ctx.globalAlpha = (1 - d / 110) * 0.12;
+            ctx.strokeStyle = '#D97706';
+            ctx.globalAlpha = (1 - d / 110) * 0.1;
             ctx.lineWidth = 0.8;
             ctx.stroke();
           }

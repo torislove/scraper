@@ -129,7 +129,9 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
       setProfile(data);
     } catch (err) {
       if (!mountedRef.current) return;
-      setError(err?.response?.data?.error || err.message || 'Could not load profile.');
+      const rawErr = err?.response?.data?.error || err.message || '';
+      const cleanErr = rawErr === 'rate_limited' ? 'Server busy. Profile will refresh shortly.' : (rawErr || 'Could not load profile.');
+      setError(cleanErr);
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -180,7 +182,11 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
         setError('Deep extraction finished with errors.');
       }
     } catch (err) {
-      if (mountedRef.current) setError(err?.response?.data?.error || err.message || 'Deep extraction failed.');
+      if (mountedRef.current) {
+        const rawErr = err?.response?.data?.error || err.message || '';
+        const cleanErr = rawErr === 'rate_limited' ? 'Lookup is queued. Retrying in a moment...' : (rawErr || 'Deep extraction failed.');
+        setError(cleanErr);
+      }
     } finally {
       if (mountedRef.current) setExtracting(false);
     }
@@ -543,21 +549,33 @@ export default function VendorDrawer({ vendor, onClose, onUpdated, onOpenWhatsAp
                   </span>
                 </div>
 
-                {(socialGroup.instagram || socialGroup.facebook || socialGroup.linkedin || socialGroup.twitter) && (
+                {(socialGroup.instagram || vendor.instagram || socialGroup.facebook || vendor.facebook || socialGroup.tiktok || vendor.tiktok || socialGroup.linkedin || vendor.linkedin || socialGroup.twitter || vendor.twitter || vendor.whatsappLink) && (
                   <div className="v2-data-row">
-                    <span className="v2-data-label">Social Handles</span>
+                    <span className="v2-data-label">Social & Messaging</span>
                     <span className="v2-data-val" style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      {socialGroup.instagram && (
-                        <a href={socialGroup.instagram} target="_blank" rel="noreferrer" style={{ color: '#E1306C', fontWeight: 600 }}>Instagram</a>
+                      {vendor.whatsappLink && (
+                        <a href={vendor.whatsappLink} target="_blank" rel="noreferrer" style={{ color: '#22c55e', fontWeight: 600 }}>WhatsApp</a>
                       )}
-                      {socialGroup.facebook && (
-                        <a href={socialGroup.facebook} target="_blank" rel="noreferrer" style={{ color: '#1877F2', fontWeight: 600 }}>Facebook</a>
+                      {(socialGroup.instagram || vendor.instagram) && (
+                        <a href={socialGroup.instagram || vendor.instagram} target="_blank" rel="noreferrer" style={{ color: '#E1306C', fontWeight: 600 }}>
+                          Instagram {vendor.instagramFollowers ? `(${vendor.instagramFollowers})` : ''}
+                        </a>
                       )}
-                      {socialGroup.linkedin && (
-                        <a href={socialGroup.linkedin} target="_blank" rel="noreferrer" style={{ color: '#0A66C2', fontWeight: 600 }}>LinkedIn</a>
+                      {(socialGroup.facebook || vendor.facebook) && (
+                        <a href={socialGroup.facebook || vendor.facebook} target="_blank" rel="noreferrer" style={{ color: '#1877F2', fontWeight: 600 }}>
+                          Facebook {vendor.facebookFollowers ? `(${vendor.facebookFollowers})` : ''}
+                        </a>
                       )}
-                      {socialGroup.twitter && (
-                        <a href={socialGroup.twitter} target="_blank" rel="noreferrer" style={{ color: '#1DA1F2', fontWeight: 600 }}>Twitter</a>
+                      {(socialGroup.tiktok || vendor.tiktok) && (
+                        <a href={socialGroup.tiktok || vendor.tiktok} target="_blank" rel="noreferrer" style={{ color: '#00F2FE', fontWeight: 600 }}>
+                          TikTok {vendor.tiktokFollowers ? `(${vendor.tiktokFollowers})` : ''}
+                        </a>
+                      )}
+                      {(socialGroup.linkedin || vendor.linkedin) && (
+                        <a href={socialGroup.linkedin || vendor.linkedin} target="_blank" rel="noreferrer" style={{ color: '#0A66C2', fontWeight: 600 }}>LinkedIn</a>
+                      )}
+                      {(socialGroup.twitter || vendor.twitter) && (
+                        <a href={socialGroup.twitter || vendor.twitter} target="_blank" rel="noreferrer" style={{ color: '#1DA1F2', fontWeight: 600 }}>Twitter / X</a>
                       )}
                     </span>
                   </div>

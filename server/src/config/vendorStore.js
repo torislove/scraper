@@ -230,6 +230,13 @@ function nameLocationKey(name, city) {
   return '';
 }
 
+function socialKey(val, prefix) {
+  if (!val || typeof val !== 'string') return '';
+  const clean = val.toLowerCase().replace(/^https?:\/\/(?:www\.)?(?:instagram\.com|facebook\.com|tiktok\.com)\/?(?:@)?/i, '').replace(/[\/\?#].*$/, '').replace(/^@/, '').trim();
+  if (!clean || clean.length < 3 || ['pages', 'p', 'reel', 'reels', 'explore', 'stories', 'about'].includes(clean)) return '';
+  return `${prefix}:${clean}`;
+}
+
 function keysFor(vendor) {
   const keys = [];
   if (vendor.id) keys.push(`id:${vendor.id}`);
@@ -245,6 +252,15 @@ function keysFor(vendor) {
   if (dom) keys.push(dom);
   const nameLoc = nameLocationKey(vendor.name, vendor.city || vendor.mandal || vendor.district);
   if (nameLoc) keys.push(nameLoc);
+
+  // Social profile keys for instant multi-engine deduplication
+  const ig = socialKey(vendor.instagram, 'ig');
+  if (ig) keys.push(ig);
+  const fb = socialKey(vendor.facebook, 'fb');
+  if (fb) keys.push(fb);
+  const tt = socialKey(vendor.tiktok, 'tt');
+  if (tt) keys.push(tt);
+
   return keys;
 }
 

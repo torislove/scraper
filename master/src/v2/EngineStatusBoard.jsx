@@ -11,7 +11,7 @@ const GROUP_LABELS = {
   api: 'APIs'
 };
 
-const STATUS_RANK = { error: 0, paused: 1, empty: 2, untested: 3, online: 4 };
+const STATUS_RANK = { error: 0, stalled: 1, paused: 2, empty: 3, untested: 4, online: 5 };
 
 function relativeTime(value) {
   if (!value) return 'never';
@@ -59,7 +59,7 @@ export default function EngineStatusBoard({ compact = false }) {
   }, [load]);
 
   const engines = Array.isArray(data?.engines) ? data.engines : [];
-  const summary = data?.summary || { total: 0, online: 0, error: 0, empty: 0, paused: 0, untested: 0 };
+  const summary = data?.summary || { total: 0, online: 0, error: 0, stalled: 0, empty: 0, paused: 0, untested: 0 };
 
   const groups = useMemo(() => {
     const order = ['google', 'directory', 'web', 'ai', 'api'];
@@ -76,13 +76,15 @@ export default function EngineStatusBoard({ compact = false }) {
 
   const worst = engines.some(e => e.status === 'error')
     ? 'error'
-    : engines.some(e => e.status === 'empty')
-      ? 'empty'
-      : engines.some(e => e.status === 'untested')
-        ? 'untested'
-        : engines.some(e => e.status === 'paused')
-          ? 'paused'
-          : 'online';
+    : engines.some(e => e.status === 'stalled')
+      ? 'stalled'
+      : engines.some(e => e.status === 'empty')
+        ? 'empty'
+        : engines.some(e => e.status === 'untested')
+          ? 'untested'
+          : engines.some(e => e.status === 'paused')
+            ? 'paused'
+            : 'online';
 
   return (
     <section className={cx('v2-engine-board', compact && 'is-compact')}>
@@ -93,6 +95,7 @@ export default function EngineStatusBoard({ compact = false }) {
           <span className="v2-engine-summary">
             {summary.online}/{summary.total} online
             {summary.error ? ` · ${summary.error} error` : ''}
+            {summary.stalled ? ` · ${summary.stalled} stalled` : ''}
             {summary.paused ? ` · ${summary.paused} paused` : ''}
             {summary.untested ? ` · ${summary.untested} untested` : ''}
           </span>
@@ -130,16 +133,17 @@ export default function EngineStatusBoard({ compact = false }) {
                   <span
                     key={engine.key}
                     className={cx('v2-engine-chip', `is-${engine.status}`)}
-                    title={`${engine.detail || engine.label}\nStatus: ${engine.status}\n${engine.message}\nLast run: ${relativeTime(engine.lastRunAt)}${engine.lastCount != null ? ` · ${engine.lastCount} rows` : ''}`}
+                    title={`${engine.detail || engine.label}\nStatus: ${engine.status.toUpperCase()}\n${engine.message}\nLast run: ${relativeTime(engine.lastRunAt)}${engine.lastCount != null ? ` · ${engine.lastCount} rows` : ''}\nYield: ${engine.yieldPerRun ?? 0} leads/sweep · Last lead: ${relativeTime(engine.lastNonZeroAt)}`}
                   >
                     <i className="v2-engine-dot" />
                     <b>{engine.label}</b>
                     <small>
                       {engine.status === 'online' ? 'OK'
                         : engine.status === 'error' ? 'ERROR'
-                          : engine.status === 'empty' ? 'EMPTY'
-                            : engine.status === 'paused' ? 'PAUSED'
-                              : 'UNTESTED'}
+                          : engine.status === 'stalled' ? 'STALLED'
+                            : engine.status === 'empty' ? 'EMPTY'
+                              : engine.status === 'paused' ? 'PAUSED'
+                                : 'UNTESTED'}
                     </small>
                   </span>
                 ))}
@@ -150,9 +154,10 @@ export default function EngineStatusBoard({ compact = false }) {
       )}
 
       <footer className="v2-engine-board-foot">
-        <span><CheckCircle2 size={11} /> Green = ready or last run returned rows</span>
-        <span><AlertTriangle size={11} /> Red = browser runtime missing or last run failed</span>
-        <span>Grey = paused on purpose (never bypassed)</span>
+        <span><CheckCircle2 size={11} /> Green = ready or returning leads</span>
+        <span><AlertTriangle size={11} /> Amber = stalled (0 leads across sweeps)</span>
+        <span>Red = missing runtime or failed</span>
+        <span>Grey = paused on purpose</span>
         {taxonomy ? (
           <span className="v2-engine-learned" title="Products and categories learned automatically from successful runs">
             🧠 Learned {taxonomy.products || 0} products · {taxonomy.categories || 0} categories · {taxonomy.brands || 0} brands

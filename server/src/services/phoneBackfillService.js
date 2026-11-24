@@ -449,6 +449,7 @@ function pickNumbers(rawValues, countryCode = 'IN') {
 }
 
 async function openDetailPage(context, url, leadOrName = '') {
+  if (!context || !url) return null;
   const leadObj = typeof leadOrName === 'object' && leadOrName !== null ? leadOrName : { name: String(leadOrName || '') };
   const expectedName = leadObj.name || '';
   const page = await context.newPage();
@@ -564,6 +565,48 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
     return summary;
   }
 
+  // Pre-pass: Fast parallel HTTP website & SPA bundle enrichment (<800ms) for all candidates with a website.
+  // This extracts Vite/React SPA & HTML phones instantly without needing heavy browser tabs!
+  const websiteCandidates = candidates.filter(c => c?.lead?.website && c.lead.website.startsWith('http') && !c.lead.website.includes('google.com') && !hasValidMobile(c.lead.phone, countryForLead(c.lead)));
+  if (websiteCandidates.length > 0) {
+    try {
+      const httpLimit = 8;
+      for (let i = 0; i < websiteCandidates.length; i += httpLimit) {
+        if (Date.now() - startedAt >= budgetMs || shouldAbort()) break;
+        const chunk = websiteCandidates.slice(i, i + httpLimit);
+        await Promise.allSettled(chunk.map(async ({ lead }) => {
+          try {
+            const ext = await fastWebsiteExtract(lead.website, lead.name, {
+              defaultCountry: countryForLead(lead),
+              allowInternational: countryForLead(lead) !== 'IN'
+            });
+            if (ext && ext.phone) {
+              const existingPhones = Array.isArray(lead.phones) ? lead.phones : (lead.phone ? [lead.phone] : []);
+              const newPhones = Array.isArray(ext.phones) ? ext.phones : [ext.phone];
+              lead.phones = [...new Set([...existingPhones, ...newPhones])];
+              if (!lead.phone || (ext.mobiles && ext.mobiles.length > 0)) {
+                lead.phone = ext.phone;
+                lead.phoneType = (ext.mobiles && ext.mobiles.length > 0) ? 'mobile' : 'landline';
+                lead.isMobile = Boolean(ext.mobiles && ext.mobiles.length > 0);
+                lead.isLandline = !lead.isMobile;
+              }
+              if (ext.whatsappLink) {
+                lead.whatsappAvailable = true;
+                lead.whatsappLink = ext.whatsappLink;
+              }
+              if (ext.email && !lead.email) lead.email = ext.email;
+              if (ext.logo && (!lead.logo || lead.logo.includes('favicons'))) lead.logo = ext.logo;
+              lead.verified = true;
+              summary.filled++;
+              if (lead.isMobile) summary.mobilesFound++;
+              else summary.landlinesFound++;
+            }
+          } catch (e) {}
+        }));
+      }
+    } catch (e) {}
+  }
+
   const browser = await getBrowser();
   if (!browser) {
     log('[Phone Backfill] Browser unavailable, skipping place-detail pass.');
@@ -587,6 +630,7 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
         const index = cursor++;
         if (index >= candidates.length) return;
         const { lead, url, synthesized } = candidates[index];
+        if (hasValidMobile(lead.phone, countryForLead(lead))) continue;
 
         let page = null;
         try {
@@ -1037,9 +1081,17 @@ class StreamingEnrichmentManager {
         }
 
         const url = lead.mapsLink || lead.googleMapsUrl || lead.sourceUrl;
-        page = await openDetailPage(this.context, url, lead);
-        const details = await readPlaceDetails(page);
-        const numbers = pickNumbers(details.rawPhones, countryCode);
+        const isDirectGooglePlace = url && (url.includes('/maps/place/') || url.includes('cid=') || url.includes('data-item-id'));
+        let details = { rawPhones: [] };
+
+        if (isDirectGooglePlace) {
+          page = await openDetailPage(this.context, url, lead);
+          if (page) {
+            details = await readPlaceDetails(page);
+          }
+        }
+
+        const numbers = pickNumbers(details.rawPhones || [], countryCode);
         const mobiles = numbers.filter(n => n.isMobile);
         const landlines = numbers.filter(n => n.isLandline);
         const existingPhones = Array.isArray(lead.phones) ? lead.phones : [];
@@ -1130,6 +1182,59 @@ class StreamingEnrichmentManager {
           } catch (e) { }
         }
 
+        // Step C: Targeted Social Bio & WhatsApp Hunter if still lacking verified mobile
+        if (!hasValidMobile(lead.phone, countryCode) && lead.name) {
+          try {
+            const { huntSocialBioContacts } = require('./aggressivePhoneEnricher');
+            const loc = lead.locality || lead.zoneName || lead.city || lead.district || lead.state || '';
+            const zone = lead.zoneName || lead.locality || '';
+            const social = await huntSocialBioContacts(lead.name, loc, countryCode, zone, {
+              instagram: lead.instagram,
+              facebook: lead.facebook
+            });
+            if (social.phones && social.phones.length > 0) {
+              const moreMobiles = pickNumbers(social.phones, countryCode);
+              if (moreMobiles.length > 0) {
+                const bestMob = moreMobiles.find(m => m.isMobile) || moreMobiles[0];
+                lead.phone = bestMob.displayPhone || bestMob.e164;
+                lead.phoneType = bestMob.isMobile ? 'mobile' : 'landline';
+                lead.isMobile = Boolean(bestMob.isMobile);
+                lead.whatsappAvailable = Boolean(bestMob.isMobile);
+                lead.whatsappLink = social.whatsapp || (bestMob.isMobile ? `https://wa.me/${bestMob.digits}` : '');
+                lead.verified = true;
+                lead.aiVerified = true;
+                lead.phoneSource = 'social-bio-dork';
+                const fmtd = moreMobiles.map(m => m.displayPhone || m.e164);
+                lead.phones = [...new Set([...(lead.phones || []), ...fmtd])];
+                changed = true;
+              }
+            }
+            if (social.whatsapp && !lead.whatsappLink) {
+              lead.whatsappLink = social.whatsapp;
+              lead.whatsappAvailable = true;
+              changed = true;
+            }
+            if (social.instagram && !lead.instagram) { lead.instagram = social.instagram; changed = true; }
+            if (social.instagramFollowers && !lead.instagramFollowers) { lead.instagramFollowers = social.instagramFollowers; changed = true; }
+            if (social.facebook && !lead.facebook) { lead.facebook = social.facebook; changed = true; }
+            if (social.facebookFollowers && !lead.facebookFollowers) { lead.facebookFollowers = social.facebookFollowers; changed = true; }
+            if (social.bio && (!lead.description || lead.description.length < 15)) {
+              lead.description = social.bio;
+              lead.bio = social.bio;
+              changed = true;
+            }
+            if (social.emails && social.emails.length > 0) {
+              lead.emails = [...new Set([...(lead.emails || []), ...social.emails])];
+              if (!lead.email) lead.email = lead.emails[0];
+              changed = true;
+            }
+            if (social.address && (!lead.address || lead.address.length < 15)) {
+              lead.address = social.address;
+              changed = true;
+            }
+          } catch (e) { }
+        }
+
         // Recalculate lead quality score & tier
         const newScore = calculateQualityScore(lead);
         lead.qualityScore = newScore;
@@ -1163,7 +1268,11 @@ class StreamingEnrichmentManager {
               email: lead.email,
               emails: lead.emails,
               instagram: lead.instagram,
+              instagramFollowers: lead.instagramFollowers,
               facebook: lead.facebook,
+              facebookFollowers: lead.facebookFollowers,
+              description: lead.description || target.description,
+              bio: lead.bio || target.bio,
               logo: lead.logo,
               avatar: lead.avatar || lead.logo,
               gstin: lead.gstin || target.gstin,
@@ -1176,8 +1285,8 @@ class StreamingEnrichmentManager {
             this.emit(target, 'updated');
           } catch (e) { }
 
-          if (mobiles.length) {
-            this.log(`[Realtime Scout] 📞 ${lead.name}: ${mobiles[0].e164}${lead.whatsappAvailable ? ' (WhatsApp)' : ''}${lead.website ? ` · ${lead.website}` : ''}`);
+          if (lead.phone) {
+            this.log(`[Realtime Scout] 📞 ${lead.name}: ${lead.phone}${lead.whatsappAvailable ? ' (WhatsApp)' : ''}${lead.instagram ? ` · IG: ${lead.instagram}` : ''}${lead.facebook ? ` · FB: ${lead.facebook}` : ''}`);
           }
         }
       } catch (err) {

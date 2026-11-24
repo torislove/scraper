@@ -181,18 +181,21 @@ const SUFFIX_LEVEL = {
   state: 'state',
   states: 'state'
 };
-const LEVEL_RANK = { city: 0, town: 1, district: 2, mandal: 3, state: 4, village: 5 };
+const LEVEL_RANK = { city: 0, town: 1, dual_mandal_town: 1, mandal: 2, subdistrict: 2, district: 3, state: 4, village: 5 };
 const LEVEL_LABEL = {
   city: 'City',
   town: 'Town',
+  dual_mandal_town: 'Town & Mandal',
   district: 'District',
   mandal: 'Mandal',
+  subdistrict: 'Mandal',
   state: 'State',
   village: 'Village'
 };
 const LOCATION_LEVELS = {
   city: 'city',
   town: 'town',
+  dual_mandal_town: 'city',
   village: 'village',
   subdistrict: 'mandal',
   district: 'district',
@@ -478,10 +481,10 @@ function isRealCorrection(fragment, value) {
 }
 
 function locationFromResult(item, fragment) {
-  const name = canonicalName(item);
-  const display = name === item.name && item.display
+  const name = item.label || canonicalName(item);
+  const display = item.display || (name === item.name && item.display
     ? item.display
-    : [name, norm(item.district) !== norm(name) ? item.district : '', item.state].filter(Boolean).join(', ');
+    : [name, norm(item.district) !== norm(name) ? item.district : '', item.state].filter(Boolean).join(', '));
   const mandal = item.mandal || item.subDistrict || (item.type === 'subdistrict' ? item.name : '');
   const district = item.district || (item.type === 'district' ? item.name : '');
   const state = item.state || (item.type === 'state' ? item.name : '');
@@ -489,7 +492,8 @@ function locationFromResult(item, fragment) {
   const detail = item.detail || LEVEL_LABEL[level] || 'City';
   const scope = item.scope || (level === 'district' ? 'district' : level === 'state' ? 'state' : level === 'mandal' ? 'mandal' : 'city');
   return {
-    value: name,
+    value: item.name || name,
+    label: item.label || item.name || name,
     display,
     mandal,
     district,
@@ -511,7 +515,7 @@ function findLocations(fragment, limit = 6, isMaster = false) {
   if (text.length < 3) return [];
   try {
     const geo = getGeo();
-    let mapped = geo.searchLocations(text, Math.max(limit, 6), true)
+    let mapped = geo.searchLocations(text, Math.max(limit, 8), isMaster)
       .map(item => {
         const res = locationFromResult(item, text);
         // Major Indian metro city-districts (e.g. Chennai, Mumbai, Kolkata, Delhi)
@@ -526,7 +530,7 @@ function findLocations(fragment, limit = 6, isMaster = false) {
     if (!mapped.length && text.length >= 4 && /[uai]$/i.test(text)) {
       const stem = text.replace(/[uai]$/i, '');
       if (stem.length >= 3) {
-        const stemResults = geo.searchLocations(stem, Math.max(limit, 6), isMaster)
+        const stemResults = geo.searchLocations(stem, Math.max(limit, 8), isMaster)
           .map(item => locationFromResult(item, text));
         if (stemResults.length) {
           mapped = stemResults;
@@ -536,7 +540,7 @@ function findLocations(fragment, limit = 6, isMaster = false) {
     if (!mapped.length) {
       try {
         const { searchInternationalPlaces } = require('./internationalGeoIndex');
-        const intl = searchInternationalPlaces(text, { limit: Math.max(limit, 6), isMaster });
+        const intl = searchInternationalPlaces(text, { limit: Math.max(limit, 8), isMaster });
         if (intl && intl.length) {
           mapped = intl;
         }
@@ -545,7 +549,7 @@ function findLocations(fragment, limit = 6, isMaster = false) {
 
     const seen = new Set();
     return mapped.filter(item => {
-      const key = `${norm(item.value)}|${norm(item.state)}`;
+      const key = `${norm(item.value)}|${item.level || ''}|${norm(item.state)}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -986,19 +990,24 @@ function findPlaceVariants(text, limit = 6, isMaster = false) {
   });
 
   const searchBase = targetCity || base;
-  for (const item of findLocations(searchBase, 10)) {
+  for (const item of findLocations(searchBase, 10, isMaster)) {
     const itemNorm = norm(item.value);
+    const itemLabelNorm = norm(item.label || '');
     const baseNorm = norm(searchBase);
     const isMatch = itemNorm === baseNorm ||
+      itemLabelNorm === baseNorm ||
+      itemNorm.startsWith(baseNorm) ||
+      baseNorm.startsWith(itemNorm) ||
+      (item.mandal && norm(item.mandal) === baseNorm) ||
       (itemNorm.length >= 3 && baseNorm.length >= 3 && itemNorm.replace(/[uai]$/i, '') === baseNorm.replace(/[uai]$/i, ''));
     if (!isMatch) continue;
     push({
       value: item.value,
-      label: item.value,
+      label: item.label || item.value,
       display: item.display,
       level: item.level,
-      scope: item.level === 'village' ? 'city' : item.level,
-      detail: LEVEL_LABEL[item.level] || 'Place',
+      scope: item.scope || (item.level === 'village' ? 'city' : item.level),
+      detail: item.detail || LEVEL_LABEL[item.level] || 'Place',
       state: item.state || '',
       district: item.district || '',
       mandal: item.mandal || '',
@@ -1150,6 +1159,9 @@ function suggest(options = {}) {
       level: firstLocation.level,
       lat: firstLocation.lat,
       lng: firstLocation.lng,
+      radiusKm: firstLocation.level === 'city'
+        ? (/\b(delhi|new delhi|noida|gurgaon|gurugram|mumbai|navi mumbai|thane|bengaluru|bangalore|hyderabad|secunderabad|chennai|kolkata)\b/i.test(firstLocation.value) ? 16 : 6.0)
+        : 6.0,
       raw: locationFragment,
       corrected: firstLocation.corrected || Boolean(locationCorrectedFrom),
       correctedFrom: locationCorrectedFrom || (firstLocation.corrected ? locationFragment : '')
@@ -1247,7 +1259,7 @@ function suggest(options = {}) {
     ...locationMatches.map((match, index) => ({
       type: 'location',
       value: match.value,
-      label: match.value,
+      label: match.label || match.value,
       display: match.display,
       mandal: match.mandal || '',
       district: match.district || '',

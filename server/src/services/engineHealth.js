@@ -57,11 +57,11 @@ const ENGINES = [
   {
     key: 'justdial',
     label: 'JustDial',
-    kind: 'browser',
+    kind: 'http',
     group: 'directory',
     taskNames: ['scrapeJustDial'],
-    requires: ['playwright'],
-    detail: 'City-indexed business directory'
+    requires: [],
+    detail: 'City-indexed business directory (live mobile endpoint, no browser required)'
   },
   {
     key: 'indiamart',
@@ -382,9 +382,23 @@ function recordRun(key, { ok = true, error = '', ms = 0, count = null, taskName 
     entry.lastErrorAt = '';
     entry.lastCount = count;
     entry.lastNote = String(note || '').slice(0, 300);
+
+    const rowCount = typeof count === 'number' ? count : (Array.isArray(count) ? count.length : 0);
+    if (rowCount > 0) {
+      entry.lastNonZeroAt = now;
+      entry.lastNonZeroCount = rowCount;
+      entry.zeroRunStreak = 0;
+      entry.runsSinceLastLead = 0;
+      entry.totalLeadsProduced = Number(entry.totalLeadsProduced || 0) + rowCount;
+    } else {
+      entry.zeroRunStreak = Number(entry.zeroRunStreak || 0) + 1;
+      entry.runsSinceLastLead = Number(entry.runsSinceLastLead || 0) + 1;
+    }
   } else {
     entry.failures = Number(entry.failures || 0) + 1;
     entry.consecutiveFailures = Number(entry.consecutiveFailures || 0) + 1;
+    entry.zeroRunStreak = Number(entry.zeroRunStreak || 0) + 1;
+    entry.runsSinceLastLead = Number(entry.runsSinceLastLead || 0) + 1;
     entry.lastError = String(error || 'Unknown engine failure').slice(0, 400);
     entry.lastErrorAt = now;
   }
@@ -404,20 +418,27 @@ function buildEngineStatus(definition) {
   let status = 'untested';
   let message = 'No run recorded yet';
 
+  const totalRuns = Number(entry.runs || 0);
+  const totalLeads = Number(entry.totalLeadsProduced || 0);
+  const yieldPerRun = totalRuns > 0 ? Number((totalLeads / totalRuns).toFixed(2)) : 0;
+  const zeroRunStreak = Number(entry.zeroRunStreak !== undefined ? entry.zeroRunStreak : (entry.lastCount === 0 ? (entry.runs || 0) : 0));
+
   if (definition.paused) {
     status = 'paused';
     message = definition.pauseReason || 'Paused';
   } else if (!requirement.ok) {
     status = 'error';
     message = `Missing: ${requirement.missing.join(', ')}`;
-  } else if (entry.lastError) {
+  } else if (entry.lastError && Number(entry.consecutiveFailures || 0) >= 3) {
     status = 'error';
     message = entry.lastError;
+  } else if (zeroRunStreak >= 3 && totalRuns >= 3 && definition.group !== 'api' && !definition.utility) {
+    status = 'stalled';
+    const lastLeadInfo = entry.lastNonZeroAt ? ` (last yield: ${entry.lastNonZeroCount ?? 0} leads)` : ' (never yielded)';
+    message = `Stalled: 0 leads across last ${zeroRunStreak} runs${lastLeadInfo}`;
   } else if (entry.lastSuccessAt) {
     if (entry.lastCount === 0) {
       status = 'empty';
-      // An empty result is honest information, not an explanation. Always say
-      // "0 rows" first, then append where the run came from.
       const note = String(entry.lastNote || '').trim();
       message = note && !/0 rows/i.test(note)
         ? `Last run returned 0 rows · ${note}`
@@ -449,7 +470,13 @@ function buildEngineStatus(definition) {
     lastSuccessAt: entry.lastSuccessAt || null,
     lastErrorAt: entry.lastErrorAt || null,
     lastDurationMs: entry.lastDurationMs ?? null,
-    lastCount: entry.lastCount ?? null
+    lastCount: entry.lastCount ?? null,
+    yieldPerRun,
+    totalLeadsProduced: totalLeads,
+    runsSinceLastLead: Number(entry.runsSinceLastLead || 0),
+    zeroRunStreak,
+    lastNonZeroAt: entry.lastNonZeroAt || null,
+    lastNonZeroCount: entry.lastNonZeroCount ?? null
   };
 }
 
@@ -458,6 +485,7 @@ function getStatus() {
   const summary = {
     total: engines.length,
     online: engines.filter(e => e.status === 'online').length,
+    stalled: engines.filter(e => e.status === 'stalled').length,
     empty: engines.filter(e => e.status === 'empty').length,
     error: engines.filter(e => e.status === 'error').length,
     paused: engines.filter(e => e.status === 'paused').length,

@@ -222,21 +222,34 @@ function scanTargetIcon(label = '', leadsCount = 0) {
   });
 }
 
-function zoneBeaconIcon(zoneName = '', cellState = 'queued', leadsCount = 0) {
-  const safeName = String(zoneName || '').replace(/[<>&"]/g, '').slice(0, 24);
+function tacticalZoneIcon(zoneName = '', cellState = 'queued', leadsCount = 0, isCompact = false) {
+  const safeName = String(zoneName || '').replace(/[<>&"]/g, '').slice(0, 20);
   const countTag = leadsCount > 0 ? ` · ${leadsCount}` : '';
-  const stateClass = cellState === 'scanning'
-    ? 'is-scanning'
-    : (cellState === 'done' || cellState === 'saturated')
-      ? 'is-done'
-      : 'is-queued';
-  const iconGlyph = cellState === 'scanning' ? '⚡' : (cellState === 'done' || cellState === 'saturated') ? '✅' : '🛰️';
+
+  if (isCompact && cellState === 'queued') {
+    return L.divIcon({
+      className: 'v2-tactical-dot-wrap',
+      html: `<div class="v2-tactical-radar-dot" title="${safeName}"><i></i></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+  }
+
+  const isDone = cellState === 'done' || cellState === 'saturated';
+  const stateClass = isDone ? 'is-done' : cellState === 'dry' ? 'is-dry' : 'is-queued';
+  const iconGlyph = isDone ? '✓' : '🛰️';
+  const displayLabel = isDone ? (leadsCount > 0 ? `${leadsCount} leads` : safeName) : safeName;
+
   return L.divIcon({
     className: 'v2-zone-beacon-wrap',
-    html: `<div class="v2-zone-beacon-pill ${stateClass}"><i></i><span>${iconGlyph} ${safeName}${countTag}</span></div>`,
-    iconSize: [156, 26],
-    iconAnchor: [78, 13]
+    html: `<div class="v2-zone-beacon-pill ${stateClass}" title="${safeName}${countTag}"><i></i><span>${iconGlyph} ${displayLabel}</span></div>`,
+    iconSize: [isDone ? 96 : 120, 22],
+    iconAnchor: [isDone ? 48 : 60, 11]
   });
+}
+
+function zoneBeaconIcon(zoneName = '', cellState = 'queued', leadsCount = 0) {
+  return tacticalZoneIcon(zoneName, cellState, leadsCount, false);
 }
 
 function InitialFit({ points, zonePoints = [], fitKey = 'default' }) {
@@ -284,23 +297,29 @@ export default function CommandMap({
   const TILE_FAILOVER_ORDER = ['satellite'];
   const handleTileError = useMemo(() => () => {}, []);
 
-  const safeCenter = useMemo(() => {
-    const lat = Number(center?.[0]);
-    const lng = Number(center?.[1]);
-    return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : INDIA_CENTER;
-  }, [center]);
-
   const coverage = useMemo(
     () => zones.map((zone, index) => ({
       name: zone.zoneName || zone.name || `Zone ${index + 1}`,
       lat: Number(zone.lat ?? zone.latitude),
       lng: Number(zone.lng ?? zone.longitude),
-      radiusKm: Number(zone.radiusKm) || 3.5,
+      radiusKm: Number(zone.radiusKm) || 6.0,
       approximate: Boolean(zone.isApproximate || zone.approx),
       index: zone.index || index + 1
     })).filter(zone => Number.isFinite(zone.lat) && Number.isFinite(zone.lng)),
     [zones]
   );
+
+  const safeCenter = useMemo(() => {
+    let lat = Number(center?.[0]);
+    let lng = Number(center?.[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && (Math.abs(lat) > 1 || Math.abs(lng) > 1)) {
+      return [lat, lng];
+    }
+    if (coverage.length > 0 && Number.isFinite(coverage[0].lat) && Number.isFinite(coverage[0].lng) && (Math.abs(coverage[0].lat) > 1 || Math.abs(coverage[0].lng) > 1)) {
+      return [coverage[0].lat, coverage[0].lng];
+    }
+    return INDIA_CENTER;
+  }, [center, coverage]);
 
   const zonePoints = useMemo(
     () => coverage.map(z => [z.lat, z.lng]),

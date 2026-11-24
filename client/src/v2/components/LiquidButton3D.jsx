@@ -12,7 +12,7 @@ export default function LiquidButton3D({
   children,
   onClick,
   type = 'button',
-  variant = 'emerald', // emerald | cyan | sapphire | amber | ghost
+  variant = 'gold',   // gold (default) | obsidian | glass-gold | ghost
   size = 'md',        // sm | md | lg | xl
   icon: IconComponent,
   iconRight: IconRightComponent,
@@ -28,46 +28,42 @@ export default function LiquidButton3D({
 
   const getVariantStyles = () => {
     switch (variant) {
-      case 'emerald':
+      case 'obsidian':
         return {
-          background: 'linear-gradient(135deg, #059669 0%, #10b981 50%, #06b6d4 100%)',
-          lipColor: '#047857',
-          glowColor: 'rgba(16, 185, 129, 0.45)',
-          color: '#ffffff',
-          border: '1.5px solid rgba(255, 255, 255, 0.45)'
+          background: 'linear-gradient(135deg, #0b1120 0%, #1e293b 65%, #334155 100%)',
+          lipColor: '#020617',
+          glowColor: 'rgba(217, 119, 6, 0.32)',
+          color: '#fef3c7',
+          border: '1.5px solid rgba(251, 191, 36, 0.58)'
         };
-      case 'cyan':
+      case 'glass-gold':
+      case 'ghost':
         return {
-          background: 'linear-gradient(135deg, #0284c7 0%, #06b6d4 50%, #10b981 100%)',
-          lipColor: '#0369a1',
-          glowColor: 'rgba(6, 182, 212, 0.45)',
-          color: '#ffffff',
-          border: '1.5px solid rgba(255, 255, 255, 0.45)'
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 251, 235, 0.9) 100%)',
+          lipColor: '#d97706',
+          glowColor: 'rgba(245, 158, 11, 0.24)',
+          color: '#78350f',
+          border: '1.5px solid rgba(217, 119, 6, 0.42)'
         };
       case 'sapphire':
         return {
-          background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #38bdf8 100%)',
-          lipColor: '#1e3a8a',
-          glowColor: 'rgba(37, 99, 235, 0.45)',
-          color: '#ffffff',
-          border: '1.5px solid rgba(255, 255, 255, 0.45)'
+          background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 55%, #b45309 100%)',
+          lipColor: '#020617',
+          glowColor: 'rgba(217, 119, 6, 0.35)',
+          color: '#fef3c7',
+          border: '1.5px solid rgba(253, 230, 138, 0.55)'
         };
+      case 'gold':
+      case 'emerald':
+      case 'cyan':
       case 'amber':
-        return {
-          background: 'linear-gradient(135deg, #d97706 0%, #f59e0b 55%, #fbbf24 100%)',
-          lipColor: '#b45309',
-          glowColor: 'rgba(245, 158, 11, 0.45)',
-          color: '#ffffff',
-          border: '1.5px solid rgba(255, 255, 255, 0.5)'
-        };
-      case 'ghost':
       default:
         return {
-          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 245, 249, 0.85) 100%)',
-          lipColor: '#cbd5e1',
-          glowColor: 'rgba(15, 23, 42, 0.08)',
-          color: '#0f172a',
-          border: '1.5px solid rgba(255, 255, 255, 0.92)'
+          background: 'linear-gradient(135deg, #b45309 0%, #d97706 30%, #f59e0b 68%, #fbbf24 100%)',
+          lipColor: '#78350f',
+          glowColor: 'rgba(217, 119, 6, 0.44)',
+          color: '#ffffff',
+          border: '1.5px solid rgba(254, 243, 199, 0.78)'
         };
     }
   };

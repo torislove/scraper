@@ -192,9 +192,34 @@ function countCategories(leads) {
     .sort((a, b) => b.count - a.count || a.category.localeCompare(b.category));
 }
 
+function listOobFolders() {
+  const dir = path.join(SESSIONS_DIR, 'master');
+  if (!fs.existsSync(dir)) return [];
+  try {
+    const files = fs.readdirSync(dir).filter(f => f.startsWith('master_oob_') && f.endsWith('.json'));
+    return files.map(f => {
+      const full = path.join(dir, f);
+      const data = readFolder(full);
+      if (!data) return null;
+      return {
+        id: data.id,
+        name: data.name,
+        district: data.metadata?.oobDistrict || '',
+        leadCount: data.leadCount || (Array.isArray(data.leads) ? data.leads.length : 0),
+        phoneCount: data.phoneCount || 0,
+        categories: data.metadata?.oobCategories || countCategories(data.leads || []),
+        updatedAt: data.timestamp || data.createdAt
+      };
+    }).filter(Boolean);
+  } catch (e) {
+    return [];
+  }
+}
+
 module.exports = {
   folderIdFor,
   folderPathFor,
   recordRejections,
-  categoryFor
+  categoryFor,
+  listOobFolders
 };

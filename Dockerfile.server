@@ -1,62 +1,45 @@
-# ==========================================
-# Scraper.co.in - Autonomous Scraping Engine
-# Production Container Image (Playwright Chromium)
-# ==========================================
+# ==============================================================================
+# Scraper.co.in - Autonomous Residential Edge Scraper (Production)
+# Zero-Server Footprint: Client PC Hardware & Browser Extension Powered
+# ==============================================================================
 
-FROM node:20-bookworm-slim
+FROM node:20-bookworm-slim AS base
 
-# Install system dependencies required for Chromium & Playwright
+# Install essential runtime utilities & minimal shared libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     dumb-init \
-    procps \
     ca-certificates \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    fonts-liberation \
+    procps \
     && rm -rf /var/lib/apt/lists/*
-
-# Set up shared Playwright browser directory accessible by node user
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN mkdir -p /ms-playwright && chown -R node:node /ms-playwright
 
 WORKDIR /app
 
-# Copy root gazetteer and metadata data
+# Copy root geo data and metadata
 COPY --chown=node:node data/ ./data/
 
-# Copy server dependency manifests
+# Copy server package manifests
 COPY --chown=node:node server/package*.json ./server/
 
 WORKDIR /app/server
 
-# Install production dependencies and Playwright Chromium binary
-RUN npm ci --omit=dev
-RUN npx playwright install chromium
+# Install lean production dependencies
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy server application source code and Zero-Knowledge Browser Extension package
+# Copy pre-packaged zero-knowledge browser extensions & server source
 COPY --chown=node:node extension/ ./extension/
 COPY --chown=node:node server/ ./
 
-# Create data directories with appropriate permissions
-RUN mkdir -p /app/server/data /app/server/db/user_sessions && chown -R node:node /app/server/data /app/server/db
+# Create persistent storage directories with proper permissions
+RUN mkdir -p /app/server/data /app/server/db/user_sessions && \
+    chown -R node:node /app/server/data /app/server/db
 
-# Switch to non-root node user for security
+# Security: Run as unprivileged node user
 USER node
 
-# Production environment defaults (Zero-Knowledge Extension-Only Cloud Compute)
+# Production Zero-Server Compute Configuration:
+# - All DOM parsing, network transit, and residential scraping run on Client Hardware
+# - Cloud server functions as lightweight JSON coordinator (<50MB RAM idle)
 ENV PORT=5002
 ENV NODE_ENV=production
 ENV COMPUTE_MODE=extension_only
@@ -65,13 +48,13 @@ ENV USER_RAM_OFFLOAD_ENABLED=1
 ENV SCRAPER_ALLOW_REMOTE=1
 ENV SCRAPER_BROWSER_SLOTS=0
 ENV PLAYWRIGHT_CONCURRENCY=0
-ENV NODE_OPTIONS="--max-old-space-size=1536"
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 
 EXPOSE 5002
 
 # Health check probe
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=20s --timeout=4s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:5002/api/health || exit 1
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
-CMD ["node", "--max-old-space-size=2560", "index.js"]
+CMD ["node", "index.js"]

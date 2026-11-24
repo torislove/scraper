@@ -16,6 +16,8 @@ import {
   Users
 } from 'lucide-react';
 import LiquidButton3D from './LiquidButton3D';
+import { useExtension } from '../context/ExtensionContext';
+import { openClientWorkspace, openMasterWorkspace } from '../utils/editionSwitch';
 
 /**
  * MasterVsClientShowcase
@@ -24,18 +26,14 @@ import LiquidButton3D from './LiquidButton3D';
  */
 export default function MasterVsClientShowcase() {
   const navigate = useNavigate();
+  const { ensureConnected } = useExtension() || {};
 
   const handleLaunchClient = () => {
-    navigate('/command?country=IN');
+    openClientWorkspace(navigate, '/command?country=IN', ensureConnected);
   };
 
   const handleLaunchMaster = () => {
-    // Navigate to Master portal (port 5174 in dev, or /admin in production)
-    if (typeof window !== 'undefined' && window.location.port === '5173') {
-      window.open('http://localhost:5174/', '_blank');
-    } else {
-      window.open('/admin', '_blank');
-    }
+    openMasterWorkspace(navigate, '/command?country=IN');
   };
 
   return (
@@ -58,7 +56,7 @@ export default function MasterVsClientShowcase() {
           }}
         >
           <Layers size={12} />
-          <span>DUAL-WORKSPACE ARCHITECTURE · SELECT YOUR OPERATIONAL EDITION</span>
+          <span>DUAL-SCRAPER FLEET ARCHITECTURE · MASTER (11 NATIONS) &amp; CLIENT</span>
         </span>
       </div>
 
@@ -73,7 +71,7 @@ export default function MasterVsClientShowcase() {
           letterSpacing: '-0.025em'
         }}
       >
-        Two Distinct Editions.{' '}
+        Two Distinct Scrapers.{' '}
         <span
           style={{
             background: 'linear-gradient(135deg, #059669 0%, #06b6d4 100%)',
@@ -81,13 +79,12 @@ export default function MasterVsClientShowcase() {
             WebkitTextFillColor: 'transparent'
           }}
         >
-          Built for Specific Operational Needs.
+          Engineered for Pure Data Acquisition.
         </span>
       </h2>
 
       <p style={{ fontSize: 12.5, color: '#475569', maxWidth: '64ch', margin: '0 auto 16px', lineHeight: 1.45 }}>
-        Choose between a private outbound machine running on your local computer, or an executive centralized
-        master command that aggregates data across all connected client runners.
+        Choose between the Client Cockpit for targeted local business discovery, or the flagship Master Scraper running unmetered sweeps across all 11 sovereign nations.
       </p>
 
       {/* Side-by-Side Dual Edition Cards */}
@@ -126,55 +123,54 @@ export default function MasterVsClientShowcase() {
                 </div>
                 <div>
                   <span style={{ fontSize: 9.5, fontWeight: 800, color: '#059669', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    Edition 01 · Local Outbound
+                    Edition 01 · Local Client Engine
                   </span>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 850, color: '#0f172a' }}>
-                    CLIENT WORKSPACE
+                    CLIENT COCKPIT
                   </h3>
                 </div>
               </div>
 
               <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
-                PRIVATE &amp; LOCAL
+                LOCAL &amp; FOCUSED
               </span>
             </div>
 
             <p style={{ fontSize: 12, color: '#334155', fontWeight: 650, margin: '0 0 10px', lineHeight: 1.4 }}>
-              Your Private Local Outbound Machine for Solo Founders, Sales Reps, Agencies &amp; Businesses.
+              Streamlined client-tier scraper for targeted local business discovery, verified phone extraction, and CRM exports.
             </p>
 
             {/* Feature Bullets */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: '#475569', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <ShieldCheck size={14} color="#059669" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>100% Machine Privacy:</strong> All scraped leads stay private on your local computer. Never leaked or shared.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-                <Cpu size={14} color="#059669" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>Zero Server RAM Markups:</strong> Crawls natively via your browser extension using your device RAM &amp; residential IP.</span>
+                <span><strong>Targeted City Searches:</strong> Clean single-city and mandal scans with 15–25 zone concurrency.</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <Zap size={14} color="#059669" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>Instant Outreach:</strong> Direct WhatsApp messaging, 1-click Excel (.xlsx), CSV, and vCard phonebook sync.</span>
+                <span><strong>Zero-Knowledge Privacy:</strong> Direct local-to-browser execution with no centralized tracking.</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                <Lock size={14} color="#D97706" style={{ marginTop: 2, flex: 'none' }} />
+                <span><strong>Verified Export Safeguards:</strong> Automated carrier filtering, WhatsApp readiness tags, and structured Excel output.</span>
               </div>
             </div>
           </div>
 
           <div style={{ paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
             <LiquidButton3D
-              variant="emerald"
+              variant="gold"
               size="md"
               icon={Laptop}
-              pulse
               onClick={handleLaunchClient}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              Launch Client Cockpit (Private)
+              Launch Client Cockpit
             </LiquidButton3D>
           </div>
         </motion.div>
 
-        {/* EDITION 2: MASTER FLEET EDITION (Cyan/Indigo Theme) */}
+        {/* EDITION 2: MASTER SCRAPER (Cyan/Indigo Theme) */}
         <motion.div
           whileHover={{ y: -3 }}
           transition={{ duration: 0.2 }}
@@ -201,49 +197,49 @@ export default function MasterVsClientShowcase() {
                 </div>
                 <div>
                   <span style={{ fontSize: 9.5, fontWeight: 800, color: '#0891b2', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-                    Edition 02 · Central Hub
+                    Edition 02 · Master Scraper
                   </span>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 850, color: '#0f172a' }}>
-                    MASTER FLEET EDITION
+                    MASTER SCRAPER (11 COUNTRIES)
                   </h3>
                 </div>
               </div>
 
               <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc' }}>
-                ADMIN &amp; OPERATORS
+                UNMETERED · 11 NATIONS
               </span>
             </div>
 
             <p style={{ fontSize: 12, color: '#334155', fontWeight: 650, margin: '0 0 10px', lineHeight: 1.4 }}>
-              Central Fleet Command &amp; Multi-Tenant Data Aggregator for Operators &amp; Agency Networks.
+              Flagship High-Throughput Scraper for All 11 Sovereign Countries with Deep Multi-Zone Sweeps.
             </p>
 
             {/* Feature Bullets */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: '#475569', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-                <Database size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>Global Fleet Data Vault:</strong> Collects &amp; aggregates all scraped leads from master, clients, and customer tenants.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <Globe2 size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>Fleet Orchestration:</strong> Orchestrates the 22 cloud discovery engines, manages client quotas, and audits fleet health.</span>
+                <span><strong>11 Sovereign Nations:</strong> Full scraping coverage for IN, US, UK, CA, AU, AE, SG, NZ, ZA, IE, DE.</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-                <Users size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>Multi-Tenant Telemetry:</strong> Live ingestion velocity, global deduplicated exports, and remote client diagnostics.</span>
+                <Zap size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
+                <span><strong>Unmetered Territorial Sweeps:</strong> State-wide and district-wide multi-zone parallel extraction without rate limits.</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                <Database size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
+                <span><strong>22 Parallel Engines:</strong> Synchronous directory indexing, multi-channel social enrichment, and cross-engine phone verification.</span>
               </div>
             </div>
           </div>
 
           <div style={{ paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
             <LiquidButton3D
-              variant="cyan"
+              variant="obsidian"
               size="md"
               icon={Server}
               onClick={handleLaunchMaster}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              Access Master Fleet Command (Admin)
+              Launch Master Scraper (11 Countries)
             </LiquidButton3D>
           </div>
         </motion.div>

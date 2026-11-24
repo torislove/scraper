@@ -332,7 +332,7 @@ function uniqueZones(zones) {
       mandal: z.mandal || null,
       district: z.district || null,
       state: z.state || null,
-      radiusKm: z.radiusKm || null,
+      radiusKm: z.radiusKm || 6.0,
       typology: z.typology || null,
       // Coordinate cells carry their real anchor and an explicit query string.
       // Dropping them here used to erase a city grid's precision and force the
@@ -430,7 +430,7 @@ function buildDistrictZones(name, options = {}) {
           mandal: mName,
           district: entry.district,
           state: entry.state,
-          radiusKm: 3.5,
+          radiusKm: 6.0,
           typology: 'urban'
         });
       }
@@ -462,7 +462,7 @@ function buildDistrictZones(name, options = {}) {
           mandal: bucket.mandal,
           district: entry.district,
           state: entry.state,
-          radiusKm: Math.min(bucket.typology.radiusKm, 5.0),
+          radiusKm: 6.0,
           typology: bucket.typology.type
         });
       }
@@ -560,6 +560,61 @@ function buildDistrictZones(name, options = {}) {
   };
 }
 
+
+function buildMandalBoundary(entry, urbanLocalities = [], villages = [], boundingbox = null) {
+  const centers = [];
+  const seen = new Set();
+  const { ZONE_COORDINATES } = require('../utils/universalGeoCluster');
+
+  for (const loc of urbanLocalities) {
+    const key = String(loc || '').toLowerCase().trim();
+    if (!key || seen.has(key)) continue;
+    const c = ZONE_COORDINATES[key] || gazetteerCenter(loc);
+    if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
+      seen.add(key);
+      centers.push({ name: loc, lat: Number(c.lat), lng: Number(c.lng), radiusKm: 3.2 });
+    }
+  }
+
+  const mCenter = gazetteerCenter(entry.subDistrict) || ZONE_COORDINATES[String(entry.subDistrict || '').toLowerCase().trim()];
+  if (mCenter && !seen.has(keyOf(entry.subDistrict))) {
+    seen.add(keyOf(entry.subDistrict));
+    centers.push({ name: entry.subDistrict, lat: Number(mCenter.lat), lng: Number(mCenter.lng), radiusKm: 4.0 });
+  }
+
+  for (const v of villages) {
+    const key = keyOf(v);
+    if (!key || seen.has(key)) continue;
+    const c = gazetteerCenter(v);
+    if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
+      seen.add(key);
+      centers.push({ name: v, lat: Number(c.lat), lng: Number(c.lng), radiusKm: 3.5 });
+    }
+  }
+
+  let computedBox = boundingbox;
+  if ((!computedBox || computedBox.length !== 4) && centers.length >= 2) {
+    const lats = centers.map(c => c.lat);
+    const lngs = centers.map(c => c.lng);
+    computedBox = [
+      Number((Math.min(...lats) - 0.015).toFixed(5)),
+      Number((Math.max(...lats) + 0.015).toFixed(5)),
+      Number((Math.min(...lngs) - 0.015).toFixed(5)),
+      Number((Math.max(...lngs) + 0.015).toFixed(5))
+    ];
+  }
+
+  return {
+    kind: 'mandal_boundary',
+    mandal: entry.subDistrict,
+    district: entry.district,
+    state: entry.state,
+    centers,
+    boundingbox: computedBox,
+    note: 'Dynamic mandal boundary: lead must be contained inside the mandal envelope or constituent ward/village nodes.'
+  };
+}
+
 function buildMandalZones(name, options = {}) {
   const entry = lookup(mandalIndex, name);
   if (!entry) return null;
@@ -610,7 +665,7 @@ function buildMandalZones(name, options = {}) {
         mandal: entry.subDistrict,
         district: entry.district,
         state: entry.state,
-        radiusKm: 3.5,
+        radiusKm: 6.0,
         typology: 'urban'
       });
     }
@@ -618,7 +673,7 @@ function buildMandalZones(name, options = {}) {
 
   // 2. Category Sub-Vectors (e.g. Wedding Photography, Photo Studio, Baby Shoots, or CNC, Hardware)
   if (category) {
-    const vectorZones = buildCategorySubVectorZones(entry.subDistrict, category, 24);
+    const vectorZones = buildCategorySubVectorZones(category, entry.subDistrict, 24);
     for (const vz of vectorZones) {
       rawList.push({
         name: vz.zoneName,
@@ -626,7 +681,7 @@ function buildMandalZones(name, options = {}) {
         mandal: entry.subDistrict,
         district: entry.district,
         state: entry.state,
-        radiusKm: 4.0,
+        radiusKm: 6.0,
         queryText: vz.queryText,
         coverageKind: 'vector'
       });
@@ -642,19 +697,28 @@ function buildMandalZones(name, options = {}) {
       mandal: entry.subDistrict,
       district: entry.district,
       state: entry.state,
-      radiusKm: Math.min(typology.radiusKm, 5.0),
+      radiusKm: 6.0,
       typology: typology.type
     });
   }
 
   // 4. Viewport grid cells for dense urban / dual-status mandal to ensure zero geometric gaps
+  let mandalBbox = options.boundingbox || null;
+  const hub = ZONE_COORDINATES[String(entry.subDistrict || '').toLowerCase().trim()] || gazetteerCenter(entry.subDistrict);
+
   if (urbanLocalities.length > 0 || typology.type === 'urban') {
-    const hub = ZONE_COORDINATES[String(entry.subDistrict || '').toLowerCase().trim()];
     if (hub) {
-      const grid = buildCityGridZones(entry.subDistrict, category, [], {
+      const localityAnchors = urbanLocalities.map(loc => {
+        const c = ZONE_COORDINATES[loc.toLowerCase()] || gazetteerCenter(loc);
+        return c ? { lat: Number(c.lat), lng: Number(c.lng) } : null;
+      }).filter(Boolean);
+
+      const grid = buildCityGridZones(entry.subDistrict, category, localityAnchors, {
         center: { lat: Number(hub.lat), lng: Number(hub.lng) },
-        cappedRadiusKm: 8,
-        ringKm: 4
+        boundingbox: mandalBbox,
+        scope: 'mandal',
+        cappedRadiusKm: 4.5,
+        ringKm: 0.5
       });
       for (const cell of grid) {
         rawList.push({
@@ -663,9 +727,10 @@ function buildMandalZones(name, options = {}) {
           mandal: entry.subDistrict,
           district: entry.district,
           state: entry.state,
-          radiusKm: 2.6,
+          radiusKm: cell.radiusKm || 2.5,
           lat: cell.lat,
           lng: cell.lng,
+          boundingbox: cell.boundingbox || mandalBbox,
           queryText: cell.queryText,
           coverageKind: 'grid'
         });
@@ -676,6 +741,7 @@ function buildMandalZones(name, options = {}) {
   const unique = uniqueZones(rawList);
   const capped = capZones(unique, CAPS.mandal);
   const isDual = urbanLocalities.length > 0;
+  const mandalBoundary = buildMandalBoundary(entry, urbanLocalities, villages, mandalBbox);
 
   return {
     resolvedScope: 'mandal',
@@ -685,6 +751,7 @@ function buildMandalZones(name, options = {}) {
     state: entry.state,
     district: entry.district,
     center: gazetteerCenter(entry.subDistrict),
+    boundary: mandalBoundary,
     zones: capped.zones,
     coverage: {
       districts: 1,
@@ -847,13 +914,14 @@ function buildCityZones(name, options = {}) {
 
   const { AUTHORITATIVE_CLUSTERS, resolveUniversalZones } = require('../utils/universalGeoCluster');
   const matchedClusterKey = Object.keys(AUTHORITATIVE_CLUSTERS).find(k => k === cleanKey || k === strippedKey);
+  const targetCountry = options.countryCode || options.country || 'IN';
   if (matchedClusterKey) {
-    const rawZones = resolveUniversalZones(cleanName, options.category || '', options.isMaster || false);
+    const rawZones = resolveUniversalZones(cleanName, options.category || '', options.isMaster || false, targetCountry);
     if (Array.isArray(rawZones) && rawZones.length > 0) {
       const all = uniqueZones(rawZones.map(z => ({
         name: z.zoneName || z.name,
         kind: z.coverageKind || 'locality',
-        radiusKm: z.radiusKm || 4.0,
+        radiusKm: z.radiusKm || 6.0,
         lat: z.lat,
         lng: z.lng
       })));
@@ -893,7 +961,7 @@ function buildCityZones(name, options = {}) {
   }
 
   const subZones = Array.isArray(classification.subZones) ? classification.subZones : [];
-  const rawZones = subZones.length ? subZones : resolveUniversalZones(cleanName, options.category || '', options.isMaster || false).map(z => z.zoneName || z.name);
+  const rawZones = subZones.length ? subZones : resolveUniversalZones(cleanName, options.category || '', options.isMaster || false, targetCountry).map(z => z.zoneName || z.name);
   if (!Array.isArray(rawZones) || rawZones.length < 1) return null;
 
   const all = uniqueZones(rawZones.map(z => ({ name: z, kind: 'locality' })));

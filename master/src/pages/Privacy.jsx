@@ -17,14 +17,14 @@ export default function Privacy() {
         <p className="text-gray-500 mb-8 font-medium">Last updated: June 12, 2026</p>
         
         <div className="space-y-6 text-gray-600 text-sm leading-relaxed">
-          <h2 className="text-xl font-bold text-gray-900">1. Information We Collect</h2>
-          <p>When you create an account to access our free credits, we collect your name, email address, and usage data regarding which vendors you have revealed.</p>
+          <h2 className="text-xl font-bold text-gray-900">1. Institutional Data Governance</h2>
+          <p>Scraper.co.in operates strictly as a B2B public web indexing utility. Workspace authentication stores only your organizational identifier, email address, and encrypted session metadata.</p>
           
-          <h2 className="text-xl font-bold text-gray-900">2. How We Use Your Data</h2>
-          <p>We use your data solely to manage your credit balance, process premium upgrades, and prevent abuse of our free tier system. We do not sell your personal data to third parties.</p>
+          <h2 className="text-xl font-bold text-gray-900">2. Zero-Knowledge Local Execution</h2>
+          <p>Client-side extraction executes directly within local browser memory without storing private consumer databases or personal PII on central cloud servers. We never sell workspace metadata to third parties.</p>
           
-          <h2 className="text-xl font-bold text-gray-900">3. Data Security</h2>
-          <p>Your data is protected using industry-standard encryption. We secure your login sessions using local storage and encrypted transmission protocols.</p>
+          <h2 className="text-xl font-bold text-gray-900">3. Security Architecture</h2>
+          <p>All telemetry transmissions occur over 256-bit TLS encrypted channels with hashed workspace tokens and strict role isolation between Client and Master Fleet consoles.</p>
         </div>
       </div>
     </div>

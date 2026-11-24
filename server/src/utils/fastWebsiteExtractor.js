@@ -135,6 +135,52 @@ function extractFromHtml(html, pageUrl, opts = {}) {
     }
   });
 
+  // 0c. Inline Scripts & Data Blobs (Next.js __NEXT_DATA__, Nuxt, Webflow, Vite inline states)
+  $('script').each((_, el) => {
+    try {
+      const type = ($(el).attr('type') || '').toLowerCase();
+      if (type === 'application/ld+json') return; // Handled above
+      const scriptContent = $(el).html();
+      if (!scriptContent || scriptContent.length < 10 || scriptContent.length > 500000) return;
+      
+      // Look for phone/tel/mobile keys in inline state objects
+      const phonePropRegex = /(?:phone|mobile|tel|contact|whatsapp|emergency|call)["':\s=]+["']?(\+?[0-9\s-]{10,16})["']?/gi;
+      let m;
+      while ((m = phonePropRegex.exec(scriptContent)) !== null) {
+        const raw = m[1].trim();
+        const p = normalizePhone(raw, {
+          context: 'inline script phone',
+          defaultCountry: opts.defaultCountry || 'IN',
+          allowInternational: opts.allowInternational === true
+        });
+        if (p) {
+          const national = p.national || p.digits;
+          if (p.isMobile && !data.mobiles.includes(national)) data.mobiles.push(national);
+          if (!data.phones.includes(p.displayPhone)) data.phones.push(p.displayPhone);
+          if (p.isMobile && !data.whatsappLink) data.whatsappLink = `https://wa.me/${p.digits}`;
+        }
+      }
+    } catch (e) {}
+  });
+
+  // 0d. HTML Data Attributes & Tel/WhatsApp Attributes on any element
+  $('[data-phone], [data-tel], [data-mobile], [data-whatsapp], a[href*="wa.me"], a[href*="whatsapp"]').each((_, el) => {
+    try {
+      const raw = $(el).attr('data-phone') || $(el).attr('data-tel') || $(el).attr('data-mobile') || $(el).attr('data-whatsapp') || $(el).attr('href') || '';
+      const p = normalizePhone(raw, {
+        context: 'data attr phone',
+        defaultCountry: opts.defaultCountry || 'IN',
+        allowInternational: opts.allowInternational === true
+      });
+      if (p) {
+        const national = p.national || p.digits;
+        if (p.isMobile && !data.mobiles.includes(national)) data.mobiles.push(national);
+        if (!data.phones.includes(p.displayPhone)) data.phones.push(p.displayPhone);
+        if (p.isMobile && !data.whatsappLink) data.whatsappLink = `https://wa.me/${p.digits}`;
+      }
+    } catch (e) {}
+  });
+
   // Strip all script, style, SVG, and metadata tags from Cheerio DOM
   // to prevent CSS variables (--wbu-color-...) and JS chunks from leaking into text.
   $('script, style, noscript, svg, template, iframe, style-sheet').remove();
@@ -440,6 +486,64 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
         if (!result.pincode && extracted.pincode) result.pincode = extracted.pincode;
         if (!result.whatsappLink && extracted.whatsappLink) result.whatsappLink = extracted.whatsappLink;
       }
+    }
+
+    // 3. SPA Bundle Probe (Vite, React, Next.js, Webflow):
+    // When HTML is an SPA shell with empty body text, scan the primary JS bundle for embedded phones
+    if (result.mobiles.length === 0 && result.phones.length === 0 && homeHtml && origin) {
+      try {
+        const $home = cheerio.load(homeHtml);
+        const scriptUrls = [];
+        $home('script[src]').each((_, el) => {
+          const src = $home(el).attr('src') || '';
+          if (/(?:assets\/index|static\/js\/main|app\.|bundle\.|_next\/static\/chunks\/pages\/index)/i.test(src) || (src.endsWith('.js') && !src.includes('analytics') && !src.includes('gtag') && !src.includes('facebook'))) {
+            try {
+              const fullScriptUrl = new URL(src, origin).toString();
+              if (new URL(fullScriptUrl).origin === origin && !scriptUrls.includes(fullScriptUrl)) {
+                scriptUrls.push(fullScriptUrl);
+              }
+            } catch (e) {}
+          }
+        });
+
+        const targetBundle = scriptUrls[0];
+        if (targetBundle) {
+          const bundleText = await fetchWebsiteText(targetBundle, 3000, 2);
+          if (bundleText && bundleText.length > 100) {
+            const isIntl = Boolean(opts.allowInternational || (opts.defaultCountry && opts.defaultCountry !== 'IN'));
+            if (isIntl) {
+              const parsed = extractPhones(bundleText.slice(0, 500000), {
+                defaultCountry: opts.defaultCountry || 'US',
+                allowInternational: true,
+                trusted: false,
+                context: 'spa bundle'
+              });
+              for (const phone of parsed) {
+                if (isCssOrCodeSnippet(phone.displayPhone) || isCssOrCodeSnippet(phone.digits)) continue;
+                const national = phone.national || phone.digits;
+                if (phone.isMobile || phone.isLandline) {
+                  if (!result.mobiles.includes(national)) result.mobiles.push(national);
+                  if (!result.whatsappLink && phone.isMobile) result.whatsappLink = `https://wa.me/${phone.digits}`;
+                }
+                if (!result.phones.includes(phone.displayPhone)) result.phones.push(phone.displayPhone);
+              }
+            } else {
+              const mobileRegex = /(?:(?:\+|0{0,2})91[\s-]?)?([6-9]\d{9})\b/g;
+              let m;
+              const scanSlice = bundleText.slice(0, 500000);
+              while ((m = mobileRegex.exec(scanSlice)) !== null) {
+                const digits = m[1].replace(/\D/g, '');
+                if (digits.length === 10 && /^[6-9]/.test(digits) && !digits.startsWith('9999999999') && !digits.startsWith('9876543210')) {
+                  if (!result.mobiles.includes(digits)) result.mobiles.push(digits);
+                  const formatted = `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`;
+                  if (!result.phones.includes(formatted)) result.phones.push(formatted);
+                  if (!result.whatsappLink) result.whatsappLink = `https://wa.me/91${digits}`;
+                }
+              }
+            }
+          }
+        }
+      } catch (spaErr) {}
     }
   } catch (err) {
     // Graceful fallback

@@ -857,36 +857,37 @@
   color: #065f46;
 }
 
-/* Primary 3D Extruded Hardware Submit Button */
+/* Primary 3D Extruded Liquid Gold Submit Button */
 .login-submit {
   width: 100%;
   height: 46px;
   margin-top: 4px;
-  border: none;
+  border: 1.5px solid rgba(254, 243, 199, 0.78);
   border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: linear-gradient(135deg, #059669 0%, #10b981 55%, #06b6d4 100%);
+  background: linear-gradient(135deg, #b45309 0%, #d97706 32%, #f59e0b 68%, #fbbf24 100%);
   color: #ffffff;
   font-size: 14.5px;
   font-weight: 800;
   letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.42),
-    0 4px 0 #047857,
-    0 14px 28px -8px rgba(16, 185, 129, 0.52);
+    inset 0 2px 0 rgba(255, 255, 255, 0.65),
+    0 4px 0 #78350f,
+    0 14px 28px -8px rgba(217, 119, 6, 0.45);
   transition: transform 0.13s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.13s ease, filter 0.15s ease;
 }
 
 .login-shell--master .login-submit {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 62%, #334155 100%);
+  background: linear-gradient(135deg, #92400e 0%, #d97706 45%, #f59e0b 100%);
+  border: 1.5px solid rgba(253, 230, 138, 0.65);
   box-shadow:
-    inset 0 2px 0 rgba(255, 255, 255, 0.25),
-    0 4px 0 #020617,
-    0 14px 28px -8px rgba(15, 23, 42, 0.36);
+    inset 0 2px 0 rgba(254, 243, 199, 0.55),
+    0 4px 0 #78350f,
+    0 14px 28px -8px rgba(217, 119, 6, 0.42);
 }
 
 .login-submit:hover:not(:disabled) {
@@ -896,11 +897,11 @@
 
 .login-submit:active:not(:disabled) {
   transform: translateY(2.5px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 1px 0 #047857;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 0 #78350f;
 }
 
 .login-shell--master .login-submit:active:not(:disabled) {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 0 #020617;
+  box-shadow: inset 0 1px 0 rgba(254, 243, 199, 0.4), 0 1px 0 #78350f;
 }
 
 .login-submit:disabled {

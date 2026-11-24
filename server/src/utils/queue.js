@@ -144,7 +144,14 @@ const PLAYWRIGHT_TASKS = new Set([
   'scrapeMandap',
   'scrapePuppeteerIndiaMart',
   'scrapeCrawleeDeep',
-  'scrapeScrapySpider'
+  'scrapeWebDiscovery',
+  'scrapeYelp',
+  'scrapeYellowPagesGlobal',
+  'scrapeBingPlaces',
+  'scrapeTripAdvisor',
+  'scrapeBraveDork',
+  'scrapeDuckDuckGoDork',
+  'scrapeSocialDorkIntl'
 ]);
 
 // Dynamic Concurrency Calculator based on client hardware profile & real-time system RAM availability
@@ -294,10 +301,13 @@ async function processQueue() {
           continue;
         }
 
+        const isUnmetered = Boolean(candidate.meta?.unmetered);
         const isPlaywright = PLAYWRIGHT_TASKS.has(candidate.taskName);
-        const hasSlot = isPlaywright
-          ? playwrightActiveCount < limits.maxPlaywrightConcurrency
-          : (activeCount - playwrightActiveCount) < limits.maxHttpConcurrency;
+        const hasSlot = isUnmetered
+          ? true
+          : (isPlaywright
+              ? playwrightActiveCount < limits.maxPlaywrightConcurrency
+              : (activeCount - playwrightActiveCount) < limits.maxHttpConcurrency);
         if (!hasSlot) continue;
 
         const gate = requestGuard.beforeJob(candidate.taskName);
@@ -309,6 +319,16 @@ async function processQueue() {
             globalDeps.logger(
               `[Guard] Skipped ${candidate.taskName}: ${gate.reason} (${Math.round((gate.remainingMs || 0) / 1000)}s cooldown left). Other engines continue.`
             );
+            if (candidate.meta?.sessionId && candidate.meta?.location && globalDeps.emitDispatchEvent) {
+              try {
+                globalDeps.emitDispatchEvent({
+                  sessionId: candidate.meta.sessionId,
+                  location: candidate.meta.location,
+                  state: 'skipped',
+                  reason: gate.reason
+                });
+              } catch (e) { }
+            }
             continue;
           }
           candidate.notBefore = Date.now() + Math.max(40, gate.waitMs || 50);
@@ -353,10 +373,13 @@ async function processQueue() {
 
 // Rest of worker code remains identical for stability
 function startJobExecution(job, isPlaywright) {
-  activeCount++;
-  if (isPlaywright) {
-    playwrightActiveCount++;
-    browserBudget.setDiscoveryActive(playwrightActiveCount);
+  const isUnmetered = Boolean(job?.meta?.unmetered);
+  if (!isUnmetered) {
+    activeCount++;
+    if (isPlaywright) {
+      playwrightActiveCount++;
+      browserBudget.setDiscoveryActive(playwrightActiveCount);
+    }
   }
 
   const instanceId = Math.random().toString(36).substr(2, 5).toUpperCase();
@@ -366,10 +389,12 @@ function startJobExecution(job, isPlaywright) {
   const delay = Promise.resolve(); // No staged delay - launch all workers instantly
 
   delay.then(() => processJob(job, instanceId)).finally(() => {
-    activeCount--;
-    if (isPlaywright) {
-      playwrightActiveCount--;
-      browserBudget.setDiscoveryActive(playwrightActiveCount);
+    if (!isUnmetered) {
+      activeCount--;
+      if (isPlaywright) {
+        playwrightActiveCount--;
+        browserBudget.setDiscoveryActive(playwrightActiveCount);
+      }
     }
     activeJobs.delete(instanceId);
     publishDiscoveryQueued();
@@ -399,11 +424,18 @@ async function processJob(job, instanceId) {
     globalDeps.emitActivePointEvent({ ...meta, instanceId });
   }
 
+  const isUnmetered = Boolean(meta?.unmetered);
   let timer = null;
+  const controller = new AbortController();
   try {
-    const timeoutMs = 600000; // 10 minutes hard limit (Places extraction can take time)
+    const timeoutMs = isUnmetered ? 3600000 : 600000; // 1 hr for orchestrator, 10 min hard limit for workers
     const timeoutPromise = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Job timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer = setTimeout(() => {
+        // Abort before rejecting: freeing the slot without cancelling the work
+        // let a timed-out page keep running and compete with the next job.
+        try { controller.abort(); } catch (e) { }
+        reject(new Error(`Job timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
 
     await Promise.race([
@@ -412,7 +444,8 @@ async function processJob(job, instanceId) {
           userId: meta?.userId,
           sessionId: meta?.sessionId,
           isMaster: meta?.isMaster,
-          country: meta?.country
+          country: meta?.country,
+          abortSignal: controller.signal
         },
         () => fn(...args)
       ),
@@ -426,17 +459,21 @@ async function processJob(job, instanceId) {
   }
 }
 
-async function addScrapeJob(taskName, args, priority = 10, meta = null) {
-  const sid = meta?.sessionId ? String(meta.sessionId) : null;
-  if (sid && abortedSessions.has(sid)) {
-    return;
+async function addScrapeJobs(jobs) {
+  if (!Array.isArray(jobs) || !jobs.length) return;
+  for (const job of jobs) {
+    const sid = job?.meta?.sessionId ? String(job.meta.sessionId) : null;
+    if (sid && abortedSessions.has(sid)) continue;
+    inMemoryQueue.push(job);
   }
-  inMemoryQueue.push({ taskName, args, priority, meta });
-  inMemoryQueue.sort((a, b) => b.priority - a.priority);
+  inMemoryQueue.sort((a, b) => (b.priority || 0) - (a.priority || 0));
   savePersistentQueue();
   publishDiscoveryQueued();
+  processQueue();
+}
 
-  processQueue(); // Kick off processing if not already running
+async function addScrapeJob(taskName, args, priority = 10, meta = null) {
+  return addScrapeJobs([{ taskName, args, priority, meta }]);
 }
 
 /**
@@ -498,6 +535,7 @@ module.exports = {
   initQueue,
   registerTask,
   addScrapeJob,
+  addScrapeJobs,
   clearQueue,
   clearQueueForSession,
   clearStaleQueue,

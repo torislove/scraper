@@ -20,6 +20,7 @@ server/data/
 server/db/user_sessions/
 data/
 db/
+!server/db/india_villages.json
 # ...but the generated country list is source code, not customer data.
 !client/src/v2/data/
 !client/src/v2/data/**

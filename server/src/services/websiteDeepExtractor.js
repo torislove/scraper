@@ -281,6 +281,7 @@ function socialKey(href) {
   if (host.includes('linkedin.com')) return 'linkedin';
   if (host === 'youtube.com' || host === 'youtu.be' || host.includes('youtube.')) return 'youtube';
   if (host === 'twitter.com' || host === 'x.com') return 'twitter';
+  if (host.includes('tiktok.com')) return 'tiktok';
   if (host.includes('pinterest.')) return 'pinterest';
   if (host.includes('threads.net')) return 'threads';
   if (host === 't.me' || host.includes('telegram.')) return 'telegram';
@@ -293,7 +294,7 @@ function normaliseSocial(key, href) {
   try {
     const u = new URL(href);
     const path = u.pathname.replace(/\/+$/, '');
-    if (['facebook', 'instagram', 'linkedin', 'youtube', 'pinterest', 'threads'].includes(key)) {
+    if (['facebook', 'instagram', 'linkedin', 'youtube', 'pinterest', 'threads', 'tiktok', 'twitter'].includes(key)) {
       // Drop obvious sharing endpoints, keep profile URLs.
       if (/\/(sharer|share|intent|plugins|dialog)\b/i.test(path)) return '';
       if (!path || path === '') return '';
@@ -1013,6 +1014,8 @@ async function deepExtractWebsite(url, options = {}) {
   prov('cin', result.legal.cin, 'website_legal', 0.99);
   prov('instagram', socials.instagram, 'website_social', 0.92);
   prov('facebook', socials.facebook, 'website_social', 0.92);
+  prov('twitter', socials.twitter, 'website_social', 0.9);
+  prov('tiktok', socials.tiktok, 'website_social', 0.9);
   prov('linkedin', socials.linkedin, 'website_social', 0.9);
   prov('youtube', socials.youtube, 'website_social', 0.9);
   prov('openingHours', hours.raw, 'website_jsonld', 0.88);

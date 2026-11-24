@@ -6,12 +6,33 @@ import { getUserId } from '../../utils/sessionManager';
 import { getToken } from '../auth';
 import { detectDeviceHardware } from '../utils/deviceRamEngine';
 import { detectExtension, pairExtension, startRelayAgent } from '../utils/relayAgent';
+import { detectUserBrowser } from '../utils/browserDetect';
 import ExtensionGatewayModal from '../components/modals/ExtensionGatewayModal';
 
 const VERIFIED_KEY = 'scraper_ext_verified_v1';
 const SKIP_EXTENSION_KEY = 'scraper_skip_extension';
 
-const ExtensionContext = createContext(null);
+const DEFAULT_EXTENSION_CONTEXT = {
+  ext: { installed: false, version: null, ready: false, transport: 'none' },
+  userBrowser: { name: 'Microsoft Edge', badge: 'Edge', storeUrl: 'https://microsoftedge.microsoft.com/addons/detail/gcmknikiliglejekhghkdplkjgkjjkdm' },
+  ready: false,
+  checking: false,
+  hardware: { ramGb: 16, cores: 8, tier: 'T2 Standard' },
+  gatewayOpen: false,
+  gatewayMode: 'connect',
+  targetMeta: null,
+  skippedExtension: false,
+  skipAndRunLocal: () => {},
+  resetLocalMode: () => {},
+  ensureConnected: (onReady) => { if (typeof onReady === 'function') onReady(); },
+  openTelemetry: () => {},
+  openSetup: () => {},
+  closeGateway: () => {},
+  completeProceed: () => {},
+  fetchServerStatus: () => Promise.resolve({ ok: true })
+};
+
+const ExtensionContext = createContext(DEFAULT_EXTENSION_CONTEXT);
 
 function buildHeaders() {
   const headers = {};
@@ -24,7 +45,11 @@ function buildHeaders() {
 
 export function ExtensionProvider({ children }) {
   const hardware = useMemo(() => detectDeviceHardware(), []);
-  const initialDomInstalled = typeof document !== 'undefined' && Boolean(document.documentElement?.dataset?.scraperExtension);
+  const userBrowser = useMemo(() => detectUserBrowser(), []);
+  const initialDomInstalled = typeof document !== 'undefined' && Boolean(
+    document.documentElement?.getAttribute('data-scraper-ext-installed') === 'true' ||
+    document.documentElement?.dataset?.scraperExtension
+  );
 
   const [ext, setExt] = useState({
     installed: initialDomInstalled,
@@ -63,7 +88,7 @@ export function ExtensionProvider({ children }) {
         ...prev,
         connected: Boolean(data?.connected || prev.connected),
         extensionOnly: Boolean(data?.extensionOnly),
-        storeUrl: data?.storeUrl || prev.storeUrl,
+        storeUrl: data?.storeUrls?.[userBrowser?.slug] || data?.storeUrl || prev.storeUrl,
         capabilities: data?.capabilities?.length ? data.capabilities : prev.capabilities,
         relayed: data?.relayedTotal ?? prev.relayed,
         version: data?.version || prev.version
@@ -123,10 +148,18 @@ export function ExtensionProvider({ children }) {
     window.addEventListener('message', onWindowMsg);
     window.addEventListener('focus', onFocus);
 
+    const onCustomReady = (e) => {
+      const ver = e?.detail?.version || '1.2.0';
+      setChecking(false);
+      setExt(prev => ({ ...prev, installed: true, version: ver, connected: true }));
+    };
+    window.addEventListener('scraper-extension-ready', onCustomReady);
+
     const stopTimer = setTimeout(() => setChecking(false), 1200);
 
     return () => {
       clearTimeout(stopTimer);
+      window.removeEventListener('scraper-extension-ready', onCustomReady);
       window.removeEventListener('message', onWindowMsg);
       window.removeEventListener('focus', onFocus);
       relayRef.current?.stop?.();
@@ -237,6 +270,7 @@ export function ExtensionProvider({ children }) {
 
   const value = useMemo(() => ({
     ...ext,
+    userBrowser,
     ready,
     checking,
     hardware,
@@ -254,7 +288,7 @@ export function ExtensionProvider({ children }) {
     completeProceed,
     refreshStatus: fetchServerStatus
   }), [
-    ext, ready, checking, hardware, gatewayOpen, gatewayMode, targetMeta,
+    ext, userBrowser, ready, checking, hardware, gatewayOpen, gatewayMode, targetMeta,
     skippedExtension, skipAndRunLocal, resetLocalMode,
     ensureConnected, openTelemetry, openSetup, closeGateway, completeProceed, fetchServerStatus
   ]);
@@ -268,5 +302,6 @@ export function ExtensionProvider({ children }) {
 }
 
 export function useExtension() {
-  return useContext(ExtensionContext);
+  const ctx = useContext(ExtensionContext);
+  return ctx || DEFAULT_EXTENSION_CONTEXT;
 }

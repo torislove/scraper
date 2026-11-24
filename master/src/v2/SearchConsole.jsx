@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, Check, Clock, Cpu, FolderOpen, Globe, Layers, Loader2, MapPin, Phone, Search,
-  Shield, Sparkles, Square, Tag, X, Zap
+  ArrowRight, ArrowUpRight, Check, Clock, Cpu, FolderOpen, Globe, Layers, Loader2, MapPin, Phone, Search,
+  Shield, Sparkles, Square, Tag, TrendingUp, X, Zap
 } from 'lucide-react';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
@@ -260,15 +260,8 @@ function SearchConsole({
     return (market?.prompts || []).slice(0, 5);
   }, [country, market]);
 
-  // Check if the user already has a saved folder matching this search
-  const matchedSavedFolder = useMemo(() => {
-    const q = draft.trim().toLowerCase();
-    if (q.length < 4 || !Array.isArray(runs) || !runs.length) return null;
-    return runs.find(r => {
-      const title = String(r.customName || r.name || `${r.category || ''} in ${r.location || ''}`).toLowerCase();
-      return title.includes(q) && (r.leadCount || 0) > 0;
-    }) || null;
-  }, [draft, runs]);
+  // Fresh suggestions only (no folder interruptions in search box)
+  const matchedSavedFolder = null;
 
   const industryClusters = useMemo(() => industryClustersFor(country), [country]);
 
@@ -286,20 +279,11 @@ function SearchConsole({
 
   const groups = useMemo(() => {
     if (draft.trim().length < 2) {
-      const out = [];
-      if (recentSearches.length) {
-        out.push({
-          title: 'Recent Searches',
-          icon: Clock,
-          items: recentSearches.map(q => ({ type: 'recent', value: q, label: q, subtitle: 'Run again instantly', detail: 'RECENT' }))
-        });
-      }
-      out.push({
-        title: 'Popular Examples',
+      return [{
+        title: 'Popular Suggestions',
         icon: Sparkles,
-        items: examples.map(q => ({ type: 'recent', value: q, label: q, subtitle: 'Click to search immediately', detail: 'TRY' }))
-      });
-      return out;
+        items: examples.map(q => ({ type: 'example', value: q, label: q, subtitle: 'Click to search immediately', detail: 'TRY' }))
+      }];
     }
 
     const list = Array.isArray(response?.suggestions) ? response.suggestions : [];
@@ -328,7 +312,7 @@ function SearchConsole({
       out.push({ title: 'Matching Places', icon: MapPin, items: locations.slice(0, 6) });
     }
     return out;
-  }, [response, draft, recentSearches, examples]);
+  }, [response, draft, examples]);
 
   const flatItems = useMemo(() => groups.flatMap(g => g.items), [groups]);
 
@@ -545,9 +529,17 @@ function SearchConsole({
           
           <div className="v2-console-input-wrap">
             {parsedCategory && parsedLocation && draft.includes(parsedLocation) && (
-              <span className="v2-entity-pill is-location" title="Current location target">
+              <span
+                className="v2-entity-pill is-location"
+                title={`Verified Target: ${response?.location?.display || parsedLocation} · Perimeter: ${response?.location?.radiusKm ? `${response.location.radiusKm} km (Strict Urban Boundary)` : 'Strict City Boundary'}`}
+              >
                 <MapPin size={11} />
                 <span>{parsedLocation}</span>
+                {response?.location?.radiusKm && (
+                  <span style={{ opacity: 0.85, fontSize: 10, fontWeight: 700, marginLeft: 3 }}>
+                    · {response.location.radiusKm} km
+                  </span>
+                )}
                 <button
                   type="button"
                   className="v2-entity-pill-remove"
@@ -670,82 +662,100 @@ function SearchConsole({
                 </div>
               )}
 
-              {matchedSavedFolder && (
-                <div
-                  className="v2-suggest-vault-bridge"
-                  onMouseDown={e => {
-                    e.preventDefault();
-                    setOpen(false);
-                    onOpenFolder?.(matchedSavedFolder);
-                  }}
-                >
-                  <div className="v2-vault-bridge-info">
-                    <span className="v2-vault-badge"><FolderOpen size={11} /> ALREADY IN YOUR SAVED LISTS</span>
-                    <b>{matchedSavedFolder.customName || matchedSavedFolder.name || `${matchedSavedFolder.category} in ${matchedSavedFolder.location}`}</b>
-                    <small>{matchedSavedFolder.leadCount || 0} leads saved ({matchedSavedFolder.phoneCount || 0} with phone numbers)</small>
-                  </div>
-                  <button type="button" className="v2-btn-open-vault">
-                    Open Saved List <ArrowRight size={12} />
-                  </button>
-                </div>
-              )}
-
-              {/* Zero-Keystroke Mission Palette 2.0 when draft is empty */}
+              {/* Google-Grade Search Palette: Recent Searches & Trending Searches when draft is empty */}
               {!draft.trim() ? (
-                <div className="v2-mission-palette">
-                  {recentSearches.length > 0 && (
-                    <div className="v2-mission-section">
-                      <div className="v2-mission-title">
-                        <Clock size={12} />
-                        <span>Recent Missions</span>
+                <div className="v2-google-palette">
+                  {recentSearches && recentSearches.length > 0 && (
+                    <div className="v2-palette-group">
+                      <div className="v2-palette-header">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Clock size={12} />
+                          <span>Recent Searches</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="v2-palette-clear-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            try {
+                              const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+                              delete raw[String(country || 'IN').toUpperCase()];
+                              localStorage.setItem(RECENT_KEY, JSON.stringify(raw));
+                            } catch (err) {}
+                            setRecentSearches([]);
+                          }}
+                        >
+                          Clear all
+                        </button>
                       </div>
-                      <div className="v2-mission-grid">
-                        {recentSearches.map(q => (
-                          <button
-                            key={q}
-                            type="button"
-                            className="v2-mission-chip"
+                      <div className="v2-palette-list">
+                        {recentSearches.map((query, rIdx) => (
+                          <div
+                            key={`recent-${query}-${rIdx}`}
+                            className="v2-palette-row"
                             onClick={() => {
-                              setDraft(q);
-                              lastExternalRef.current = q;
-                              onChange?.(q);
-                              commitAndDeploy(q);
+                              setDraft(query);
+                              lastExternalRef.current = query;
+                              onChange?.(query);
+                              commitAndDeploy(query);
                             }}
                           >
-                            <span className="v2-mission-chip-label">{q}</span>
-                            <span className="v2-mission-chip-badge">Rerun ⚡</span>
-                          </button>
+                            <span className="v2-palette-icon"><Clock size={13} /></span>
+                            <span className="v2-palette-text">{query}</span>
+                            <button
+                              type="button"
+                              className="v2-palette-del-btn"
+                              title="Remove from history"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const updated = recentSearches.filter((_, i) => i !== rIdx);
+                                setRecentSearches(updated);
+                                try {
+                                  const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || '{}');
+                                  raw[String(country || 'IN').toUpperCase()] = updated;
+                                  localStorage.setItem(RECENT_KEY, JSON.stringify(raw));
+                                } catch (err) {}
+                              }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  <div className="v2-mission-section">
-                    <div className="v2-mission-title">
-                      <Sparkles size={12} />
-                      <span>National Industry Clusters ({String(country || 'IN').toUpperCase()})</span>
+                  <div className="v2-palette-group">
+                    <div className="v2-palette-header">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <TrendingUp size={12} />
+                        <span>Trending & Popular Searches</span>
+                      </span>
                     </div>
-                    <div className="v2-mission-grid">
-                      {industryClusters.map(item => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          className="v2-mission-chip"
+                    <div className="v2-palette-list">
+                      {examples.map((item, eIdx) => (
+                        <div
+                          key={`trending-${item}-${eIdx}`}
+                          className="v2-palette-row"
                           onClick={() => {
-                            if (item.country && item.country !== country) {
-                              onCountrySelect?.(item.country);
-                            }
-                            setDraft(item.query);
-                            lastExternalRef.current = item.query;
-                            onChange?.(item.query);
-                            commitAndDeploy(item.query);
+                            setDraft(item);
+                            lastExternalRef.current = item;
+                            onChange?.(item);
+                            commitAndDeploy(item);
                           }}
                         >
-                          <span className="v2-mission-chip-label">{item.label}</span>
-                          <span className="v2-mission-chip-badge">{item.sector}</span>
-                        </button>
+                          <span className="v2-palette-icon"><Search size={13} /></span>
+                          <span className="v2-palette-text">{item}</span>
+                          <span className="v2-palette-arrow"><ArrowUpRight size={13} /></span>
+                        </div>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="v2-palette-footer">
+                    <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+                    <span><kbd>↵</kbd> search</span>
+                    <span><kbd>esc</kbd> close</span>
                   </div>
                 </div>
               ) : (

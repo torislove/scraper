@@ -536,8 +536,9 @@ export function detectRamExtension(timeoutMs = 500) {
     return Promise.resolve({ installed: false, version: '' });
   }
   const datasetVer = document.documentElement?.dataset?.scraperExtension;
-  if (datasetVer) {
-    return Promise.resolve({ installed: true, version: String(datasetVer) });
+  const attrInstalled = document.documentElement?.getAttribute('data-scraper-ext-installed') === 'true';
+  if (datasetVer || attrInstalled) {
+    return Promise.resolve({ installed: true, version: String(datasetVer || '1.2.0') });
   }
   return new Promise((resolve) => {
     let settled = false;

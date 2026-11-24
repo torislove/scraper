@@ -8,6 +8,9 @@
         "client": [
           "scraper-co-in-app"
         ],
+        "master": [
+          "scraper-co-in-master"
+        ],
         "admin": [
           "scraper-co-in-admin"
         ]

@@ -111,6 +111,10 @@ const ENRICH_YIELD = process.env.SCRAPER_ENRICH_YIELD === '1';
 let discoveryActive = 0;
 let enrichmentActive = 0;
 let discoveryQueued = 0;
+// Browsers opened outside the queue (the Tier-0 burst calls engines directly).
+// They must still be counted, or a burst page plus a full queue can overshoot
+// the RAM budget — which is what made Web Discovery fail 6/6.
+let externalActive = 0;
 const listeners = new Set();
 
 function freeRamPct() {
@@ -141,7 +145,7 @@ function discoveryLimit() {
       ramCap = Math.min(2, dynamicTotalSlots);
     }
   } catch (e) { }
-  return Math.max(1, Math.min(ramCap, dynamicTotalSlots - enrichmentActive));
+  return Math.max(1, Math.min(ramCap, dynamicTotalSlots - enrichmentActive - externalActive));
 }
 
 /** Enrichment gets dedicated slots that run continuously alongside discovery. */
@@ -170,6 +174,34 @@ function setEnrichmentActive(count) {
   notify();
 }
 
+/**
+ * Reserve one browser slot for work that runs outside the queue (the Tier-0
+ * burst). Returns an idempotent release function. Throws on abort or timeout so
+ * a stuck sweep cannot hold a slot forever.
+ */
+async function acquireBrowserSlot({ timeoutMs = 60000, signal = null } = {}) {
+  const started = Date.now();
+  while (true) {
+    if (signal && signal.aborted) throw new Error('browser slot request aborted');
+    let ramOk = true;
+    try {
+      if (os.freemem() < EMERGENCY_FLOOR_BYTES) ramOk = false;
+    } catch (e) { }
+    if (ramOk && (discoveryActive + externalActive) < dynamicTotalSlots) break;
+    if (Date.now() - started > timeoutMs) throw new Error('browser slot timeout');
+    await new Promise(resolve => setTimeout(resolve, 120));
+  }
+  externalActive++;
+  notify();
+  let released = false;
+  return function release() {
+    if (released) return;
+    released = true;
+    externalActive = Math.max(0, externalActive - 1);
+    notify();
+  };
+}
+
 /** How many browser discovery jobs are still waiting for a slot. */
 function setDiscoveryQueued(count) {
   const next = Math.max(0, Math.floor(Number(count) || 0));
@@ -192,6 +224,7 @@ function getStatus() {
     discoveryActive,
     discoveryQueued,
     enrichmentActive,
+    externalActive,
     discoveryLimit: discoveryLimit(),
     enrichmentLimit: enrichmentLimit(),
     freeRamPct: freeRamPct(),
@@ -210,6 +243,7 @@ module.exports = {
   setDiscoveryActive,
   setDiscoveryQueued,
   setEnrichmentActive,
+  acquireBrowserSlot,
   onSlotChange,
   getStatus
 };

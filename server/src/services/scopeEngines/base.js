@@ -15,6 +15,7 @@ const WEDDING_INTENT = /wedding|marriage|shaadi|shadi|vivah|pelli|kalyana|kalyan
 // said it serves that market.
 const BUNDLE_KEY = {
   wikidata: 'wikidata-businesses',
+  social: 'social-dork-intl',
   'social-dork': 'social-dork-intl',
   freeindex: 'freeindex-uk',
   goldenpages: 'goldenpages-ie',
@@ -79,12 +80,15 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     jobs.push({ task: 'scrapeMandap', args: [category, baseLocation, 'omni', sessionId] });
   }
 
-  if (countryCode === 'IN' && allowed('social')) {
-    const platforms = ['instagram.com', 'facebook.com', 'linkedin.com'];
+  if (allowed('social') || allowed('social-dork') || allowed('social-dork-intl')) {
+    const platforms = ['instagram.com', 'facebook.com', 'x.com'];
+    if (countryCode !== 'IN') {
+      platforms.push('tiktok.com');
+    }
     for (const p of platforms) {
       jobs.push({
         task: 'scrapeDuckDuckGoDork',
-        args: [p, `${category} ${baseLocation}`, category, baseLocation, sessionId, 'IN', ctx.userId || 'admin_1']
+        args: [p, `${category} ${baseLocation}`, category, baseLocation, sessionId, countryCode || 'IN', ctx.userId || 'admin_1', { zoneName: baseLocation }]
       });
     }
   }

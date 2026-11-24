@@ -89,7 +89,8 @@ export default function LeadsTableView({
     const headers = [
       'Business Name', 'Category', 'Phone', 'Address', 'Area / Mandal',
       'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
-      'Map Directions', 'Rating', 'Reviews', 'Website'
+      'Map Directions', 'Rating', 'Reviews', 'Website',
+      'Instagram', 'Facebook', 'TikTok', 'Twitter / X', 'WhatsApp Link'
     ];
     const lines = [headers.join(',')];
     target.forEach(r => {
@@ -114,7 +115,12 @@ export default function LeadsTableView({
         `"${mapUrl}"`,
         `"${r.rating || ''}"`,
         `"${r.reviewsCount || ''}"`,
-        `"${(r.website || '').replace(/"/g, '""')}"`
+        `"${(r.website || '').replace(/"/g, '""')}"`,
+        `"${(r.instagram || '').replace(/"/g, '""')}"`,
+        `"${(r.facebook || '').replace(/"/g, '""')}"`,
+        `"${(r.tiktok || '').replace(/"/g, '""')}"`,
+        `"${(r.twitter || '').replace(/"/g, '""')}"`,
+        `"${(r.whatsappLink || '').replace(/"/g, '""')}"`
       ].join(','));
     });
     const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -323,6 +329,66 @@ export default function LeadsTableView({
                               className="lx-web-mini"
                             >
                               Email
+                            </a>
+                          )}
+                          {vendor.whatsappLink && (
+                            <a
+                              href={vendor.whatsappLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="lx-web-mini"
+                              style={{ borderColor: 'rgba(34, 197, 94, 0.4)', color: '#22c55e', background: 'rgba(34, 197, 94, 0.08)' }}
+                              title="Open WhatsApp chat"
+                            >
+                              WhatsApp
+                            </a>
+                          )}
+                          {vendor.instagram && (
+                            <a
+                              href={vendor.instagram}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="lx-web-mini"
+                              style={{ borderColor: 'rgba(225, 48, 108, 0.4)', color: '#E1306C', background: 'rgba(225, 48, 108, 0.08)' }}
+                              title={`Instagram ${vendor.instagramFollowers ? `(${vendor.instagramFollowers})` : ''}`}
+                            >
+                              IG {vendor.instagramFollowers ? `· ${vendor.instagramFollowers}` : ''}
+                            </a>
+                          )}
+                          {vendor.facebook && (
+                            <a
+                              href={vendor.facebook}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="lx-web-mini"
+                              style={{ borderColor: 'rgba(24, 119, 242, 0.4)', color: '#1877F2', background: 'rgba(24, 119, 242, 0.08)' }}
+                              title={`Facebook ${vendor.facebookFollowers ? `(${vendor.facebookFollowers})` : ''}`}
+                            >
+                              FB {vendor.facebookFollowers ? `· ${vendor.facebookFollowers}` : ''}
+                            </a>
+                          )}
+                          {vendor.tiktok && (
+                            <a
+                              href={vendor.tiktok}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="lx-web-mini"
+                              style={{ borderColor: 'rgba(0, 242, 254, 0.4)', color: '#00F2FE', background: 'rgba(0, 242, 254, 0.08)' }}
+                              title={`TikTok ${vendor.tiktokFollowers ? `(${vendor.tiktokFollowers})` : ''}`}
+                            >
+                              TikTok {vendor.tiktokFollowers ? `· ${vendor.tiktokFollowers}` : ''}
+                            </a>
+                          )}
+                          {vendor.twitter && (
+                            <a
+                              href={vendor.twitter}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="lx-web-mini"
+                              style={{ borderColor: 'rgba(148, 163, 184, 0.4)', color: '#94a3b8', background: 'rgba(148, 163, 184, 0.08)' }}
+                              title="Twitter / X profile"
+                            >
+                              X
                             </a>
                           )}
                         </div>

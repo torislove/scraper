@@ -1,8 +1,18 @@
 import { defineConfig, loadEnv, createLogger } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath } from 'node:url'
+import http from 'node:http'
 
 let lastProxyWarnAt = 0
+
+// Persistent keep-alive agent prevents ephemeral port exhaustion on Windows localhost
+const proxyAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 15000,
+  maxSockets: 300,
+  maxFreeSockets: 100,
+  timeout: 60000
+})
 
 function createCleanViteLogger() {
   const logger = createLogger()
@@ -13,7 +23,7 @@ function createCleanViteLogger() {
     const errDetail = String(options?.error?.message || options?.error?.code || '')
     if (
       text.includes('http proxy error') &&
-      /ECONNREFUSED|ECONNRESET|EPIPE|ETIMEDOUT/i.test(`${text} ${errDetail}`)
+      /ECONNREFUSED|ECONNRESET|EPIPE|ETIMEDOUT|EADDRINUSE/i.test(`${text} ${errDetail}`)
     ) {
       const now = Date.now()
       if (now - lastProxyWarnAt > 15000) {
@@ -29,15 +39,6 @@ function createCleanViteLogger() {
 }
 
 function releaseOnClose(proxy) {
-  proxy.on('proxyRes', (proxyRes, req, res) => {
-    const cleanup = () => {
-      if (!res.writableEnded) {
-        try { proxyRes.destroy(); } catch (e) {}
-      }
-    };
-    req.on('aborted', cleanup);
-    res.on('close', cleanup);
-  });
   proxy.on('error', (err, _req, res) => {
     if (!res || res.headersSent || res.writableEnded) return;
     try {
@@ -72,6 +73,7 @@ export default defineConfig(({ mode }) => {
           secure: false,
           ws: true,
           timeout: 0,
+          agent: proxyAgent,
           configure: releaseOnClose
         },
         '/logs': {
@@ -80,6 +82,7 @@ export default defineConfig(({ mode }) => {
           secure: false,
           ws: true,
           timeout: 0,
+          agent: proxyAgent,
           configure: releaseOnClose
         },
         '/events': {
@@ -88,6 +91,7 @@ export default defineConfig(({ mode }) => {
           secure: false,
           ws: true,
           timeout: 0,
+          agent: proxyAgent,
           configure: releaseOnClose
         },
         '/downloads': {
@@ -95,6 +99,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           timeout: 0,
+          agent: proxyAgent,
           configure: releaseOnClose
         }
       }

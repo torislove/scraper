@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { API_URL } from '../apiConfig';
+import { API_URL, DIRECT_BACKEND_URL } from '../apiConfig';
 
 const SESSION_KEY = 'scraper.session.v1';
 const CONFIG_CACHE_KEY = 'scraper.auth.config.v1';
@@ -66,15 +66,34 @@ export function withStreamToken(url) {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
+  const fetchOpts = {
     credentials: 'include',
+    ...options,
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders(),
       ...(options.headers || {})
-    },
-    ...options
-  });
+    }
+  };
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, fetchOpts);
+    const ct = response.headers.get('content-type') || '';
+    const shouldRetryDirect =
+      String(API_URL || '').startsWith('/') &&
+      DIRECT_BACKEND_URL &&
+      ([502, 503, 504].includes(response.status) ||
+        (response.status === 500 && !ct.includes('application/json')));
+    if (shouldRetryDirect) {
+      response = await fetch(`${DIRECT_BACKEND_URL}/api${path}`, fetchOpts);
+    }
+  } catch (err) {
+    if (String(API_URL || '').startsWith('/') && DIRECT_BACKEND_URL) {
+      response = await fetch(`${DIRECT_BACKEND_URL}/api${path}`, fetchOpts);
+    } else {
+      throw err;
+    }
+  }
   let body = null;
   try {
     body = await response.json();

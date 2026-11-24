@@ -36,7 +36,7 @@ router.get('/suggest', async (req, res) => {
 
     res.json(payload);
   } catch (error) {
-    console.error('[Search Suggest Error]', error.message);
+    console.error('[Search Suggest Error]', error.message, error.stack);
     res.json({
       ok: false,
       query: '',

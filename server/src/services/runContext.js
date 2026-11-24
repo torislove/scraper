@@ -29,6 +29,9 @@ function runWithContext(context, fn) {
     sessionId: context?.sessionId ? String(context.sessionId) : null,
     isMaster: Boolean(context?.isMaster),
     country: context?.country ? String(context.country).toUpperCase() : null,
+    // Per-job cancellation. The queue aborts this on timeout so a slow engine
+    // stops touching the network instead of running on after its slot is freed.
+    abortSignal: context?.abortSignal || null,
     startedAt: context?.startedAt || Date.now()
   };
   return storage.run(store, fn);
@@ -54,11 +57,17 @@ function isMasterRun() {
   return Boolean(getRunContext()?.isMaster);
 }
 
+/** The abort signal for the current queue job, or null outside a job. */
+function currentAbortSignal() {
+  return getRunContext()?.abortSignal || null;
+}
+
 module.exports = {
   runWithContext,
   getRunContext,
   currentUserId,
   currentSessionId,
   currentCountry,
-  isMasterRun
+  isMasterRun,
+  currentAbortSignal
 };
