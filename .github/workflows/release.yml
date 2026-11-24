@@ -1,4 +1,4 @@
-name: release-desktop
+name: release-artifacts
 
 on:
   push:
@@ -15,15 +15,17 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-desktop
+  group: release-artifacts
   cancel-in-progress: false
 
-jobs:
-  windows:
-    name: Build Windows installer
-    runs-on: windows-latest
-    timeout-minutes: 75
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
+jobs:
+  package-release:
+    name: Package Web & Browser Extensions
+    runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,32 +34,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
 
-      - name: Install client dependencies
-        run: npm install --prefix client --no-audit --no-fund
+      - name: Install & build Client bundle
+        run: |
+          npm install --prefix client --no-audit --no-fund
+          npm run build --prefix client
 
-      - name: Build web bundle (desktop flavour, no landing page)
-        run: npm run build:desktop --prefix client
+      - name: Package Chrome, Edge & Firefox Extensions
+        run: node scripts/package-extension.cjs
 
-      - name: Install engine dependencies
-        run: npm install --prefix server --omit=dev --no-audit --no-fund
-
-      - name: Install desktop dependencies
-        run: npm install --prefix desktop --no-audit --no-fund
-
-      - name: Publish installer to GitHub Releases
-        run: npm run release --prefix desktop
+      - name: Optional Desktop Installer Build
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Optional: enables online activation. Leave unset for offline builds.
           SCRAPER_LICENSE_API: ${{ vars.SCRAPER_LICENSE_API }}
           SCRAPER_CHECKOUT_URL: ${{ vars.SCRAPER_CHECKOUT_URL }}
+        run: |
+          if (Test-Path "desktop/package.json") {
+            npm install --prefix server --omit=dev --no-audit --no-fund
+            npm install --prefix desktop --no-audit --no-fund
+            npm run release --prefix desktop
+          } else {
+            Write-Host "Desktop shell not present in repo; packaged cross-browser extensions cleanly."
+          }
 
-      - name: Upload build artifacts
+      - name: Upload Extension & Release Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: scraper-windows
+          name: scraper-release-bundles
           path: |
+            dist/extensions/*.zip
             desktop/release/*.exe
             desktop/release/*.blockmap
             desktop/release/latest.yml

@@ -41,6 +41,9 @@ concurrency:
   group: deploy-web-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy-client:
     name: Build & Deploy Client + Landing
@@ -73,8 +76,23 @@ jobs:
       - name: Build Client production bundle
         run: npm run build --prefix client
 
+      - name: Check Firebase credentials
+        id: creds
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FB_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "$SA_KEY" ]; then
+            echo "mode=service_account" >> "$GITHUB_OUTPUT"
+          elif [ -n "$FB_TOKEN" ]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Firebase Credentials Not Configured Yet::Client build & lint passed! Add FIREBASE_SERVICE_ACCOUNT or FIREBASE_TOKEN in GitHub Secrets to activate live Firebase Hosting deployment."
+          fi
+
       - name: Deploy PR Preview (Client)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -83,8 +101,8 @@ jobs:
           target: client
           expires: 7d
 
-      - name: Deploy Live (Client -> scraper.co.in)
-        if: github.event_name != 'pull_request'
+      - name: Deploy Live via Service Account (Client -> scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -92,6 +110,14 @@ jobs:
           projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: client
           channelId: live
+
+      - name: Deploy Live via Firebase Token (Client -> scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'token'
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
+        run: |
+          npx --yes firebase-tools@latest deploy --only hosting:client --project "$FIREBASE_PROJECT_ID" --token "$FIREBASE_TOKEN"
 
   deploy-master:
     name: Build & Deploy Master Fleet
@@ -126,8 +152,23 @@ jobs:
         env:
           VITE_EDITION: master
 
+      - name: Check Firebase credentials
+        id: creds
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FB_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "$SA_KEY" ]; then
+            echo "mode=service_account" >> "$GITHUB_OUTPUT"
+          elif [ -n "$FB_TOKEN" ]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Firebase Credentials Not Configured Yet::Master build & lint passed! Add FIREBASE_SERVICE_ACCOUNT or FIREBASE_TOKEN in GitHub Secrets to activate live Firebase Hosting deployment."
+          fi
+
       - name: Deploy PR Preview (Master)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -136,8 +177,8 @@ jobs:
           target: master
           expires: 7d
 
-      - name: Deploy Live (Master -> master.scraper.co.in)
-        if: github.event_name != 'pull_request'
+      - name: Deploy Live via Service Account (Master -> master.scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -145,6 +186,14 @@ jobs:
           projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: master
           channelId: live
+
+      - name: Deploy Live via Firebase Token (Master -> master.scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'token'
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
+        run: |
+          npx --yes firebase-tools@latest deploy --only hosting:master --project "$FIREBASE_PROJECT_ID" --token "$FIREBASE_TOKEN"
 
   deploy-admin:
     name: Build & Deploy Admin Panel
@@ -172,8 +221,23 @@ jobs:
       - name: Build Admin production bundle
         run: npm run build --prefix admin
 
+      - name: Check Firebase credentials
+        id: creds
+        env:
+          SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FB_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          if [ -n "$SA_KEY" ]; then
+            echo "mode=service_account" >> "$GITHUB_OUTPUT"
+          elif [ -n "$FB_TOKEN" ]; then
+            echo "mode=token" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=skip" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Firebase Credentials Not Configured Yet::Admin build passed! Add FIREBASE_SERVICE_ACCOUNT or FIREBASE_TOKEN in GitHub Secrets to activate live Firebase Hosting deployment."
+          fi
+
       - name: Deploy PR Preview (Admin)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -182,8 +246,8 @@ jobs:
           target: admin
           expires: 7d
 
-      - name: Deploy Live (Admin -> admin.scraper.co.in)
-        if: github.event_name != 'pull_request'
+      - name: Deploy Live via Service Account (Admin -> admin.scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'service_account'
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
@@ -191,3 +255,11 @@ jobs:
           projectId: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
           target: admin
           channelId: live
+
+      - name: Deploy Live via Firebase Token (Admin -> admin.scraper.co.in)
+        if: github.event_name != 'pull_request' && steps.creds.outputs.mode == 'token'
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'scraper-37c72' }}
+        run: |
+          npx --yes firebase-tools@latest deploy --only hosting:admin --project "$FIREBASE_PROJECT_ID" --token "$FIREBASE_TOKEN"
