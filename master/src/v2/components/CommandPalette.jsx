@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Award, Compass, Cpu, Globe2, Layers, Laptop, LogIn, MapPin,
-  RefreshCw, Rocket, Search, Server, Sparkles, X
+  Activity, Award, Compass, Globe2, Laptop, LogIn, MapPin,
+  RefreshCw, Rocket, Search, Server, Sliders, X
 } from 'lucide-react';
-import { isMasterRuntime, openClientWorkspace, openMasterWorkspace } from '../utils/editionSwitch';
+import {
+  isMasterRuntime, openAdminWorkspace, openClientWorkspace, openMasterWorkspace, openPortalLogin
+} from '../utils/editionSwitch';
 import { useExtension } from '../context/ExtensionContext';
 
 const MARKETS = [
@@ -62,75 +64,75 @@ export default function CommandPalette({ workspaceActions = null }) {
     const list = [
       {
         id: 'nav-home',
-        group: 'Platform Showcase',
-        label: '01 · Overview & Autonomous Radar',
-        hint: 'Screen 01',
+        group: 'Platform Overview',
+        label: 'Overview — Live Demo & Portals',
+        hint: '/',
         icon: Compass,
         run: () => navigate('/')
       },
       {
-        id: 'nav-solutions',
-        group: 'Platform Showcase',
-        label: '02 · Three-Step Extraction Pipeline',
-        hint: 'Screen 02',
-        icon: Sparkles,
-        run: () => navigate('/solutions')
-      },
-      {
         id: 'nav-arch',
-        group: 'Platform Showcase',
-        label: '03 · 22 Parallel Engines Architecture',
-        hint: 'Screen 03',
-        icon: Layers,
+        group: 'Platform Overview',
+        label: 'Server Connectivity & Live /api/health',
+        hint: '/architecture',
+        icon: Activity,
         run: () => navigate('/architecture')
       },
       {
         id: 'nav-global',
-        group: 'Platform Showcase',
-        label: '04 · 11 Sovereign Markets & Geofencing',
-        hint: 'Screen 04',
+        group: 'Platform Overview',
+        label: '11 Sovereign Markets & Local Dialing',
+        hint: '/global-coverage',
         icon: Globe2,
         run: () => navigate('/global-coverage')
       },
       {
-        id: 'nav-hw',
-        group: 'Platform Showcase',
-        label: '05 · Client-Side RAM Virtualization',
-        hint: 'Screen 05',
-        icon: Cpu,
-        run: () => navigate('/hardware')
-      },
-      {
         id: 'nav-story',
-        group: 'Platform Showcase',
-        label: '06 · Founder Story & 20% Strategic Equity',
-        hint: 'Screen 06',
+        group: 'Platform Overview',
+        label: 'About, Founder & Open-Web Compliance',
+        hint: '/story',
         icon: Award,
         run: () => navigate('/story')
       },
       {
         id: 'ed-client',
-        group: 'Workspaces & Editions',
-        label: `Launch Client Cockpit${!masterActive ? ' (Current)' : ''}`,
-        hint: 'Local RAM',
+        group: 'Portals & Workspaces',
+        label: `Launch Client Workspace${!masterActive ? ' (Current)' : ''}`,
+        hint: 'scraper.co.in',
         icon: Laptop,
         run: () => openClientWorkspace(navigate, '/command?country=IN', ensureConnected)
       },
       {
         id: 'ed-master',
-        group: 'Workspaces & Editions',
+        group: 'Portals & Workspaces',
         label: `Open Master Fleet Command${masterActive ? ' (Current)' : ''}`,
-        hint: 'Swarm Fleet',
+        hint: 'master.scraper.co.in',
         icon: Server,
         run: () => openMasterWorkspace(navigate, '/command?country=IN')
       },
       {
-        id: 'ed-login',
-        group: 'Workspaces & Editions',
-        label: 'Workspace Sign In / Authentication',
+        id: 'ed-admin',
+        group: 'Portals & Workspaces',
+        label: 'Open Admin Console',
+        hint: 'admin.scraper.co.in',
+        icon: Sliders,
+        run: () => openAdminWorkspace(navigate, '/')
+      },
+      {
+        id: 'ed-login-client',
+        group: 'Sign-In Routes',
+        label: 'Client Sign In / Free Trial',
         hint: '/login',
         icon: LogIn,
-        run: () => navigate('/login')
+        run: () => openPortalLogin('client', navigate, 'signin')
+      },
+      {
+        id: 'ed-login-master',
+        group: 'Sign-In Routes',
+        label: 'Master Fleet Sign In',
+        hint: 'master/login',
+        icon: LogIn,
+        run: () => openPortalLogin('master', navigate, 'signin')
       }
     ];
 

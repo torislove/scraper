@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Check, CheckCircle2, Eye, EyeOff,
-  Loader2, LockKeyhole, Mail, ShieldCheck
+  Laptop, Loader2, LockKeyhole, Mail, Server, ShieldCheck, Sliders
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
+import { openPortalLogin } from './utils/editionSwitch';
 import { AUTH_REQUIRED, fetchAuthConfig, loginWithFirebaseGoogle, loginWithGoogle, loginWithPassword } from './auth';
 import './login.css';
 
@@ -217,6 +218,33 @@ export default function LoginV2({ variant = 'master' }) {
               <span className="login-gbc-dot is-kiwi" />
               <span className="login-gbc-dot is-atomic" />
               <span className="login-gbc-dot is-berry" />
+            </div>
+
+            <div className="login-portal-switcher" role="navigation" aria-label="Switch Login Portal">
+              <button
+                type="button"
+                className="login-portal-pill"
+                onClick={() => openPortalLogin('client', navigate, 'signin')}
+              >
+                <Laptop size={12} />
+                <span>Client Portal</span>
+              </button>
+              <button
+                type="button"
+                className="login-portal-pill is-active"
+                onClick={() => openPortalLogin('master', navigate)}
+              >
+                <Server size={12} />
+                <span>Master Fleet</span>
+              </button>
+              <button
+                type="button"
+                className="login-portal-pill"
+                onClick={() => openPortalLogin('admin', navigate)}
+              >
+                <Sliders size={12} />
+                <span>Admin Console</span>
+              </button>
             </div>
 
             <div className="login-card-head">

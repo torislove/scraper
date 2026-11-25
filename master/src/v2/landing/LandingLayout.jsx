@@ -2,21 +2,19 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import LandingNavbar from './LandingNavbar';
-import LandingDockControls from './LandingDockControls';
 import AnimatedLiquidBackground from '../components/AnimatedLiquidBackground';
-import SocialProofSlideIn from '../components/popups/SocialProofSlideIn';
 import CommandPalette from '../components/CommandPalette';
 import '../landingExecutive.css';
 import '../landingCloud.css';
 import '../landingSingleScreen.css';
 
-const ROUTES_ORDER = ['/', '/solutions', '/architecture', '/global-coverage', '/hardware', '/story'];
+const ROUTES_ORDER = ['/', '/architecture', '/global-coverage', '/story'];
 
 const pageVariants = {
   enter: (direction) => ({
     opacity: 0,
-    x: direction > 0 ? 32 : -32,
-    scale: 0.985
+    x: direction > 0 ? 24 : -24,
+    scale: 0.99
   }),
   center: {
     opacity: 1,
@@ -24,17 +22,17 @@ const pageVariants = {
     scale: 1,
     transition: {
       type: 'spring',
-      stiffness: 320,
+      stiffness: 340,
       damping: 32,
-      mass: 0.78
+      mass: 0.72
     }
   },
   exit: (direction) => ({
     opacity: 0,
-    x: direction > 0 ? -28 : 28,
-    scale: 0.985,
+    x: direction > 0 ? -20 : 20,
+    scale: 0.99,
     transition: {
-      duration: 0.2,
+      duration: 0.16,
       ease: [0.16, 1, 0.3, 1]
     }
   })
@@ -45,8 +43,8 @@ export default function LandingLayout({ children }) {
   const prevPathRef = useRef(location.pathname);
   const [routePulseKey, setRoutePulseKey] = useState(0);
 
-  const prevIndex = ROUTES_ORDER.indexOf(prevPathRef.current);
-  const currIndex = ROUTES_ORDER.indexOf(location.pathname);
+  const prevIndex = Math.max(0, ROUTES_ORDER.indexOf(prevPathRef.current));
+  const currIndex = Math.max(0, ROUTES_ORDER.indexOf(location.pathname));
   const direction = currIndex >= prevIndex ? 1 : -1;
   prevPathRef.current = location.pathname;
 
@@ -56,18 +54,16 @@ export default function LandingLayout({ children }) {
 
   return (
     <div className="lx-single-viewport">
-      {/* 1. Ambient Champagne & Liquid 3D Gold Stardust Background */}
       <AnimatedLiquidBackground />
 
-      {/* 2. Flagship 3-Zone Liquid 3D Gold Navigation Header (60px) */}
       <LandingNavbar />
 
-      {/* 2.1 Molten Liquid Gold Route Transition Progress Hairline */}
+      {/* Molten Liquid Gold Route Transition Hairline */}
       <motion.div
         key={`gold-bar-${routePulseKey}`}
         initial={{ scaleX: 0, opacity: 0.95 }}
         animate={{ scaleX: 1, opacity: 0 }}
-        transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
         style={{
           position: 'fixed',
           top: 59,
@@ -76,13 +72,12 @@ export default function LandingLayout({ children }) {
           height: 2,
           transformOrigin: 'left center',
           background: 'linear-gradient(90deg, #b45309 0%, #f59e0b 45%, #fde68a 80%, #d97706 100%)',
-          boxShadow: '0 0 12px rgba(245, 158, 11, 0.75)',
+          boxShadow: '0 0 12px rgba(245, 158, 11, 0.7)',
           zIndex: 60,
           pointerEvents: 'none'
         }}
       />
 
-      {/* 3. Center Stage with GPU-Accelerated Spring Choreography */}
       <main id="main-content" className="lx-single-stage">
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
@@ -94,7 +89,6 @@ export default function LandingLayout({ children }) {
             exit="exit"
             style={{
               width: '100%',
-              height: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -106,14 +100,7 @@ export default function LandingLayout({ children }) {
         </AnimatePresence>
       </main>
 
-      {/* 4. Non-disruptive Live Extraction Social Proof Slide-in */}
-      <SocialProofSlideIn />
-
-      {/* 5. Global Ctrl+K / Cmd+K Liquid 3D Gold Command Palette */}
       <CommandPalette />
-
-      {/* 6. Single-Screen Bottom Dock & Keyboard Screen Switcher (56px) */}
-      <LandingDockControls />
     </div>
   );
 }

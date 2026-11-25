@@ -1,228 +1,294 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  Rocket,
-  Zap,
+  Activity,
+  ArrowUpRight,
   CheckCircle2,
-  Database,
   Globe,
-  Layers,
-  Scale,
+  Laptop,
+  LogIn,
+  Rocket,
+  Server,
+  ShieldCheck,
+  Sliders,
   Sparkles
 } from 'lucide-react';
 import { useExtension } from '../context/ExtensionContext';
 import LiquidButton3D from '../components/LiquidButton3D';
-import ExtractedDataShowcase3D from '../components/ExtractedDataShowcase3D';
-import MasterVsClientShowcase from '../components/MasterVsClientShowcase';
-import SocialEnrichmentShowcase from '../components/SocialEnrichmentShowcase';
-import LegalTrustPlaybook from '../components/LegalTrustPlaybook';
+import HeroLiveDemoCard from '../components/HeroLiveDemoCard';
+import {
+  ADMIN_ORIGIN,
+  CLIENT_ORIGIN,
+  MASTER_ORIGIN,
+  isMasterRuntime,
+  openAdminWorkspace,
+  openClientWorkspace,
+  openMasterWorkspace,
+  openPortalLogin
+} from '../utils/editionSwitch';
 
 export default function LandingHome() {
   const navigate = useNavigate();
-  const { ensureConnected, skipAndRunLocal } = useExtension() || {};
-  const [stageMode, setStageMode] = useState('fields'); // 'fields' | 'social' | 'editions' | 'legal'
+  const { ensureConnected } = useExtension() || {};
+  const masterActive = isMasterRuntime();
 
-  const handleLaunch = () => {
-    ensureConnected(() => navigate('/command?country=IN'), { country: 'IN' });
+  const handlePrimaryWorkspace = () => {
+    if (masterActive) openMasterWorkspace(navigate, '/command?country=IN');
+    else openClientWorkspace(navigate, '/command?country=IN', ensureConnected);
   };
-
-  const handleLocalLaunch = () => {
-    if (skipAndRunLocal) skipAndRunLocal();
-    navigate('/command?country=IN&mode=local');
-  };
-
-  const tabs = [
-    { id: 'fields', label: '52 Extracted Fields', icon: Database },
-    { id: 'social', label: 'Social & Web Data', icon: Sparkles },
-    { id: 'editions', label: 'Master vs. Client', icon: Layers },
-    { id: 'legal', label: 'Legal Playbook', icon: Scale }
-  ];
 
   return (
-    <div className="lx-screen-container">
-      {/* 1. Eyebrow Badge & Context View Switcher */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}
-      >
-        <span className="lx-highlight-tag">
-          <span className="lx-status-dot-pulse" />
-          <span>✦ 52-FIELD BUSINESS DATA EXTRACTION &amp; FRONTEND ENRICHMENT</span>
-        </span>
-
-        {/* Stage Switcher */}
-        <div
-          style={{
-            display: 'inline-flex',
-            background: 'rgba(255, 251, 235, 0.85)',
-            border: '1.5px solid rgba(217, 119, 6, 0.25)',
-            borderRadius: 999,
-            padding: 3,
-            gap: 3,
-            flexWrap: 'wrap',
-            justifyContent: 'center',
-            boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.95), 0 2px 8px rgba(120, 53, 15, 0.06)'
-          }}
+    <div className="lx-screen-container lx-home-shell">
+      {/* 1. Above-the-Fold 2-Column Hero */}
+      <section className="lx-hero-grid" aria-label="Platform Overview">
+        <motion.div
+          className="lx-hero-copy"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
         >
-          {tabs.map((tab) => {
-            const TabIcon = tab.icon;
-            const isActive = stageMode === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setStageMode(tab.id)}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 999,
-                  border: isActive ? '1px solid rgba(217, 119, 6, 0.35)' : '1px solid transparent',
-                  fontSize: 11,
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  background: isActive ? '#ffffff' : 'transparent',
-                  color: isActive ? '#92400e' : '#64748b',
-                  boxShadow: isActive ? '0 2px 8px rgba(217, 119, 6, 0.14)' : 'none',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 5,
-                  transition: 'all 0.16s ease'
-                }}
-              >
-                <TabIcon size={12} color={isActive ? '#d97706' : '#64748b'} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="lx-highlight-tag">
+              <span className="lx-status-dot-pulse" />
+              <span>
+                {masterActive
+                  ? 'MASTER FLEET · REAL-TIME ENGINE'
+                  : 'REAL-TIME LEAD ENGINE · 11 MARKETS'}
+              </span>
+            </span>
 
-          <button
-            type="button"
-            onClick={() => navigate('/story')}
-            style={{
-              padding: '4px 12px',
-              borderRadius: 999,
-              border: '1px solid rgba(254, 243, 199, 0.75)',
-              fontSize: 11,
-              fontWeight: 850,
-              cursor: 'pointer',
-              background: 'linear-gradient(135deg, #b45309 0%, #d97706 50%, #f59e0b 100%)',
-              color: '#ffffff',
-              boxShadow: '0 2px 10px rgba(217, 119, 6, 0.28)',
-              transition: 'all 0.16s ease'
-            }}
-            title="Read Founder Manoj's Journey & 20% Strategic Equity Allocation"
-          >
-            👨‍💻 Founder &amp; 20% Equity ★
-          </button>
+            <button
+              type="button"
+              onClick={() => navigate('/story')}
+              className="lx-founder-pill-btn"
+              title="Read Founder Story & Legal Trust Playbook"
+            >
+              <Sparkles size={11} />
+              <span>Founder &amp; Trust</span>
+            </button>
+          </div>
+
+          <h1 className="lx-kinetic-title lx-hero-title">
+            {masterActive ? (
+              <>
+                State-Scale Lead Discovery.{' '}
+                <span className="lx-gradient-text">Unified Fleet Control.</span>
+              </>
+            ) : (
+              <>
+                Verified Mobiles, Landlines &amp; Socials.{' '}
+                <span className="lx-gradient-text">Extracted Live.</span>
+              </>
+            )}
+          </h1>
+
+          <p className="lx-kinetic-subcopy lx-hero-sub">
+            {masterActive
+              ? 'Orchestrate district and national territory sweeps across 11 markets, govern synonym intelligence, and supervise live multi-engine SSE pipelines from one golden glass console.'
+              : 'Extract direct owner mobiles (+91 MOB), STD landlines, websites, emails, WhatsApp links, and 3D social handles across 11 countries—streamed live onto a satellite territory map with 1-click .xlsx & .vcf exports.'}
+          </p>
+
+          <div className="lx-hero-cta-row">
+            <LiquidButton3D
+              variant="gold"
+              size="lg"
+              icon={Rocket}
+              pulse
+              onClick={handlePrimaryWorkspace}
+            >
+              {masterActive ? 'Open Master Command' : 'Launch Client Workspace'}
+            </LiquidButton3D>
+
+            <LiquidButton3D
+              variant="glass-gold"
+              size="lg"
+              icon={LogIn}
+              onClick={() => navigate('/login')}
+            >
+              {masterActive ? 'Master Sign In' : 'Sign In / Free Trial'}
+            </LiquidButton3D>
+
+            <button
+              type="button"
+              onClick={() => navigate('/architecture')}
+              className="lx-hero-link-pill"
+            >
+              <Activity size={13} color="#d97706" />
+              <span>Server &amp; Portals</span>
+              <ArrowUpRight size={13} />
+            </button>
+          </div>
+        </motion.div>
+
+        <div className="lx-hero-demo-wrap">
+          <HeroLiveDemoCard isMaster={masterActive} />
         </div>
-      </motion.div>
+      </section>
 
-      {/* 2. Headline Explaining Real Data Extraction & Live Frontend Enrichment */}
-      <div style={{ maxWidth: 920 }}>
-        <h1 className="lx-kinetic-title">
-          All Business Data Extracted.{' '}
-          <span className="lx-gradient-text">Enriched Live in Your Frontend.</span>
-        </h1>
+      {/* 2. Upfront Portal Explainers & Separate Sign-In Routes */}
+      <section className="lx-portal-cards-section" aria-label="Workspace Portals and Sign-In Routes">
+        <div className="lx-portal-section-head">
+          <h2>Choose Your Portal &amp; Sign-In Route</h2>
+          <span>Client, Master Fleet, and Admin share one real-time API engine with dedicated logins</span>
+        </div>
 
-        <p className="lx-kinetic-subcopy" style={{ margin: '6px auto 0' }}>
-          Extract official websites, verified mobile numbers, WhatsApp links, emails, social channels, addresses, GSTIN/CIN tax IDs, reviews, and operating hours across 11 nations—deduplicated and enriched in real time inside your workspace.
-        </p>
-      </div>
-
-      {/* 3. Main Stage */}
-      <AnimatePresence mode="wait">
-        {stageMode === 'fields' && (
-          <motion.div
-            key="fields-stage"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.28 }}
-            style={{ width: '100%', maxWidth: 1080, margin: '0 auto' }}
+        <div className="lx-portal-cards-grid">
+          {/* CLIENT PORTAL CARD */}
+          <motion.article
+            whileHover={{ y: -3 }}
+            transition={{ duration: 0.18 }}
+            className={`lx-golden-glass-card lx-portal-card ${!masterActive ? 'is-active-portal' : ''}`}
           >
-            <ExtractedDataShowcase3D />
-          </motion.div>
-        )}
+            <div className="lx-portal-card-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span className="lx-conn-icon-badge" style={{ color: '#059669', borderColor: 'rgba(5, 150, 105, 0.35)' }}>
+                  <Laptop size={16} />
+                </span>
+                <div>
+                  <h3>Client Workspace</h3>
+                  <code>{CLIENT_ORIGIN.replace(/^https?:\/\//, '')}/login</code>
+                </div>
+              </div>
+              <span className="lx-portal-role-badge is-client">Teams &amp; Founders</span>
+            </div>
 
-        {stageMode === 'social' && (
-          <motion.div
-            key="social-stage"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.28 }}
-            style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}
+            <p>
+              Fast city &amp; zone lead extraction, satellite map pins, saved lead folders, live mobile/STD filters, and instant Excel / vCard exports.
+            </p>
+
+            <div className="lx-portal-card-actions">
+              <button
+                type="button"
+                className="lx-portal-btn-primary"
+                onClick={() => openPortalLogin('client', navigate, 'signin')}
+              >
+                <LogIn size={13} />
+                <span>Client Sign In</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
+                onClick={() => openPortalLogin('client', navigate, 'signup')}
+              >
+                <span>Free Trial</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
+                onClick={() => openClientWorkspace(navigate, '/command?country=IN', ensureConnected)}
+                title="Open Client Command Center"
+              >
+                <span>Launch</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+          </motion.article>
+
+          {/* MASTER PORTAL CARD */}
+          <motion.article
+            whileHover={{ y: -3 }}
+            transition={{ duration: 0.18 }}
+            className={`lx-golden-glass-card lx-portal-card ${masterActive ? 'is-active-portal' : ''}`}
           >
-            <SocialEnrichmentShowcase />
-          </motion.div>
-        )}
+            <div className="lx-portal-card-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span className="lx-conn-icon-badge" style={{ color: '#d97706', borderColor: 'rgba(217, 119, 6, 0.42)' }}>
+                  <Server size={16} />
+                </span>
+                <div>
+                  <h3>Master Fleet</h3>
+                  <code>{MASTER_ORIGIN.replace(/^https?:\/\//, '')}/login</code>
+                </div>
+              </div>
+              <span className="lx-portal-role-badge is-master">Operators &amp; Scale</span>
+            </div>
 
-        {stageMode === 'editions' && (
-          <motion.div
-            key="editions-stage"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.28 }}
-            style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}
+            <p>
+              District, state &amp; 11-nation sweeps, multi-engine job telemetry, self-learning category synonyms, and fleet-wide lead aggregation.
+            </p>
+
+            <div className="lx-portal-card-actions">
+              <button
+                type="button"
+                className="lx-portal-btn-primary is-amber"
+                onClick={() => openPortalLogin('master', navigate)}
+              >
+                <LogIn size={13} />
+                <span>Master Sign In</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
+                onClick={() => openMasterWorkspace(navigate, '/command?country=IN')}
+              >
+                <span>Open Fleet</span>
+                <ArrowUpRight size={13} />
+              </button>
+            </div>
+          </motion.article>
+
+          {/* ADMIN & SERVER CONNECTIVITY CARD */}
+          <motion.article
+            whileHover={{ y: -3 }}
+            transition={{ duration: 0.18 }}
+            className="lx-golden-glass-card lx-portal-card"
           >
-            <MasterVsClientShowcase />
-          </motion.div>
-        )}
+            <div className="lx-portal-card-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span className="lx-conn-icon-badge" style={{ color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.38)' }}>
+                  <Sliders size={16} />
+                </span>
+                <div>
+                  <h3>Admin &amp; Server</h3>
+                  <code>{ADMIN_ORIGIN.replace(/^https?:\/\//, '')}</code>
+                </div>
+              </div>
+              <span className="lx-portal-role-badge is-admin">Admin &amp; Health</span>
+            </div>
 
-        {stageMode === 'legal' && (
-          <motion.div
-            key="legal-stage"
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.28 }}
-            style={{ width: '100%', maxWidth: 1040, margin: '0 auto' }}
-          >
-            <LegalTrustPlaybook />
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <p>
+              Customer onboarding, free trial &amp; quota policies, trending search analytics, and real-time backend server connectivity &amp; latency status.
+            </p>
 
-      {/* 4. Tactile 3D Liquid Gold Action Buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, flexWrap: 'wrap', margin: '4px 0' }}>
-        <LiquidButton3D
-          variant="gold"
-          size="lg"
-          icon={Rocket}
-          pulse
-          onClick={handleLaunch}
-        >
-          Launch Client Engine Sweep
-        </LiquidButton3D>
+            <div className="lx-portal-card-actions">
+              <button
+                type="button"
+                className="lx-portal-btn-primary is-blue"
+                onClick={() => openAdminWorkspace(navigate, '/')}
+              >
+                <Sliders size={13} />
+                <span>Open Admin</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
+                onClick={() => navigate('/architecture')}
+              >
+                <Activity size={13} />
+                <span>Server Health</span>
+              </button>
+            </div>
+          </motion.article>
+        </div>
+      </section>
 
-        <LiquidButton3D
-          variant="glass-gold"
-          size="lg"
-          icon={Zap}
-          onClick={handleLocalLaunch}
-        >
-          Open Local Compute Console
-        </LiquidButton3D>
-      </div>
-
-      {/* 5. Real Capabilities Strip */}
+      {/* 3. Concise Capability Strip */}
       <div className="lx-value-strip">
         <span className="lx-value-chip is-highlight">
           <CheckCircle2 size={13} color="#d97706" />
-          <span>52 Real Tracked Business Fields Across 10 Groups</span>
+          <span>52 Tracked Lead Fields</span>
         </span>
         <span className="lx-value-chip">
           <Globe size={13} color="#b45309" />
-          <span>Websites, Mobiles, Emails, Socials &amp; Tax IDs</span>
-        </span>
-        <span className="lx-value-chip">
-          <span>⚖️ 100% Legal Public Open-Web Indexing</span>
+          <span>11 Sovereign Markets</span>
         </span>
         <span className="lx-value-chip is-highlight">
-          <span>⚡ Client &amp; Master Workspaces Synchronized</span>
+          <span>Mobile (MOB) + Landline (STD) Auto-Split</span>
+        </span>
+        <span className="lx-value-chip">
+          <ShieldCheck size={13} color="#059669" />
+          <span>100% Legal Open-Web Indexing</span>
         </span>
       </div>
     </div>
