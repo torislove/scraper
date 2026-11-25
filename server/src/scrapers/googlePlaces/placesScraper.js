@@ -607,12 +607,14 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
           const rawCards = await page.evaluate(() => {
             const feedCards = Array.from(document.querySelectorAll('div[role="feed"] div.Nv2PK'));
             return feedCards.map(card => {
+              if (card.dataset.lxDone === '1') return null;
               const nameEl = card.querySelector('div.fontHeadlineSmall, .qBF1Pd');
               const name = nameEl ? nameEl.innerText.trim() : '';
               if (!name || name.length < 2) return null;
 
               const mapsLinkEl = card.querySelector('a.hfpxzc');
               const mapsLink = mapsLinkEl ? mapsLinkEl.getAttribute('href') : '';
+              if (mapsLink) card.dataset.lxDone = '1';
 
               // Extract all text inside card, one visual line at a time. Google
               // feed cards separate name, rating, category, address and hours

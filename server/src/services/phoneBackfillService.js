@@ -764,7 +764,7 @@ async function backfillPhones(leadsOrOptions = {}, maybeOptions = {}) {
 
             try {
               const vendorId = lead.id;
-              const stored = dbAdapter.getVendors().find(v => v.id === vendorId);
+              const stored = (dbAdapter.findById && dbAdapter.findById(vendorId)) || dbAdapter.findMatch({ id: vendorId });
               if (stored) {
                 Object.assign(stored, {
                   phone: lead.phone,
@@ -927,7 +927,10 @@ class StreamingEnrichmentManager {
     if (!this.queue.length) return;
     if (this.activeWorkers >= this.maxConcurrency) return;
 
-    if (browserBudget.enrichmentLimit() <= 0) {
+    // Yield heavy Chromium detail tabs while Google Maps discovery queue has active bursts,
+    // keeping Zone 1 -> Zone N velocity at 100% while HTTP website hunter runs concurrently.
+    const status = browserBudget.getStatus();
+    if (browserBudget.enrichmentLimit() <= 0 || (status.discoveryQueued > 2 && status.discoveryActive >= 2)) {
       this._scheduleRetry();
       return;
     }
@@ -1042,8 +1045,7 @@ class StreamingEnrichmentManager {
         lead.websiteEnrichedAt = new Date().toISOString();
 
         try {
-          const allVendors = dbAdapter.getVendors();
-          const stored = allVendors.find(v => v.id === lead.id || (v.name === lead.name && v.sessionId === lead.sessionId));
+          const stored = (dbAdapter.findById && dbAdapter.findById(lead.id)) || dbAdapter.findMatch(lead);
           // If the lead is not in the store yet, persist the enriched copy
           // instead of throwing the work away.
           const target = stored || lead;
@@ -1305,8 +1307,7 @@ class StreamingEnrichmentManager {
           lead.lastScrapedAt = lead.profileEnrichedAt;
 
           try {
-            const allVendors = dbAdapter.getVendors();
-            const stored = allVendors.find(v => v.id === lead.id || (v.name === lead.name && v.sessionId === lead.sessionId));
+            const stored = (dbAdapter.findById && dbAdapter.findById(lead.id)) || dbAdapter.findMatch(lead);
             const target = stored || lead;
             Object.assign(target, {
               phone: lead.phone,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers } from 'lucide-react';
+import { Layers, Minimize2 } from 'lucide-react';
 import { formatNumber, cx } from '../../ui';
 import FilterBar from '../cards/FilterBar';
 import { MapLegend } from '../cards/MetricCard';
@@ -20,7 +20,8 @@ export default function MapViewTab({
   estimate,
   setSelectedVendor,
   cellStates = {},
-  jumpTrail = null
+  jumpTrail = null,
+  onMinimize = null
 }) {
   const mapVendors = (run?.id || sessionFilter)
     ? filteredVendors.filter(v => v.sessionId === (run?.id || sessionFilter) || v.lastSessionId === (run?.id || sessionFilter))
@@ -43,6 +44,16 @@ export default function MapViewTab({
           compact
         />
         <MapLegend />
+        {onMinimize && (
+          <button
+            type="button"
+            className="lx-chip-toggle"
+            onClick={onMinimize}
+            title="Minimize back to Workspace split view"
+          >
+            <Minimize2 size={12} /> Minimize
+          </button>
+        )}
       </div>
       <div className="v2-map-view-body">
         <CommandMap
@@ -59,6 +70,7 @@ export default function MapViewTab({
           jumpTrail={jumpTrail}
           onSelect={vendor => setSelectedVendor(vendor)}
           onSelectZone={name => updateFilter('query', name)}
+          onMinimize={onMinimize}
         />
         <aside className="v2-map-side">
           <div className="v2-map-side-head">

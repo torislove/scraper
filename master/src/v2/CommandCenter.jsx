@@ -83,7 +83,6 @@ import MissionCompleteDrawer from './components/popups/MissionCompleteDrawer';
 import CockpitFolderRow from './components/CockpitView/CockpitFolderRow';
 import CockpitView from './components/CockpitView/CockpitView';
 import FolderView from './components/FolderView/FolderView';
-import SystemCheckPill from './components/SystemCheckPill';
 import LeadsTableView from './components/views/LeadsTableView';
 import MapViewTab from './components/views/MapViewTab';
 import FoldersGridView from './components/views/FoldersGridView';
@@ -95,7 +94,6 @@ import CommandCenterHeader from './components/CommandCenterHeader';
 import CountryFlagStrip from './components/CountryFlagStrip';
 import AccountMenu from './components/AccountMenu';
 import TrashModal from './components/TrashModal';
-import RetroDigitalTimer from './components/RetroDigitalTimer';
 import { findCountry } from './data/countries';
 
 const LAST_LIVE_SESSION_KEY = 'scraper_master_last_live_session';
@@ -859,6 +857,10 @@ export default function CommandCenter() {
         } catch (error) { /* ignore */ }
       });
 
+      es.addEventListener('heartbeat', () => {
+        lastEventRef.current = Date.now();
+      });
+
       es.addEventListener('vendor', event => {
         try {
           const payload = JSON.parse(event.data);
@@ -932,23 +934,14 @@ export default function CommandCenter() {
           setProgress(data);
           if (typeof data?.sessionActive === 'boolean') {
             if (!data.sessionActive) {
-              setScanning(false);
               const explicitStop = data.aborted === true
-                || ['aborted', 'failed', 'interrupted'].includes(String(data.status || '').toLowerCase());
-              const totalZ = Number(data.totalMandals || data.totalMandalsAcrossAll) || 0;
-              const doneZ = Number(data.completedMandals ?? data.overallCompletedMandals) || 0;
-              const incomplete = totalZ > 0 && doneZ < totalZ;
-              if (currentRun?.status === 'running' && (explicitStop || incomplete)) {
-                setRun(prev => ({
-                  ...(prev || {}),
-                  id: data.sessionId || prev?.id,
-                  sessionId: data.sessionId || prev?.sessionId,
-                  status: explicitStop ? (String(data.status || '').toLowerCase() || 'aborted') : 'interrupted',
-                  completedZones: doneZ,
-                  totalZones: totalZ,
-                  leadCount: prev?.leadCount
-                }));
-                toast.error(`⚠️ Scrape stopped (${doneZ}/${totalZ || '?'} zones done). Choose "Continue Scrape" to resume.`, { id: 'scrape-stop-alert', duration: 8000 });
+                || ['aborted', 'failed', 'stopped', 'completed'].includes(String(data.status || '').toLowerCase());
+              if (currentRun?.status === 'running' && (explicitStop || data.finished === true)) {
+                setScanning(false);
+                finishRun(
+                  data.error ? 'error' : (data.aborted || String(data.status || '').toLowerCase() === 'aborted' || String(data.status || '').toLowerCase() === 'stopped') ? 'stopped' : 'complete',
+                  { serverConfirmed: true }
+                );
               }
             } else {
               setScanning(true);
@@ -1190,59 +1183,62 @@ export default function CommandCenter() {
     }, 800);
   }, [refresh]);
 
-  // Progress completion: finish when session is finished OR all allotted zones are complete
+  // Progress completion: finish ONLY on explicit server terminal state (never false-timeout live sweeps)
   useEffect(() => {
     if (run?.status === 'running' && progress) {
-      // Guard: strictly ensure progress event belongs to current run
       if (progress.sessionId && (progress.sessionId === run.id || progress.sessionId === run.sessionId)) {
-        const comp = Number(progress.overallCompletedMandals ?? progress.completedMandals ?? 0);
-        const tot = Number(progress.totalMandalsAcrossAll ?? progress.totalMandals ?? 0);
-        const isAllZonesDone = tot > 0 && comp >= tot;
-        // The server's terminal flag or completion of all zones is authoritative.
-        const serverSaysFinished = progress.finished === true || progress.status === 'completed' || progress.sessionActive === false;
-        const lastEventAt = Number(lastEventRef.current) || 0;
-        const streamIsStale = lastEventAt > 0 && (Date.now() - lastEventAt) > 60_000;
-        if (isAllZonesDone || serverSaysFinished || progress.aborted || progress.error || streamIsStale) {
+        const serverSaysFinished = progress.finished === true || progress.status === 'completed';
+        if (serverSaysFinished || progress.aborted || progress.error) {
           finishRun(
             progress.error ? 'error' : progress.aborted ? 'stopped' : 'complete',
-            { serverConfirmed: serverSaysFinished || isAllZonesDone }
+            { serverConfirmed: serverSaysFinished }
           );
         }
       }
     }
-  }, [progress, run?.status, run?.id, run?.sessionId, run?.startedAt, finishRun]);
+  }, [progress, run?.status, run?.id, run?.sessionId, finishRun]);
 
   useEffect(() => {
     if (run?.status !== 'running') return undefined;
     const id = setInterval(async () => {
       try {
-        const jobs = await getScrapeJobs();
+        const sid = run.sessionId || run.id || activeSessionIdRef.current;
+        const [jobs, synced] = await Promise.all([
+          getScrapeJobs(),
+          sid ? loadVendors(sid) : Promise.resolve([])
+        ]);
         if (!mountedRef.current) return;
-        // The backend returns a flat array of omni + cron jobs. Accept the
-        // wrapped shape too so this watchdog cannot silently stop working.
+        if (Array.isArray(synced) && synced.length > 0) {
+          for (const v of synced) {
+            if (v?.id) runVendorIdsRef.current.add(v.id);
+          }
+          setRunLeadCount(prev => Math.max(prev, runVendorIdsRef.current.size, synced.length));
+        }
         const list = Array.isArray(jobs)
           ? jobs
           : Array.isArray(jobs?.omniJobs) ? jobs.omniJobs : [];
         const matching = list.find(job => job.id === run.id || job.sessionId === run.id);
-        if (matching?.status === 'completed') {
-          const comp = Number(matching.completedCount || 0);
-          const tot = Number(matching.totalCount || 0);
-          if (!tot || comp >= tot) {
-            finishRun('complete');
-          } else {
-            // The job record is authoritative about termination. A run can end
-            // with skipped zones, so the ratio may never reach 100%.
-            finishRun('complete', { serverConfirmed: true });
-          }
+        if (matching && matching.status === 'running') {
+          setProgress(prev => ({
+            ...(prev || {}),
+            sessionId: sid,
+            overallCompletedMandals: Math.max(prev?.overallCompletedMandals || 0, Number(matching.completedCount || 0)),
+            totalMandalsAcrossAll: Math.max(prev?.totalMandalsAcrossAll || 0, Number(matching.totalCount || 0)),
+            activeMandal: matching.activeMandal || prev?.activeMandal,
+            etaText: matching.etaText || prev?.etaText,
+            sessionActive: true
+          }));
+        } else if (matching?.status === 'completed') {
+          finishRun('complete', { serverConfirmed: true });
         } else if (matching?.status === 'failed') {
           toast.error('Engine execution encountered an error. Inspect the Parallel Engines board and retry.');
         } else if (!matching && (Date.now() - (run.startedAt || 0) > 120000) && (Date.now() - lastEventRef.current > 180000)) {
           finishRun('complete');
         }
       } catch (error) { /* ignore */ }
-    }, 5000);
+    }, 4000);
     return () => clearInterval(id);
-  }, [run?.status, run?.id, run?.startedAt, finishRun]);
+  }, [run?.status, run?.id, run?.sessionId, run?.startedAt, finishRun, loadVendors]);
 
   // Deep job polling.
   useEffect(() => {
@@ -2694,48 +2690,6 @@ export default function CommandCenter() {
         refresh={refresh}
       />
 
-      {!extReady && !bannerDismissed && (
-        <div className="v2-ext-top-banner">
-          <div className="v2-ext-top-banner-main">
-            <span className="v2-ext-top-pulse" />
-            <div className="v2-ext-top-icon">
-              <Cpu size={16} color="#059669" />
-            </div>
-            <div className="v2-ext-top-copy">
-              <b>Connect RAM Turbo Extension (1.2.0)</b>
-              <span>Run searches via your own machine’s RAM &amp; IP for 8x speed with zero server queues.</span>
-            </div>
-          </div>
-          <div className="v2-ext-top-actions">
-            <button
-              type="button"
-              className="v2-btn v2-btn-emerald v2-btn-sm"
-              onClick={() => openSetup({ country: searchCountry })}
-            >
-              <Zap size={13} /> Setup Extension (30s)
-            </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-sm"
-              style={{ color: '#047857', border: '1px solid rgba(5, 150, 105, 0.4)', background: '#ecfdf5', fontWeight: 700 }}
-              onClick={skipAndRunLocal}
-              title="Run searches directly on the local server without requiring the Chrome extension"
-            >
-              <Zap size={13} color="#059669" /> ⚡ Skip &amp; Run Local
-            </button>
-            <button
-              type="button"
-              className="v2-btn v2-btn-ghost v2-btn-sm"
-              onClick={() => setBannerDismissed(true)}
-              aria-label="Dismiss setup banner"
-              title="Dismiss"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className={cx('v2-cmd-body', activeTab === 'cockpit' && 'is-cockpit')}>
         <main className={cx('v2-cmd-main', activeTab === 'cockpit' && 'is-cockpit')}>
           <div className="lx-top-controls">
@@ -2808,37 +2762,24 @@ export default function CommandCenter() {
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a' }}>
                   Sweeping <b>{run.category || form.category || autoQuery}</b> in <b>{run.location || form.location || 'Selected Area'}</b>
                   {(effectiveActiveZone?.name || progress?.activeMandal) ? (
-                    <span style={{ fontWeight: 500, color: '#475569' }}> · {hopTransition || effectiveActiveZone?.name || progress?.activeMandal}</span>
+                    <span style={{ fontWeight: 500, color: '#475569' }}> · {effectiveActiveZone?.name || progress?.activeMandal}</span>
                   ) : null}
                 </div>
                 <span className="lx-zone-pill is-live">
                   Zone {Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)} / {Math.max(1, runTotal || mapZones.length || 1)}
                 </span>
+                {progress?.etaText && (
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#92400e', background: '#fffbeb', border: '1px solid rgba(217,119,6,0.3)', padding: '2px 8px', borderRadius: 999 }}>
+                    ETA {progress.etaText}
+                  </span>
+                )}
               </div>
 
-              {/* Master Retro Digital Watch Chrono & Orchestrator ETA */}
-              <RetroDigitalTimer
-                etaMs={progress?.etaMs || 0}
-                etaText={progress?.etaText || ''}
-                elapsedSeconds={runElapsed}
-                zoneIndex={Math.min(Math.max(1, runTotal || mapZones.length || 1), runDone + 1)}
-                totalZones={Math.max(1, runTotal || mapZones.length || 1)}
-                activeZoneName={effectiveActiveZone?.name || progress?.activeMandal || ''}
-                hopTransition={hopTransition}
-                leadsCount={runLeadCount}
-                runningCount={progress?.runningZones || progress?.runningJobs || 1}
-                doneCount={runDone}
-                queuedCount={Math.max(0, (runTotal || mapZones.length || 1) - runDone - 1)}
-                engineCount={searchCountry === 'IN' ? 11 : 10}
-                scanning={scanning}
-              />
-
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <b style={{ fontSize: 14, fontWeight: 800, color: '#4f46e5', fontVariantNumeric: 'tabular-nums' }}>
-                  {formatNumber(runLeadCount)} leads · {formatNumber(runMobilesCount)} mobiles
+                <b style={{ fontSize: 14, fontWeight: 800, color: '#92400e', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatNumber(Math.max(runLeadCount, filteredVendors.length))} leads · {formatNumber(runMobilesCount)} mobiles
                 </b>
                 <button type="button" className="v2-btn v2-btn-danger v2-btn-sm" onClick={stopRun}>
-                  <span className="lx-gbc-keycap is-b">B</span>
                   <Square size={11} /> Stop ({runDone}/{Math.max(1, runTotal || mapZones.length || 1)} Zones)
                 </button>
               </div>
@@ -2887,18 +2828,6 @@ export default function CommandCenter() {
                   <Plus size={13} /> New Search
                 </button>
               </div>
-            </div>
-          )}
-
-          {currentDeep && ['queued', 'running', 'stopping'].includes(currentDeep.status) && (
-            <div className="v2-deep-banner">
-              <span className="v2-deep-banner-pulse" />
-              <Zap size={13} />
-              <b>Completing business profiles</b>
-              <span>{currentDeep.completed || 0}/{currentDeep.total || 0} done · phones, emails and websites are still streaming in</span>
-              <button type="button" className="v2-btn v2-btn-ghost v2-btn-sm" onClick={() => setActiveTab('deep')}>
-                View engine
-              </button>
             </div>
           )}
 
@@ -2986,6 +2915,7 @@ export default function CommandCenter() {
                 cellStates={progress?.cellStates || {}}
                 jumpTrail={jumpTrail}
                 setSelectedVendor={setSelectedVendor}
+                onMinimize={() => setActiveTab('cockpit')}
               />
             )}
 

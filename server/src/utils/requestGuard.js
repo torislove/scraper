@@ -20,7 +20,7 @@
 
 const engineHealth = require('../services/engineHealth');
 
-const MAX_DEFER_MS = 45_000;
+const MAX_DEFER_MS = 70_000;
 
 /**
  * Per-engine behaviour. `gapMs` is the minimum start-to-start spacing and
@@ -28,8 +28,8 @@ const MAX_DEFER_MS = 45_000;
  * block up to `maxCooldownMs`.
  */
 const POLICIES = {
-  'google-local-finder': { gapMs: 250, jitterMs: 150, cooldownMs: 90_000, maxCooldownMs: 15 * 60_000 },
-  maps: { gapMs: 150, jitterMs: 100, cooldownMs: 60_000, maxCooldownMs: 10 * 60_000 },
+  'google-local-finder': { gapMs: 120, jitterMs: 80, cooldownMs: 20_000, maxCooldownMs: 65_000 },
+  maps: { gapMs: 60, jitterMs: 50, cooldownMs: 12_000, maxCooldownMs: 60_000 },
   'google-serp': { gapMs: 650, jitterMs: 350, cooldownMs: 120_000, maxCooldownMs: 15 * 60_000 },
   justdial: { gapMs: 350, jitterMs: 200, cooldownMs: 150_000, maxCooldownMs: 20 * 60_000 },
   indiamart: { gapMs: 1_200, jitterMs: 600, cooldownMs: 180_000, maxCooldownMs: 30 * 60_000 },

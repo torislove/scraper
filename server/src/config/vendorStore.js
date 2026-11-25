@@ -606,11 +606,44 @@ function snapshotNow(force = false) {
   }
 }
 
+let _asyncSnapshotInFlight = false;
+async function snapshotAsync() {
+  if (_asyncSnapshotInFlight) return false;
+  ensureDirs();
+  if (!booted || !canWrite() || !dirty) return false;
+  if (vendors.length === 0 && lastNonEmptyCount > 0) return false;
+  _asyncSnapshotInFlight = true;
+  const payload = JSON.stringify(vendors);
+  const tmp = `${STORE_FILE}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    await fs.promises.writeFile(tmp, payload, 'utf-8');
+    await fs.promises.rename(tmp, STORE_FILE);
+    if (journalTimer) {
+      clearTimeout(journalTimer);
+      journalTimer = null;
+    }
+    journalBuffer = [];
+    try { await fs.promises.truncate(JOURNAL_FILE, 0); } catch (e) {}
+    journalLines = 0;
+    dirty = false;
+    fs.promises.writeFile(LOCK_FILE, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }), 'utf-8').catch(() => {});
+    if (vendors.length > lastNonEmptyCount) lastNonEmptyCount = vendors.length;
+    maybeBackup();
+    return true;
+  } catch (error) {
+    try { await fs.promises.unlink(tmp); } catch (e) {}
+    console.error('[vendorStore] Async snapshot failed:', error.message);
+    return false;
+  } finally {
+    _asyncSnapshotInFlight = false;
+  }
+}
+
 function scheduleSnapshot() {
   if (snapshotTimer) clearTimeout(snapshotTimer);
   snapshotTimer = setTimeout(() => {
     snapshotTimer = null;
-    snapshotNow();
+    snapshotAsync().catch(() => {});
   }, SNAPSHOT_DEBOUNCE_MS);
   if (typeof snapshotTimer.unref === 'function') snapshotTimer.unref();
 }

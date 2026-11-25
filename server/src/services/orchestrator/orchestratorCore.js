@@ -1564,8 +1564,8 @@ async function runOmniSearchOrchestrator(
           queuedZones: Math.max(0, totalZones - completedZones - runningForSession.length),
           doneZones: completedZones,
           runningZones: runningForSession.length,
-          sessionActive: completedZones < totalZones,
-          finished: completedZones >= totalZones
+          sessionActive: !(completedZones >= totalZones && primaryPendingForSession.length === 0 && primaryRunningForSession.length === 0),
+          finished: false
         });
 
         // Broadcast active scanning zone so the Command Center map highlights and tracks the live swarm

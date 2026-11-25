@@ -103,11 +103,8 @@ async function releaseZoneContext(slot, { recycle = false } = {}) {
     && zoneContextPool.length < maxPool
     && !browserBudget.isMemoryUnderPressure();
   if (keep) {
-    try {
-      if (slot.page && !slot.page.isClosed()) {
-        await slot.page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 1500 }).catch(() => { });
-      }
-    } catch (e) { }
+    // Keep Google Maps SPA warm on the reused tab rather than resetting to about:blank
+    // so Zone 1 -> Zone N transitions skip cold Maps bundle bootstrap.
     zoneContextPool.push(slot);
     return;
   }

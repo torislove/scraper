@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Circle, Tooltip, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -8,7 +8,7 @@ import 'leaflet/dist/leaflet.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-import { ExternalLink, MapPin, Phone, Star, Plus, Minus, Compass, Layers, CheckCircle2, Zap } from 'lucide-react';
+import { ExternalLink, MapPin, Phone, Star, Plus, Minus, Compass, Minimize2 } from 'lucide-react';
 import { cx, formatNumber } from './ui';
 import { API_URL } from '../apiConfig';
 
@@ -24,47 +24,18 @@ try {
   });
 } catch (e) { }
 
-// 100% Free Keyless Multi-CDN + Same-Origin Disk-Cached Basemaps (0 API Keys)
-const BASEMAP_STYLES = {
-  streets: {
-    label: 'Streets',
-    icon: '🗺️',
-    urls: [
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-      `${API_URL}/map-tiles/voyager/{z}/{x}/{y}.png`
-    ],
-    attribution: '&copy; CARTO &copy; OpenStreetMap'
+// 100% Free Watermark-Free HD Satellite Imagery + Boundaries (Zero API Keys)
+const SATELLITE_SOURCES = [
+  {
+    imagery: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    labels: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
   },
-  light: {
-    label: 'Light',
-    icon: '☀️',
-    urls: [
-      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-      `${API_URL}/map-tiles/light/{z}/{x}/{y}.png`
-    ],
-    attribution: '&copy; CARTO &copy; OpenStreetMap'
-  },
-  satellite: {
-    label: 'Satellite',
-    icon: '🛰️',
-    urls: [
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`
-    ],
-    labelsUrl: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; Esri &copy; CARTO'
-  },
-  dark: {
-    label: 'Dark',
-    icon: '🌙',
-    urls: [
-      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-      `${API_URL}/map-tiles/dark/{z}/{x}/{y}.png`
-    ],
-    attribution: '&copy; CARTO &copy; OpenStreetMap'
+  {
+    imagery: `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`,
+    labels: `${API_URL}/map-tiles/labels/{z}/{x}/{y}.png`
   }
-};
+];
+const SATELLITE_ATTRIBUTION = '&copy; Esri World Imagery';
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
 const MAX_MAP_PLOTTED_LEADS = 300;
@@ -232,23 +203,19 @@ function SmartMapController({ center, zoom, activePoint, scanning }) {
   return null;
 }
 
-function scanTargetIcon(label = '', leadsCount = 0) {
-  const safeLabel = String(label || '').replace(/[<>&"]/g, '');
-  const countTag = leadsCount > 0 ? ` · ${leadsCount} Leads` : '';
+function scanTargetIcon() {
   return L.divIcon({
     className: 'v2-scan-target-wrap',
     html: `
-      <div class="v2-scan-target">
+      <div class="v2-scan-target" style="width:76px;height:76px;">
         <span class="v2-radar-sweep-beam"></span>
         <i class="ring r1"></i>
         <i class="ring r2"></i>
-        <i class="ring r3"></i>
         <b></b>
-        ${safeLabel ? `<div class="v2-scan-target-badge"><span class="v2-scan-badge-dot"></span><span class="v2-scan-badge-text">⚡ SCANNING: ${safeLabel}${countTag}</span></div>` : ''}
       </div>
     `,
-    iconSize: [160, 160],
-    iconAnchor: [80, 80]
+    iconSize: [76, 76],
+    iconAnchor: [38, 38]
   });
 }
 
@@ -318,22 +285,13 @@ function CommandMap({
   scopeTitle = 'Current Search',
   hoveredLeadId = null,
   cellStates = {},
-  jumpTrail = null
+  jumpTrail = null,
+  onMinimize = null
 }) {
   const mapRef = useRef(null);
-  const [is3DMode, setIs3DMode] = useState(false);
-  const [tileMode, setTileMode] = useState('streets');
   const [tileFailoverIdx, setTileFailoverIdx] = useState(0);
-  const [showZones, setShowZones] = useState(false);
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
-  const activeStyle = BASEMAP_STYLES[tileMode] || BASEMAP_STYLES.streets;
-  const activeTileUrl = activeStyle.urls[Math.min(tileFailoverIdx, activeStyle.urls.length - 1)];
-
-  const handleTileModeChange = (mode) => {
-    setTileMode(mode);
-    setTileFailoverIdx(0);
-    tileErrorTrackerRef.current = { count: 0, since: 0 };
-  };
+  const activeSat = SATELLITE_SOURCES[Math.min(tileFailoverIdx, SATELLITE_SOURCES.length - 1)];
 
   const handleTileError = useMemo(() => () => {
     const now = Date.now();
@@ -347,9 +305,9 @@ function CommandMap({
     if (tracker.count >= 2) {
       tracker.count = 0;
       tracker.since = now;
-      setTileFailoverIdx(prev => (prev + 1 < activeStyle.urls.length ? prev + 1 : prev));
+      setTileFailoverIdx(prev => (prev + 1 < SATELLITE_SOURCES.length ? prev + 1 : prev));
     }
-  }, [activeStyle.urls.length]);
+  }, []);
 
   const coverage = useMemo(
     () => zones.map((zone, index) => ({
@@ -443,7 +401,20 @@ function CommandMap({
     [validVendors]
   );
 
-  const scanIcon = useMemo(() => scanTargetIcon(activeZoneLabel), [activeZoneLabel]);
+  // Resolve strictly AT MOST ONE active zone index so generic city names never highlight 45 circles
+  const activeZonePoint = useMemo(() => {
+    if (!scanning) return null;
+    if (activePoint) return activePoint;
+    if (!coverage.length || !activeZoneLabel) return null;
+    const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanAct = norm(activeZoneLabel);
+    if (!cleanAct) return null;
+    const exact = coverage.find(z => norm(z.name) === cleanAct);
+    if (exact) return [exact.lat, exact.lng];
+    return null;
+  }, [scanning, activePoint, coverage, activeZoneLabel]);
+
+  const scanIcon = useMemo(() => scanTargetIcon(), []);
 
   // Manual Zoom Controls
   const handleZoomIn = () => {
@@ -477,7 +448,7 @@ function CommandMap({
 
   return (
     <div
-      className={cx('v2-map-shell', compact && 'is-compact', is3DMode && 'is-3d-perspective', className)}
+      className={cx('v2-map-shell', compact && 'is-compact', className)}
       style={{
         height: computedHeight,
         minHeight: computedMinHeight,
@@ -485,12 +456,11 @@ function CommandMap({
         position: 'relative',
         overflow: 'hidden',
         borderRadius: compact ? 12 : 14,
-        perspective: is3DMode ? 1000 : undefined,
-        background: '#eef4fb',
-        boxShadow: 'inset 0 2px 6px rgba(15, 23, 42, 0.06)'
+        background: '#0f172a',
+        boxShadow: 'inset 0 2px 6px rgba(15, 23, 42, 0.14)'
       }}
     >
-      {/* Pure White 3D Liquid Glass HUD Pill */}
+      {/* Minimal Golden-Bordered Liquid Glass Telemetry Pill */}
       <div className="v2-map-hud-wrap" style={{ position: 'absolute', top: 12, left: 12, zIndex: 1000, pointerEvents: 'none' }}>
         <div
           className="v2-map-hud-pill"
@@ -501,24 +471,18 @@ function CommandMap({
             gap: 8,
             padding: '6px 13px',
             borderRadius: 999,
-            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.9))',
-            backdropFilter: 'blur(18px) saturate(190%)',
-            border: '1.5px solid #ffffff',
-            boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 24px -8px rgba(15, 23, 42, 0.18)'
+            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(255, 251, 235, 0.88))',
+            backdropFilter: 'blur(18px) saturate(180%)',
+            border: '1.5px solid rgba(217, 119, 6, 0.42)',
+            boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 24px -8px rgba(180, 83, 9, 0.22)'
           }}
         >
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'radial-gradient(circle at 35% 35%, #6ee7b7, #10b981)', boxShadow: '0 0 8px rgba(16, 185, 129, 0.8)' }} />
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: scanning ? 'radial-gradient(circle at 35% 35%, #fcd34d, #d97706)' : 'radial-gradient(circle at 35% 35%, #6ee7b7, #059669)', boxShadow: scanning ? '0 0 8px rgba(217, 119, 6, 0.85)' : '0 0 8px rgba(16, 185, 129, 0.8)' }} />
           <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.03em', color: '#0f172a' }}>
             {scopeTitle.toUpperCase()}
           </span>
-          <span style={{ fontSize: 10.5, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700, color: '#065f46', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 999 }}>
-            {Math.abs(Number(safeCenter[0])).toFixed(2)}°{Number(safeCenter[0]) >= 0 ? 'N' : 'S'}, {Math.abs(Number(safeCenter[1])).toFixed(2)}°{Number(safeCenter[1]) >= 0 ? 'E' : 'W'}
-          </span>
-          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
-            <b style={{ color: '#059669' }}>{formatNumber(validVendors.length)}</b> pinned
-          </span>
-          <span style={{ fontSize: 9.5, fontWeight: 850, letterSpacing: '0.04em', color: '#047857', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 999 }}>
-            KEYLESS · 0 API KEYS
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>
+            <b>{formatNumber(validVendors.length)}</b> pinned
           </span>
         </div>
       </div>
@@ -534,18 +498,16 @@ function CommandMap({
         style={{
           height: '100%',
           minHeight: computedMinHeight,
-          width: '100%',
-          transform: is3DMode ? 'rotateX(24deg) scale(1.03)' : 'none',
-          transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          width: '100%'
         }}
         attributionControl={false}
         zoomControl={false}
       >
-        {/* Free Keyless Multi-CDN Basemap + Local Cache Failover */}
+        {/* Free Watermark-Free HD Satellite Imagery + Street/Place Boundaries */}
         <TileLayer
-          key={`${tileMode}-${tileFailoverIdx}`}
-          url={activeTileUrl}
-          attribution={activeStyle.attribution}
+          key={`sat-${tileFailoverIdx}`}
+          url={activeSat.imagery}
+          attribution={SATELLITE_ATTRIBUTION}
           maxNativeZoom={18}
           maxZoom={19}
           keepBuffer={3}
@@ -554,15 +516,14 @@ function CommandMap({
             tileerror: handleTileError
           }}
         />
-        {tileMode === 'satellite' && activeStyle.labelsUrl && (
-          <TileLayer
-            url={activeStyle.labelsUrl}
-            attribution={activeStyle.attribution}
-            maxNativeZoom={18}
-            maxZoom={19}
-            opacity={0.92}
-          />
-        )}
+        <TileLayer
+          key={`sat-labels-${tileFailoverIdx}`}
+          url={activeSat.labels}
+          attribution={SATELLITE_ATTRIBUTION}
+          maxNativeZoom={18}
+          maxZoom={19}
+          opacity={0.92}
+        />
 
         <SmartMapController
           center={safeCenter}
@@ -573,114 +534,20 @@ function CommandMap({
 
         {!compact && <InitialFit points={points} zonePoints={zonePoints} fitKey={fitKey} />}
 
-        {/* Animated Zone Hopping Jump Trail */}
+        {/* Subtle Zone Hop Trail */}
         {jumpTrail && jumpTrail.from && jumpTrail.to && (
           <Polyline
             positions={[jumpTrail.from, jumpTrail.to]}
             pathOptions={{
               color: '#f59e0b',
-              weight: 3.5,
-              opacity: 0.95,
-              dashArray: '8 8',
+              weight: 2.5,
+              opacity: 0.85,
+              dashArray: '6 8',
               lineCap: 'round',
               lineJoin: 'round'
             }}
           />
         )}
-
-        {/* Single Clean Territory Perimeter Outline (Zero Cluttered Blue Spokes or Overlapping Circles) */}
-        {!showZones && coverage.length > 0 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && (
-          <Circle
-            center={safeCenter}
-            radius={Math.max(4000, Math.min(35000, coverage.reduce((mx, z) => Math.max(mx, Math.hypot((z.lat - safeCenter[0]) * 111000, (z.lng - safeCenter[1]) * 95000)), 6000)))}
-            interactive={false}
-            pathOptions={{
-              color: '#059669',
-              weight: 1.5,
-              opacity: 0.42,
-              fillOpacity: 0,
-              dashArray: '6 8'
-            }}
-          />
-        )}
-
-        {/* Active Scanning Beacon (Always Visible Live) + Full Zone Grid Only When Toggled */}
-        {coverage.map((zone, index) => {
-          const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const cleanZoneName = norm(zone.name);
-          const cleanActiveName = norm(activeZoneLabel);
-          const isNameMatch = cleanActiveName && (cleanActiveName === cleanZoneName || cleanZoneName.includes(cleanActiveName) || cleanActiveName.includes(cleanZoneName));
-          const isCoordMatch = Boolean(activePoint && Math.abs(zone.lat - activePoint[0]) < 0.005 && Math.abs(zone.lng - activePoint[1]) < 0.005);
-          const isActive = scanning && (isNameMatch || isCoordMatch);
-          if (!showZones && !isActive) return null;
-          const cellInfo = cellStates?.[zone.name] || null;
-          const cellState = isActive ? 'scanning' : (cellInfo?.state || (zone.approximate ? 'approx' : 'queued'));
-          const tone = cellState === 'scanning'
-            ? '#059669'
-            : (cellState === 'saturated' || cellInfo?.splitDepth > 0)
-              ? '#9333ea'
-              : cellState === 'done'
-                ? '#10b981'
-                : (cellState === 'dry' || cellState === 'approx')
-                  ? '#d97706'
-                  : cellState === 'resting'
-                    ? '#e11d48'
-                    : '#0284c7';
-
-          return (
-            <React.Fragment key={`zone-${zone.index || index}-${zone.name}`}>
-              <Circle
-                center={[zone.lat, zone.lng]}
-                radius={Math.max(850, Math.min(5500, (zone.radiusKm || (zone.approximate ? 3.5 : 2.2)) * 1000))}
-                eventHandlers={{
-                  click: () => onSelectZone?.(zone.name)
-                }}
-                pathOptions={{
-                  color: tone,
-                  weight: isActive ? 3 : 1.5,
-                  opacity: isActive ? 0.95 : 0.65,
-                  fillColor: tone,
-                  fillOpacity: isActive ? 0.14 : 0.03,
-                  dashArray: isActive || cellState === 'done' ? undefined : '5 7'
-                }}
-              >
-                <Tooltip direction="top" opacity={0.95}>
-                  <div style={{ padding: '2px 4px', fontWeight: 700, fontSize: 11 }}>
-                    {cellState === 'scanning'
-                      ? `⚡ SCANNING · ${zone.name}`
-                      : cellState === 'saturated'
-                        ? `🔀 SPLIT ↗ · ${zone.name} (${cellInfo?.leads || 0} leads)`
-                        : cellState === 'done'
-                          ? `✅ DONE · ${zone.name} (${cellInfo?.leads || 0} leads)`
-                          : cellState === 'dry'
-                            ? `🟡 LOW DENSITY · ${zone.name}`
-                            : zone.approximate
-                              ? `Area · ${zone.name}`
-                              : `Covered Area · ${zone.name}`}
-                  </div>
-                </Tooltip>
-              </Circle>
-              {(isActive || showZones) && index < 24 && (
-                <Marker
-                  position={[zone.lat, zone.lng]}
-                  icon={zoneBeaconIcon(zone.name, cellState, cellInfo?.leads || 0)}
-                  zIndexOffset={cellState === 'scanning' ? 3500 : 250}
-                  eventHandlers={{
-                    click: () => onSelectZone?.(zone.name)
-                  }}
-                />
-              )}
-              {isActive && (
-                <Marker
-                  position={[zone.lat, zone.lng]}
-                  icon={scanTargetIcon(zone.name, cellInfo?.leads || 0)}
-                  interactive={false}
-                  zIndexOffset={4000}
-                />
-              )}
-            </React.Fragment>
-          );
-        })}
 
         {/* Cluster Group with high-performance Canvas rendering */}
         <MarkerClusterGroup
@@ -754,26 +621,23 @@ function CommandMap({
           })}
         </MarkerClusterGroup>
 
-        {activePoint && scanning && !coverage.some(z => {
-          const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-          const cleanZ = norm(z.name);
-          const cleanAct = norm(activeZoneLabel);
-          return (cleanAct && (cleanAct === cleanZ || cleanZ.includes(cleanAct))) || (Math.abs(z.lat - activePoint[0]) < 0.005 && Math.abs(z.lng - activePoint[1]) < 0.005);
-        }) && (
+        {/* Single Hollow Pinpoint Radar Pulse When Scanning (Zero Filled Green Circles) */}
+        {activeZonePoint && scanning && (
           <>
             <Circle
-              center={activePoint}
-              radius={Math.max(1400, Math.min(6000, ((Number(activeZone?.radiusKm) || 3.5) * 1000)))}
+              center={activeZonePoint}
+              radius={950}
+              interactive={false}
               pathOptions={{
-                color: '#06b6d4',
-                fillColor: '#06b6d4',
-                fillOpacity: 0.28,
-                weight: 3.5,
-                dashArray: '8, 8'
+                color: '#f59e0b',
+                fillOpacity: 0,
+                weight: 2.2,
+                opacity: 0.9,
+                dashArray: '6 6'
               }}
             />
             <Marker
-              position={activePoint}
+              position={activeZonePoint}
               icon={scanIcon}
               interactive={false}
               zIndexOffset={3000}
@@ -782,7 +646,7 @@ function CommandMap({
         )}
       </MapContainer>
 
-      {/* Floating White 3D Liquid Glass Map Control Bar */}
+      {/* Clean Golden-Bordered 3D Liquid Glass Zoom/Recenter Controls */}
       <div
         className="v2-map-controls-floating"
         style={{
@@ -793,11 +657,11 @@ function CommandMap({
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
-          background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.88))',
+          background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.94), rgba(255, 251, 235, 0.86))',
           padding: 6,
           borderRadius: 14,
-          border: '1.5px solid #ffffff',
-          boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 26px -8px rgba(15, 23, 42, 0.2)',
+          border: '1.5px solid rgba(217, 119, 6, 0.42)',
+          boxShadow: 'inset 0 1.5px 0 #ffffff, 0 10px 26px -8px rgba(180, 83, 9, 0.24)',
           backdropFilter: 'blur(18px)'
         }}
       >
@@ -805,7 +669,7 @@ function CommandMap({
           type="button"
           onClick={handleZoomIn}
           title="Zoom In"
-          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(217,119,6,0.28)', boxShadow: '0 2px 0 rgba(180,83,9,0.1)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
         >
           <Plus size={15} />
         </button>
@@ -813,7 +677,7 @@ function CommandMap({
           type="button"
           onClick={handleZoomOut}
           title="Zoom Out"
-          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(217,119,6,0.28)', boxShadow: '0 2px 0 rgba(180,83,9,0.1)', borderRadius: 9, color: '#0F172A', cursor: 'pointer' }}
         >
           <Minus size={15} />
         </button>
@@ -821,92 +685,40 @@ function CommandMap({
           type="button"
           onClick={handleResetCenter}
           title="Center Territory"
-          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(15,23,42,0.1)', boxShadow: '0 2px 0 rgba(15,23,42,0.08)', borderRadius: 9, color: '#059669', cursor: 'pointer' }}
+          style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ffffff', border: '1px solid rgba(217,119,6,0.28)', boxShadow: '0 2px 0 rgba(180,83,9,0.1)', borderRadius: 9, color: '#b45309', cursor: 'pointer' }}
         >
           <Compass size={15} />
         </button>
-        <button
-          type="button"
-          onClick={() => setIs3DMode(!is3DMode)}
-          title={is3DMode ? '2D Flat View' : '3D Perspective Tilt'}
-          style={{
-            width: 32,
-            height: 32,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: is3DMode ? 'linear-gradient(135deg, #10b981, #059669)' : '#ffffff',
-            border: is3DMode ? '1px solid #047857' : '1px solid rgba(15,23,42,0.1)',
-            boxShadow: is3DMode ? '0 2px 0 #047857' : '0 2px 0 rgba(15,23,42,0.08)',
-            borderRadius: 9,
-            color: is3DMode ? '#FFFFFF' : '#059669',
-            cursor: 'pointer'
-          }}
-        >
-          <span style={{ fontSize: 10, fontWeight: 900 }}>3D</span>
-        </button>
-      </div>
-
-      {/* Free Keyless Basemap Style Switcher & Optional Zone Grid Toggle */}
-      <div className="lx-map-mode-bar" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-        {Object.entries(BASEMAP_STYLES).map(([modeKey, cfg]) => (
+        {onMinimize && (
           <button
-            key={modeKey}
             type="button"
-            className={cx('lx-map-mode-pill', tileMode === modeKey && 'is-active')}
-            onClick={() => handleTileModeChange(modeKey)}
-            title={`Switch to ${cfg.label} map view (100% Free)`}
+            onClick={onMinimize}
+            title="Minimize Map"
+            style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fffbeb', border: '1px solid rgba(217,119,6,0.45)', boxShadow: '0 2px 0 rgba(180,83,9,0.12)', borderRadius: 9, color: '#92400e', cursor: 'pointer' }}
           >
-            {cfg.icon} {cfg.label}
+            <Minimize2 size={15} />
           </button>
-        ))}
-        <button
-          type="button"
-          className={cx('lx-map-mode-pill', showZones && 'is-active')}
-          onClick={() => setShowZones(z => !z)}
-          title="Show or hide territory zone rings"
-        >
-          <Layers size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
-          Zones ({formatNumber(coverage.length || 1)})
-        </button>
+        )}
       </div>
 
       {scanning && (
         <div
           className="v2-map-scan"
           style={{
-            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92))',
+            background: 'linear-gradient(155deg, rgba(255, 255, 255, 0.95), rgba(255, 251, 235, 0.9))',
             backdropFilter: 'blur(16px)',
-            border: '1.5px solid #06b6d4',
+            border: '1.5px solid rgba(217, 119, 6, 0.55)',
             color: '#0f172a',
-            boxShadow: 'inset 0 1px 0 #ffffff, 0 12px 28px -8px rgba(6, 182, 212, 0.35)'
+            boxShadow: 'inset 0 1px 0 #ffffff, 0 12px 28px -8px rgba(180, 83, 9, 0.28)'
           }}
         >
-          <span className="v2-map-scan-radar"><i style={{ background: '#06b6d4' }} /></span>
+          <span className="v2-map-scan-radar"><i style={{ background: '#d97706' }} /></span>
           <span className="v2-map-scan-copy">
-            <b style={{ color: '#0891b2', letterSpacing: '0.07em' }}>LIVE ACTIVE ZONE SWEEP</b>
+            <b style={{ color: '#b45309', letterSpacing: '0.06em' }}>SCANNING SATELLITE ZONE</b>
             <small style={{ color: '#0f172a', fontWeight: 800 }}>{activeZoneLabel || 'Mapping target territory…'}</small>
-            {activePoint && (
-              <span style={{ fontSize: 9.5, color: '#0891b2', fontFamily: '"JetBrains Mono", monospace', fontWeight: 700 }}>
-                [{activePoint[0].toFixed(4)}, {activePoint[1].toFixed(4)}] · ULTRA FAST WAVE
-              </span>
-            )}
           </span>
         </div>
       )}
-
-      {/* Scope and Status Overlay */}
-      <div className="v2-map-overlay">
-        <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.94)', color: '#0F172A', border: '1px solid #E2E8F0', fontWeight: 600 }}>
-          <i className={scanning || points.length ? 'is-live' : ''} />
-          {scanning ? 'SEARCHING AREA' : `${formatNumber(validVendors.length)} BUSINESSES IN ${scopeTitle.toUpperCase()}`}
-        </span>
-        {validVendors.length < vendors.filter(hasCoords).length && (
-          <span className="v2-map-coord" style={{ background: 'rgba(255, 255, 255, 0.92)', color: '#64748B', border: '1px solid #E2E8F0' }}>
-            TOP {MAX_MAP_PLOTTED_LEADS} SHOWN
-          </span>
-        )}
-      </div>
     </div>
   );
 }

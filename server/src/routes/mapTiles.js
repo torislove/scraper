@@ -11,8 +11,7 @@ const TILE_CACHE_DIR = path.join(DATA_DIR, 'tile-cache');
 
 const STYLE_TEMPLATES = {
   voyager: [
-    (z, x, y) => `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
-    (z, x, y) => `https://b.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
     (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
   ],
   osm: [
@@ -21,7 +20,7 @@ const STYLE_TEMPLATES = {
   ],
   streets: [
     (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
-    (z, x, y) => `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`
+    (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
   ],
   satellite: [
     (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
@@ -30,11 +29,9 @@ const STYLE_TEMPLATES = {
     (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`
   ],
   light: [
-    (z, x, y) => `https://a.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`,
     (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
   ],
   dark: [
-    (z, x, y) => `https://a.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`,
     (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`
   ]
 };

@@ -173,40 +173,6 @@ export default function LeadsTableView({
         </div>
       )}
 
-      <div className="lx-preset-strip" role="region" aria-label="1-Click Playbook Presets">
-        <span className="lx-preset-label">WORKFLOW PRESETS</span>
-        <button
-          type="button"
-          className={cx('lx-preset-btn', filters.phoneOnly && !filters.noWebsiteOnly && filters.sort === 'quality' && 'is-active')}
-          onClick={() => setFilters(prev => ({ ...prev, phoneOnly: true, noWebsiteOnly: false, websiteOnly: false, minRating: 0, sort: 'quality' }))}
-        >
-          Startup Outreach
-        </button>
-        <button
-          type="button"
-          className={cx('lx-preset-btn', filters.noWebsiteOnly && Number(filters.minRating || 0) >= 4 && 'is-active')}
-          onClick={() => setFilters(prev => ({ ...prev, noWebsiteOnly: true, websiteOnly: false, minRating: 4, sort: 'rating' }))}
-        >
-          Agency · No Website (4★+)
-        </button>
-        <button
-          type="button"
-          className={cx('lx-preset-btn', filters.sort === 'area' && 'is-active')}
-          onClick={() => setFilters(prev => ({ ...prev, phoneOnly: true, noWebsiteOnly: false, sort: 'area' }))}
-        >
-          Field Rep · Area &amp; Pins
-        </button>
-        {(filters.query || filters.phoneOnly || filters.noWebsiteOnly || filters.websiteOnly || filters.minRating > 0 || filters.sort !== 'newest') && (
-          <button
-            type="button"
-            className="lx-preset-reset"
-            onClick={() => setFilters({ query: '', phoneOnly: false, primeOnly: false, websiteOnly: false, noWebsiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest', source: 'all' })}
-          >
-            <X size={11} /> Reset
-          </button>
-        )}
-      </div>
-
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 280 }}>
           <FilterBar

@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const { DATA_DIR: dataDir } = require('./paths');
@@ -412,6 +412,7 @@ module.exports = {
   saveOutOfBounds,
   saveOutOfBoundsVendor,
   isKnown,
+  findById: vendorStore.findById,
   findMatch,
   isDuplicate,
   flushSync

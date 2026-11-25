@@ -1,15 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowRight, ArrowUpRight, Check, Clock, Cpu, FolderOpen, Globe, Layers, Loader2, MapPin, Phone, Search,
-  Shield, Sparkles, Square, Tag, TrendingUp, X, Zap
+  ArrowUpRight, Clock, Loader2, MapPin, Search, Shield, Sparkles, Square, TrendingUp, X, Zap
 } from 'lucide-react';
 import { suggestSearch, sendSearchFeedback } from './api';
 import { cx } from './ui';
-import { examplesFor, omniExamplesFor, GLOBAL_11_COUNTRY_TICKER, industryClustersFor } from './data/searchExamples';
-import {
-  detectDeviceHardware, DEVICE_REQUIREMENTS, ALL_BUILTIN_ENGINES
-} from './utils/deviceRamEngine';
+import { examplesFor, omniExamplesFor } from './data/searchExamples';
 
 function useTypewriterPlaceholder(examples, active) {
   const [text, setText] = useState('');
@@ -263,8 +259,6 @@ function SearchConsole({
   // Fresh suggestions only (no folder interruptions in search box)
   const matchedSavedFolder = null;
 
-  const industryClusters = useMemo(() => industryClustersFor(country), [country]);
-
   // Auto-sync power directives if user typed directives into the query
   useEffect(() => {
     if (response?.directives) {
@@ -346,10 +340,6 @@ function SearchConsole({
 
   const parsedCategory = response?.category?.value || response?.fragments?.category || '';
   const parsedLocation = response?.location?.value || response?.fragments?.location || '';
-  const relatedSynonyms = Array.isArray(response?.relatedSynonyms) ? response.relatedSynonyms : [];
-  const didYouMean = response?.didYouMean && response.didYouMean.toLowerCase() !== draft.trim().toLowerCase()
-    ? response.didYouMean
-    : null;
 
   // Synchronous zero-lag input update (never blocks typing!)
   const handleInput = useCallback((text) => {
@@ -506,18 +496,8 @@ function SearchConsole({
     return () => window.removeEventListener('leadharvest:run-suggestion', handler);
   }, [onChange, commitAndDeploy]);
 
-  const hardware = useMemo(() => detectDeviceHardware(), []);
-  const [ramCardOpen, setRamCardOpen] = useState(false);
-  const [showAll11Countries, setShowAll11Countries] = useState(false);
   const omniExamples = useMemo(() => omniExamplesFor(country), [country]);
   const animatedPlaceholder = useTypewriterPlaceholder(omniExamples, !draft);
-  const locClassification = response?.locationClassification || response?.parsed?.locationClassification || null;
-  const displayService = parsedCategory || category || 'Any Business / Service';
-  const displayPlace = parsedLocation || location || 'City, Mandal or County';
-  const precisionBadge = locClassification?.zoneCount
-    ? `${locClassification.zoneCount} ${locClassification.type || 'Zone'} Pockets`
-    : `${totalZones || 'Auto'} Zones`;
-
   const canSearch = draft.trim().length >= 2;
   let runningIdx = 0;
 
@@ -830,197 +810,10 @@ function SearchConsole({
                 </div>
               )}
 
-              {/* Directives Toolbar */}
-              <div className="v2-quick-filter-strip">
-                <span className="v2-qf-label">PRE-FLIGHT DIRECTIVES:</span>
-                <button
-                  type="button"
-                  className={cx('v2-qf-chip', form?.phonesOnly && 'is-active')}
-                  onClick={() => onToggle?.('phonesOnly')}
-                  title="Filter only leads with direct phone numbers"
-                >
-                  <Phone size={11} /> Phones Only
-                </button>
-                <button
-                  type="button"
-                  className={cx('v2-qf-chip', form?.websiteOnly && 'is-active')}
-                  onClick={() => onToggle?.('websiteOnly')}
-                  title="Filter only leads with verified websites"
-                >
-                  <Globe size={11} /> Websites Only
-                </button>
-                <button
-                  type="button"
-                  className={cx('v2-qf-chip', strategy === 'turbo' && 'is-active')}
-                  onClick={() => onStrategyChange?.(strategy === 'turbo' ? 'balanced' : 'turbo')}
-                  title="Toggle multi-engine turbo scraping speed"
-                >
-                  <Zap size={11} /> Turbo Speed
-                </button>
-              </div>
-
-              <div className="lx-suggest-foot">
-                <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
-                <span><kbd>Tab</kbd> complete</span>
-                <span><kbd>Enter</kbd> search</span>
-                <span><kbd>Esc</kbd> close</span>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
-
-      {/* Clean Game Boy Color 3D Liquid Glass Search Strip */}
-      <div className="lx-search-helper-strip" role="region" aria-label="Search assistant and 11-country examples">
-        <div className="lx-search-helper-row">
-          <div className="lx-precision-badges">
-            <span className="lx-precision-pill is-service">🎯 <b>{displayService}</b></span>
-            <span className="lx-precision-pill is-place">📍 <b>{displayPlace}</b></span>
-            <span className="lx-precision-pill is-scope">⚡ <b>{precisionBadge}</b></span>
-            <span className="lx-precision-pill"><Layers size={12} color="#0e7490" /> 20+ Engines Auto On</span>
-          </div>
-
-          <button
-            type="button"
-            className="lx-ram-pill"
-            onClick={() => setRamCardOpen(prev => !prev)}
-            aria-expanded={ramCardOpen}
-            title="View device RAM acceleration & system requirements"
-          >
-            <Cpu size={13} />
-            <span>
-              {hardware.ramGb} GB RAM · {hardware.cpuCores} Cores · {hardware.parallelZones}x Speed
-            </span>
-          </button>
-        </div>
-
-        <div className="lx-example-chips-row">
-          <span style={{ fontSize: 11, fontWeight: 800, color: '#64748b', letterSpacing: '0.04em' }}>TRY IN {String(country || 'IN').toUpperCase()}:</span>
-          {examples.slice(0, 4).map(example => (
-            <button
-              key={example}
-              type="button"
-              className="lx-example-chip"
-              onClick={() => {
-                setDraft(example);
-                lastExternalRef.current = example;
-                onChange?.(example);
-                commitAndDeploy(example);
-              }}
-            >
-              <Sparkles size={11} color="#059669" />
-              <span>{example}</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            className="lx-example-chip"
-            style={{ background: showAll11Countries ? '#ecfdf5' : '#ffffff', borderColor: 'rgba(5, 150, 105, 0.34)', color: '#065f46' }}
-            onClick={() => setShowAll11Countries(prev => !prev)}
-            aria-expanded={showAll11Countries}
-          >
-            <span>{showAll11Countries ? 'Hide 11 Countries ▲' : 'All 11 Countries 🌍'}</span>
-          </button>
-        </div>
-
-        {showAll11Countries && (
-          <div className="lx-example-chips-row" role="list" aria-label="Starter searches across all 11 countries">
-            {GLOBAL_11_COUNTRY_TICKER.map(item => (
-              <button
-                key={`${item.code}-${item.query}`}
-                type="button"
-                role="listitem"
-                className="lx-example-chip"
-                onClick={() => {
-                  setDraft(item.query);
-                  lastExternalRef.current = item.query;
-                  onChange?.(item.query);
-                  commitAndDeploy(item.query);
-                }}
-              >
-                <b style={{ color: '#0e7490' }}>{item.country}:</b>
-                <span>{item.query}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <AnimatePresence>
-          {ramCardOpen && (
-            <motion.div
-              className="lx-ram-modal-card"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.14 }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10 }}>
-                <b style={{ fontSize: 13 }}>
-                  💻 Your Device Powers the Speed · Zero Server Queues (Need an entire District, State or Country? Ask our Master Team)
-                </b>
-                <button
-                  type="button"
-                  onClick={() => setRamCardOpen(false)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-                >
-                  <X size={15} />
-                </button>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 10, marginBottom: 10 }}>
-                {DEVICE_REQUIREMENTS.map(req => (
-                  <div
-                    key={req.tier}
-                    style={{
-                      padding: '8px 10px',
-                      borderRadius: 12,
-                      border: req.tier === hardware.tier ? '1.5px solid #10b981' : '1px solid rgba(15,23,42,0.1)',
-                      background: req.tier === hardware.tier ? '#ecfdf5' : '#ffffff'
-                    }}
-                  >
-                    <div style={{ fontSize: 10, fontWeight: 850, color: '#0e7490' }}>{req.badge} {req.tier === hardware.tier ? '· YOUR PC' : ''}</div>
-                    <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f172a' }}>{req.ram} · {req.cpu}</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: '#047857' }}>{req.parallelZones} Parallel Zones · {req.speed}</div>
-                    <div style={{ fontSize: 11, color: '#475569' }}>{req.note}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-                {ALL_BUILTIN_ENGINES.map(eng => (
-                  <div key={eng.id} style={{ fontSize: 11.5, color: '#334155', background: '#f8fafc', padding: '7px 10px', borderRadius: 10, border: '1px solid rgba(15,23,42,0.08)' }}>
-                    <b style={{ color: '#0f172a' }}>{eng.number}: {eng.name}</b>
-                    <div style={{ color: '#64748b', marginTop: 2 }}>{eng.shortDesc}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Only show compact typo-heal bar when there is a real typo correction */}
-      {didYouMean && (
-        <div className="lx-didyoumean-bar">
-          <span>Did you mean</span>
-          <button
-            type="button"
-            onClick={() => {
-              sendSearchFeedback({
-                rawQuery: draft,
-                selectedCategory: parsedCategory,
-                selectedLocation: parsedLocation,
-                country,
-                correctedFrom: draft
-              });
-              setDraft(didYouMean);
-              lastExternalRef.current = didYouMean;
-              onChange?.(didYouMean);
-              commitAndDeploy(didYouMean);
-            }}
-          >
-            <Check size={12} /> <b>{didYouMean}</b>
-          </button>
-        </div>
-      )}
     </section>
   );
 }

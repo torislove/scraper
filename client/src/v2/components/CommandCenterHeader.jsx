@@ -1,17 +1,13 @@
 import React from 'react';
 import {
-  LayoutDashboard, FolderArchive, Wifi, WifiOff, Cpu, Settings, ChevronDown,
-  MapPin, Sparkles, FileSpreadsheet, Download, RefreshCw, Search, Server
+  LayoutDashboard, FolderArchive, Wifi, WifiOff, Settings, ChevronDown,
+  MapPin, FileSpreadsheet, Download, RefreshCw, Server
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Logo, StatusPill, cx, formatNumber } from '../ui';
-import { IS_DESKTOP, HOME_ROUTE } from '../../desktop';
-import DesktopBadge from '../DesktopBadge';
+import { HOME_ROUTE } from '../../desktop';
 import AccountMenu from './AccountMenu';
-import NotificationBell from '../NotificationBell';
-import SystemCheckPill from './SystemCheckPill';
 import { openMasterWorkspace } from '../utils/editionSwitch';
-import { useAuthSession } from '../auth';
 
 export default function CommandCenterHeader({
   navigate,
@@ -20,12 +16,7 @@ export default function CommandCenterHeader({
   effectiveRuns,
   isEngineReady,
   sseStatus,
-  extReady,
-  openTelemetry,
-  openSetup,
   searchCountry,
-  skippedExtension,
-  hardware,
   toolsRef,
   toolsOpen,
   setToolsOpen,
@@ -34,14 +25,10 @@ export default function CommandCenterHeader({
   exportFolder,
   refresh
 }) {
-  const session = useAuthSession();
-  const showFreeLaunchPill = session?.user?.role !== 'master' && !session?.user?.trial?.paymentRequired;
-  const freeDaysLeft = session?.user?.trial?.daysRemaining ?? 7;
-
   return (
     <header className="v2-cmd-top">
       <div className="v2-cmd-brand">
-        <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title={IS_DESKTOP ? 'Workspace' : 'Back to home'}>
+        <button type="button" className="v2-cmd-home" onClick={() => navigate(HOME_ROUTE)} title="Back to home">
           <Logo compact />
         </button>
         <div className="lx-top-nav">
@@ -57,60 +44,17 @@ export default function CommandCenterHeader({
             className={cx('lx-nav-chip', activeTab === 'runs' && 'is-active')}
             onClick={() => setActiveTab('runs')}
           >
-            <FolderArchive size={13} /> Saved Lists <b>{formatNumber(effectiveRuns.length)}</b>
+            <FolderArchive size={13} /> Folders <b>{formatNumber(effectiveRuns.length)}</b>
           </button>
         </div>
       </div>
 
       <div className="v2-cmd-top-status">
-        {showFreeLaunchPill && (
-          <StatusPill tone="lime">
-            <Sparkles size={11} />
-            FREE ACCESS · {freeDaysLeft}D LEFT
-          </StatusPill>
-        )}
         <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
           {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
           {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}
         </StatusPill>
 
-        <button
-          type="button"
-          className={cx('v2-gbc-cartridge-pill', extReady && 'is-on')}
-          onClick={() => (extReady ? openTelemetry() : openSetup({ country: searchCountry }))}
-          title={skippedExtension ? 'Running on Local Node.js Server Engine' : 'RAM Turbo status and your hardware lanes'}
-        >
-          <Cpu size={12} />
-          <span>
-            {skippedExtension
-              ? `LOCAL SERVER · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-              : extReady
-                ? `RAM TURBO · ${hardware.ramGb}GB · ${hardware.parallelZones} LANES`
-                : 'CONNECT RAM TURBO'}
-          </span>
-        </button>
-
-        <SystemCheckPill variant="client" />
-        <button
-          type="button"
-          className="v2-btn v2-btn-ghost v2-btn-sm"
-          onClick={() => window.dispatchEvent(new CustomEvent('open-command-palette'))}
-          style={{ borderColor: 'rgba(217, 119, 6, 0.34)', color: '#92400e', gap: 5 }}
-          title="Quick Command Palette (Ctrl+K)"
-        >
-          <Search size={12} /> <kbd style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10 }}>⌘K</kbd>
-        </button>
-        <button
-          type="button"
-          className="v2-btn v2-btn-ghost v2-btn-sm"
-          onClick={() => openMasterWorkspace(navigate, `/command?country=${searchCountry || 'IN'}`)}
-          style={{ borderColor: 'rgba(217, 119, 6, 0.42)', background: 'linear-gradient(135deg, #0b1120, #1e293b)', color: '#fde68a', gap: 5 }}
-          title="Switch to Master Fleet Command"
-        >
-          <Server size={12} color="#fbbf24" /> Master Fleet
-        </button>
-        <NotificationBell />
-        <DesktopBadge />
         <AccountMenu variant="client" />
         <div className="v2-tools" ref={toolsRef}>
           <button
@@ -126,11 +70,7 @@ export default function CommandCenterHeader({
             <div className="v2-tools-menu" role="menu">
               <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('map'); }}>
                 <MapPin size={14} />
-                <span><b>Full Screen Map</b><small>Explore every discovered business on the map</small></span>
-              </button>
-              <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); setActiveTab('deep'); }}>
-                <Sparkles size={14} />
-                <span><b>Find Missing Contacts</b><small>Look up missing phones, emails &amp; websites</small></span>
+                <span><b>Full Screen Satellite Map</b><small>Explore pinned businesses across the territory</small></span>
               </button>
               <button
                 type="button"
@@ -160,7 +100,11 @@ export default function CommandCenterHeader({
               </button>
               <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); refresh(); toast.success('Workspace updated.'); }}>
                 <RefreshCw size={14} />
-                <span><b>Refresh Leads</b><small>Sync latest businesses and lists</small></span>
+                <span><b>Refresh Leads</b><small>Sync latest businesses and folders</small></span>
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setToolsOpen(false); openMasterWorkspace(navigate, `/command?country=${searchCountry || 'IN'}`); }}>
+                <Server size={14} />
+                <span><b>Switch to Master Fleet</b><small>Open district &amp; state-level sweep console</small></span>
               </button>
             </div>
           )}
