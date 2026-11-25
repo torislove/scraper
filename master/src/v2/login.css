@@ -949,10 +949,10 @@
 }
 
 
-/* ── 3-Portal Switcher Bar (Client / Master / Admin) ─────────────────────── */
+/* ── 2-Portal Switcher Bar (Client / Master) ─────────────────────────────── */
 .login-portal-switcher {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 5px;
   padding: 4px;
   margin: 0 0 14px;

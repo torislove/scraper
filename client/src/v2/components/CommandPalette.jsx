@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Activity, Award, Compass, Globe2, Laptop, LogIn, MapPin,
-  RefreshCw, Rocket, Search, Server, Sliders, X
+  Award, Compass, Globe2, Laptop, Layers, LogIn, MapPin,
+  RefreshCw, Rocket, Search, Server, X
 } from 'lucide-react';
 import {
-  isMasterRuntime, openAdminWorkspace, openClientWorkspace, openMasterWorkspace, openPortalLogin
+  isMasterRuntime, openClientWorkspace, openMasterWorkspace, openPortalLogin
 } from '../utils/editionSwitch';
 import { useExtension } from '../context/ExtensionContext';
 
@@ -73,9 +73,9 @@ export default function CommandPalette({ workspaceActions = null }) {
       {
         id: 'nav-arch',
         group: 'Platform Overview',
-        label: 'Server Connectivity & Live /api/health',
+        label: 'How It Works — Client & Master Pipeline',
         hint: '/architecture',
-        icon: Activity,
+        icon: Layers,
         run: () => navigate('/architecture')
       },
       {
@@ -96,27 +96,19 @@ export default function CommandPalette({ workspaceActions = null }) {
       },
       {
         id: 'ed-client',
-        group: 'Portals & Workspaces',
-        label: `Launch Client Workspace${!masterActive ? ' (Current)' : ''}`,
+        group: 'Editions & Workspaces',
+        label: `Run Client Workspace${!masterActive ? ' (Current)' : ''}`,
         hint: 'scraper.co.in',
         icon: Laptop,
         run: () => openClientWorkspace(navigate, '/command?country=IN', ensureConnected)
       },
       {
         id: 'ed-master',
-        group: 'Portals & Workspaces',
-        label: `Open Master Fleet Command${masterActive ? ' (Current)' : ''}`,
+        group: 'Editions & Workspaces',
+        label: `Run Master Fleet Command${masterActive ? ' (Current)' : ''}`,
         hint: 'master.scraper.co.in',
         icon: Server,
         run: () => openMasterWorkspace(navigate, '/command?country=IN')
-      },
-      {
-        id: 'ed-admin',
-        group: 'Portals & Workspaces',
-        label: 'Open Admin Console',
-        hint: 'admin.scraper.co.in',
-        icon: Sliders,
-        run: () => openAdminWorkspace(navigate, '/')
       },
       {
         id: 'ed-login-client',

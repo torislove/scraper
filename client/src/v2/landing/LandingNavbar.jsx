@@ -1,20 +1,19 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Rocket, Laptop, Server, Sliders, Search, LogIn } from 'lucide-react';
+import { Rocket, Laptop, Server, Search, LogIn } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import { useExtension } from '../context/ExtensionContext';
 import LiquidButton3D from '../components/LiquidButton3D';
 import {
   isMasterRuntime,
-  openAdminWorkspace,
   openClientWorkspace,
   openMasterWorkspace
 } from '../utils/editionSwitch';
 
 const NAV_LINKS = [
   { to: '/', label: 'Overview', end: true },
-  { to: '/architecture', label: 'Server & Portals' },
+  { to: '/architecture', label: 'How It Works' },
   { to: '/global-coverage', label: '11 Markets' },
   { to: '/story', label: 'About & Trust' }
 ];
@@ -30,10 +29,6 @@ export default function LandingNavbar() {
 
   const handleLaunchMaster = () => {
     openMasterWorkspace(navigate, '/command?country=IN');
-  };
-
-  const handleLaunchAdmin = () => {
-    openAdminWorkspace(navigate, '/');
   };
 
   const handlePrimaryLaunch = () => {
@@ -54,10 +49,7 @@ export default function LandingNavbar() {
         </NavLink>
 
         {/* Clean 4-Destination Golden Capsule */}
-        <nav
-          aria-label="Main Navigation"
-          className="lx-nav-capsule"
-        >
+        <nav aria-label="Main Navigation" className="lx-nav-capsule">
           {NAV_LINKS.map((item) => (
             <NavLink
               key={item.to}
@@ -99,14 +91,14 @@ export default function LandingNavbar() {
           ))}
         </nav>
 
-        {/* Right Zone: Client · Master · Admin Switcher + Quick Palette + Sign In + Launch */}
+        {/* Right Zone: Client · Master Switcher + Quick Palette + Sign In + Launch */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
           <div className="lx-dual-panel-toggle lx-portal-pill-group">
             <button
               type="button"
               onClick={handleLaunchClient}
               className={`lx-portal-pill-btn ${!masterActive ? 'is-client-active' : ''}`}
-              title="Open Client Cockpit (scraper.co.in)"
+              title="Run Client Workspace (scraper.co.in)"
             >
               <Laptop size={12} color={!masterActive ? '#059669' : '#64748b'} />
               <span>Client</span>
@@ -116,20 +108,10 @@ export default function LandingNavbar() {
               type="button"
               onClick={handleLaunchMaster}
               className={`lx-portal-pill-btn ${masterActive ? 'is-master-active' : ''}`}
-              title="Open Master Fleet Command (master.scraper.co.in)"
+              title="Run Master Fleet Command (master.scraper.co.in)"
             >
               <Server size={12} color={masterActive ? '#fbbf24' : '#64748b'} />
               <span>Master</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLaunchAdmin}
-              className="lx-portal-pill-btn"
-              title="Open Admin Console (admin.scraper.co.in)"
-            >
-              <Sliders size={12} color="#0284c7" />
-              <span>Admin</span>
             </button>
           </div>
 
@@ -147,7 +129,7 @@ export default function LandingNavbar() {
             type="button"
             onClick={() => navigate('/login')}
             className="lx-nav-signin-btn"
-            title="Sign in to Client, Master Fleet, or Admin Console"
+            title="Sign in or start your free trial"
           >
             <LogIn size={12} color="#d97706" />
             <span>Sign In</span>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Building2, Check, CheckCircle2, Eye, EyeOff,
-  KeyRound, Laptop, Loader2, LockKeyhole, Mail, Server, ShieldCheck, Sliders, Sparkles, User
+  KeyRound, Laptop, Loader2, LockKeyhole, Mail, Server, ShieldCheck, Sparkles, User
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
@@ -396,14 +396,6 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
               >
                 <Server size={12} />
                 <span>Master Fleet</span>
-              </button>
-              <button
-                type="button"
-                className="login-portal-pill"
-                onClick={() => openPortalLogin('admin', navigate)}
-              >
-                <Sliders size={12} />
-                <span>Admin Console</span>
               </button>
             </div>
 

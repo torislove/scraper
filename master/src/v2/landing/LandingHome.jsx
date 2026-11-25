@@ -2,27 +2,24 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  Activity,
   ArrowUpRight,
   CheckCircle2,
   Globe,
   Laptop,
+  Layers,
   LogIn,
   Rocket,
   Server,
   ShieldCheck,
-  Sliders,
   Sparkles
 } from 'lucide-react';
 import { useExtension } from '../context/ExtensionContext';
 import LiquidButton3D from '../components/LiquidButton3D';
 import HeroLiveDemoCard from '../components/HeroLiveDemoCard';
 import {
-  ADMIN_ORIGIN,
   CLIENT_ORIGIN,
   MASTER_ORIGIN,
   isMasterRuntime,
-  openAdminWorkspace,
   openClientWorkspace,
   openMasterWorkspace,
   openPortalLogin
@@ -53,8 +50,8 @@ export default function LandingHome() {
               <span className="lx-status-dot-pulse" />
               <span>
                 {masterActive
-                  ? 'MASTER FLEET · REAL-TIME ENGINE'
-                  : 'REAL-TIME LEAD ENGINE · 11 MARKETS'}
+                  ? 'MASTER FLEET · STATE & NATIONAL SCALE'
+                  : 'CLIENT & MASTER · 11 GLOBAL MARKETS'}
               </span>
             </span>
 
@@ -73,7 +70,7 @@ export default function LandingHome() {
             {masterActive ? (
               <>
                 State-Scale Lead Discovery.{' '}
-                <span className="lx-gradient-text">Unified Fleet Control.</span>
+                <span className="lx-gradient-text">Master Fleet Control.</span>
               </>
             ) : (
               <>
@@ -85,8 +82,8 @@ export default function LandingHome() {
 
           <p className="lx-kinetic-subcopy lx-hero-sub">
             {masterActive
-              ? 'Orchestrate district and national territory sweeps across 11 markets, govern synonym intelligence, and supervise live multi-engine SSE pipelines from one golden glass console.'
-              : 'Extract direct owner mobiles (+91 MOB), STD landlines, websites, emails, WhatsApp links, and 3D social handles across 11 countries—streamed live onto a satellite territory map with 1-click .xlsx & .vcf exports.'}
+              ? 'Run district, state, and 11-nation lead sweeps with self-learning synonyms and multi-engine orchestration—or switch cleanly to the Client Cockpit.'
+              : 'Extract direct owner mobiles (+91 MOB), STD landlines, official websites, emails, WhatsApp links, and 3D social handles across 11 markets—exported in 1 click to .xlsx & .vcf.'}
           </p>
 
           <div className="lx-hero-cta-row">
@@ -114,8 +111,8 @@ export default function LandingHome() {
               onClick={() => navigate('/architecture')}
               className="lx-hero-link-pill"
             >
-              <Activity size={13} color="#d97706" />
-              <span>Server &amp; Portals</span>
+              <Layers size={13} color="#d97706" />
+              <span>How It Works</span>
               <ArrowUpRight size={13} />
             </button>
           </div>
@@ -126,15 +123,15 @@ export default function LandingHome() {
         </div>
       </section>
 
-      {/* 2. Upfront Portal Explainers & Separate Sign-In Routes */}
-      <section className="lx-portal-cards-section" aria-label="Workspace Portals and Sign-In Routes">
+      {/* 2. Upfront Client vs Master Edition Choice */}
+      <section className="lx-portal-cards-section" aria-label="Choose Edition to Run">
         <div className="lx-portal-section-head">
-          <h2>Choose Your Portal &amp; Sign-In Route</h2>
-          <span>Client, Master Fleet, and Admin share one real-time API engine with dedicated logins</span>
+          <h2>Choose What You Want to Run: Client or Master</h2>
+          <span>Both editions share live satellite maps &amp; verified contact extraction—pick your workflow</span>
         </div>
 
-        <div className="lx-portal-cards-grid">
-          {/* CLIENT PORTAL CARD */}
+        <div className="lx-portal-cards-grid lx-two-col">
+          {/* CLIENT WORKSPACE CARD */}
           <motion.article
             whileHover={{ y: -3 }}
             transition={{ duration: 0.18 }}
@@ -147,20 +144,28 @@ export default function LandingHome() {
                 </span>
                 <div>
                   <h3>Client Workspace</h3>
-                  <code>{CLIENT_ORIGIN.replace(/^https?:\/\//, '')}/login</code>
+                  <code>{CLIENT_ORIGIN.replace(/^https?:\/\//, '')}</code>
                 </div>
               </div>
               <span className="lx-portal-role-badge is-client">Teams &amp; Founders</span>
             </div>
 
             <p>
-              Fast city &amp; zone lead extraction, satellite map pins, saved lead folders, live mobile/STD filters, and instant Excel / vCard exports.
+              Ideal for fast city &amp; neighborhood lead sweeps: live satellite territory map, instant Mobile (MOB) vs. Landline (STD) filters, saved lead folders, and 1-click Excel / vCard exports.
             </p>
 
             <div className="lx-portal-card-actions">
               <button
                 type="button"
                 className="lx-portal-btn-primary"
+                onClick={() => openClientWorkspace(navigate, '/command?country=IN', ensureConnected)}
+              >
+                <Rocket size={13} />
+                <span>Run Client</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
                 onClick={() => openPortalLogin('client', navigate, 'signin')}
               >
                 <LogIn size={13} />
@@ -171,21 +176,12 @@ export default function LandingHome() {
                 className="lx-portal-btn-ghost"
                 onClick={() => openPortalLogin('client', navigate, 'signup')}
               >
-                <span>Free Trial</span>
-              </button>
-              <button
-                type="button"
-                className="lx-portal-btn-ghost"
-                onClick={() => openClientWorkspace(navigate, '/command?country=IN', ensureConnected)}
-                title="Open Client Command Center"
-              >
-                <span>Launch</span>
-                <ArrowUpRight size={13} />
+                <span>7-Day Free Trial</span>
               </button>
             </div>
           </motion.article>
 
-          {/* MASTER PORTAL CARD */}
+          {/* MASTER FLEET CARD */}
           <motion.article
             whileHover={{ y: -3 }}
             transition={{ duration: 0.18 }}
@@ -198,75 +194,32 @@ export default function LandingHome() {
                 </span>
                 <div>
                   <h3>Master Fleet</h3>
-                  <code>{MASTER_ORIGIN.replace(/^https?:\/\//, '')}/login</code>
+                  <code>{MASTER_ORIGIN.replace(/^https?:\/\//, '')}</code>
                 </div>
               </div>
               <span className="lx-portal-role-badge is-master">Operators &amp; Scale</span>
             </div>
 
             <p>
-              District, state &amp; 11-nation sweeps, multi-engine job telemetry, self-learning category synonyms, and fleet-wide lead aggregation.
+              Built for full-district, state, and 11-nation sweeps: multi-zone parallel execution, self-learning synonym intelligence, and consolidated high-volume lead pipelines.
             </p>
 
             <div className="lx-portal-card-actions">
               <button
                 type="button"
                 className="lx-portal-btn-primary is-amber"
+                onClick={() => openMasterWorkspace(navigate, '/command?country=IN')}
+              >
+                <Rocket size={13} />
+                <span>Run Master</span>
+              </button>
+              <button
+                type="button"
+                className="lx-portal-btn-ghost"
                 onClick={() => openPortalLogin('master', navigate)}
               >
                 <LogIn size={13} />
                 <span>Master Sign In</span>
-              </button>
-              <button
-                type="button"
-                className="lx-portal-btn-ghost"
-                onClick={() => openMasterWorkspace(navigate, '/command?country=IN')}
-              >
-                <span>Open Fleet</span>
-                <ArrowUpRight size={13} />
-              </button>
-            </div>
-          </motion.article>
-
-          {/* ADMIN & SERVER CONNECTIVITY CARD */}
-          <motion.article
-            whileHover={{ y: -3 }}
-            transition={{ duration: 0.18 }}
-            className="lx-golden-glass-card lx-portal-card"
-          >
-            <div className="lx-portal-card-head">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span className="lx-conn-icon-badge" style={{ color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.38)' }}>
-                  <Sliders size={16} />
-                </span>
-                <div>
-                  <h3>Admin &amp; Server</h3>
-                  <code>{ADMIN_ORIGIN.replace(/^https?:\/\//, '')}</code>
-                </div>
-              </div>
-              <span className="lx-portal-role-badge is-admin">Admin &amp; Health</span>
-            </div>
-
-            <p>
-              Customer onboarding, free trial &amp; quota policies, trending search analytics, and real-time backend server connectivity &amp; latency status.
-            </p>
-
-            <div className="lx-portal-card-actions">
-              <button
-                type="button"
-                className="lx-portal-btn-primary is-blue"
-                onClick={() => openAdminWorkspace(navigate, '/')}
-              >
-                <Sliders size={13} />
-                <span>Open Admin</span>
-              </button>
-              <button
-                type="button"
-                className="lx-portal-btn-ghost"
-                onClick={() => navigate('/architecture')}
-              >
-                <Activity size={13} />
-                <span>Server Health</span>
               </button>
             </div>
           </motion.article>

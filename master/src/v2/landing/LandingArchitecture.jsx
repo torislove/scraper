@@ -1,37 +1,53 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Activity, Cpu, Database, Globe2, Layers, Rocket, ShieldCheck } from 'lucide-react';
+import {
+  CheckCircle2,
+  Cpu,
+  Database,
+  Globe2,
+  Laptop,
+  Layers,
+  LogIn,
+  Rocket,
+  Server,
+  ShieldCheck
+} from 'lucide-react';
 import LiquidButton3D from '../components/LiquidButton3D';
-import PortalConnectivityFlow from '../components/PortalConnectivityFlow';
-import { isMasterRuntime, openClientWorkspace, openMasterWorkspace } from '../utils/editionSwitch';
+import ScrapeProgressionFlow from '../components/ScrapeProgressionFlow';
+import {
+  isMasterRuntime,
+  openClientWorkspace,
+  openMasterWorkspace,
+  openPortalLogin
+} from '../utils/editionSwitch';
 
 const PIPELINE_STEPS = [
   {
     step: '01',
     title: 'City & Zone Grid Split',
-    desc: 'Decomposes metro cities, districts & mandals into non-overlapping geo sectors to beat 120-result caps.',
+    desc: 'Decomposes metro cities, districts & mandals into non-overlapping geo sectors to capture every listing.',
     icon: Globe2,
     color: '#059669'
   },
   {
     step: '02',
     title: 'Parallel Multi-Engine Run',
-    desc: 'Queries Maps, trade directories & open websites concurrently with adaptive zero-drop pacing.',
+    desc: 'Queries Maps, commercial directories & official websites concurrently with smart rate governance.',
     icon: Cpu,
     color: '#d97706'
   },
   {
     step: '03',
     title: 'MOB / STD & 3D Social Enrich',
-    desc: 'Classifies mobile vs landline phones, extracts WhatsApp/IG/FB/LI handles & validates official domains.',
+    desc: 'Separates direct mobile numbers from landlines, enriches WhatsApp/IG/FB/LI & validates domains.',
     icon: Layers,
     color: '#0284c7'
   },
   {
     step: '04',
-    title: 'Live SSE Stream & Vault',
-    desc: 'Streams verified pins & lead cards live to Client or Master folders with instant .xlsx & .vcf export.',
+    title: 'Live Workspace & Export',
+    desc: 'Streams verified pins onto your satellite map and saves organized folders ready for .xlsx & .vcf export.',
     icon: Database,
     color: '#92400e'
   }
@@ -41,11 +57,6 @@ export default function LandingArchitecture() {
   const navigate = useNavigate();
   const masterActive = isMasterRuntime();
 
-  const handleLaunch = () => {
-    if (masterActive) openMasterWorkspace(navigate, '/command?country=IN');
-    else openClientWorkspace(navigate, '/command?country=IN');
-  };
-
   return (
     <div className="lx-screen-container lx-arch-shell">
       <motion.div
@@ -54,23 +65,31 @@ export default function LandingArchitecture() {
         transition={{ duration: 0.3 }}
       >
         <span className="lx-highlight-tag">
-          <Activity size={13} color="#d97706" />
-          <span>SERVER CONNECTIVITY &amp; PORTAL TOPOLOGY</span>
+          <Layers size={13} color="#d97706" />
+          <span>HOW CLIENT &amp; MASTER WORK</span>
         </span>
       </motion.div>
 
-      <div style={{ maxWidth: 900 }}>
+      <div style={{ maxWidth: 880 }}>
         <h1 className="lx-kinetic-title">
-          Three Dedicated Portals.{' '}
-          <span className="lx-gradient-text">One Real-Time Engine Server.</span>
+          One Autonomous Pipeline.{' '}
+          <span className="lx-gradient-text">Run as Client or Master.</span>
         </h1>
         <p className="lx-kinetic-subcopy" style={{ margin: '8px auto 0' }}>
-          Client Cockpit, Master Fleet, and Admin Console connect directly to the Core API Engine over HTTPS REST and Live SSE—with real-time latency diagnostics built right in.
+          Choose Client for nimble city campaigns or Master for full-district and 11-country territory sweeps—both powered by the exact same 4-stage live extraction flow.
         </p>
       </div>
 
-      {/* Interactive Animated Portal <-> Server Connectivity Mesh */}
-      <PortalConnectivityFlow />
+      {/* Animated Scrape Progression Showcase */}
+      <div style={{ width: '100%', maxWidth: 1080 }}>
+        <ScrapeProgressionFlow
+          onLaunch={() =>
+            masterActive
+              ? openMasterWorkspace(navigate, '/command?country=IN')
+              : openClientWorkspace(navigate, '/command?country=IN')
+          }
+        />
+      </div>
 
       {/* Clean 4-Stage Pipeline Strip */}
       <div className="lx-arch-steps-grid">
@@ -89,36 +108,49 @@ export default function LandingArchitecture() {
         })}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, flexWrap: 'wrap' }}>
+      {/* Side-by-Side Edition Quick Launch */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
         <LiquidButton3D
           variant="gold"
           size="lg"
-          icon={Rocket}
+          icon={Laptop}
           pulse
-          onClick={handleLaunch}
+          onClick={() => openClientWorkspace(navigate, '/command?country=IN')}
         >
-          {masterActive ? 'Open Master Command' : 'Open Client Command Center'}
+          Run Client Workspace
         </LiquidButton3D>
 
         <LiquidButton3D
           variant="glass-gold"
           size="lg"
-          onClick={() => navigate('/global-coverage')}
+          icon={Server}
+          onClick={() => openMasterWorkspace(navigate, '/command?country=IN')}
         >
-          Explore 11 Markets →
+          Run Master Fleet
         </LiquidButton3D>
+
+        <button
+          type="button"
+          className="lx-hero-link-pill"
+          onClick={() => openPortalLogin(masterActive ? 'master' : 'client', navigate)}
+        >
+          <LogIn size={13} color="#d97706" />
+          <span>{masterActive ? 'Master Sign In' : 'Client Sign In'}</span>
+        </button>
       </div>
 
       <div className="lx-value-strip">
         <span className="lx-value-chip is-highlight">
-          <ShieldCheck size={13} color="#059669" />
-          <span>Role-Scoped Sessions (Client · Master · Admin)</span>
-        </span>
-        <span className="lx-value-chip">
-          <span>✓ Live /api/health Monitoring</span>
+          <CheckCircle2 size={13} color="#059669" />
+          <span>Client: City &amp; Zone Precision</span>
         </span>
         <span className="lx-value-chip is-highlight">
-          <span>✓ Instant Delta Sync Across Reloads</span>
+          <Rocket size={13} color="#d97706" />
+          <span>Master: District &amp; State Sweeps</span>
+        </span>
+        <span className="lx-value-chip">
+          <ShieldCheck size={13} color="#059669" />
+          <span>Zero API Keys Required</span>
         </span>
       </div>
     </div>
