@@ -325,7 +325,8 @@ const SPECIFIC_NICHES = {
       'Authorised Laptop Service Centers'
     ],
     avoids: ['cctv installation', 'mobile repair only', 'tv repair', 'appliances'],
-    anchors: ['laptop repair', 'computer service', 'chip level', 'motherboard repair']
+    anchors: ['repair service', 'computer repair', 'laptop repair', 'computer service', 'laptop service', 'pc repair', 'macbook repair', 'chip level', 'motherboard repair', 'screen replacement', 'data recovery', 'it repair', 'laptop care', 'computer clinic'],
+    tokenGroups: [['laptop', 'computer', 'desktop', 'macbook', 'pc', 'motherboard'], ['repair', 'service', 'care', 'fix', 'recovery', 'clinic', 'technician']]
   },
   gaming_pc_builders: {
     key: 'gaming_pc_builders',
@@ -343,15 +344,48 @@ const SPECIFIC_NICHES = {
   mobile_phone_repair: {
     key: 'mobile_phone_repair',
     label: 'Mobile Phone Repair & Service',
-    patterns: [/\b(mobile\s*repair|phone\s*repair|display\s*replacement|screen\s*change|iphone\s*repair)\b/i],
+    patterns: [/\b(mobile\s*(?:phone\s*)?repair|phone\s*repair|cell\s*phone\s*repair|smartphone\s*repair|mobile\s*service|phone\s*service|iphone\s*(?:repair|service)|display\s*replacement|screen\s*change|screen\s*replacement)\b/i],
     subvectors: [
-      'Mobile Screen & Display Replacement Centers',
+      'Mobile phone repair shop',
+      'Mobile Phone Repair & Service Centers',
+      'Phone Screen & Display Replacement Centers',
+      'iPhone & Smartphone Service Centers',
       'Chip-Level Mobile Repair & Glass Change',
-      'iPhone & iPad Service Centers',
-      'Water Damage & Battery Replacement Centers'
+      'Phone Repair Service'
     ],
-    avoids: ['automobile garage', 'laptop repair only', 'cctv'],
-    anchors: ['mobile repair', 'screen replacement', 'display change', 'iphone repair']
+    avoids: ['automobile garage', 'car repair', 'auto repair', 'cctv installation'],
+    anchors: [
+      'mobile phone repair', 'phone repair', 'mobile repair', 'cell phone repair',
+      'smartphone repair', 'iphone repair', 'iphone service', 'mobile service', 'phone service',
+      'mobile care', 'phone care', 'phone fix', 'ifix', 'icore', 'icare',
+      'screen replacement', 'display change', 'display replacement', 'glass change',
+      'touch & display', 'mobile clinic', 'mobile point', 'cell point', 'mobile solution'
+    ],
+    tokenGroups: [
+      ['mobile', 'phone', 'cell', 'cellphone', 'smartphone', 'iphone', 'android', 'display', 'screen', 'touch'],
+      ['repair', 'service', 'care', 'fix', 'clinic', 'point', 'solution', 'unlock', 'doctor', 'hub', 'center', 'centre', 'shop']
+    ]
+  },
+  mobile_phone_shop: {
+    key: 'mobile_phone_shop',
+    label: 'Mobile Phone Shops & Showrooms',
+    patterns: [/\b(mobile\s*(?:phone\s*)?(?:shop|shops|store|stores|showroom|showrooms|dealer|dealers|retail|world|hub|zone)|smartphone\s*(?:shop|store|showroom)|cell\s*phone\s*store|phone\s*(?:shop|store|showroom))\b/i],
+    subvectors: [
+      'Mobile Phone Showrooms & Multi-Brand Stores',
+      'Cell Phone Store & Smartphone Dealers',
+      'Authorised Mobile Distributors & Retail Hubs',
+      'Mobile Phone Accessories & Gadgets'
+    ],
+    avoids: ['automobile', 'car showroom', 'tyre', 'tractor'],
+    anchors: [
+      'mobile', 'mobiles', 'cell phone', 'cellphone', 'smartphone', 'iphone', 'telecom', 'telecome',
+      'sangeetha', 'poorvika', 'lot mobiles', 'big c', 'happi', 'aptronics', 'croma', 'reliance digital',
+      'phone shop', 'phone store', 'cellular', 'mobile store', 'mobile shop', 'mobile showroom'
+    ],
+    tokenGroups: [
+      ['mobile', 'mobiles', 'phone', 'phones', 'cell', 'cellphone', 'smartphone', 'iphone', 'telecom', 'cellular'],
+      ['shop', 'store', 'showroom', 'mart', 'world', 'hub', 'zone', 'planet', 'palace', 'junction', 'gallery', 'point', 'dealer', 'retail', 'communications']
+    ]
   },
   tmt_steel: {
     key: 'tmt_steel',
@@ -389,7 +423,7 @@ const SPECIFIC_NICHES = {
       'Inverter AC PCB Board Repair'
     ],
     avoids: ['plumber', 'painting', 'carpentry', 'pest control'],
-    anchors: ['ac repair', 'ac service', 'air conditioner', 'hvac', 'gas filling']
+    anchors: ['ac repair', 'ac service', 'air condition', 'hvac', 'cooling', 'refrigeration', 'gas filling', 'chill']
   },
   pest_control: {
     key: 'pest_control',
@@ -402,7 +436,7 @@ const SPECIFIC_NICHES = {
       'Anti-Termite Pre-Construction Treatment'
     ],
     avoids: ['plumber', 'electrician', 'painting', 'carpenter'],
-    anchors: ['pest control', 'termite', 'cockroach', 'disinfection']
+    anchors: ['pest', 'termite', 'cockroach', 'disinfect', 'fumigat', 'exterminat']
   },
   packers_movers: {
     key: 'packers_movers',
@@ -415,7 +449,7 @@ const SPECIFIC_NICHES = {
       'Car & Bike Transport Carriers'
     ],
     avoids: ['courier parcel only', 'taxi only', 'travel agency'],
-    anchors: ['packers and movers', 'household shifting', 'relocation service']
+    anchors: ['packer', 'mover', 'moving', 'shifting', 'relocation', 'logistics', 'transport']
   },
   borewell_drilling: {
     key: 'borewell_drilling',
@@ -554,7 +588,7 @@ const SPECIFIC_NICHES = {
       'Car Electrical & Engine Tuning Workshops'
     ],
     avoids: ['bike mechanic only', 'car showroom only', 'towing only'],
-    anchors: ['car mechanic', 'car service', 'car garage', 'auto repair']
+    anchors: ['car mechanic', 'car service', 'car garage', 'auto repair', 'automobile', 'workshop', 'mechanic', 'motors']
   },
   footwear_shoes: {
     key: 'footwear_shoes',

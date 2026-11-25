@@ -326,10 +326,24 @@ async function resolveInternationalZones(location, category, countryCode, opts =
     if (Number.isFinite(derived) && derived >= 2) radiusKm = Math.min(maxRadius, derived);
   }
 
-  const gridOpts = opts.isMaster ? { ...opts, size: Math.max(5, Number(opts.size) || 5), radiusKm } : { ...opts, radiusKm };
+  const gridOpts = opts.isMaster
+    ? { ...opts, size: Math.max(7, Number(opts.size) || 7), radiusKm }
+    : { ...opts, size: Math.max(6, Number(opts.size) || 6), radiusKm };
   const namedZones = buildInternationalNamedZones(anchor, category, location, { ...opts, radiusKm });
+  let subVectorZones = [];
+  try {
+    const { buildCategorySubVectorZones } = require('./geo/subvectors');
+    subVectorZones = buildCategorySubVectorZones(category, anchor.name || location, 6, country).map(z => ({
+      ...z,
+      lat: z.lat || anchor.lat,
+      lng: z.lng || anchor.lng,
+      country,
+      state: anchor.state || '',
+      district: anchor.district || ''
+    }));
+  } catch (e) {}
   const gridZones = buildGridZones(anchor, category, location, gridOpts);
-  const zones = [...namedZones, ...gridZones];
+  const zones = [...namedZones, ...subVectorZones, ...gridZones];
   return { zones, anchor, namedZones, gridZones };
 }
 

@@ -227,8 +227,29 @@ const LANDMARK_DICTIONARY = {
 const STOPWORDS_FLUFF = [
   'i want', 'i need', 'find me', 'show me', 'search for', 'can you find', 'looking for',
   'give me', 'list of', 'list all', 'who are the', 'where are the', 'please find',
-  'best', 'top', 'cheap', 'affordable', 'good', 'some', 'few', 'services', 'service'
+  'best', 'top', 'cheap', 'affordable', 'good', 'some', 'few'
 ];
+
+const VERB_FIRST_TRADE_NOUNS = 'mobiles?|phones?|smartphones?|iphones?|cellphones?|laptops?|computers?|pcs?|macbooks?|printers?|cameras?|dslrs?|ac|air\\s*conditioners?|fridges?|refrigerators?|washing\\s*machines?|tvs?|televisions?|microwaves?|ovens?|inverters?|ro\\s*purifiers?|water\\s*purifiers?|geysers?|cars?|bikes?|two\\s*wheelers?|vehicles?|watches?|cycles?|appliances?';
+
+function reorderVerbFirstCategory(catText) {
+  let out = String(catText || '').replace(/\s+/g, ' ').trim();
+  if (!out) return out;
+  // "repair mobile" / "fix iphone" -> "mobile repair" / "iphone repair"
+  const repairLeadRx = new RegExp(`^(repair|repairing|fix|fixing|servicing)\\s+(${VERB_FIRST_TRADE_NOUNS})(?:\\s+(.*))?$`, 'i');
+  const repairMatch = out.match(repairLeadRx);
+  if (repairMatch) {
+    const verb = /^servicing$/i.test(repairMatch[1]) ? 'service' : 'repair';
+    const tail = repairMatch[3] ? ` ${repairMatch[3]}` : '';
+    return `${repairMatch[2]} ${verb}${tail}`.replace(/\s+/g, ' ').trim();
+  }
+  const installLeadRx = /^(install|installation\s+of)\s+(.+)$/i;
+  const installMatch = out.match(installLeadRx);
+  if (installMatch && !/\binstallation\b/i.test(installMatch[2])) {
+    return `${installMatch[2]} installation`.replace(/\s+/g, ' ').trim();
+  }
+  return out;
+}
 
 /**
  * Universal Natural Language Parser
@@ -276,9 +297,19 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
     isB2B: false
   };
 
-  if (/\b(?:with phone|with mobile|mobile numbers?|contact numbers?|phones?|verified contact|phone|mobiles?)\b/i.test(normalized)) {
+  if (/\b(?:with\s+(?:phone|mobile|contact)s?|only\s+(?:phone|mobile)\s+numbers?|(?:phone|mobile|contact)\s+numbers?\s+only|verified\s+contact|has:phone)\b/i.test(normalized)) {
     modifiers.phoneOnly = true;
-    normalized = normalized.replace(/\b(?:with phone|with mobile|mobile numbers?|contact numbers?|phones?|verified contact)\b/gi, ' ');
+    normalized = normalized.replace(/\b(?:with\s+(?:phone|mobile|contact)s?|only\s+(?:phone|mobile)\s+numbers?|(?:phone|mobile|contact)\s+numbers?\s+only|verified\s+contact|has:phone)\b/gi, ' ');
+  }
+
+  if (/\b(?:without\s+website|no\s+website)\b/i.test(normalized)) {
+    modifiers.noWebsiteOnly = true;
+    normalized = normalized.replace(/\b(?:without\s+website|no\s+website)\b/gi, ' ');
+  }
+
+  if (/\b(?:with\s+whatsapp|whatsapp\s+only)\b/i.test(normalized)) {
+    modifiers.whatsappOnly = true;
+    normalized = normalized.replace(/\b(?:with\s+whatsapp|whatsapp\s+only)\b/gi, ' ');
   }
 
   if (/\b(?:top rated|best rated|highest rated|rated 4\+|4 star|5 star)\b/i.test(normalized)) {
@@ -306,14 +337,15 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
   // Normalize isolated typo prepositions (e.g. 'phtgaphers I gntur' -> 'phtgaphers in gntur')
   normalized = normalized.replace(/\s+\b([iI]|n|arund|aroun)\b\s+/g, ' in ');
 
-  // Normalize city typos in tokens
+  // Normalize city typos & regional shorthand in tokens
   const CITY_TYPO_MAP = {
     'gntur': 'Guntur', 'guntor': 'Guntur', 'mubai': 'Mumbai', 'mumbay': 'Mumbai',
-    'hydrabad': 'Hyderabad', 'hyderbad': 'Hyderabad', 'vijaywada': 'Vijayawada',
-    'vijayawda': 'Vijayawada', 'vizag': 'Visakhapatnam', 'tirupathi': 'Tirupati',
-    'bengaluru': 'Bengaluru', 'banglore': 'Bengaluru', 'bangalore': 'Bengaluru',
+    'hyd': 'Hyderabad', 'hydrabad': 'Hyderabad', 'hyderbad': 'Hyderabad',
+    'vja': 'Vijayawada', 'bezawada': 'Vijayawada', 'vijaywada': 'Vijayawada', 'vijayawda': 'Vijayawada',
+    'vizag': 'Visakhapatnam', 'vishakapatnam': 'Visakhapatnam', 'tirupathi': 'Tirupati',
+    'blr': 'Bengaluru', 'blore': 'Bengaluru', 'bengaluru': 'Bengaluru', 'banglore': 'Bengaluru', 'bangalore': 'Bengaluru',
     'madras': 'Chennai', 'chenai': 'Chennai', 'calcutta': 'Kolkata', 'kolkatta': 'Kolkata',
-    'delhy': 'Delhi', 'poona': 'Pune', 'pune': 'Pune'
+    'delhy': 'Delhi', 'poona': 'Pune', 'pune': 'Pune', 'secndrabad': 'Secunderabad', 'tenal': 'Tenali'
   };
 
   const normTokens = normalized.split(/\s+/).map(t => {
@@ -328,14 +360,17 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
   let matchedLandmark = null;
   let parentCity = null;
 
-  // Check landmark matches first
+  // Check landmark matches with strict word boundaries first
   for (const [lmKey, info] of Object.entries(LANDMARK_DICTIONARY)) {
-    if (normalized.includes(lmKey)) {
+    const lmRx = new RegExp(`\\b${lmKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (lmRx.test(normalized)) {
       matchedLandmark = lmKey;
       parentCity = info.parent;
       rawLocation = `${lmKey}, ${info.parent}`;
-      // Strip both landmark and parent from category
-      rawCategory = normalized.replace(lmKey, ' ').replace(info.parent.toLowerCase(), ' ').trim();
+      rawCategory = normalized
+        .replace(lmRx, ' ')
+        .replace(new RegExp(`\\b${info.parent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ')
+        .trim();
       break;
     }
   }
@@ -355,19 +390,57 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
         }
       });
       rawLocation = Array.from(locMap.values()).join(', ');
+    } else if (/[,|]\s*|\s+-\s+/.test(normalized)) {
+      const sepParts = normalized.split(/\s*[,|]\s*|\s+-\s+/).map(s => s.trim()).filter(Boolean);
+      if (sepParts.length >= 2) {
+        const firstLower = sepParts[0].toLowerCase();
+        const isFirstCity = MAJOR_CITIES.some(c => c.toLowerCase() === firstLower) || ALL_STATES.some(s => s.toLowerCase() === firstLower);
+        if (isFirstCity) {
+          rawLocation = sepParts[0];
+          rawCategory = sepParts.slice(1).join(' ');
+        } else {
+          rawLocation = sepParts[sepParts.length - 1];
+          rawCategory = sepParts.slice(0, -1).join(' ');
+        }
+      }
     } else {
-      // Check known cities occurring at the end or start
-      for (const city of MAJOR_CITIES) {
+      // Check known cities/states occurring at the end OR start
+      for (const city of [...MAJOR_CITIES, ...ALL_STATES]) {
         const cityLower = city.toLowerCase();
-        if (normalized.endsWith(` ${cityLower}`)) {
+        if (normalized.toLowerCase().endsWith(` ${cityLower}`)) {
           rawLocation = city;
           rawCategory = normalized.substring(0, normalized.length - cityLower.length - 1).trim();
           break;
-        } else if (normalized.startsWith(`${cityLower} `)) {
+        } else if (normalized.toLowerCase().startsWith(`${cityLower} `)) {
           rawLocation = city;
           rawCategory = normalized.substring(cityLower.length + 1).trim();
           break;
         }
+      }
+      // India geo index fallback (districts, mandals, towns, villages) when no major city matched
+      if (!rawLocation) {
+        try {
+          const indiaGeoIndex = require('./indiaGeoIndex');
+          const words = normalized.split(/\s+/).filter(Boolean);
+          if (words.length >= 2) {
+            for (let take = Math.min(3, words.length - 1); take >= 1; take--) {
+              const tail = words.slice(-take).join(' ');
+              const head = words.slice(0, take).join(' ');
+              const tailHit = tail.length >= 3 ? indiaGeoIndex.resolveQuick(tail) : null;
+              if (tailHit && (tailHit.district || tailHit.city || tailHit.state || tailHit.village)) {
+                rawLocation = tail;
+                rawCategory = words.slice(0, -take).join(' ');
+                break;
+              }
+              const headHit = head.length >= 3 ? indiaGeoIndex.resolveQuick(head) : null;
+              if (headHit && (headHit.district || headHit.city || headHit.state || headHit.village)) {
+                rawLocation = head;
+                rawCategory = words.slice(take).join(' ');
+                break;
+              }
+            }
+          }
+        } catch (e) {}
       }
     }
   }
@@ -390,19 +463,19 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
     }
   }
 
-  // Clean and auto-correct trade typos in category
+  // Clean category while strictly preserving trade nouns ("services", "repair", "dealers", "contractors", "works")
   let cleanCategory = rawCategory
-    .replace(/\b(?:with|and|or|in|near|at|around|under|from)\b/gi, ' ')
-    .replace(/^(services?|contractors?|works?|dealers?|repair)\s+/gi, '')
-    .replace(/\s+(services?|works?)$/gi, '')
+    .replace(/^(?:with|in|near|at|around|under|from)\b\s*/gi, '')
+    .replace(/\s*\b(?:in|near|at|around|under|from)$/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
+  cleanCategory = reorderVerbFirstCategory(cleanCategory);
 
   // Strip duplicate location name if it still leaked into cleanCategory
   if (rawLocation) {
     const locWords = rawLocation.toLowerCase().split(/[\s,]+/).filter(w => w.length >= 3);
     for (const lw of locWords) {
-      const rx = new RegExp(`(^|\\s)${lw}(\\s|$)`, 'gi');
+      const rx = new RegExp(`(^|\\s)${lw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\s|$)`, 'gi');
       cleanCategory = cleanCategory.replace(rx, ' ').trim();
     }
   }
@@ -410,6 +483,7 @@ function parseUniversalQuery(rawInput, defaultCountry = 'IN') {
   try {
     const { normalizeTradePhrase } = require('./tradeIntelligence');
     cleanCategory = normalizeTradePhrase(cleanCategory);
+    cleanCategory = reorderVerbFirstCategory(cleanCategory);
   } catch (e) {
     // fallback
   }

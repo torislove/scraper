@@ -392,9 +392,10 @@ export function fallbackStreamUrl() {
 }
 
 export function sessionStreamUrl(sessionId) {
-  const base = streamUrl();
-  const sep = base.includes('?') ? '&' : '?';
-  return `${base}${sep}sessionId=${encodeURIComponent(sessionId)}`;
+  const sid = encodeURIComponent(sessionId || '');
+  const uid = getUserId() || 'master';
+  const sep = SSE_STREAM_BASE.includes('?') ? '&' : '?';
+  return withStreamToken(`${SSE_STREAM_BASE}/scrape/stream/${sid}${sep}scope=master&uid=${encodeURIComponent(uid)}`);
 }
 
 export async function getGeoHierarchy(params = {}) {

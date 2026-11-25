@@ -334,6 +334,13 @@ export function fallbackStreamUrl() {
   return primary === direct ? proxied : direct;
 }
 
+export function sessionStreamUrl(sessionId) {
+  const sid = encodeURIComponent(sessionId || '');
+  const sep = SSE_STREAM_BASE.includes('?') ? '&' : '?';
+  const uid = getUserId() || 'anonymous';
+  return withStreamToken(`${SSE_STREAM_BASE}/scrape/stream/${sid}${sep}scope=client&uid=${encodeURIComponent(uid)}`);
+}
+
 export async function getGeoHierarchy(params = {}) {
   const { data } = await client.get('/locations/hierarchy', { params });
   return data;

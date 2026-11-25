@@ -82,7 +82,16 @@ function isGenericRowName(value) {
 // Category fan-out. Each variant is resolved to its own JustDial ncatid, so a
 // single city query can cover related marketplace categories without guessing.
 const VARIANT_RULES = [
+  { test: /\b(mobile|phone|cell\s*phone|cellphone|smartphone|iphone)\b.*\b(repair|service|fix|screen|display|unlock|care|glass)\b|\b(repair|service)\b.*\b(mobile|phone|iphone)\b/i, variants: ['Mobile Phone Repair & Services', 'iPhone Repair & Services', 'Smartphone Repair & Services', 'Mobile Screen Replacement Services', 'Cell Phone Repair & Services'] },
+  { test: /\b(mobile|mobiles|smartphone|iphone|cell\s*phone|cellphone)\b/i, variants: ['Mobile Phone Dealers', 'Mobile Phone Showrooms', 'Mobile Phone Retailers', 'Cell Phone Stores', 'Mobile Phone Accessory Dealers', 'iPhone Dealers'] },
   { test: /\b(computer|laptop|desktop|gaming pc|macbook)\b/i, variants: ['Computer Dealers', 'Laptop Dealers', 'Computer Hardware Dealers', 'Laptop Repair & Services', 'Computer Software Dealers', 'Computer Accessory Dealers'] },
+  { test: /\b(jewell\w*|gold\s*shop|diamond)\b/i, variants: ['Jewellery Showrooms', 'Gold Jewellery Showrooms', 'Diamond Jewellery Showrooms', 'Jewellers'] },
+  { test: /\b(furniture|sofa|mattress|wardrobe)\b/i, variants: ['Furniture Dealers', 'Sofa Set Dealers', 'Mattress Dealers', 'Wooden Furniture Manufacturers', 'Office Furniture Dealers'] },
+  { test: /\b(footwear|shoe|shoes|chappal|sandals)\b/i, variants: ['Shoe Dealers', 'Footwear Showrooms', 'Footwear Wholesalers', 'Sports Shoe Dealers'] },
+  { test: /\b(pharmacy|chemist|medical\s*store|medical\s*shop|drug\s*store)\b/i, variants: ['Chemists', '24 Hours Chemists', 'Medical Stores', 'Wholesale Chemists'] },
+  { test: /\b(diagnostic|pathology|blood\s*test|scan|mri|x\s*ray)\b/i, variants: ['Diagnostic Centres', 'Pathology Labs', 'X Ray Centres', 'Scan Centres'] },
+  { test: /\b(bakery|baker|cake|pastry|sweet|mithai)\b/i, variants: ['Bakeries', 'Cake Shops', 'Sweet Shops', 'Pastry Shops'] },
+  { test: /\b(hardware|tiles|granite|marble|cement|steel|sanitary|plywood)\b/i, variants: ['Hardware Shops', 'Tile Dealers', 'Cement Dealers', 'Steel Dealers', 'Sanitaryware Dealers', 'Plywood Dealers'] },
   { test: /\b(mall|malls|shopping mall|shopping complex)\b/i, variants: ['Shopping Malls', 'Commercial Complexes', 'Malls', 'Departmental Stores', 'Supermarkets'] },
   { test: /\b(manufactur\w*|factor\w*|industrial|machinery|fabricat\w*)\b/i, variants: ['Industrial Machinery Manufacturers', 'Fabrication Works', 'Manufacturers', 'Industrial Equipment Dealers', 'OEM Manufacturers'] },
   { test: /album|color lab|colour lab|photo book|photobook|karizma|canvera/i, variants: ['Photo Album Manufacturers', 'Digital Color Laboratories', 'Wedding Album Printers', 'Photo Book Printing Services', 'Digital Photo Printing Services', 'Offset Printers'] },

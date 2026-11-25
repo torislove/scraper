@@ -779,13 +779,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               }
             });
 
-            // Fast network settle check (280ms instead of 400ms)
+            // Reliable feed settle check (380ms) so slow-hydrating Maps lists never abort early
             await page.waitForFunction((before) => {
               const feed = document.querySelector('div[role="feed"]');
               if (!feed) return false;
               return feed.querySelectorAll('div.Nv2PK').length > before.cards
                 || feed.scrollHeight > before.height + 10;
-            }, beforeScroll, { timeout: 280, polling: 35 }).catch(() => { });
+            }, beforeScroll, { timeout: 380, polling: 40 }).catch(() => { });
 
             const added = mergeCards(await collectVisibleCards());
 
@@ -810,10 +810,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
             if (added === 0) {
               staleTicks++;
-              if (staleTicks >= 2 || accumulatedCards.size === 0) {
+              if (staleTicks >= 4 || (staleTicks >= 2 && accumulatedCards.size === 0)) {
                 // Rapid PageDown confirmation before cleanly exiting zone
                 await page.keyboard.press('PageDown').catch(() => {});
-                await page.waitForTimeout(100);
+                await page.waitForTimeout(180);
                 const recoveryAdded = mergeCards(await collectVisibleCards());
                 if (recoveryAdded === 0) {
                   addLog(`[Cyber Core] Zone feed completed (${accumulatedCards.size} cards). Drained cleanly.`);
@@ -1041,9 +1041,11 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               continue;
             }
 
-            // Strict Address Text Filter (Bypass if Broad Strategy)
-            if (strategy === 'strict') {
-              const cleanCityName = location ? location.split(' (@')[0].trim().toLowerCase() : '';
+            // Strict Address Text Filter (Bypass when Broad Strategy OR valid GPS coords inside target city)
+            const placeCoords = (place.latitude && place.longitude) ? { lat: place.latitude, lng: place.longitude } : extractCoords(place.mapsLink);
+            const hasVerifiedLocalCoords = Boolean(placeCoords && Number.isFinite(placeCoords.lat) && centerLat && centerLng && getDistanceKm(centerLat, centerLng, placeCoords.lat, placeCoords.lng) <= Math.max(15, Number(radiusKm) || 6));
+            if (strategy === 'strict' && !hasVerifiedLocalCoords) {
+              const cleanCityName = location ? location.split(' (@')[0].split(',')[0].trim().toLowerCase() : '';
               if (place.address && cleanCityName) {
                 const addrLower = place.address.toLowerCase();
                 if (!addrLower.includes(cleanCityName)) {
@@ -1063,7 +1065,6 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
             }
 
             // Strict Text & Geographic Containment Check
-            const placeCoords = (place.latitude && place.longitude) ? { lat: place.latitude, lng: place.longitude } : extractCoords(place.mapsLink);
             const containment = isListingRelevantToQuery(place.name, place.address, district, stateName, location, location, placeCoords, boundingbox, cityHint, isMaster, scope);
             if (!containment.relevant) {
               addLog(`[Containment Guard] Discarded "${place.name}": ${containment.reason}`);

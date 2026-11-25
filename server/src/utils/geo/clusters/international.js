@@ -102,6 +102,46 @@ const INTERNATIONAL_AUTHORITATIVE_CLUSTERS = {
   'tokyo': [
     'Shinjuku', 'Shibuya & Harajuku', 'Ginza & Chuo',
     'Roppongi & Minato', 'Akihabara & Chiyoda', 'Ikebukuro & Toshima'
+  ],
+  'houston': [
+    'Downtown Houston', 'Midtown Houston', 'Galleria & Uptown', 'Montrose & Museum District',
+    'The Heights', 'Sugar Land', 'Katy & Energy Corridor', 'Westchase'
+  ],
+  'dallas': [
+    'Downtown Dallas', 'Uptown & Victory Park', 'Deep Ellum', 'Bishop Arts & Oak Cliff',
+    'North Dallas & Galleria', 'Plano Legacy', 'Irving & Las Colinas', 'Richardson'
+  ],
+  'austin': [
+    'Downtown Austin', 'South Congress (SoCo)', 'East Austin', 'The Domain & North Burnet',
+    'Zilker & Barton Springs', 'Round Rock', 'Cedar Park'
+  ],
+  'miami': [
+    'Downtown Miami', 'Brickell', 'Wynwood & Design District', 'Miami Beach & South Beach',
+    'Coral Gables', 'Coconut Grove', 'Doral'
+  ],
+  'manchester': [
+    'Manchester City Centre', 'Spinningfields & Deansgate', 'Northern Quarter & Ancoats',
+    'Salford Quays', 'Didsbury', 'Trafford & Stretford', 'Chorlton'
+  ],
+  'birmingham': [
+    'Birmingham City Centre', 'Jewellery Quarter', 'Digbeth', 'Edgbaston',
+    'Sutton Coldfield', 'Solihull', 'Moseley'
+  ],
+  'melbourne': [
+    'Melbourne CBD', 'Southbank & Docklands', 'Fitzroy & Collingwood', 'Richmond',
+    'St Kilda & South Yarra', 'Carlton', 'Brunswick', 'Box Hill'
+  ],
+  'vancouver': [
+    'Downtown Vancouver', 'Yaletown', 'Gastown', 'Mount Pleasant',
+    'Kitsilano', 'Burnaby Metrotown', 'Richmond Centre'
+  ],
+  'abudhabi': [
+    'Al Zahiyah & Tourist Club Area', 'Al Khalidiyah', 'Hamdan Street', 'Electra Street',
+    'Al Reem Island', 'Al Maryah Island', 'Mussafah Industrial', 'Khalifa City'
+  ],
+  'amsterdam': [
+    'Amsterdam Centrum', 'De Pijp', 'Jordaan', 'Oud-Zuid',
+    'Amsterdam Noord', 'Oost & Watergraafsmeer', 'Zuidas'
   ]
 };
 

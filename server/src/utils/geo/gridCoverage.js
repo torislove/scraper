@@ -105,9 +105,9 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
   const spanKm = Math.max(latMeters, lngMeters);
 
   // Dynamic Scale-Adaptive Cell Sizing:
-  // Compact areas (<12km span e.g. urban mandals) use 2x2 or 3x3 max to prevent 81-cell explosion.
-  // Expansive areas scale proportionally without exceeding safe browser bounds.
-  const maxAxis = options.maxAxis || (options.scope === 'mandal' || spanKm < 12 ? 3 : (spanKm < 25 ? 4 : GRID_MAX_CELLS_PER_AXIS));
+  // Dense urban hubs (e.g. Vijayawada, Austin, Manchester) use 4x4–6x6 grids so Maps'
+  // 20-card pagination limit is bypassed across neighboring 1.2–1.8km commercial pockets.
+  const maxAxis = options.maxAxis || (options.scope === 'mandal' ? 3 : (spanKm < 15 ? 4 : (spanKm < 30 ? 5 : GRID_MAX_CELLS_PER_AXIS)));
   const dynamicCellPitch = Math.max(GRID_CELL_KM, spanKm / maxAxis);
 
   const cols = Math.max(1, Math.min(maxAxis, Math.round(lngMeters / dynamicCellPitch)));
@@ -124,12 +124,13 @@ function buildCityGridZones(cityName, category, anchors = [], options = {}) {
       const lng = minLng + (maxLng - minLng) * ((c + 0.5) / cols);
       const point = { lat: Number(lat.toFixed(5)), lng: Number(lng.toFixed(5)) };
 
-      // Skip cells already covered by an authoritative named locality
+      // Skip grid cells only when virtually overlapping an authoritative pin (<0.85km);
+      // 1km+ pockets yield distinct Maps top-20 results in dense bazaars.
       const nearest = coords.reduce((best, a) => {
         const d = distanceKm(point, a);
         return d < best.d ? { d, a } : best;
       }, { d: Infinity, a: null });
-      if (nearest.a && nearest.d < 1.8) continue;
+      if (nearest.a && nearest.d < 0.85) continue;
 
       const dir = compassLabel(point.lat, point.lng, minLat, maxLat, minLng, maxLng);
       let zoneName = `${city} ${dir} Sector ${cells.length + 1}`;
@@ -197,7 +198,7 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
     .filter(z => z.lat && z.lng)
     .map(z => ({ lat: z.lat, lng: z.lng, name: z.zoneName }));
   const cityLabel = locationLabel || cityName;
-  const subVectors = buildCategorySubVectorZones(category, cityLabel, 8, countryCode).map(z => ({
+  const subVectors = buildCategorySubVectorZones(category, cityLabel, 6, countryCode).map(z => ({
     ...z,
     radiusKm: 6.0,
     coverageKind: 'vector',
@@ -216,31 +217,27 @@ function buildCityCoverage(cityName, category, localityNames, locationLabel, max
 
   if (merged.length <= maxZones) return merged;
 
-  // Keep every locality and every category sub-vector, then sample the grid
-  // evenly by distance so the outer ring is represented too. Sub-vectors are
-  // the highest-yield zones because each one returns a different top-20 list.
   const center = ZONE_COORDINATES[String(cityName || '').toLowerCase().trim()] || { lat: anchors[0]?.lat, lng: anchors[0]?.lng };
-  const slots = Math.max(0, maxZones - mustKeep.length);
+  const minGridReserve = Math.min(grid.length, Math.max(12, Math.floor(maxZones * 0.32)));
+  const namedCap = Math.max(named.length, maxZones - minGridReserve);
+  const keptMust = mustKeep.slice(0, namedCap);
+  const slots = Math.max(minGridReserve, maxZones - keptMust.length);
   const sortedGrid = grid
     .map(z => ({ z, d: center && center.lat ? distanceKm(z, center) : 0 }))
     .sort((a, b) => a.d - b.d);
 
-  // User mandate: Search all over the city not leaving one single lead/locality.
-  // Never truncate authentic named localities.
-  if (slots <= 0) return mustKeep;
-  if (slots >= sortedGrid.length) return [...mustKeep, ...sortedGrid.map(entry => entry.z)];
+  if (slots >= sortedGrid.length) return [...keptMust, ...sortedGrid.map(entry => entry.z)];
 
   const picked = new Set();
   for (let i = 0; i < slots; i++) {
     const idx = Math.round((i * (sortedGrid.length - 1)) / Math.max(1, slots - 1));
     picked.add(sortedGrid[idx].z);
   }
-  // Rounding can collide at the edges; top up with any cell not yet picked.
   for (const entry of sortedGrid) {
     if (picked.size >= slots) break;
     picked.add(entry.z);
   }
-  return [...mustKeep, ...picked];
+  return [...keptMust, ...picked];
 }
 
 

@@ -765,6 +765,7 @@ export default function CommandCenter() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
+  const bindSessionSourceRef = useRef(null);
   useEffect(() => {
     const unextracted = vendors.filter(vendor => !vendor.deepExtractedAt).length;
     setDeepEstimate({
@@ -1121,11 +1122,13 @@ export default function CommandCenter() {
     window.addEventListener('leadharvest:server_online', onServerOnline);
     window.addEventListener('leadharvest:server_offline', onServerOffline);
 
+    bindSessionSourceRef.current = bindSource;
     stream.start();
 
     flushTimer = setInterval(flushBuffers, 250);
 
     return () => {
+      bindSessionSourceRef.current = null;
       mounted = false;
       window.removeEventListener('leadharvest:server_online', onServerOnline);
       window.removeEventListener('leadharvest:server_offline', onServerOffline);
@@ -1134,6 +1137,22 @@ export default function CommandCenter() {
       if (stream) stream.stop();
     };
   }, []);
+
+  // Dedicated per-session SSE channel during active sweeps for instant zone & vendor replay
+  useEffect(() => {
+    const sid = run?.sessionId || run?.id;
+    if (!sid || run?.status !== 'running' || typeof EventSource === 'undefined') return undefined;
+    let sessionEs = null;
+    try {
+      sessionEs = new EventSource(sessionStreamUrl(sid));
+      bindSessionSourceRef.current?.(sessionEs);
+    } catch (e) { /* fallback to primary log stream */ }
+    return () => {
+      if (sessionEs) {
+        try { sessionEs.close(); } catch (e) {}
+      }
+    };
+  }, [run?.sessionId, run?.id, run?.status]);
 
   const finishRun = useCallback(async (status, options = {}) => {
     const current = runRef.current;

@@ -572,12 +572,14 @@ app.get('/api/license/status', (req, res) => {
 // stale socket can never permanently lock a dashboard out of the feed.
 const handleLogStream = (req, res) => {
   try {
-    // A verified session token (resolveIdentity) wins over the self-declared
-    // query hints, which only exist for token-less local installs.
+    // EventSource cannot send custom headers, so query hints (`scope`, `uid`)
+    // carry workspace routing while verified token identity always overrides uid.
     const verified = Boolean(req.identity);
     liveStreams.attachLog(req, res, systemLogs, {
-      scope: verified ? req.headers['x-workspace-scope'] : (req.query && req.query.scope),
-      userId: verified ? req.headers['x-user-id'] : (req.query && req.query.uid)
+      scope: req.headers['x-workspace-scope'] || (req.query && req.query.scope) || (req.identity && req.identity.scope),
+      userId: verified
+        ? (req.identity.clientId || req.identity.id || req.headers['x-user-id'] || (req.query && req.query.uid))
+        : (req.headers['x-user-id'] || (req.query && req.query.uid))
     });
   } catch (err) {
     console.error('[SSE] log stream attach failed:', err.message);

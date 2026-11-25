@@ -23,7 +23,7 @@ import { findCountry } from './data/countries';
 import { CRM_STAGES, crmStageOf, formatInr } from './utils/leadStages';
 import {
   deepExtractVendor, getDeepJob, getDeepJobs, getEstimate, getHealth, pingHealth,
-  getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl,
+  getScrapeJobs, getSessions, getSessionVault, getVendors, sessionExportUrl, sessionStreamUrl,
   startAuto, startDeepBatch, startOmni, stopAllScrapes, stopDeepJob, resumeDeepJob, updateVendorCrm, streamUrl, fallbackStreamUrl,
   deleteSession, renameSession, mergeSessions, batchDeleteSessions
 } from './api';
@@ -592,7 +592,10 @@ export default function CommandCenter() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
+  const deepEstimateSetterRef = useRef(null);
+  const bindSessionSourceRef = useRef(null);
   useEffect(() => {
+    deepEstimateSetterRef.current = null;
     const unextracted = vendors.filter(vendor => !vendor.deepExtractedAt).length;
     setDeepEstimate({
       count: unextracted,
@@ -897,6 +900,7 @@ export default function CommandCenter() {
     };
 
     flushTimer = setInterval(flushBuffers, 300);
+    bindSessionSourceRef.current = bindSource;
 
     const stream = createLiveStream({
       url: () => streamUrl(),
@@ -949,6 +953,7 @@ export default function CommandCenter() {
     stream.start();
 
     return () => {
+      bindSessionSourceRef.current = null;
       clearInterval(pingId);
       if (flushTimer) clearInterval(flushTimer);
       if (microFlushTimer) clearTimeout(microFlushTimer);
@@ -957,6 +962,22 @@ export default function CommandCenter() {
       stream.stop();
     };
   }, []);
+
+  // Dedicated per-session SSE channel during active sweeps for instant zone & vendor replay
+  useEffect(() => {
+    const sid = run?.sessionId || run?.id;
+    if (!sid || run?.status !== 'running' || typeof EventSource === 'undefined') return undefined;
+    let sessionEs = null;
+    try {
+      sessionEs = new EventSource(sessionStreamUrl(sid));
+      bindSessionSourceRef.current?.(sessionEs);
+    } catch (e) { /* fallback to primary log stream */ }
+    return () => {
+      if (sessionEs) {
+        try { sessionEs.close(); } catch (e) {}
+      }
+    };
+  }, [run?.sessionId, run?.id, run?.status]);
 
   const finishRun = useCallback(async (status, options = {}) => {
     const current = runRef.current;

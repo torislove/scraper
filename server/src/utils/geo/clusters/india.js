@@ -167,8 +167,12 @@ const AUTHORITATIVE_CLUSTERS = {
     'Old Bus Stand Mangalagiri', 'Tadepalle'
   ],
   'vijayawada': [
-    'Suryaraopeta', 'Benz Circle', 'Governorpet', 'Labbipet', 'Moghalrajpuram', 'Patamata', 'Auto Nagar', 
-    'Bhavanipuram', 'Satyanarayanapuram', 'Gunadala', 'Gandhinagar Vijayawada', 'Kanuru', 'Poranki', 'One Town Vijayawada', 'Machavaram'
+    'Governorpet', 'NTR Complex Governorpet', 'Besant Road', 'Eluru Road', 'Bandar Road',
+    'Suryaraopeta', 'Benz Circle', 'Labbipet', 'Moghalrajpuram', 'Patamata', 'Auto Nagar',
+    'One Town Vijayawada', 'Tarapet', 'Gandhinagar Vijayawada', 'Satyanarayanapuram',
+    'Machavaram', 'Bhavanipuram', 'Vidyadharapuram', 'Ajith Singh Nagar', 'Krishna Lanka',
+    'Gunadala', 'Currency Nagar', 'Guru Nanak Colony', 'Ramavarappadu', 'Enikepadu',
+    'Prasadampadu', 'Gollapudi', 'Kanuru', 'Poranki', 'Penamaluru'
   ],
   'visakhapatnam': [
     'Siripuram', 'Dwaraka Nagar', 'MVP Colony', 'Gajuwaka', 'Rushikonda', 

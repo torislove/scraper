@@ -83,12 +83,13 @@ router.post('/parse-location', async (req, res) => {
 });
 
 router.post('/preflight', async (req, res) => {
-  const { location } = req.body;
-  if (!location) return res.status(400).json({ error: 'Location required' });
+  const rawInput = req.body.location || req.body.query || '';
+  if (!rawInput) return res.status(400).json({ error: 'Location required' });
 
-  // Auto-correct location typos before checking scope
-  const parsed = parseNaturalLanguageQuery(location);
-  const cleanLocation = parsed.location || parsed.category || location;
+  const { parseUniversalQuery } = require('../../utils/universalQueryEngine');
+  const parsedUni = req.body.query ? parseUniversalQuery(req.body.query, req.body.country || 'IN') : null;
+  const parsed = parseNaturalLanguageQuery(rawInput);
+  const cleanLocation = req.body.location || parsedUni?.location || parsed.location || parsed.category || rawInput;
   const correctedLoc = intelligentExtractor.correctLocationTypo(cleanLocation);
 
   try {

@@ -48,7 +48,7 @@ function resolveUniversalZones(location, category = '', isMaster = false, countr
     if (lowerLoc === key || primaryName === key || strippedName === key) {
       const cityLabel = cleanLoc.replace(/\b(city|town)\b/gi, '').replace(/\s+/g, ' ').trim() || cleanLoc;
       const cityTitle = key.replace(/\b\w/g, ch => ch.toUpperCase());
-      const maxCityZones = isMaster ? 48 : 24;
+      const maxCityZones = isMaster ? 96 : 52;
       return buildCityCoverage(cityTitle, category, zones, cityLabel, maxCityZones, countryCode);
     }
   }
@@ -69,7 +69,7 @@ function resolveUniversalZones(location, category = '', isMaster = false, countr
         // see the businesses those few phrases happen to rank.
         const cityLabel = cleanLoc.replace(/\b(city|town)\b/gi, '').replace(/\s+/g, ' ').trim() || cleanLoc;
         const cityTitle = key.replace(/\b\w/g, ch => ch.toUpperCase());
-        const maxCityZones = isMaster ? 48 : 24;
+        const maxCityZones = isMaster ? 96 : 52;
         return buildCityCoverage(cityTitle, category, zones, cityLabel, maxCityZones);
       }
     }
@@ -121,8 +121,8 @@ function resolveUniversalZones(location, category = '', isMaster = false, countr
 
     // Fill the rest of the city with viewport grid cells so the sweep is not
     // limited to eight hand-written sectors.
-    const maxDistrictCityZones = isMaster ? 40 : 22;
-    const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6 });
+    const maxDistrictCityZones = isMaster ? 72 : 42;
+    const grid = buildCityGridZones(cityName, category, [], { cappedRadiusKm: 6, maxAxis: isMaster ? 5 : 4 });
     return [...sectorZones, ...grid].slice(0, maxDistrictCityZones);
   }
 

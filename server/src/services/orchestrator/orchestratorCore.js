@@ -659,10 +659,18 @@ async function runOmniSearchOrchestrator(
     // grid. Fast mode used to stop after the named zones, which silently dropped
     // whole quadrants of a city; it now keeps the same order but sweeps the grid
     // too. Ordering is the speed control, not truncation.
-    const intentPhrases = categoryRouter.getColloquialIntentQueries
-      ? categoryRouter.getColloquialIntentQueries(category, baseLocation, countryCode)
-      : [];
-    const intentZones = intentPhrases.map((phrase, idx) => ({
+    const intentPhrases = [
+      ...(categoryRouter.getColloquialIntentQueries
+        ? categoryRouter.getColloquialIntentQueries(category, baseLocation, countryCode)
+        : []),
+      ...((() => {
+        try {
+          const learned = taxonomyLearner.getSynonyms(category, 3) || [];
+          return learned.map(s => `${s} in ${baseLocation}`);
+        } catch (e) { return []; }
+      })())
+    ].filter((phrase, idx, arr) => arr.findIndex(p => p.toLowerCase() === phrase.toLowerCase()) === idx);
+    const intentZones = intentPhrases.slice(0, 8).map((phrase, idx) => ({
       zoneName: phrase,
       queryText: phrase,
       isVectorQuery: true,
@@ -1435,8 +1443,8 @@ async function runOmniSearchOrchestrator(
             // Adaptive quad-split: when a cell hits >=18 leads (or >=12 for high-density categories like dentists/hospitals/wedding), subdivide into 4 tighter 1.2km micro-cells
             const azLat = Number(az.lat ?? az.latitude);
             const azLng = Number(az.lng ?? az.longitude);
-            const isHighDensityCategory = /\b(dentist|dental|doctor|clinic|hospital|wedding|venue|hall|photograph)\b/i.test(category);
-            const splitThreshold = isHighDensityCategory ? 12 : 18;
+            const isHighDensityCategory = /\b(dentist|dental|doctor|clinic|hospital|wedding|venue|hall|photograph|mobile|phone|repair|restaurant|cafe|salon)\b/i.test(category);
+            const splitThreshold = isHighDensityCategory ? 8 : 10;
             if (
               tState === 'completed'
               && tally.total >= splitThreshold

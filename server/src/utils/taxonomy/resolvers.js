@@ -57,19 +57,14 @@ function getSubvectorsForQuery(query, countryCode = 'IN') {
     return sector.subvectors;
   }
 
-  // Universal dynamic subvector generation for all trade categories
+  // Universal dynamic subvector generation for all trade categories (zero noisy fillers)
   const cleanQ = String(query || '').replace(/\s+/g, ' ').trim();
   if (cleanQ && cleanQ.length >= 2) {
-    return [
-      `Top Rated ${cleanQ}`,
-      `Best ${cleanQ}`,
-      `Professional ${cleanQ} Services`,
-      `Authorized ${cleanQ} Dealers`,
-      `Wholesale & Retail ${cleanQ}`,
-      `Commercial ${cleanQ} Specialists`,
-      `Leading ${cleanQ} Center`,
-      `Emergency 24 Hours ${cleanQ}`
-    ];
+    const isService = /\b(repair|service|services|clinic|hospital|doctor|dentist|salon|spa|lawyer|advocate|plumber|electrician|cleaner|cleaning)\b/i.test(cleanQ);
+    if (isService) {
+      return [cleanQ, `Best ${cleanQ}`, `${cleanQ} center`, `Top rated ${cleanQ}`, `Authorized ${cleanQ}`];
+    }
+    return [cleanQ, `Best ${cleanQ}`, `${cleanQ} dealers`, `Wholesale ${cleanQ}`, `Top rated ${cleanQ}`];
   }
   return [];
 }

@@ -192,9 +192,24 @@ class LiveStreamHub {
     this.logClients.set(client.id, client);
 
     // First frame is the console backlog, exactly as before.
-    // Scoped viewers get no shared backlog: it mixes every workspace's lines.
     const backlog = JSON.stringify(client.scope === 'all' && Array.isArray(initialLogs) ? initialLogs : []);
     this._write(client, `event: init\ndata: ${backlog}\n\n`);
+
+    // Replay latest active session snapshot (grid_points, active_point, progress)
+    // so reconnecting or late-attaching dashboards immediately populate zones & status.
+    if (this.sessionSnapshots) {
+      const cutoff = Date.now() - 3600000;
+      for (const [sid, snap] of this.sessionSnapshots.entries()) {
+        if (!snap || snap.updatedAt < cutoff) {
+          this.sessionSnapshots.delete(sid);
+          continue;
+        }
+        if (!LiveStreamHub.viewerAccepts(client, snap.audience)) continue;
+        if (snap.gridFrame) this._write(client, snap.gridFrame);
+        if (snap.activePointFrame) this._write(client, snap.activePointFrame);
+        if (snap.progressFrame) this._write(client, snap.progressFrame);
+      }
+    }
     return client;
   }
 
@@ -235,6 +250,15 @@ class LiveStreamHub {
     viewers.set(client.id, client);
 
     this._write(client, `event: connected\ndata: ${JSON.stringify({ sessionId, status: 'listening' })}\n\n`);
+    const snap = this.sessionSnapshots && this.sessionSnapshots.get(sessionId);
+    if (snap) {
+      if (snap.gridFrame) this._write(client, snap.gridFrame);
+      if (snap.activePointFrame) this._write(client, snap.activePointFrame);
+      if (snap.progressFrame) this._write(client, snap.progressFrame);
+      if (Array.isArray(snap.recentVendorFrames) && snap.recentVendorFrames.length) {
+        this._write(client, snap.recentVendorFrames.join(''));
+      }
+    }
     return client;
   }
 
@@ -284,8 +308,18 @@ class LiveStreamHub {
       return;
     }
     const frame = `event: ${eventName}\ndata: ${data}\n\n`;
-    this._writeAudience(frame, audience);
     const sid = payload && (payload.sessionId || (Array.isArray(payload) && payload[0] && payload[0].sessionId));
+    if (sid && ['grid_points', 'active_point', 'progress'].includes(eventName)) {
+      if (!this.sessionSnapshots) this.sessionSnapshots = new Map();
+      const prev = this.sessionSnapshots.get(sid) || { recentVendorFrames: [] };
+      if (eventName === 'grid_points') prev.gridFrame = frame;
+      if (eventName === 'active_point') prev.activePointFrame = frame;
+      if (eventName === 'progress') prev.progressFrame = frame;
+      prev.audience = audience || prev.audience || null;
+      prev.updatedAt = Date.now();
+      this.sessionSnapshots.set(sid, prev);
+    }
+    this._writeAudience(frame, audience);
     if (sid) this._writeSession(sid, frame);
   }
 
@@ -310,10 +344,26 @@ class LiveStreamHub {
   broadcastVendorBatch(entries, belongsToSession, audienceOf = null) {
     if (!Array.isArray(entries) || !entries.length) return;
     const audiences = entries.map(entry => (typeof audienceOf === 'function' ? audienceOf(entry.vendor) : null));
+
+    if (!this.sessionSnapshots) this.sessionSnapshots = new Map();
+    for (let i = 0; i < entries.length; i += 1) {
+      const v = entries[i]?.vendor;
+      const sid = v && (v.lastSessionId || v.sessionId);
+      if (!sid) continue;
+      const snap = this.sessionSnapshots.get(sid) || { recentVendorFrames: [] };
+      snap.recentVendorFrames.push(`event: vendor\ndata: ${entries[i].data}\n\n`);
+      if (snap.recentVendorFrames.length > 40) {
+        snap.recentVendorFrames = snap.recentVendorFrames.slice(-40);
+      }
+      snap.audience = audiences[i] || snap.audience || null;
+      snap.updatedAt = Date.now();
+      this.sessionSnapshots.set(sid, snap);
+    }
+
     for (const client of this.logClients.values()) {
       let frame = '';
       for (let i = 0; i < entries.length; i += 1) {
-        if (LiveStreams_accepts(client, audiences[i])) frame += `event: vendor\ndata: ${entries[i].data}\n\n`;
+        if (LiveStreamHub.viewerAccepts(client, audiences[i])) frame += `event: vendor\ndata: ${entries[i].data}\n\n`;
       }
       if (frame) this._write(client, frame);
     }

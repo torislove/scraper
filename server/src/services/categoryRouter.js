@@ -170,8 +170,15 @@ const FAMILY_KEYWORDS = {
     ['computer service', 12], ['computer accessories', 12], ['laptop shop', 14], ['laptop store', 14],
     ['laptop dealer', 13], ['laptop repair', 13], ['laptop service', 12], ['second hand laptop', 12],
     ['desktop pc', 12], ['gaming pc', 12], ['custom pc', 12], ['pc repair', 12],
-    ['mobile shop', 13], ['mobile shops', 13], ['mobile store', 13], ['mobile repair', 13],
-    ['smartphone', 11], ['iphone repair', 12], ['electronics shop', 11], ['electronics store', 11],
+    ['mobile phone repair', 16], ['mobile repair', 16], ['phone repair', 15], ['cell phone repair', 15],
+    ['smartphone repair', 15], ['iphone repair', 15], ['iphone service', 16], ['iphone service center', 17],
+    ['mobile service center', 16], ['mobile service centre', 16], ['mobile service', 14], ['mobile care', 14],
+    ['screen replacement', 14], ['display replacement', 14], ['display repair', 14],
+    ['mobile phone shop', 16], ['mobile phone shops', 16], ['mobile phone store', 15], ['mobile showroom', 16],
+    ['mobile showrooms', 16], ['smartphone showroom', 16], ['mobile shop', 15], ['mobile shops', 15],
+    ['mobile store', 15], ['phone shop', 15], ['phone showroom', 15], ['mobile accessories', 13],
+    ['mobile dealer', 14], ['cell phone store', 15], ['smartphone', 12], ['mobile', 10], ['iphone', 10],
+    ['electronics shop', 11], ['electronics store', 11],
     ['cctv', 11], ['security camera', 11], ['biometric', 10], ['printer repair', 11],
     ['printer dealer', 11], ['toner refill', 10], ['camera repair', 13], ['dslr repair', 13], ['networking', 10], ['software company', 11],
     ['web development', 10], ['app development', 10], ['it services', 11], ['it company', 11],
@@ -207,8 +214,10 @@ const FAMILY_KEYWORDS = {
     ['commercial solar', 15], ['solar pv', 15], ['solar contractor', 14],
     ['plumb', 8], ['electric', 8], ['carpenter', 8], ['carpentry', 7], ['painter', 6],
     ['painting', 5], ['pest control', 8], ['cleaning service', 7], ['house cleaning', 6],
-    ['ac repair', 8], ['air condition', 7], ['appliance repair', 8], ['refrigerator repair', 8],
-    ['washing machine repair', 8], ['water purifier', 6], ['packers', 7], ['movers', 7],
+    ['ac service', 13], ['ac service center', 14], ['ac repair', 12], ['air condition', 10],
+    ['appliance repair', 11], ['refrigerator repair', 11], ['fridge repair', 11],
+    ['washing machine repair', 11], ['tv repair', 11], ['microwave repair', 11], ['geyser repair', 10],
+    ['ro repair', 10], ['ro service', 10], ['inverter repair', 10], ['water purifier', 8], ['packers', 7], ['movers', 7],
     ['packers and movers', 9], ['interior design', 4], ['modular kitchen', 6],
     ['false ceiling', 6], ['waterproofing', 7], ['solar install', 6], ['cctv', 6],
     ['security service', 4], ['gardener', 6], ['landscaping', 5], ['mason', 6],
@@ -224,7 +233,7 @@ const FAMILY_KEYWORDS = {
     ['dslr store', 14], ['dslr camera', 13], ['camera lens', 13], ['camera', 11],
     ['showroom', 5], ['store', 4], ['shop', 4], ['boutique', 5], ['mall', 4],
     ['supermarket', 6], ['kirana', 6], ['grocery', 6], ['electronics', 6],
-    ['mobile shop', 7], ['mobile store', 7], ['furniture', 6], ['jewell', 6],
+    ['furniture', 6], ['jewell', 6],
     ['jewel', 6], ['clothing', 5], ['apparel', 5], ['footwear', 5], ['fashion', 4],
     ['gift shop', 6], ['stationery', 5], ['book store', 6], ['toy store', 6],
     ['hardware', 5], ['paint store', 6], ['tiles', 5], ['sanitary', 5],
@@ -257,7 +266,8 @@ const FAMILY_KEYWORDS = {
     ['powertrain', 15], ['powertrain engineering', 15], ['transmission engineering', 15],
     ['car showroom', 9], ['bike showroom', 9], ['motorcycle', 7], ['scooter', 6],
     ['automobile', 7], ['car dealer', 8], ['car service', 8], ['garage', 8],
-    ['service center', 6], ['tyre', 6], ['tire', 5], ['battery shop', 6],
+    ['car service center', 10], ['car service centre', 10], ['bike service center', 10], ['bike service centre', 10],
+    ['auto service center', 9], ['authorized service center', 2], ['tyre', 6], ['tire', 5], ['battery shop', 6],
     ['spare parts', 7], ['auto parts', 7], ['car wash', 7], ['detailing', 5],
     ['ev charging', 7], ['driving school', 7],
     ['car rental', 9], ['car rentals', 9], ['bike rental', 9], ['bike rentals', 9],
@@ -582,12 +592,18 @@ function parseSearchQuery(input = {}, explicitLocation = '') {
     if (split) {
       category = clean(split[1], 200);
       location = clean(split[2], 200);
+    } else if (/[,|]\s*|\s+-\s+/.test(queryText)) {
+      const sep = queryText.split(/\s*[,|]\s*|\s+-\s+/).map(s => clean(s, 200)).filter(Boolean);
+      if (sep.length >= 2) {
+        location = sep[sep.length - 1];
+        category = sep.slice(0, -1).join(' ');
+      }
     }
   } else if (queryText && !category && location) {
     category = queryText;
   }
 
-  // Strip common search noise from category.
+  // Strip common search noise from category (never strip trade nouns like "service").
   if (category) {
     category = category
       .replace(CATEGORY_STOPWORDS, '')
@@ -596,20 +612,30 @@ function parseSearchQuery(input = {}, explicitLocation = '') {
   }
   if (location) location = location.replace(LOCATION_PREFIX, '').trim();
 
-  // If there is still no location, try to detect a trailing place name locally.
+  // If there is still no location, try trailing OR leading place name lookup against the geo index.
   if (!location && queryText) {
     try {
       const indiaGeoIndex = require('../utils/indiaGeoIndex');
       const words = queryText.split(/\s+/).filter(Boolean);
       const maxTake = Math.min(4, words.length - 1);
       for (let take = maxTake; take >= 1; take--) {
-        const candidate = words.slice(-take).join(' ');
-        if (candidate.length < 3) continue;
-        const resolved = indiaGeoIndex.resolveQuick(candidate);
-        if (resolved && (resolved.district || resolved.state || resolved.village || resolved.city)) {
-          location = candidate;
-          category = words.slice(0, -take).join(' ');
-          break;
+        const tailCand = words.slice(-take).join(' ');
+        if (tailCand.length >= 3) {
+          const resolved = indiaGeoIndex.resolveQuick(tailCand);
+          if (resolved && (resolved.district || resolved.state || resolved.village || resolved.city)) {
+            location = tailCand;
+            category = words.slice(0, -take).join(' ');
+            break;
+          }
+        }
+        const headCand = words.slice(0, take).join(' ');
+        if (headCand.length >= 3) {
+          const resolvedHead = indiaGeoIndex.resolveQuick(headCand);
+          if (resolvedHead && (resolvedHead.district || resolvedHead.state || resolvedHead.village || resolvedHead.city)) {
+            location = headCand;
+            category = words.slice(take).join(' ');
+            break;
+          }
         }
       }
     } catch (e) {
@@ -1327,57 +1353,27 @@ function getColloquialIntentQueries(category, location, countryCode = 'IN') {
   if (!category || !location) return [];
   const normCat = String(category).trim();
   const normLoc = String(location).trim();
-  const classification = classifyCategory(normCat);
-  const family = classification.family || '';
-
   const out = [];
 
-  // Universal high-intent customer patterns
+  // 1. Exact query + natural colloquial variations anchored to the user's exact trade
+  out.push(`${normCat} in ${normLoc}`);
   out.push(`Best ${normCat} in ${normLoc}`);
-  out.push(`Top rated ${normCat} in ${normLoc}`);
-  out.push(`Affordable ${normCat} in ${normLoc}`);
+  out.push(`Top ${normCat} near ${normLoc}`);
 
-  // Family-specific colloquial seeds
-  if (family === 'photography') {
-    out.push(`Wedding photographers in ${normLoc}`);
-    out.push(`Candid wedding photography in ${normLoc}`);
-    out.push(`Photo studio near me in ${normLoc}`);
-    out.push(`Pre wedding photoshoot in ${normLoc}`);
-  } else if (family === 'wedding') {
-    out.push(`Banquet halls in ${normLoc}`);
-    out.push(`Wedding function halls in ${normLoc}`);
-    out.push(`Event caterers in ${normLoc}`);
-    out.push(`Bridal makeup in ${normLoc}`);
-  } else if (family === 'health') {
-    out.push(`Best clinics in ${normLoc}`);
-    out.push(`Top doctors in ${normLoc}`);
-    out.push(`Specialist hospital in ${normLoc}`);
-  } else if (family === 'home-services') {
-    out.push(`Plumbers near me in ${normLoc}`);
-    out.push(`Electricians in ${normLoc}`);
-    out.push(`Interior designers in ${normLoc}`);
-  } else if (family === 'food') {
-    out.push(`Best restaurants in ${normLoc}`);
-    out.push(`Top cafes in ${normLoc}`);
-    out.push(`Family dining in ${normLoc}`);
-  } else if (family === 'beauty') {
-    out.push(`Beauty parlour in ${normLoc}`);
-    out.push(`Hair salon in ${normLoc}`);
-    out.push(`Spa and wellness in ${normLoc}`);
-  } else if (family === 'real-estate') {
-    out.push(`Real estate agents in ${normLoc}`);
-    out.push(`Property dealers in ${normLoc}`);
-    out.push(`Flats for sale in ${normLoc}`);
-  } else if (family === 'auto') {
-    out.push(`Car repair service in ${normLoc}`);
-    out.push(`Auto mechanics in ${normLoc}`);
-  } else if (family === 'education') {
-    out.push(`Top schools in ${normLoc}`);
-    out.push(`Coaching institutes in ${normLoc}`);
-  }
+  // 2. Trade-faithful subvectors (never pull unrelated sibling trades from the broad family!)
+  try {
+    const subvectors = getCategorySubvectors(normCat);
+    if (Array.isArray(subvectors)) {
+      for (const vec of subvectors) {
+        const cleanVec = String(vec || '').trim();
+        if (!cleanVec || cleanVec.toLowerCase() === normCat.toLowerCase()) continue;
+        out.push(`${cleanVec} in ${normLoc}`);
+        if (out.length >= 8) break;
+      }
+    }
+  } catch (e) {}
 
-  // Deduplicate and return top 5
-  return Array.from(new Set(out)).slice(0, 5);
+  return Array.from(new Set(out)).slice(0, 6);
 }
 
 module.exports = {

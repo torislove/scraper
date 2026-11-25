@@ -249,6 +249,12 @@ function synonyms(category, location = '') {
     for (const alias of (entry.a || []).slice(0, 10)) push(alias, 'alias');
   }
 
+  // 1b. Self-learned synonyms verified from previous live runs.
+  try {
+    const learnedSyns = require('../taxonomyLearner').getSynonyms(text, 4) || [];
+    for (const syn of learnedSyns) push(syn, 'learned');
+  } catch (e) {}
+
   // 2. Curated related categories (kalyana mandapam -> banquet hall...).
   let related = [];
   try {

@@ -219,12 +219,28 @@ const CATEGORY_TAGS = [
     ]
   },
   {
-    test: /computer|laptop|printer|cctv|software|it service|mobile|electronics|ups\b/i,
+    test: /\b(mobile|phone|cellphone|smartphone|iphone)\b.*\b(repair|service|fix|screen|display)\b|\b(mobile|mobiles|smartphone|iphone|cell\s*phone)\b/i,
     filters: [
-      '["shop"~"^(computer|electronics|mobile_phone|photo|hifi|appliance)$"]',
+      '["shop"~"^(mobile_phone|electronics|telecommunication)$"]',
+      '["craft"~"^(electronics_repair|mobile_phone_repair)$"]',
+      '["office"~"^(telecommunication)$"]'
+    ]
+  },
+  {
+    test: /computer|laptop|printer|cctv|software|it service|electronics|ups\b/i,
+    filters: [
+      '["shop"~"^(computer|electronics|photo|hifi|appliance)$"]',
       '["office"~"^(it|telecommunication)$"]',
       '["craft"~"^(electronics_repair|computer_repair)$"]'
     ]
+  },
+  {
+    test: /\b(pharmacy|chemist|medical store|drug store)\b/i,
+    filters: ['["amenity"="pharmacy"]', '["healthcare"="pharmacy"]']
+  },
+  {
+    test: /\b(jewell\w*|gold|diamond|furniture|sofa|mattress|footwear|shoe|hardware|tiles|paint)\b/i,
+    filters: ['["shop"~"^(jewelry|furniture|shoes|hardware|paint|doityourself|department_store|electronics)$"]']
   },
   {
     test: /real estate|property|builder|flat|apartment|land|plot/i,

@@ -174,6 +174,20 @@ const ROLES = [
     avoids: ['plumber', 'plumbing', 'pipe', 'interior design', 'furniture', 'paint', 'photo studio', 'wedding', 'caterer', 'venue', 'dental', 'beauty', 'salon']
   },
   {
+    id: 'mobile_repair',
+    label: 'Mobile Phone Repair & Service',
+    match: ['mobile repair', 'phone repair', 'mobile phone repair', 'cell phone repair', 'smartphone repair', 'iphone repair', 'iphone service', 'mobile service center', 'display replacement', 'screen replacement'],
+    wants: ['mobile', 'phone', 'cell phone', 'cellphone', 'smartphone', 'iphone', 'android', 'repair', 'service', 'display', 'screen', 'touch', 'glass', 'unlock', 'care', 'fix', 'point', 'clinic'],
+    avoids: ['car repair', 'auto repair', 'garage', 'tyre', 'plumber', 'dentist', 'beauty parlour', 'salon', 'restaurant', 'biryani', 'real estate', 'banquet', 'function hall', 'wedding']
+  },
+  {
+    id: 'mobile_shop',
+    label: 'Mobile Phone Shops & Showrooms',
+    match: ['mobile shop', 'mobile shops', 'mobile phone shop', 'mobile phone shops', 'mobile showroom', 'mobile showrooms', 'mobile store', 'phone shop', 'phone store', 'cell phone store', 'smartphone showroom', 'smartphone store'],
+    wants: ['mobile', 'mobiles', 'phone', 'phones', 'cell phone', 'cellphone', 'smartphone', 'iphone', 'telecom', 'cellular', 'showroom', 'store', 'shop', 'communications', 'accessories', 'sangeetha', 'poorvika', 'lot', 'big c', 'happi', 'croma'],
+    avoids: ['car showroom', 'bike showroom', 'tyre', 'tractor', 'plumber', 'dentist', 'restaurant', 'function hall']
+  },
+  {
     id: 'computer_store',
     label: 'Computer & Laptop Stores',
     match: ['computer shop', 'computer store', 'computer dealer', 'computer hardware', 'computer repair', 'laptop shop', 'laptop store', 'laptop dealer', 'laptop repair', 'desktop pc', 'gaming pc', 'macbook', 'computer accessories', 'pc builder'],
@@ -731,13 +745,19 @@ function isVendorRelevant(vendor, requestedCategory) {
   }
 
   // 1a. Specific Niche Mandatory Positive Anchor Guard:
-  // When user searches for a specific micro-niche (Dental, Plumber, CCTV, Biryani, CAs, etc.),
-  // the candidate lead MUST possess a positive anchor token of that niche, and must not hit niche avoids!
+  // Supports both contiguous anchor phrases AND flexible token-group co-occurrence
+  // (e.g. "Mobile phone repair shop" or "Sri Sai Mobile Care" matches [mobile/phone] + [repair/care/shop]).
   const specificNiche = indiaTradeIntelligence.extractSpecificNiche(requestedCategory);
   if (specificNiche) {
     const combined = `${norm(vendor.name)} ${norm(vendor.subcategory || '')} ${norm(vendor.placeCategory || '')} ${norm(vendor.description || '')}`;
-    const hasNicheAnchor = hasAny(combined, (specificNiche.anchors || []).map(norm));
-    if (!hasNicheAnchor) {
+    const hasPhraseAnchor = hasAny(combined, (specificNiche.anchors || []).map(norm));
+    const hasTokenGroupAnchor = Array.isArray(specificNiche.tokenGroups) && specificNiche.tokenGroups.length > 0
+      ? specificNiche.tokenGroups.every(group => hasAny(combined, group.map(norm)))
+      : false;
+    // Also accept if the candidate shares substantive tokens with the requested query and has no avoid conflict
+    const queryWords = norm(requestedCategory).split(/\s+/).filter(w => w.length >= 3 && !['the', 'and', 'for', 'with', 'near', 'best', 'top', 'shop', 'shops', 'store', 'stores', 'showroom', 'showrooms', 'center', 'centre', 'service', 'services'].includes(w));
+    const hasCoreWordMatch = queryWords.length > 0 && queryWords.some(w => combined.includes(w));
+    if (!hasPhraseAnchor && !hasTokenGroupAnchor && !(hasCoreWordMatch && !(specificNiche.avoids && hasAny(combined, specificNiche.avoids.map(norm))))) {
       return false; // REJECT: zero positive evidence for the specific niche requested
     }
     if (specificNiche.avoids && hasAny(combined, specificNiche.avoids.map(norm))) {

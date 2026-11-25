@@ -156,6 +156,23 @@ function isCategoryCompatible(queryText, observedCategory) {
     }
   }
 
+  // Mobile/Phone searches MUST NEVER learn automobile garages or unrelated trades
+  if (/\b(?:mobile|phone|cellphone|smartphone|iphone)\b/i.test(qNorm)) {
+    if (/\b(?:auto repair|car repair|car garage|car service|bike service|automobile|plumber|dentist|salon|restaurant|biryani|banquet)\b/i.test(oNorm)) {
+      return false;
+    }
+  }
+
+  // Universal NAICS exclusion matrix check so every industry learns safely
+  try {
+    const naicsTaxonomy = require('../utils/naicsTaxonomy');
+    const qN = naicsTaxonomy.classifyToNaics(queryText);
+    const oN = naicsTaxonomy.classifyToNaics(observedCategory);
+    if (qN && oN && naicsTaxonomy.isMutuallyExclusive(qN.sectorCode, oN.sectorCode)) {
+      return false;
+    }
+  } catch (e) {}
+
   return true;
 }
 
@@ -319,7 +336,7 @@ function recordRun({ query = '', location = '', leadCount = 0, phoneCount = 0, v
   // queries are remembered as attempts but never promoted into the dictionary.
   if (Number(leadCount) > 0) {
     const productName = brandIntel.canonicalPhrase(intent.product || intent.genericProduct);
-    if (productName && !intent.repair) {
+    if (productName) {
       const entry = bump(store.products, normalize(productName), {
         name: productName,
         expansions: [],

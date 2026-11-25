@@ -1,8 +1,31 @@
 const STOP_WORDS = [
-  "i", "want", "looking", "for", "find", "me", "some", "best", "good", "cheap", 
-  "top", "rated", "can", "you", "search", "show", "get", "need", "a", "an", "the", 
-  "are", "is", "am", "to", "all", "few", "list", "services", "agencies", "service"
+  "i", "want", "looking", "for", "find", "me", "some", "best", "good", "cheap",
+  "top", "rated", "can", "you", "search", "show", "get", "need", "a", "an", "the",
+  "are", "is", "am", "to", "all", "few", "list", "please"
 ];
+
+const QUERY_CITY_ALIASES = {
+  'vja': 'vijayawada',
+  'bezawada': 'vijayawada',
+  'vijaywada': 'vijayawada',
+  'vijayawda': 'vijayawada',
+  'hyd': 'hyderabad',
+  'hydrabad': 'hyderabad',
+  'hyderbad': 'hyderabad',
+  'vizag': 'visakhapatnam',
+  'vishakapatnam': 'visakhapatnam',
+  'blr': 'bengaluru',
+  'blore': 'bengaluru',
+  'banglore': 'bengaluru',
+  'bangalore': 'bengaluru',
+  'chenai': 'chennai',
+  'madras': 'chennai',
+  'guntr': 'guntur',
+  'guntor': 'guntur',
+  'tirupathi': 'tirupati',
+  'secndrabad': 'secunderabad',
+  'secunderbad': 'secunderabad'
+};
 
 // Comprehensive registry of Indian States & Union Territories
 const ALL_STATES = [
@@ -68,7 +91,13 @@ function parseNaturalLanguageQuery(rawQuery) {
 
   let cleanText = rawQuery.toLowerCase().trim();
 
-  // 1. Remove stopwords
+  // 1. Expand common city abbreviations/typos cleanly without removing trade nouns
+  cleanText = cleanText.split(/\s+/).map(w => {
+    const k = w.replace(/[^a-z]/g, '');
+    return QUERY_CITY_ALIASES[k] ? w.replace(new RegExp(k, 'i'), QUERY_CITY_ALIASES[k]) : w;
+  }).join(' ');
+
+  // 2. Remove pure conversational fluff stopwords (never remove "service", "services", "agencies")
   const words = cleanText.split(/\s+/);
   const filteredWords = words.filter(w => !STOP_WORDS.includes(w));
   cleanText = filteredWords.join(' ');
@@ -76,8 +105,8 @@ function parseNaturalLanguageQuery(rawQuery) {
   // Normalize attached preposition typos: "plumbers intenali" -> "plumbers in tenali"
   cleanText = normalizePrepositionTypos(cleanText);
 
-  // 2. Split on geographic prepositions (in, near, at, around)
-  const prepRegex = /\s+(in|near|at|around)\s+/i;
+  // 3. Split on geographic prepositions (in, near, at, around, within, across) or comma/dash separator
+  const prepRegex = /\s+(in|near|at|around|within|across)\s+/i;
   const match = cleanText.match(prepRegex);
 
   let rawCategory = cleanText;
@@ -87,18 +116,31 @@ function parseNaturalLanguageQuery(rawQuery) {
     const splitIndex = match.index;
     rawCategory = cleanText.substring(0, splitIndex).trim();
     rawLocation = cleanText.substring(splitIndex + match[0].length).trim();
+  } else if (/[,|]\s*|\s+-\s+/.test(cleanText)) {
+    const sepParts = cleanText.split(/\s*[,|]\s*|\s+-\s+/).map(s => s.trim()).filter(Boolean);
+    if (sepParts.length >= 2) {
+      const firstIsGeo = MAJOR_CITIES.includes(sepParts[0]) || ALL_STATES.includes(sepParts[0]);
+      if (firstIsGeo) {
+        rawLocation = sepParts[0];
+        rawCategory = sepParts.slice(1).join(' ');
+      } else {
+        rawLocation = sepParts[sepParts.length - 1];
+        rawCategory = sepParts.slice(0, -1).join(' ');
+      }
+    }
   } else {
-    // 3. Fallback: match known cities or states occurring at the end of the query
+    // 4. Fallback: match known cities or states occurring at the end OR start of the query
     const geoTokens = [...MAJOR_CITIES, ...ALL_STATES];
     for (const geo of geoTokens) {
-      const idx = cleanText.lastIndexOf(geo);
-      if (idx !== -1 && idx > 0) {
-        const beforeChar = cleanText[idx - 1];
-        if (beforeChar === ' ' || beforeChar === ',') {
-          rawCategory = cleanText.substring(0, idx).trim();
-          rawLocation = cleanText.substring(idx).trim();
-          break;
-        }
+      if (cleanText.endsWith(` ${geo}`) || cleanText.endsWith(`,${geo}`)) {
+        const idx = cleanText.lastIndexOf(geo);
+        rawCategory = cleanText.substring(0, idx).replace(/[,\s]+$/, '').trim();
+        rawLocation = cleanText.substring(idx).trim();
+        break;
+      } else if (cleanText.startsWith(`${geo} `)) {
+        rawLocation = geo;
+        rawCategory = cleanText.substring(geo.length).trim();
+        break;
       }
     }
   }
