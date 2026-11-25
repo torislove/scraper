@@ -38,12 +38,22 @@ const AUTHORITATIVE_CLUSTERS = {
   'bangalore': [
     'Indiranagar', 'Koramangala', 'Whitefield', 'HSR Layout', 'Jayanagar', 
     'Electronic City', 'Malleshwaram', 'Hebbal', 'Marathahalli', 'BTM Layout', 
-    'JP Nagar', 'Rajajinagar', 'Yelahanka', 'Banashankari', 'Bellandur'
+    'JP Nagar', 'Rajajinagar', 'Yelahanka', 'Banashankari', 'Bellandur',
+    'Sarjapur Road', 'Manyata Tech Park', 'MG Road Bangalore', 'Brigade Road', 'Commercial Street Bangalore',
+    'Basavanagudi', 'Richmond Town', 'Domlur', 'Ulsoor', 'Frazer Town',
+    'RT Nagar', 'Kalyan Nagar', 'Kammanahalli', 'Bannerghatta Road', 'Kengeri',
+    'Mahadevapura', 'KR Puram', 'Varthur', 'Kundalahalli', 'Brookefield',
+    'Nagawara', 'Hennur', 'Thanisandra', 'Peenya Industrial Area', 'Yeshwanthpur'
   ],
   'bengaluru': [
     'Indiranagar', 'Koramangala', 'Whitefield', 'HSR Layout', 'Jayanagar', 
     'Electronic City', 'Malleshwaram', 'Hebbal', 'Marathahalli', 'BTM Layout', 
-    'JP Nagar', 'Rajajinagar', 'Yelahanka', 'Banashankari', 'Bellandur'
+    'JP Nagar', 'Rajajinagar', 'Yelahanka', 'Banashankari', 'Bellandur',
+    'Sarjapur Road', 'Manyata Tech Park', 'MG Road Bangalore', 'Brigade Road', 'Commercial Street Bangalore',
+    'Basavanagudi', 'Richmond Town', 'Domlur', 'Ulsoor', 'Frazer Town',
+    'RT Nagar', 'Kalyan Nagar', 'Kammanahalli', 'Bannerghatta Road', 'Kengeri',
+    'Mahadevapura', 'KR Puram', 'Varthur', 'Kundalahalli', 'Brookefield',
+    'Nagawara', 'Hennur', 'Thanisandra', 'Peenya Industrial Area', 'Yeshwanthpur'
   ],
   'hyderabad': [
     // West IT Corridor & High Growth
@@ -175,12 +185,115 @@ const AUTHORITATIVE_CLUSTERS = {
     'Prasadampadu', 'Gollapudi', 'Kanuru', 'Poranki', 'Penamaluru'
   ],
   'visakhapatnam': [
-    'Siripuram', 'Dwaraka Nagar', 'MVP Colony', 'Gajuwaka', 'Rushikonda', 
-    'Madhurawada', 'Jagadamba Centre', 'Seethammadhara', 'Pendurthi'
+    'Dwaraka Nagar', 'Siripuram', 'MVP Colony', 'Jagadamba Centre', 'Gajuwaka', 
+    'Madhurawada', 'Rushikonda', 'Seethammadhara', 'Asilmetta', 'Dabagardens', 
+    'RTC Complex Vizag', 'Poorna Market', 'Kurmannapalem', 'Pendurthi', 'Gopalapatnam', 
+    'NAD Junction', 'Muralinagar', 'Kancharapalem', 'Simhachalam', 'Lawsons Bay Colony', 
+    'Beach Road Vizag', 'Akkayyapalem', 'Resapuvanipalem', 'Yendada', 'Auto Nagar Vizag'
+  ],
+  'vizag': [
+    'Dwaraka Nagar', 'Siripuram', 'MVP Colony', 'Jagadamba Centre', 'Gajuwaka', 
+    'Madhurawada', 'Rushikonda', 'Seethammadhara', 'Asilmetta', 'Dabagardens', 
+    'RTC Complex Vizag', 'Poorna Market', 'Kurmannapalem', 'Pendurthi', 'Gopalapatnam', 
+    'NAD Junction', 'Muralinagar', 'Kancharapalem', 'Simhachalam', 'Lawsons Bay Colony', 
+    'Beach Road Vizag', 'Akkayyapalem', 'Resapuvanipalem', 'Yendada', 'Auto Nagar Vizag'
   ],
   'chennai': [
     'T Nagar', 'Anna Nagar', 'Nungambakkam', 'Adyar', 'Velachery', 
-    'Besant Nagar', 'Alwarpet', 'Mylapore', 'OMR', 'Kilpauk', 'Guindy', 'Porur'
+    'Besant Nagar', 'Alwarpet', 'Mylapore', 'OMR Chennai', 'Kilpauk', 'Guindy', 'Porur',
+    'Tambaram', 'Chromepet', 'Vadapalani', 'Kodambakkam', 'Teynampet', 'Royapettah',
+    'Sowcarpet', 'George Town Chennai', 'Perambur', 'Mogappair', 'Sholinganallur', 
+    'Thoraipakkam', 'Medavakkam', 'Pallavaram', 'Egmore', 'Purasawalkam', 
+    'Ambattur Industrial Estate', 'Saidapet', 'Kotturpuram', 'Thiruvanmiyur', 'Madipakkam'
+  ],
+  'madras': [
+    'T Nagar', 'Anna Nagar', 'Nungambakkam', 'Adyar', 'Velachery', 
+    'Besant Nagar', 'Alwarpet', 'Mylapore', 'OMR Chennai', 'Kilpauk', 'Guindy', 'Porur',
+    'Tambaram', 'Chromepet', 'Vadapalani', 'Kodambakkam', 'Teynampet', 'Royapettah',
+    'Sowcarpet', 'George Town Chennai', 'Perambur', 'Mogappair', 'Sholinganallur', 
+    'Thoraipakkam', 'Medavakkam', 'Pallavaram', 'Egmore', 'Purasawalkam', 
+    'Ambattur Industrial Estate', 'Saidapet', 'Kotturpuram', 'Thiruvanmiyur', 'Madipakkam'
+  ],
+  'tirupati': [
+    'Alipiri', 'Renigunta Road', 'MR Palli', 'Korlagunta', 'Bairagipatteda', 
+    'RC Road Tirupati', 'Leela Mahal Centre', 'Bhavani Nagar Tirupati', 'Balaji Colony', 
+    'AIR Bypass Road', 'Chandragiri Road', 'Karakambadi Road', 'Padmavathi Puram', 
+    'Settipalli', 'Tiruchanoor Road', 'RTC Bus Stand Tirupati', 'Kapilatheertham', 
+    'Old Tirupati', 'Nehru Nagar Tirupati', 'Gandhi Road Tirupati', 'TTD Administrative Area', 'Annamayya Circle'
+  ],
+  'nellore': [
+    'VRC Centre Nellore', 'Trunk Road Nellore', 'Magunta Layout', 'Pogathota', 
+    'Stonehousepet', 'Haranathapuram', 'Dargamitta', 'Muthukur Road', 'Ramamurthy Nagar Nellore', 
+    'Vedayapalem', 'Podalakur Road', 'Childrens Park Area Nellore', 'Current Office Centre', 
+    'Santhapet Nellore', 'Fathekhanpet', 'Nawabpet Nellore', 'BV Nagar', 'Balaji Nagar Nellore', 
+    'Atmakur Bus Stand Nellore', 'Auto Nagar Nellore'
+  ],
+  'warangal': [
+    'Naimnagar', 'Subedari', 'Kazipet', 'Chowrasta Warangal', 'Balasamudram', 
+    'Waddepally', 'Hunter Road', 'Kishanpura', 'Mandi Bazar Warangal', 'Hanamkonda Chowrasta', 
+    'Kakatiya University Road', 'Mulugu Road', 'Lashkar Bazar', 'Enumamula Market Yard', 
+    'Pochamma Maidan', 'Girmajipet', 'Station Road Warangal', 'Fatima Nagar Kazipet', 
+    'Bhimaram', 'KU Cross Road', 'Ramnagar Hanamkonda', 'Ursu Gutta'
+  ],
+  'hanumakonda': [
+    'Naimnagar', 'Subedari', 'Kazipet', 'Chowrasta Warangal', 'Balasamudram', 
+    'Waddepally', 'Hunter Road', 'Kishanpura', 'Mandi Bazar Warangal', 'Hanamkonda Chowrasta', 
+    'Kakatiya University Road', 'Mulugu Road', 'Lashkar Bazar', 'Enumamula Market Yard', 
+    'Pochamma Maidan', 'Girmajipet', 'Station Road Warangal', 'Fatima Nagar Kazipet', 
+    'Bhimaram', 'KU Cross Road', 'Ramnagar Hanamkonda', 'Ursu Gutta'
+  ],
+  'hanamkonda': [
+    'Naimnagar', 'Subedari', 'Kazipet', 'Chowrasta Warangal', 'Balasamudram', 
+    'Waddepally', 'Hunter Road', 'Kishanpura', 'Mandi Bazar Warangal', 'Hanamkonda Chowrasta', 
+    'Kakatiya University Road', 'Mulugu Road', 'Lashkar Bazar', 'Enumamula Market Yard', 
+    'Pochamma Maidan', 'Girmajipet', 'Station Road Warangal', 'Fatima Nagar Kazipet', 
+    'Bhimaram', 'KU Cross Road', 'Ramnagar Hanamkonda', 'Ursu Gutta'
+  ],
+  'rajahmundry': [
+    'Main Road Rajahmundry', 'Danavaipeta', 'Kotipalli Bus Stand', 'Morampudi', 
+    'Innespeta', 'Prakash Nagar Rajahmundry', 'Kambala Cheruvu', 'Shyamala Nagar Rajahmundry', 
+    'Diwancheruvu', 'Lalacheruvu', 'Aryapuram', 'Tilak Road Rajahmundry', 'JN Road Rajahmundry', 
+    'Venkateswara Rao Peta', 'Katheru', 'Dowleswaram', 'Syndicate Bank Colony', 
+    'Devi Chowk', 'Alcot Gardens', 'Pushkar Ghat Area'
+  ],
+  'rajamahendravaram': [
+    'Main Road Rajahmundry', 'Danavaipeta', 'Kotipalli Bus Stand', 'Morampudi', 
+    'Innespeta', 'Prakash Nagar Rajahmundry', 'Kambala Cheruvu', 'Shyamala Nagar Rajahmundry', 
+    'Diwancheruvu', 'Lalacheruvu', 'Aryapuram', 'Tilak Road Rajahmundry', 'JN Road Rajahmundry', 
+    'Venkateswara Rao Peta', 'Katheru', 'Dowleswaram', 'Syndicate Bank Colony', 
+    'Devi Chowk', 'Alcot Gardens', 'Pushkar Ghat Area'
+  ],
+  'kakinada': [
+    'Main Road Kakinada', 'Bhanugudi Junction', 'Cinema Road Kakinada', 'Jagannaickpur', 
+    'Surya Rao Peta', 'Ramanayyapeta', 'Pratap Nagar Kakinada', 'Sarpavaram', 
+    'Sambamurthy Nagar', 'Port Road Kakinada', 'Madhavapatnam', 'NFCL Road', 
+    'Turangi', 'Gandhinagar Kakinada', 'Srinagar Kakinada', 'Temple Street Kakinada', 
+    'Vakalapudi', 'Indrapalem', 'Boat Club Road Kakinada', 'Collector Office Road Kakinada'
+  ],
+  'kurnool': [
+    'Park Road Kurnool', 'Raj Vihar Centre', 'Budhawarpet', 'C-Camp Kurnool', 
+    'B-Camp Kurnool', 'Birla Compound', 'Old City Kurnool', 'Nandyal Check Post', 
+    'Joharapuram', 'Bellary Road Kurnool', 'Maddur Nagar', 'Roza Dargah Area', 
+    'Kallur Kurnool', 'Deva Nagar', 'STBC College Road', 'Venkatramana Colony'
+  ],
+  'kadapa': [
+    'Madras Road Kadapa', 'RTC Bus Stand Kadapa', 'Nagarajupalli', 'Yerramukkapalli', 
+    'Co-operative Colony Kadapa', 'RIMS Road Kadapa', 'Ravindra Nagar', 'Seven Roads Circle', 
+    'Akkayapalli', 'Bhavani Nagar Kadapa', 'Chinna Chowk', 'Pedda Chowk', 
+    'NGO Colony Kadapa', 'Ameen Peer Dargah Area', 'Palempalli', 'Maruthi Nagar Kadapa'
+  ],
+  'anantapur': [
+    'Subhash Road Anantapur', 'Clock Tower Anantapur', 'Kamala Nagar Anantapur', 
+    'Rudrampeta', 'Ram Nagar Anantapur', 'Housing Board Colony Anantapur', 
+    'Court Road Anantapur', 'Sai Nagar Anantapur', 'Saptagiri Circle', 
+    'Tapovanam', 'Gooty Road Anantapur', 'Old Town Anantapur', 'Sharada Nagar', 
+    'Maruthi Nagar Anantapur', 'Somnath Nagar'
+  ],
+  'eluru': [
+    'RR Pet Eluru', 'Powerpet', 'Fire Station Centre Eluru', 'Sanivarapupeta', 
+    'Tangellamudi', 'Ashok Nagar Eluru', 'Old Bus Stand Eluru', 'Ameenapet', 
+    'Gavaravaram', 'One Town Eluru', 'Kothapet Eluru', 'Satrampadu', 
+    'Vangayagudem', 'Ponangi Road'
   ],
   'kolkata': [
     'Park Street', 'Salt Lake', 'New Town', 'Ballygunge', 'Alipore', 

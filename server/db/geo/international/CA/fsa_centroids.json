@@ -1,0 +1,43 @@
+{
+  "country": "Canada",
+  "code": "CA",
+  "source": "Statistics Canada Census Subdivisions + FSA Centroids",
+  "license": "Statistics Canada Open Licence",
+  "lastUpdated": "2026-11",
+  "stats": { "provinces": 13, "census_divisions": 293, "csd": 5162, "fsa_codes": 1620 },
+  "metro_clusters": {
+    "Toronto CMA": {
+      "city_of_toronto": ["Downtown Core M5V", "Midtown M4S", "North York M2N", "Scarborough M1P", "Etobicoke M8X"],
+      "peel_region": ["Mississauga City Centre L5B", "Brampton Downtown L6W"],
+      "york_region": ["Markham L3R", "Richmond Hill L4B", "Vaughan L4K", "Aurora L4G", "Newmarket L3Y"],
+      "durham_region": ["Oshawa L1H", "Ajax L1Z", "Whitby L1N", "Pickering L1V"]
+    },
+    "Montreal CMA": {
+      "island_montreal": ["Downtown Montreal H3B", "Le Plateau H2J", "Mile-End H2T", "Rosemont H1X", "Villeray H2R"],
+      "off_island": ["Laval H7E", "Longueuil J4J"]
+    },
+    "Vancouver CMA": {
+      "city_of_vancouver": ["Downtown Vancouver V6C", "Yaletown V6Z", "Gastown V6B", "Mount Pleasant V5T", "Kitsilano V6R"],
+      "south_of_fraser": ["Surrey V3T", "Burnaby V5H", "Richmond V6Y", "Delta V4K", "Coquitlam V3B"]
+    },
+    "Calgary CMA": {
+      "inner_city": ["Downtown Calgary T2P", "Kensington T2N", "Inglewood T2G", "Marda Loop T2T"],
+      "suburbs": ["Beltline T2R", "McKenzie Towne T2Z", "Nolan Hill T3R"]
+    },
+    "Edmonton CMA": {
+      "inner_city": ["Downtown Edmonton T5J", "Whyte Avenue T6E", "Oliver T5H"],
+      "suburbs": ["Sherwood Park T8A", "St. Albert T8N"]
+    },
+    "Ottawa CMA": {
+      "ottawa": ["Downtown Ottawa K1P", "Glebe K1S", "Westboro K1Y", "Kanata K2L"],
+      "gatineau": ["Hull J8X", "Aylmer J9H"]
+    }
+  },
+  "fsa_guide": {
+    "M": "Toronto (Ontario)", "K": "Ottawa/Eastern Ontario", "L": "Central Ontario/GTA",
+    "N": "Southwestern Ontario", "V": "British Columbia", "T": "Alberta",
+    "S": "Saskatchewan", "R": "Manitoba", "H": "Montreal (Quebec)", "J": "Quebec (outside Montreal)",
+    "G": "Quebec City area", "E": "New Brunswick", "B": "Nova Scotia",
+    "C": "Prince Edward Island", "A": "Newfoundland and Labrador"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "country": "France",
+  "code": "FR",
+  "source": "INSEE Communes + LaPoste Codes Postaux",
+  "license": "Licence Ouverte / Open Licence v2.0",
+  "lastUpdated": "2026-11",
+  "stats": { "regions": 18, "departments": 101, "communes": 34935 },
+  "metro_clusters": {
+    "Paris Metro": {
+      "arrondissements": ["1er (Louvre/Chatelet)", "2e (Bourse)", "3e (Le Marais Nord)", "4e (Le Marais)", "5e (Latin Quarter)", "6e (Saint-Germain)", "7e (Eiffel/Invalides)", "8e (Champs-Elysees)", "9e (Opera)", "10e (Gare du Nord)", "11e (Bastille)", "12e (Vincennes)", "13e (Gobelins)", "14e (Montparnasse)", "15e (Grenelle)", "16e (Trocadero)", "17e (Batignolles)", "18e (Montmartre)", "19e (Buttes-Chaumont)", "20e (Pere-Lachaise)"],
+      "inner_suburbs": ["La Defense 92800", "Levallois-Perret 92300", "Neuilly-sur-Seine 92200", "Issy-les-Moulineaux 92130", "Saint-Denis 93200", "Montreuil 93100", "Creteil 94000"]
+    },
+    "Lyon Metro": ["Lyon 1er (Presqu'ile)", "Lyon 2e (Bellecour)", "Lyon 3e (Guillotiere)", "Lyon 6e (Foch)", "Villeurbanne Centre"],
+    "Marseille Metro": ["Marseille 1er (Vieux-Port)", "Marseille 6e (Castellane)", "Marseille 8e (Perier)", "Aix-en-Provence Centre"],
+    "Bordeaux Metro": ["Bordeaux Centre", "Saint-Michel", "Chartrons", "Meriagnac Centre"],
+    "Lille Metro": ["Lille Centre", "Vieux-Lille", "Wazemmes"],
+    "Toulouse Metro": ["Toulouse Centre", "Capitole", "Saint-Cyprien", "Les Carmes"]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "country": "United Arab Emirates",
+  "code": "AE",
+  "source": "Dubai Municipality GIS + Abu Dhabi City Municipality",
+  "license": "Open data licensed for commercial use",
+  "lastUpdated": "2026-11",
+  "stats": { "emirates": 7, "communities": 230 },
+  "emirates": {
+    "Dubai": {
+      "sectors": {
+        "Deira & Northern Dubai": ["Deira Gold Souk", "Al Rigga", "Naif", "Al Murar", "Al Rashidiya", "Mirdif", "Muhaisnah", "Hor Al Anz"],
+        "Bur Dubai & Old Dubai": ["Bur Dubai", "Al Fahidi", "Al Karama", "Al Mankhool", "Oud Metha", "Al Raffa"],
+        "Downtown & Business": ["Downtown Dubai", "DIFC", "Business Bay", "Za'abeel", "Al Wasl"],
+        "Sheikh Zayed Road Corridor": ["Trade Centre", "JLT", "Dubai Media City", "Dubai Internet City", "Knowledge Village"],
+        "Marina & New Dubai": ["Dubai Marina", "JBR", "Palm Jumeirah", "Discovery Gardens"],
+        "South & Airport": ["Al Barsha", "Mall of Emirates Area", "Umm Suqeim", "Jumeirah", "Dubai Investment Park", "Al Furjan", "Sports City"],
+        "Outer East": ["Dubai Silicon Oasis", "Academic City", "International City", "Dragon Mart Area"]
+      }
+    },
+    "Abu Dhabi": {
+      "sectors": {
+        "Abu Dhabi Island Core": ["Al Zahiyah", "Al Khalidiyah", "Al Bateen", "Hamdan Street", "Electra Street", "Corniche Area"],
+        "New Development Islands": ["Al Reem Island", "Al Maryah Island", "Yas Island", "Saadiyat Island", "Al Raha Beach"],
+        "Mainland": ["Mussafah Industrial", "Khalifa City", "Mohammed Bin Zayed City"]
+      }
+    },
+    "Sharjah": {
+      "sectors": {
+        "Sharjah City": ["Al Majaz", "Al Qasimia", "Al Nahda Sharjah", "Al Taawun", "Rolla Area", "Muwaileh Commercial"]
+      }
+    },
+    "Ajman": { "key_areas": ["Ajman City Centre", "Al Jurf Industrial", "Al Rashidiya Ajman"] },
+    "Ras Al Khaimah": { "key_areas": ["RAK City Centre", "Al Hamra", "Mina Al Arab"] }
+  }
+}

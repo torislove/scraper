@@ -1,0 +1,17 @@
+{
+  "country": "Japan",
+  "code": "JP",
+  "source": "Japan Post Office / NTT Directory + GeoNames",
+  "license": "Creative Commons Attribution 4.0 International",
+  "lastUpdated": "2026-11",
+  "stats": { "prefectures": 47, "cities": 792, "wards": 1724 },
+  "metro_clusters": {
+    "Tokyo Metro (23 Special Wards)": ["Chiyoda (Marunouchi)", "Chuo (Ginza)", "Minato (Roppongi)", "Shibuya (Harajuku)", "Shinjuku (Kabukicho)", "Toshima (Ikebukuro)", "Sumida (Ryogoku)", "Koto (Odaiba)", "Taito (Asakusa/Ueno)", "Bunkyo (Hongo)", "Meguro (Nakameguro)", "Setagaya (Shimokitazawa)", "Suginami (Koenji)", "Nerima", "Itabashi", "Kita (Akabane)", "Adachi (Kitasenju)"],
+    "Osaka Metro": ["Namba (Chuo-ku)", "Shinsaibashi", "Umeda (Kita-ku)", "Tennoji", "Abeno", "Nishi-ku"],
+    "Nagoya Metro": ["Naka-ku (Sakae)", "Higashi-ku", "Nakamura-ku (Station Area)", "Mizuho-ku"],
+    "Sapporo Metro": ["Chuo-ku (Odori)", "Kita-ku (Sapporo Station)", "Shiroishi-ku"],
+    "Fukuoka Metro": ["Hakata-ku", "Chuo-ku (Tenjin)", "Minami-ku"],
+    "Kyoto Metro": ["Shimogyo-ku (Gion)", "Nakagyo-ku (Nishiki Market)", "Kamigyo-ku", "Fushimi-ku (Fushimi Inari)"],
+    "Kobe Metro": ["Chuo-ku (Sannomiya)", "Kitano-cho", "Motomachi", "Nada-ku"]
+  }
+}

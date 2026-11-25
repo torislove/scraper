@@ -1,0 +1,16 @@
+{
+  "country": "South Africa",
+  "code": "ZA",
+  "source": "StatsSA Census 2022 + Post Office Postal Codes",
+  "license": "Creative Commons Attribution 4.0",
+  "lastUpdated": "2026-11",
+  "stats": { "provinces": 9, "municipalities": 213, "suburbs": 4500 },
+  "metro_clusters": {
+    "City of Johannesburg": ["Sandton 2196", "Rosebank 2196", "Johannesburg CBD 2001", "Soweto 1818", "Randburg 2194", "Midrand 1685", "Fourways 2191", "Melville 2092", "Maboneng 2094", "Braamfontein 2001"],
+    "City of Cape Town": ["Cape Town CBD 8001", "Sea Point 8005", "Green Point 8005", "Camps Bay 8005", "Claremont 7708", "Rondebosch 7700", "Bellville 7530", "Century City 7441"],
+    "eThekwini (Durban)": ["Durban CBD 4001", "Berea Durban 4001", "Umhlanga 4319", "Pinetown 3610", "Westville 3630", "Ballito 4420"],
+    "City of Tshwane (Pretoria)": ["Pretoria CBD 0001", "Hatfield 0083", "Menlyn 0063", "Lynnwood 0081", "Centurion 0046"],
+    "Ekurhuleni Metro": ["Germiston 1401", "Boksburg 1459", "Benoni 1500", "Springs 1559"],
+    "Nelson Mandela Bay (PE)": ["Port Elizabeth CBD 6001", "Walmer 6070", "Greenacres 6045"]
+  }
+}

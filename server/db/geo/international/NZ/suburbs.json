@@ -1,0 +1,15 @@
+{
+  "country": "New Zealand",
+  "code": "NZ",
+  "source": "LINZ NZ Place Names Database + Stats NZ",
+  "license": "Creative Commons Attribution 4.0 International",
+  "lastUpdated": "2026-11",
+  "stats": { "regions": 16, "territorial_authorities": 67, "suburbs": 4800 },
+  "metro_clusters": {
+    "Auckland Region": ["Auckland CBD 1010", "Ponsonby 1011", "Grey Lynn 1021", "Newmarket 1023", "Parnell 1052", "Remuera 1050", "St Heliers 1071", "New Lynn 0600", "Henderson 0612", "Manukau 2104", "Albany 0632", "Takapuna 0622", "Devonport 0624"],
+    "Wellington Region": ["Wellington CBD 6011", "Te Aro 6011", "Newtown 6021", "Karori 6012", "Lower Hutt 5010", "Petone 5012", "Porirua 5022"],
+    "Canterbury": ["Christchurch Central 8013", "Riccarton 8041", "Papanui 8053", "Hornby 8042", "Merivale 8014"],
+    "Waikato": ["Hamilton CBD 3204", "Hamilton East 3216", "Flagstaff 3210"],
+    "Bay of Plenty": ["Tauranga CBD 3110", "Mount Maunganui 3116", "Rotorua Centre 3010"]
+  }
+}

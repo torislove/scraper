@@ -20,8 +20,14 @@ function initIndiaGeoMemory() {
   isInitialized = true;
 
   try {
-    const dbPath = path.join(__dirname, '../../db/india_villages.json');
-    if (fs.existsSync(dbPath)) {
+        const candidatePaths = [
+      path.join(__dirname, '../../../db/india_villages.json'),
+      path.join(__dirname, '../../db/india_villages.json'),
+      path.join(process.cwd(), 'server/db/india_villages.json'),
+      path.join(process.cwd(), 'db/india_villages.json')
+    ];
+    const dbPath = candidatePaths.find(p => fs.existsSync(p));
+    if (dbPath && fs.existsSync(dbPath)) {
       try {
         const data = JSON.parse(fs.readFileSync(dbPath, 'utf8'));
         for (const stateObj of data) {

@@ -1,0 +1,84 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "description": "Global geo partition index. Maps country codes to their local JSON gazetteer files for Master territory sweeps.",
+    "lastUpdated": "2026-11",
+    "schema": "Each country file contains metro_clusters or regions arrays ready for resolveUniversalZones() injection.",
+    "usage": "Loaded lazily by internationalGeoIndexer.js on first query for each country. Cached in-memory per server lifecycle."
+  },
+  "countries": {
+    "US": {
+      "name": "United States",
+      "files": ["international/US/metros.json"],
+      "primaryKey": "metro_clusters",
+      "totalCities": 19354,
+      "totalCounties": 3143
+    },
+    "GB": {
+      "name": "United Kingdom",
+      "files": ["international/GB/regions.json"],
+      "primaryKey": "regions",
+      "totalPostcodeAreas": 124,
+      "totalLocalAuthorities": 361
+    },
+    "AU": {
+      "name": "Australia",
+      "files": ["international/AU/suburbs.json"],
+      "primaryKey": "metro_clusters",
+      "totalSuburbs": 15746,
+      "totalLGAs": 537
+    },
+    "CA": {
+      "name": "Canada",
+      "files": ["international/CA/fsa_centroids.json"],
+      "primaryKey": "metro_clusters",
+      "totalFSAs": 1620,
+      "totalCSDs": 5162
+    },
+    "AE": {
+      "name": "United Arab Emirates",
+      "files": ["international/AE/communities.json"],
+      "primaryKey": "emirates",
+      "totalCommunities": 230
+    },
+    "SG": {
+      "name": "Singapore",
+      "files": ["international/SG/planning_areas.json"],
+      "primaryKey": "planning_areas",
+      "totalPlanningAreas": 55,
+      "totalSubzones": 332
+    },
+    "DE": {
+      "name": "Germany",
+      "files": ["international/DE/postal_districts.json"],
+      "primaryKey": "metro_clusters",
+      "totalPostalCodes": 8268,
+      "totalDistricts": 400
+    },
+    "JP": {
+      "name": "Japan",
+      "files": ["international/JP/metro_wards.json"],
+      "primaryKey": "metro_clusters",
+      "totalWards": 1724,
+      "totalCities": 792
+    },
+    "FR": {
+      "name": "France",
+      "files": ["international/FR/communes.json"],
+      "primaryKey": "metro_clusters",
+      "totalCommunes": 34935
+    },
+    "NZ": {
+      "name": "New Zealand",
+      "files": ["international/NZ/suburbs.json"],
+      "primaryKey": "metro_clusters",
+      "totalSuburbs": 4800
+    },
+    "ZA": {
+      "name": "South Africa",
+      "files": ["international/ZA/suburbs.json"],
+      "primaryKey": "metro_clusters",
+      "totalSuburbs": 4500
+    }
+  }
+}
