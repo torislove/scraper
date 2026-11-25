@@ -830,6 +830,9 @@ class StreamingEnrichmentManager {
   constructor() {
     this.sessionId = null;
     this.queue = [];
+    this.httpQueue = [];
+    this.activeHttpWorkers = 0;
+    this.maxHttpConcurrency = 12;
     this.seenIds = new Set();
     this.seenWebsites = new Set();
     this.active = false;
@@ -848,6 +851,8 @@ class StreamingEnrichmentManager {
     this.emit = typeof emit === 'function' ? emit : () => { };
     this.log = typeof log === 'function' ? log : () => { };
     this.queue = [];
+    this.httpQueue = [];
+    this.activeHttpWorkers = 0;
     this.seenIds = new Set();
     this.seenWebsites = new Set();
     this.active = true;
@@ -884,11 +889,12 @@ class StreamingEnrichmentManager {
     if (!this.active || !lead) return;
     const leadId = lead.id || lead.name;
 
-    // 1. Parallel Fast Website & Asset Scraping (<800ms Cheerio, Zero Playwright overhead)
+    // 1. Dedicated 12-Lane Pure HTTP Website Contact Pool (0ms Chromium wait, 0 browser slots!)
     const websiteUrl = lead.website || '';
     if (websiteUrl && websiteUrl.startsWith('http') && !websiteUrl.includes('google.com') && !this.seenWebsites.has(websiteUrl)) {
       this.seenWebsites.add(websiteUrl);
-      this._processWebsite(lead, websiteUrl).catch(() => { });
+      this.httpQueue.push({ lead, websiteUrl });
+      this._pumpHttp();
     }
 
     if (this.seenIds.has(leadId)) return;
@@ -942,6 +948,21 @@ class StreamingEnrichmentManager {
     if (typeof this.retryTimer.unref === 'function') this.retryTimer.unref();
   }
 
+  _pumpHttp() {
+    if (!this.active || !this.httpQueue.length) return;
+    while (this.active && this.activeHttpWorkers < this.maxHttpConcurrency && this.httpQueue.length > 0) {
+      const task = this.httpQueue.shift();
+      if (!task) continue;
+      this.activeHttpWorkers++;
+      this._processWebsite(task.lead, task.websiteUrl)
+        .catch(() => { })
+        .finally(() => {
+          this.activeHttpWorkers = Math.max(0, this.activeHttpWorkers - 1);
+          if (this.httpQueue.length > 0) this._pumpHttp();
+        });
+    }
+  }
+
   async _processWebsite(lead, url) {
     if (!url || !url.startsWith('http')) return;
     try {
@@ -977,9 +998,20 @@ class StreamingEnrichmentManager {
           const newLandlines = moreNumbers.filter(n => n.isLandline);
           const bestPhone = newMobiles[0] || newLandlines[0] || moreNumbers[0];
 
+          if (newMobiles[0] && !lead.mobilePhone) {
+            lead.mobilePhone = newMobiles[0].displayPhone || newMobiles[0].e164;
+            changed = true;
+          }
+          if (newLandlines[0] && !lead.landlinePhone) {
+            lead.landlinePhone = newLandlines[0].displayPhone || newLandlines[0].e164;
+            changed = true;
+          }
+
           if (bestPhone && !lead.phone) {
             lead.phone = bestPhone.displayPhone || bestPhone.e164;
             lead.phoneType = bestPhone.isMobile ? 'mobile' : 'landline';
+            lead.isMobile = Boolean(bestPhone.isMobile);
+            lead.isLandline = Boolean(newLandlines.length > 0 || bestPhone.isLandline);
             lead.callUrl = bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`;
             if (bestPhone.isMobile) {
               lead.whatsappAvailable = true;
@@ -990,6 +1022,7 @@ class StreamingEnrichmentManager {
           } else if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
             lead.phone = newMobiles[0].displayPhone || newMobiles[0].e164;
             lead.phoneType = 'mobile';
+            lead.isMobile = true;
             lead.whatsappAvailable = true;
             lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
             lead.callUrl = `tel:${newMobiles[0].digits}`;
@@ -1022,7 +1055,11 @@ class StreamingEnrichmentManager {
             linkedin: lead.linkedin,
             logo: lead.logo,
             avatar: lead.avatar || lead.logo,
-            phone: lead.phone,
+            phone: lead.phone || target.phone,
+            mobilePhone: lead.mobilePhone || target.mobilePhone || '',
+            landlinePhone: lead.landlinePhone || target.landlinePhone || '',
+            isMobile: Boolean(lead.isMobile || target.isMobile),
+            isLandline: Boolean(lead.isLandline || target.isLandline),
             phoneType: lead.phoneType || target.phoneType,
             callUrl: lead.callUrl || target.callUrl,
             phones: lead.phones,
@@ -1035,10 +1072,10 @@ class StreamingEnrichmentManager {
             websiteEnrichedAt: lead.websiteEnrichedAt
           });
           dbAdapter.saveVendor(target.userId || lead.userId || 'admin_1', target);
+          this.emit(target, 'updated');
         } catch (e) { }
 
-        this.emit(lead, 'updated');
-        this.log(`[Web Scout] 🌐 ${lead.name} enriched from ${url}: ${lead.email || 'No email'} · ${lead.instagram || lead.facebook || 'Social synced'}`);
+        this.log(`[Web Scout] 🌐 ${lead.name} enriched from ${url}: ${lead.phone || 'No phone'} · ${lead.email || 'No email'}`);
       }
     } catch (err) {
       // Ignore fast website scrape errors
@@ -1099,6 +1136,14 @@ class StreamingEnrichmentManager {
         const mergedPhones = [...new Set([...existingPhones, ...formatted])];
 
         let changed = false;
+        if (mobiles[0] && !lead.mobilePhone) {
+          lead.mobilePhone = mobiles[0].displayPhone || mobiles[0].e164;
+          changed = true;
+        }
+        if (landlines[0] && !lead.landlinePhone) {
+          lead.landlinePhone = landlines[0].displayPhone || landlines[0].e164;
+          changed = true;
+        }
         const bestPhoneObj = mobiles[0] || landlines[0] || numbers[0];
         if (bestPhoneObj && !lead.phone) {
           lead.phone = bestPhoneObj.displayPhone || bestPhoneObj.e164;
@@ -1166,10 +1211,23 @@ class StreamingEnrichmentManager {
                 const morePhones = pickNumbers(webData.phones, countryCode);
                 if (morePhones.length > 0) {
                   const newMobiles = morePhones.filter(n => n.isMobile);
+                  const newLandlines = morePhones.filter(n => n.isLandline);
+                  if (newMobiles[0] && !lead.mobilePhone) lead.mobilePhone = newMobiles[0].displayPhone || newMobiles[0].e164;
+                  if (newLandlines[0] && !lead.landlinePhone) lead.landlinePhone = newLandlines[0].displayPhone || newLandlines[0].e164;
+                  const bestWebPhone = newMobiles[0] || newLandlines[0] || morePhones[0];
                   if (newMobiles.length && !hasValidMobile(lead.phone, countryCode)) {
                     lead.phone = newMobiles[0].displayPhone || newMobiles[0].e164;
+                    lead.phoneType = 'mobile';
+                    lead.isMobile = true;
                     lead.whatsappAvailable = true;
                     lead.whatsappLink = `https://wa.me/${newMobiles[0].digits}`;
+                    lead.verified = true;
+                    changed = true;
+                  } else if (bestWebPhone && !lead.phone) {
+                    lead.phone = bestWebPhone.displayPhone || bestWebPhone.e164;
+                    lead.phoneType = bestWebPhone.isMobile ? 'mobile' : 'landline';
+                    lead.isLandline = Boolean(bestWebPhone.isLandline);
+                    lead.callUrl = bestWebPhone.callUrl || `tel:${bestWebPhone.digits || bestWebPhone.national}`;
                     lead.verified = true;
                     changed = true;
                   }
@@ -1252,6 +1310,10 @@ class StreamingEnrichmentManager {
             const target = stored || lead;
             Object.assign(target, {
               phone: lead.phone,
+              mobilePhone: lead.mobilePhone || target.mobilePhone || '',
+              landlinePhone: lead.landlinePhone || target.landlinePhone || '',
+              isMobile: Boolean(lead.isMobile || target.isMobile),
+              isLandline: Boolean(lead.isLandline || target.isLandline),
               phones: lead.phones,
               whatsappAvailable: lead.whatsappAvailable,
               whatsappLink: lead.whatsappLink,
@@ -1303,7 +1365,7 @@ class StreamingEnrichmentManager {
 
   async drain(timeoutMs = 60000) {
     const start = Date.now();
-    while ((this.queue.length > 0 || this.activeWorkers > 0) && (Date.now() - start < timeoutMs)) {
+    while ((this.queue.length > 0 || this.activeWorkers > 0 || this.httpQueue.length > 0 || this.activeHttpWorkers > 0) && (Date.now() - start < timeoutMs)) {
       await new Promise(r => setTimeout(r, 400));
     }
   }

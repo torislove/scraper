@@ -48,7 +48,7 @@ function buildPlan(ctx) {
       const osmTowns = swarmTowns.slice(0, 6);
       notes.push(`[Orchestrator] 🗺️ Clustering OpenStreetMap across mandal centers: ${osmTowns.join(', ')}`);
       for (const town of osmTowns) {
-        swarmJobs.push({ task: 'scrapeOpenStreetMap', args: [ctx.category, town, 'omni', ctx.sessionId] });
+        swarmJobs.push({ task: 'scrapeOpenStreetMap', args: [ctx.category, town, 'omni', ctx.sessionId, null, null, 8, ctx.countryCode || 'IN'] });
       }
     }
     if (ctx.hasEngine('social') || ctx.hasEngine('social-dork') || ctx.hasEngine('social-dork-intl')) {

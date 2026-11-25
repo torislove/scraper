@@ -2,12 +2,12 @@ import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download,
-  Globe2, MapPin, Maximize2, MessageCircle, Phone, Radar as RadarIcon, Search, Smartphone, X, Zap
+  Globe2, Loader2, MapPin, Maximize2, MessageCircle, Phone, Radar as RadarIcon, Search, Smartphone, Sparkles, X, Zap
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import { EmptyState, VendorAvatar } from '../cards/MetricCard';
 import { CarriedBadge, calculateHaversineKm } from '../../utils/leadHelpers';
-import { formatLeadPhone, getDisplayPhone } from '../../../utils/phoneClassify';
+import { formatLeadPhone, getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber } from '../../ui';
 import FloatingActionDock from '../cards/FloatingActionDock';
@@ -68,7 +68,10 @@ export default function CockpitView({
 
   const handleCopySelectedPhones = () => {
     const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
-    const phones = [...new Set(target.map(l => getDisplayPhone(l)).filter(Boolean))];
+    const phones = [...new Set(target.flatMap(l => {
+      const dual = getAllDisplayPhones(l, l.country || searchCountry);
+      return [dual.mobile?.display, dual.landline?.display, getDisplayPhone(l)].filter(Boolean);
+    }))];
     if (!phones.length) {
       toast.error('No phone numbers in selected rows.');
       return;
@@ -90,12 +93,14 @@ export default function CockpitView({
       return;
     }
     const headers = [
-      'Business Name', 'Category', 'Phone', 'Address', 'Area / Mandal',
+      'Business Name', 'Category', 'Phone', 'Mobile Phone', 'Landline / STD', 'Address', 'Area / Mandal',
       'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
       'Map Directions', 'Rating', 'Reviews', 'Website'
     ];
     const lines = [headers.join(',')];
     rows.forEach(r => {
+      const dual = getAllDisplayPhones(r, r.country || searchCountry);
+      const combinedPhone = [dual.mobile?.display, dual.landline?.display].filter(Boolean).join(' / ') || formatLeadPhone(r, r.country || searchCountry)?.display || getDisplayPhone(r) || '';
       const rLat = r.latitude ?? r.lat ?? '';
       const rLng = r.longitude ?? r.lng ?? '';
       const hasGeo = Number.isFinite(Number(rLat)) && Number.isFinite(Number(rLng)) && (Number(rLat) !== 0 || Number(rLng) !== 0);
@@ -105,7 +110,9 @@ export default function CockpitView({
       lines.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${formatLeadPhone(r, r.country || searchCountry)?.display || getDisplayPhone(r) || ''}"`,
+        `"${combinedPhone}"`,
+        `"${dual.mobile?.display || ''}"`,
+        `"${dual.landline?.display || ''}"`,
         `"${(r.address || '').replace(/"/g, '""')}"`,
         `"${(r.mandal || r.locality || '').replace(/"/g, '""')}"`,
         `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
@@ -158,18 +165,23 @@ export default function CockpitView({
     return filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).slice(0, 200);
   }, [filteredVendors, run?.id, run?.sessionId, sessionFilter]);
 
-  const { phoneCount, mobileCount } = useMemo(() => {
+  const { phoneCount, mobileCount, landlineCount, huntingCount } = useMemo(() => {
     let totalPhones = 0;
     let totalMobiles = 0;
+    let totalLandlines = 0;
+    let totalHunting = 0;
     for (const v of filteredVendors) {
-      const parsed = formatLeadPhone(v, v?.country || searchCountry);
-      if (parsed) {
+      const dual = getAllDisplayPhones(v, v?.country || searchCountry);
+      if (dual.mobile || dual.landline) {
         totalPhones += 1;
-        if (parsed.isMobile) totalMobiles += 1;
+        if (dual.mobile) totalMobiles += 1;
+        if (dual.landline) totalLandlines += 1;
+      } else if (scanning || runStatus === 'running' || (v?.website && !v?.websiteEnrichedAt)) {
+        totalHunting += 1;
       }
     }
-    return { phoneCount: totalPhones, mobileCount: totalMobiles };
-  }, [filteredVendors, searchCountry]);
+    return { phoneCount: totalPhones, mobileCount: totalMobiles, landlineCount: totalLandlines, huntingCount: totalHunting };
+  }, [filteredVendors, searchCountry, scanning, runStatus]);
   const plottedCount = useMemo(
     () => mapVendors.filter(v => Number.isFinite(Number(v.latitude))).length,
     [mapVendors]
@@ -180,6 +192,7 @@ export default function CockpitView({
 
   return (
     <div className="lx-split-stage">
+      <style>{'@keyframes lxSpin{to{transform:rotate(360deg)}} @keyframes lxHunterGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.22)}50%{box-shadow:0 0 0 4px rgba(16,185,129,0.08)}}'}</style>
       {/* LEFT PANEL: CLEAN LIVE LEADS */}
       <section className="lx-leads-pane">
         <header className="lx-pane-head">
@@ -196,7 +209,7 @@ export default function CockpitView({
               </span>
             ) : null}
             <span className="lx-count-badge">{formatNumber(filteredVendors.length)}</span>
-            <span className="lx-sub-stat">{formatNumber(mobileCount)} mobiles · {formatNumber(phoneCount)} phones</span>
+            <span className="lx-sub-stat">{formatNumber(mobileCount)} mobiles · {formatNumber(landlineCount)} landlines · {formatNumber(phoneCount)} with phone</span>
           </div>
 
           <div className="lx-pane-controls">
@@ -253,6 +266,49 @@ export default function CockpitView({
           </div>
         </header>
 
+        {(scanning || runStatus === 'running') && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: '8px 14px 4px',
+              padding: '9px 13px',
+              borderRadius: 12,
+              background: 'linear-gradient(95deg, rgba(16,185,129,0.10) 0%, rgba(245,158,11,0.10) 55%, rgba(6,182,212,0.10) 100%)',
+              border: '1px solid rgba(16,185,129,0.28)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+              flexWrap: 'wrap',
+              animation: 'lxHunterGlow 2.4s ease-in-out infinite'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
+              <Loader2 size={15} color="#059669" style={{ flexShrink: 0, animation: 'lxSpin 1.1s linear infinite' }} />
+              <div style={{ fontSize: 12, lineHeight: 1.35, color: '#0f172a' }}>
+                <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact Hunter is delivering your numbers live!</b>{' '}
+                <span style={{ color: '#475569' }}>
+                  Google Maps, JustDial, OpenStreetMap &amp; our 12-lane Website Crawler are extracting direct Mobile &amp; Landline numbers in real time.
+                </span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+              <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.16)', color: '#065f46' }}>
+                ✓ {formatNumber(mobileCount)} Mobiles
+              </span>
+              <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#1d4ed8' }}>
+                ☎ {formatNumber(landlineCount)} Landlines
+              </span>
+              {huntingCount > 0 && (
+                <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(245,158,11,0.16)', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Cards…
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="lx-table-wrap">
           <table className="lx-clean-table">
             <thead>
@@ -266,7 +322,7 @@ export default function CockpitView({
                   />
                 </th>
                 <th>Business &amp; Location</th>
-                <th>Phone &amp; Website</th>
+                <th>Mobile, Landline &amp; Website</th>
                 <th style={{ width: 96 }}>Rating</th>
                 <th style={{ width: 32 }} />
               </tr>
@@ -274,9 +330,8 @@ export default function CockpitView({
             <tbody>
               {pageRows.map((vendor, index) => {
                 const vKey = vendor.id || `${vendor.name}-${vendor.phone || index}`;
-                const parsedPhone = formatLeadPhone(vendor, vendor.country || searchCountry);
-                const phone = parsedPhone?.display || '';
-                const isMob = Boolean(parsedPhone?.isMobile);
+                const dual = getAllDisplayPhones(vendor, vendor.country || searchCountry);
+                const hasAnyPhone = Boolean(dual.mobile || dual.landline);
                 const isFresh = Boolean(freshLeadIds?.has(vendor.id || vKey));
                 const isPhonePop = Boolean(phoneJustFoundIds?.has(vendor.id || vKey));
                 const locality = vendor.city || vendor.village || vendor.district || '';
@@ -324,41 +379,75 @@ export default function CockpitView({
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <div className="lx-contact-stack">
-                        {phone ? (
-                          <div className="lx-phone-row">
-                            <a href={parsedPhone?.callUrl || `tel:${phone}`} className={cx('lx-phone-pill', isMob ? 'is-mob' : 'is-land', isPhonePop && 'lx-phone-pop')}>
-                              {isMob ? <Smartphone size={11} /> : <Phone size={11} />}
-                              <span>{phone}</span>
-                              <span className={cx('lx-phone-tag', isMob ? 'is-mob' : 'is-land')}>
-                                {isMob ? 'MOB' : 'STD'}
-                              </span>
-                            </a>
-                            {isMob && parsedPhone?.whatsappUrl && (
-                              <a
-                                href={parsedPhone.whatsappUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="lx-wa-mini"
-                                title="Message on WhatsApp"
-                              >
-                                <MessageCircle size={11} />
-                              </a>
+                        {hasAnyPhone ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {dual.mobile && (
+                              <div className="lx-phone-row">
+                                <a href={dual.mobile.callUrl || `tel:${dual.mobile.display}`} className={cx('lx-phone-pill is-mob', isPhonePop && 'lx-phone-pop')}>
+                                  <Smartphone size={11} />
+                                  <span>{dual.mobile.display}</span>
+                                  <span className="lx-phone-tag is-mob">MOB</span>
+                                </a>
+                                {dual.mobile.whatsappUrl && (
+                                  <a
+                                    href={dual.mobile.whatsappUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="lx-wa-mini"
+                                    title="Message on WhatsApp"
+                                  >
+                                    <MessageCircle size={11} />
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  className="lx-copy-mini"
+                                  onClick={e => handleCopySingle(dual.mobile.display, e)}
+                                  title="Copy mobile number"
+                                >
+                                  <Copy size={11} />
+                                </button>
+                              </div>
                             )}
-                            <button
-                              type="button"
-                              className="lx-copy-mini"
-                              onClick={e => handleCopySingle(phone, e)}
-                              title="Copy phone number"
-                            >
-                              <Copy size={11} />
-                            </button>
+                            {dual.landline && (
+                              <div className="lx-phone-row">
+                                <a href={dual.landline.callUrl || `tel:${dual.landline.display}`} className={cx('lx-phone-pill is-land', isPhonePop && 'lx-phone-pop')}>
+                                  <Phone size={11} />
+                                  <span>{dual.landline.display}</span>
+                                  <span className="lx-phone-tag is-land">STD</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  className="lx-copy-mini"
+                                  onClick={e => handleCopySingle(dual.landline.display, e)}
+                                  title="Copy landline / STD number"
+                                >
+                                  <Copy size={11} />
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        ) : scanning ? (
-                          <span className="lx-phone-scanning">
-                            <span className="lx-dot-pulse" /> Finding phone…
+                        ) : (scanning || runStatus === 'running' || (vendor.website && !vendor.websiteEnrichedAt)) ? (
+                          <span
+                            className="lx-phone-scanning"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '4px 10px',
+                              borderRadius: 999,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              color: '#065f46',
+                              background: 'linear-gradient(90deg, rgba(16,185,129,0.12) 0%, rgba(245,158,11,0.15) 50%, rgba(16,185,129,0.12) 100%)',
+                              border: '1px solid rgba(16,185,129,0.28)'
+                            }}
+                          >
+                            <Loader2 size={11} style={{ animation: 'lxSpin 1.1s linear infinite' }} />
+                            {vendor.website ? 'Scanning website & Maps for phone…' : 'Hunting mobile & landline live…'}
                           </span>
                         ) : (
-                          <span className="lx-muted-text">No phone listed</span>
+                          <span className="lx-muted-text">No public phone listed</span>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           {vendor.website ? (

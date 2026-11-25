@@ -77,6 +77,10 @@ async function launchStealthBrowser(useProxy = true, executablePath = null, isHe
     // packaged app never depends on `playwright install`.
     const possiblePaths = [
       process.env.SCRAPER_CHROME_PATH,
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/usr/bin/google-chrome-stable',
       'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
       'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',

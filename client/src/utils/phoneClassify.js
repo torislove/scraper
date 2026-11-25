@@ -221,19 +221,64 @@ export function isIndianLandline(value) {
 
 export function getDisplayPhone(vendor) {
   if (!vendor) return null;
+  if (vendor.mobilePhone && !String(vendor.mobilePhone).includes('Requires')) return vendor.mobilePhone;
   if (vendor.phone && !String(vendor.phone).includes('Requires')) return vendor.phone;
+  if (vendor.landlinePhone && !String(vendor.landlinePhone).includes('Requires')) return vendor.landlinePhone;
   if (Array.isArray(vendor.phones) && vendor.phones.length > 0) {
     for (const p of vendor.phones) {
-      const val = typeof p === 'string' ? p : p?.e164 || p?.national || p?.raw;
+      const val = typeof p === 'string' ? p : p?.displayPhone || p?.e164 || p?.national || p?.raw;
       if (val && !String(val).includes('Requires')) return val;
     }
     const first = vendor.phones[0];
-    const val = typeof first === 'string' ? first : first?.e164 || first?.national || first?.raw;
+    const val = typeof first === 'string' ? first : first?.displayPhone || first?.e164 || first?.national || first?.raw;
     if (val && !String(val).includes('Requires')) return val;
   }
   if (vendor.whatsapp && !String(vendor.whatsapp).includes('Requires')) return vendor.whatsapp;
   if (vendor.phone_primary && !String(vendor.phone_primary).includes('Requires')) return vendor.phone_primary;
   return null;
+}
+
+/**
+ * Extracts BOTH verified Mobile and STD/National Landline numbers for a vendor
+ * across India and all 10 international markets so the UI can show both side-by-side.
+ */
+export function getAllDisplayPhones(vendor, defaultCountry = 'IN') {
+  if (!vendor) return { mobile: null, landline: null, primary: null, all: [] };
+  const hint = String(vendor.country || vendor.countryCode || defaultCountry || 'IN').toUpperCase();
+  const rawList = [
+    vendor.mobilePhone,
+    vendor.landlinePhone,
+    vendor.phone,
+    ...(Array.isArray(vendor.phones) ? vendor.phones : []),
+    vendor.phone_primary
+  ].filter(Boolean);
+
+  let mobile = null;
+  let landline = null;
+  const all = [];
+  const seenDigits = new Set();
+
+  for (const item of rawList) {
+    const rawStr = typeof item === 'string'
+      ? item
+      : (item?.displayPhone || item?.display || item?.e164 || item?.national || item?.raw || '');
+    if (!rawStr || /requires|obfuscated|lookup|hidden/i.test(rawStr)) continue;
+    const formatted = formatLeadPhone(rawStr, hint);
+    if (!formatted || !formatted.display) continue;
+    const dKey = String(formatted.e164 || formatted.display).replace(/\D/g, '').slice(-10);
+    if (dKey && seenDigits.has(dKey)) continue;
+    if (dKey) seenDigits.add(dKey);
+    all.push(formatted);
+    if (formatted.isMobile && !mobile) mobile = formatted;
+    else if (!formatted.isMobile && !landline) landline = formatted;
+  }
+
+  return {
+    mobile,
+    landline,
+    primary: mobile || landline || all[0] || null,
+    all
+  };
 }
 
 /**

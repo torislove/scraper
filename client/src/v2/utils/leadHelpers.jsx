@@ -185,7 +185,16 @@ export function mergeSingleVendor(existing, incoming, countryHint = 'IN') {
   else if (isExistingMob) mergedPhone = existingPhone;
   else if (incomingPhone) mergedPhone = incomingPhone;
 
+  const existingMob = existing.mobilePhone || (isExistingMob ? existingPhone : '');
+  const incomingMob = incoming.mobilePhone || (isIncomingMob ? incomingPhone : '');
+  const existingLand = existing.landlinePhone || (!isExistingMob && existingPhone ? existingPhone : '');
+  const incomingLand = incoming.landlinePhone || (!isIncomingMob && incomingPhone ? incomingPhone : '');
+  const mergedMobilePhone = incomingMob || existingMob || '';
+  const mergedLandlinePhone = incomingLand || existingLand || '';
+
   const mergedPhones = Array.from(new Set([
+    mergedMobilePhone,
+    mergedLandlinePhone,
     ...(Array.isArray(existing.phones) ? existing.phones : (existing.phone ? [existing.phone] : [])),
     ...(Array.isArray(incoming.phones) ? incoming.phones : (incoming.phone ? [incoming.phone] : []))
   ])).filter(Boolean);
@@ -198,8 +207,11 @@ export function mergeSingleVendor(existing, incoming, countryHint = 'IN') {
   return {
     ...existing,
     ...incoming,
-    phone: mergedPhone,
+    phone: mergedPhone || mergedMobilePhone || mergedLandlinePhone,
+    mobilePhone: mergedMobilePhone || undefined,
+    landlinePhone: mergedLandlinePhone || undefined,
     phones: mergedPhones.length ? mergedPhones : (mergedPhone ? [mergedPhone] : []),
+    websiteEnrichedAt: incoming.websiteEnrichedAt || existing.websiteEnrichedAt,
     sessionId: incoming.sessionId || existing.sessionId,
     lastSessionId: incoming.lastSessionId || incoming.sessionId || existing.lastSessionId,
     sessionIds: mergedSessionIds,

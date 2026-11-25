@@ -65,7 +65,8 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
   const allowed = key => {
     if (!hasEngine(key)) return false;
     if (!bundle) return true;
-    return bundle.has(BUNDLE_KEY[key] || key);
+    const mapped = BUNDLE_KEY[key];
+    return bundle.has(key) || (mapped ? bundle.has(mapped) : false);
   };
 
   const jobs = skipSerp ? [] : serpJobs({ ...ctx, hasEngine: allowed });
@@ -101,6 +102,20 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
     jobs.push({ task: 'scrapeJustDial', args: [category, baseLocation, 'omni', sessionId] });
   }
 
+  // Global Bing Places & Wikidata Knowledge Graph run in BOTH India & International markets
+  if (allowed('bing-places')) {
+    jobs.push({
+      task: 'scrapeBingPlaces',
+      args: [category, baseLocation, sessionId, { countryCode }]
+    });
+  }
+  if (allowed('wikidata') || allowed('wikidata-businesses')) {
+    jobs.push({
+      task: 'scrapeWikidata',
+      args: [category, baseLocation, sessionId, countryCode]
+    });
+  }
+
   if (countryCode !== 'IN') {
     // 1. Yelp for US, CA, AU
     if (['US', 'CA', 'AU'].includes(countryCode) && allowed('yelp')) {
@@ -110,15 +125,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
       });
     }
 
-    // 2. Bing Places Local Directory (Global)
-    if (allowed('bing-places')) {
-      jobs.push({
-        task: 'scrapeBingPlaces',
-        args: [category, baseLocation, sessionId, { countryCode }]
-      });
-    }
-
-    // 3. TripAdvisor Global (Hospitality, dining, venues, events, tourism)
+    // 2. TripAdvisor Global (Hospitality, dining, venues, events, tourism)
     if (allowed('tripadvisor') || weddingIntent) {
       if (allowed('tripadvisor')) {
         jobs.push({
@@ -128,23 +135,15 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
       }
     }
 
-    // 4. Wikidata Open Business Graph (Global SPARQL)
-    if (allowed('wikidata')) {
-      jobs.push({
-        task: 'scrapeWikidata',
-        args: [category, baseLocation, sessionId, countryCode]
-      });
-    }
-
-    // 5. International Social & Web Contact Dorking
-    if (allowed('social-dork')) {
+    // 3. International Social & Web Contact Dorking
+    if (allowed('social-dork') || allowed('social-dork-intl')) {
       jobs.push({
         task: 'scrapeSocialDorkIntl',
         args: [category, baseLocation, sessionId, countryCode]
       });
     }
 
-    // 6. YellowPages Global (US, UK, CA, AU, NZ, AE, SG, ZA)
+    // 4. YellowPages Global (US, UK, CA, AU, NZ, AE, SG, ZA)
     if (allowed('yellowpages')) {
       jobs.push({
         task: 'scrapeYellowPagesGlobal',
@@ -152,7 +151,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
       });
     }
 
-    // 7. FreeIndex for United Kingdom
+    // 5. FreeIndex for United Kingdom
     if (['GB', 'UK'].includes(countryCode) && allowed('freeindex')) {
       jobs.push({
         task: 'scrapeFreeIndexUK',
@@ -160,7 +159,7 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
       });
     }
 
-    // 8. GoldenPages for Ireland
+    // 6. GoldenPages for Ireland
     if (countryCode === 'IE' && allowed('goldenpages')) {
       jobs.push({
         task: 'scrapeGoldenPagesIE',
@@ -168,15 +167,15 @@ function baseDirectoryJobs(ctx, { skipSerp = false } = {}) {
       });
     }
 
-    // 9. Cylex for UK, AU, CA, AE, SG, US
-    if (['GB', 'UK', 'AU', 'CA', 'AE', 'SG', 'US'].includes(countryCode) && allowed('cylex')) {
+    // 7. Cylex for UK, DE, AU, CA, AE, SG, US
+    if (['GB', 'UK', 'DE', 'AU', 'CA', 'AE', 'SG', 'US'].includes(countryCode) && allowed('cylex')) {
       jobs.push({
         task: 'scrapeCylex',
         args: [category, baseLocation, sessionId, { countryCode }]
       });
     }
 
-    // 10. Trustpilot Verified Businesses
+    // 8. Trustpilot Verified Businesses
     if (allowed('trustpilot')) {
       jobs.push({
         task: 'scrapeTrustpilot',

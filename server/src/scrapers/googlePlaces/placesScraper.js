@@ -374,7 +374,9 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 exposedNumbers.push(parsed);
               }
             }
-            const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
+            const firstMobObj = exposedNumbers.find(n => n.isMobile) || null;
+            const firstLandObj = exposedNumbers.find(n => n.isLandline) || null;
+            const primaryNumber = firstMobObj || firstLandObj || exposedNumbers[0] || null;
             let whatsappLink = '';
             let whatsappAvailable = false;
             let callUrl = '';
@@ -443,6 +445,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               name,
               address,
               phone: phone || '',
+              mobilePhone: firstMobObj ? (firstMobObj.displayPhone || firstMobObj.e164) : '',
+              landlinePhone: firstLandObj ? (firstLandObj.displayPhone || firstLandObj.e164) : '',
               phones: exposedNumbers.map(n => n.displayPhone || n.e164),
               phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
               callUrl: callUrl || (phone ? `tel:${phone.replace(/\s+/g, '')}` : ''),
@@ -880,7 +884,9 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 exposedNumbers.push(parsed);
               }
             }
-            const primaryNumber = exposedNumbers.find(n => n.isMobile) || exposedNumbers.find(n => n.isLandline) || exposedNumbers[0] || null;
+            const firstMobObj = exposedNumbers.find(n => n.isMobile) || null;
+            const firstLandObj = exposedNumbers.find(n => n.isLandline) || null;
+            const primaryNumber = firstMobObj || firstLandObj || exposedNumbers[0] || null;
             let whatsappLink = '';
             let whatsappAvailable = false;
             let callUrl = '';
@@ -912,14 +918,6 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               continue;
             }
 
-            // Managed background website enrichment: only when contact details are missing
-            if (websiteUrl && websiteUrl.startsWith('http') && (!phone || phone.includes('Requires') || !rawItem.email)) {
-              try {
-                const { streamingEnricher } = require('../../services/phoneBackfillService');
-                streamingEnricher.enqueue({ name, website: websiteUrl, country: countryCode, city: location });
-              } catch (e) { }
-            }
-
             // Category fidelity: Maps can include related businesses (a
             // wedding-photographer query returning banquet halls). Drop anything
             // that clearly belongs to a different role before it is stored.
@@ -941,6 +939,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               name,
               address,
               phone: phone || '',
+              mobilePhone: firstMobObj ? (firstMobObj.displayPhone || firstMobObj.e164) : '',
+              landlinePhone: firstLandObj ? (firstLandObj.displayPhone || firstLandObj.e164) : '',
               phones: exposedNumbers.map(n => n.displayPhone || n.e164),
               phoneType: primaryNumber ? (primaryNumber.isMobile ? 'mobile' : 'landline') : '',
               rating,

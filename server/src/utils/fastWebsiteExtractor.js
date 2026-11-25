@@ -163,10 +163,23 @@ function extractFromHtml(html, pageUrl, opts = {}) {
     } catch (e) {}
   });
 
-  // 0d. HTML Data Attributes & Tel/WhatsApp Attributes on any element
-  $('[data-phone], [data-tel], [data-mobile], [data-whatsapp], a[href*="wa.me"], a[href*="whatsapp"]').each((_, el) => {
+  // 0d. HTML Data Attributes, Tel/WhatsApp Attributes & Internal Contact/Branch Subpage Discovery
+  let pageOrigin = '';
+  try { pageOrigin = new URL(pageUrl).origin; } catch (e) {}
+  $('a[href], [data-phone], [data-tel], [data-mobile], [data-whatsapp]').each((_, el) => {
     try {
-      const raw = $(el).attr('data-phone') || $(el).attr('data-tel') || $(el).attr('data-mobile') || $(el).attr('data-whatsapp') || $(el).attr('href') || '';
+      const href = $(el).attr('href') || '';
+      if (href && pageOrigin && !href.startsWith('tel:') && !href.startsWith('mailto:') && !href.startsWith('javascript:')) {
+        const linkText = ($(el).text() || '').trim();
+        if (/(?:contact|reach|touch|about|branch|location|clinic|center|centre|appoint|book|support|office|find[-_ ]?us)/i.test(`${href} ${linkText}`)) {
+          const fullSub = new URL(href, pageUrl).toString();
+          if (fullSub.startsWith(pageOrigin) && !/\.(?:pdf|jpg|jpeg|png|svg|webp|zip|mp4)$/i.test(fullSub) && !data.candidateLinks.includes(fullSub)) {
+            data.candidateLinks.push(fullSub);
+          }
+        }
+      }
+      const raw = $(el).attr('data-phone') || $(el).attr('data-tel') || $(el).attr('data-mobile') || $(el).attr('data-whatsapp') || (/(?:tel:|wa\.me|whatsapp)/i.test(href) ? href : '');
+      if (!raw) return;
       const p = normalizePhone(raw, {
         context: 'data attr phone',
         defaultCountry: opts.defaultCountry || 'IN',
@@ -279,28 +292,25 @@ function extractFromHtml(html, pageUrl, opts = {}) {
     }
   });
 
-  // 3. Phone / mobile extraction from clean page text.
-  // India keeps its strict regex. Other countries use the shared parser, which
-  // understands local trunk prefixes and validates the number's country.
+  // 3. Phone / landline / mobile extraction from clean page text (India + International).
   const textContent = cleanBodyText;
   const isIntl = Boolean(opts.allowInternational || (opts.defaultCountry && opts.defaultCountry !== 'IN'));
-  if (isIntl) {
-    const parsed = extractPhones(textContent, {
-      defaultCountry: opts.defaultCountry || 'US',
-      allowInternational: true,
-      trusted: false,
-      context: 'phone contact'
-    });
-    for (const phone of parsed) {
-      if (isCssOrCodeSnippet(phone.displayPhone) || isCssOrCodeSnippet(phone.digits)) continue;
-      const national = phone.national || phone.digits;
-      if (phone.isMobile || phone.isLandline) {
-        if (!data.mobiles.includes(national)) data.mobiles.push(national);
-        if (!data.whatsappLink && phone.isMobile) data.whatsappLink = `https://wa.me/${phone.digits}`;
-      }
-      if (!data.phones.includes(phone.displayPhone)) data.phones.push(phone.displayPhone);
+  const parsedPhones = extractPhones(textContent, {
+    defaultCountry: opts.defaultCountry || (isIntl ? 'US' : 'IN'),
+    allowInternational: isIntl,
+    trusted: false,
+    context: 'phone contact'
+  });
+  for (const phone of parsedPhones) {
+    if (isCssOrCodeSnippet(phone.displayPhone) || isCssOrCodeSnippet(phone.digits)) continue;
+    const national = phone.national || phone.digits;
+    if (phone.isMobile) {
+      if (!data.mobiles.includes(national)) data.mobiles.push(national);
+      if (!data.whatsappLink) data.whatsappLink = `https://wa.me/${phone.digits}`;
     }
-  } else {
+    if (!data.phones.includes(phone.displayPhone)) data.phones.push(phone.displayPhone);
+  }
+  if (!isIntl) {
     const mobileRegex = /(?:(?:\+|0{0,2})91[\s-]?)?([6-9]\d{4}[\s-]?\d{5})\b/g;
     let match;
     while ((match = mobileRegex.exec(textContent)) !== null) {
@@ -442,11 +452,13 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
   }
   const uniqueUrls = [...new Set(targetUrls)].slice(0, 4);
 
+  const reqTimeout = Math.max(3000, Number(opts.timeoutMs) || 4000);
   try {
-    // 1. Fetch homepage first with fast 2500ms timeout.
-    // If homepage already has verified mobile + email, we save 3 seconds by early exit!
-    const homeHtml = await fetchWebsiteText(uniqueUrls[0], 2500, 3);
+    // 1. Fetch homepage first with fast timeout.
+    // If homepage already has verified mobile + email, we save time by early exit!
+    const homeHtml = await fetchWebsiteText(uniqueUrls[0], reqTimeout, 3);
 
+    let discoveredLinks = [];
     if (homeHtml) {
       const homeExtracted = extractFromHtml(homeHtml, uniqueUrls[0], opts);
       for (const email of homeExtracted.emails) if (!result.emails.includes(email)) result.emails.push(email);
@@ -459,13 +471,17 @@ async function fastWebsiteExtract(url, businessName = '', opts = {}) {
       if (homeExtracted.contactPerson) result.contactPerson = homeExtracted.contactPerson;
       if (homeExtracted.pincode) result.pincode = homeExtracted.pincode;
       if (homeExtracted.whatsappLink) result.whatsappLink = homeExtracted.whatsappLink;
+      discoveredLinks = Array.isArray(homeExtracted.candidateLinks) ? homeExtracted.candidateLinks : [];
     }
 
-    // 2. If homepage did NOT yield mobile phone, fetch remaining contact pages concurrently
-    if (result.mobiles.length === 0 && uniqueUrls.length > 1) {
-      const subUrls = uniqueUrls.slice(1);
+    // 2. If homepage did NOT yield a mobile phone, crawl discovered /contact, /branches, /appointment links + fallback paths concurrently!
+    const combinedSubUrls = [...new Set([...discoveredLinks, ...uniqueUrls.slice(1)])]
+      .filter(u => u && u !== uniqueUrls[0])
+      .slice(0, 6);
+    if (result.mobiles.length === 0 && combinedSubUrls.length > 0) {
+      const subUrls = combinedSubUrls;
       const responses = await Promise.allSettled(
-        subUrls.map(targetUrl => fetchWebsiteText(targetUrl, 2500, 2))
+        subUrls.map(targetUrl => fetchWebsiteText(targetUrl, Math.max(2500, reqTimeout - 500), 2))
       );
 
       for (let i = 0; i < responses.length; i++) {

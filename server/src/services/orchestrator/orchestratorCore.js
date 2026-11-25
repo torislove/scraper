@@ -34,6 +34,7 @@ const sources = require('../sources/registry');
 const { scrapeWebContact } = require('../../scrapers/engine-web-contact');
 const { isListingRelevantToQuery, warmZoneContextPool } = require('../../scrapers/engine-google-places');
 const serpBreaker = require('../serpBreaker');
+const browserBudget = require('../../utils/browserBudget');
 
 const {
   getDistanceKm,
@@ -80,12 +81,109 @@ async function runOmniSearchOrchestrator(
   // whole sweep aborted before the first engine ran.
   const emitActivePointEvent = deps.emitActivePointEvent || (() => {});
 
-  // Streaming update hook. The cooperative cross-engine pass and the SERP
-  // dork pass call onProgress(lead, phase) to push a refreshed row into the
-  // live table. It was referenced but never defined, so the first successful
-  // match threw "onProgress is not defined" and the entire pass aborted.
+  // Scope guard for every folder write & live emission (upgraded once anchor is geocoded).
+  let allowSweepLead = () => true;
+
+  // <1ms Real-Time Cross-Engine Telecom Index: merges Mobile + Landline numbers
+  // across JustDial, Google Maps, OpenStreetMap, Website Crawler & Directories instantaneously.
+  const livePhoneIndex = new Map();
+  const normBizKey = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  const guardedEmitVendorEvent = (vendor, eventType = 'inserted') => {
+    if (!vendor || !vendor.name) return;
+    try {
+      if (typeof allowSweepLead === 'function' && !allowSweepLead(vendor)) return;
+    } catch (e) {}
+
+    try {
+      if (sessionId && !vendor.sessionId) vendor.sessionId = sessionId;
+      const cCode = String(vendor.country || countryHint || 'IN').toUpperCase();
+      const rawCandidates = [
+        vendor.mobilePhone,
+        vendor.landlinePhone,
+        vendor.phone,
+        ...(Array.isArray(vendor.phones) ? vendor.phones : [])
+      ].filter(Boolean);
+
+      let foundMob = null;
+      let foundLand = null;
+      const cleanList = [];
+      for (const raw of rawCandidates) {
+        const strVal = typeof raw === 'object' ? (raw.displayPhone || raw.e164 || raw.national || raw.raw || '') : String(raw);
+        if (!strVal) continue;
+        const parsed = parsePhone(strVal, {
+          defaultCountry: cCode,
+          allowInternational: cCode !== 'IN',
+          context: 'phone tel'
+        });
+        if (parsed) {
+          const disp = parsed.displayPhone || parsed.e164;
+          if (disp && !cleanList.includes(disp)) cleanList.push(disp);
+          if (parsed.isMobile && !foundMob) foundMob = parsed;
+          if (parsed.isLandline && !foundLand) foundLand = parsed;
+        }
+      }
+
+      if (foundMob && !vendor.mobilePhone) vendor.mobilePhone = foundMob.displayPhone || foundMob.e164;
+      if (foundLand && !vendor.landlinePhone) vendor.landlinePhone = foundLand.displayPhone || foundLand.e164;
+
+      const bKey = normBizKey(vendor.name);
+      if (bKey.length >= 4) {
+        const prev = livePhoneIndex.get(bKey);
+        if (prev) {
+          if (!vendor.mobilePhone && prev.mobilePhone) {
+            vendor.mobilePhone = prev.mobilePhone;
+            if (!cleanList.includes(prev.mobilePhone)) cleanList.unshift(prev.mobilePhone);
+            if (!vendor.whatsappLink && prev.whatsappLink) {
+              vendor.whatsappLink = prev.whatsappLink;
+              vendor.whatsappAvailable = true;
+            }
+          }
+          if (!vendor.landlinePhone && prev.landlinePhone) {
+            vendor.landlinePhone = prev.landlinePhone;
+            if (!cleanList.includes(prev.landlinePhone)) cleanList.push(prev.landlinePhone);
+          }
+          if (!vendor.website && prev.website) vendor.website = prev.website;
+          if (!vendor.email && prev.email) vendor.email = prev.email;
+        }
+        livePhoneIndex.set(bKey, {
+          mobilePhone: vendor.mobilePhone || prev?.mobilePhone || '',
+          landlinePhone: vendor.landlinePhone || prev?.landlinePhone || '',
+          whatsappLink: vendor.whatsappLink || prev?.whatsappLink || '',
+          website: vendor.website || prev?.website || '',
+          email: vendor.email || prev?.email || ''
+        });
+      }
+
+      const bestPrimary = vendor.mobilePhone || vendor.landlinePhone || vendor.phone || cleanList[0] || '';
+      if (bestPrimary) {
+        vendor.phone = bestPrimary;
+        vendor.verified = true;
+      }
+      if (cleanList.length) {
+        vendor.phones = [...new Set([...cleanList, ...(Array.isArray(vendor.phones) ? vendor.phones.filter(p => typeof p === 'string') : [])])];
+      }
+      if (vendor.mobilePhone) {
+        vendor.isMobile = true;
+        vendor.phoneType = 'mobile';
+        if (!vendor.whatsappLink && foundMob?.digits) {
+          vendor.whatsappLink = `https://wa.me/${foundMob.digits}`;
+          vendor.whatsappAvailable = true;
+        }
+      } else if (vendor.landlinePhone) {
+        vendor.isLandline = true;
+        if (!vendor.phoneType || vendor.phoneType === 'unknown') vendor.phoneType = 'landline';
+      }
+    } catch (e) {}
+
+    try {
+      emitVendorEvent(vendor, eventType);
+    } catch (e) { /* streaming is best-effort */ }
+  };
+
+  // Streaming update hook.
   const onProgress = (vendor, type = 'updated') => {
-    try { emitVendorEvent(vendor, type); } catch (e) { /* streaming is best-effort */ }
+    guardedEmitVendorEvent(vendor, type);
   };
 
   if (sessionId && userId && userId !== 'anonymous' && userId !== 'admin_1') {
@@ -227,12 +325,11 @@ async function runOmniSearchOrchestrator(
 
   // Start Real-Time Streaming Detail & Phone Enricher concurrently with swarm
   try {
-    const browserBudget = require('../../utils/browserBudget');
     streamingEnricher.start({
       sessionId,
       emit: (vendor, type) => { guardedEmitVendorEvent(vendor, type); },
       log: addLog,
-      concurrency: Math.min(4, Math.max(2, browserBudget.getStatus().enrichReserve || 3))
+      concurrency: Math.min(6, Math.max(3, browserBudget.getStatus().enrichReserve || 4))
     }).catch(() => {});
   } catch (enricherErr) {
     addLog(`[Orchestrator] Realtime enricher init: ${enricherErr.message}`);
@@ -253,10 +350,6 @@ async function runOmniSearchOrchestrator(
   if (typeof dbAdapter.flushSync === 'function') {
     dbAdapter.flushSync();
   }
-
-  // Scope guard for every folder write, including the error path below. It is
-  // replaced with a real predicate once the sweep anchor is geocoded.
-  let allowSweepLead = () => true;
 
   try {
     // 1. Instant Gazetteer-first resolution (0ms local memory): check plan/gazetteer BEFORE
@@ -886,6 +979,7 @@ async function runOmniSearchOrchestrator(
                     : null;
                   const displayPhone = parsed ? (parsed.displayPhone || parsed.e164) : '';
                   const isMob = Boolean(parsed && parsed.isMobile);
+                  const isLand = Boolean(parsed && parsed.isLandline);
                   const score = displayPhone ? (isMob ? 88 : 78) : (item.website ? 65 : 48);
                   const candidate = {
                     id: `glh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
@@ -896,8 +990,12 @@ async function runOmniSearchOrchestrator(
                     state: regionLabel,
                     country: countryCode,
                     phone: displayPhone,
+                    mobilePhone: isMob ? displayPhone : '',
+                    landlinePhone: isLand ? displayPhone : '',
                     phones: displayPhone ? [displayPhone] : [],
                     phoneType: parsed ? (isMob ? 'mobile' : 'landline') : '',
+                    isMobile: isMob,
+                    isLandline: isLand,
                     callUrl: parsed ? (parsed.callUrl || `tel:${parsed.digits}`) : '',
                     whatsappAvailable: isMob,
                     whatsappLink: isMob && parsed?.digits
@@ -919,21 +1017,26 @@ async function runOmniSearchOrchestrator(
                   const existing = dbAdapter.findMatch(candidate);
                   if (!existing) {
                     dbAdapter.saveVendor(owner, candidate);
-                    try { emitVendorEvent(candidate, 'inserted'); } catch (e) {}
+                    try { guardedEmitVendorEvent(candidate, 'inserted'); } catch (e) {}
                     if (!isMob) {
                       try { streamingEnricher.enqueue(candidate); } catch (e) {}
                     }
                     inserted++;
-                  } else if (!existing.phone && candidate.phone) {
-                    existing.phone = candidate.phone;
-                    existing.phones = [...new Set([...(existing.phones || []), candidate.phone])];
-                    existing.sessionId = sessionId;
-                    dbAdapter.saveVendor(owner, existing);
-                    try { emitVendorEvent(existing, 'updated'); } catch (e) {}
+                  } else {
+                    let enrichedExisting = false;
+                    if (isMob && !existing.mobilePhone) { existing.mobilePhone = displayPhone; existing.phone = displayPhone; existing.isMobile = true; enrichedExisting = true; }
+                    if (isLand && !existing.landlinePhone) { existing.landlinePhone = displayPhone; existing.isLandline = true; if (!existing.phone) existing.phone = displayPhone; enrichedExisting = true; }
+                    if (enrichedExisting || (!existing.phone && candidate.phone)) {
+                      existing.phone = existing.phone || candidate.phone;
+                      existing.phones = [...new Set([...(existing.phones || []), candidate.phone])];
+                      existing.sessionId = sessionId;
+                      dbAdapter.saveVendor(owner, existing);
+                      try { guardedEmitVendorEvent(existing, 'updated'); } catch (e) {}
+                    }
                   }
                 }
                 if (inserted > 0) {
-                  addLog(`[Turbo-Burst] âš¡ Google Local HTTP streamed ${inserted} instant lead(s) at second 0.`);
+                  addLog(`[Turbo-Burst] Google Local HTTP streamed ${inserted} instant lead(s) at second 0.`);
                 }
                 return { count: inserted, totalScraped: inserted, newInserted: inserted };
               }));
@@ -941,7 +1044,7 @@ async function runOmniSearchOrchestrator(
 
             if (hasEngine('openstreetmap')) {
               const { scrapeOpenStreetMap, setDeps: setOsmDeps } = require('../../scrapers/engine-openstreetmap');
-              if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent: guardedEmitVendorEvent });
+              if (typeof setOsmDeps === 'function') setOsmDeps({ logger: addLog, emitVendorEvent: guardedEmitVendorEvent, abortSignal: sessionAbortSignal });
               burstTasks.push(runBurst('openstreetmap', 'OpenStreetMap', () => scrapeOpenStreetMap(
                 category,
                 cleanBaseCity,
@@ -2045,8 +2148,11 @@ async function runOmniSearchOrchestrator(
 
     // Verified Contact & Telecom Filter (Mobile + Landline)
     try {
-      function getVerifiedContact(lead) {
-        for (const raw of [lead.phone, lead.primaryPhone, ...(Array.isArray(lead.phones) ? lead.phones : [])]) {
+      function getVerifiedContacts(lead) {
+        let mobile = null;
+        let landline = null;
+        const allFormatted = [];
+        for (const raw of [lead.mobilePhone, lead.landlinePhone, lead.phone, lead.primaryPhone, ...(Array.isArray(lead.phones) ? lead.phones : [])]) {
           const val = typeof raw === 'object' && raw ? (raw.displayPhone || raw.e164 || raw.national || raw.number || '') : (raw || '');
           if (!val) continue;
           const parsed = parsePhone(val, {
@@ -2055,10 +2161,13 @@ async function runOmniSearchOrchestrator(
             allowedCountry: countryCode !== 'IN' ? countryCode : undefined
           });
           if (parsed && (parsed.isMobile || parsed.isLandline)) {
-            return parsed;
+            const disp = parsed.displayPhone || parsed.e164;
+            if (disp && !allFormatted.includes(disp)) allFormatted.push(disp);
+            if (parsed.isMobile && !mobile) mobile = parsed;
+            if (parsed.isLandline && !landline) landline = parsed;
           }
         }
-        return null;
+        return { mobile, landline, allFormatted };
       }
 
       const noContact = [];
@@ -2073,40 +2182,45 @@ async function runOmniSearchOrchestrator(
         const cityClean = String(lead.city || baseLocation || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const nameCityKey = (nameClean.length >= 4 && cityClean) ? `${nameClean}__${cityClean}` : '';
 
-        const contact = getVerifiedContact(lead);
-        if (contact) {
-          const phoneKey = contact.digits;
-          if (phoneKey && seenPhoneNumbers.has(phoneKey)) {
+        const { mobile, landline, allFormatted } = getVerifiedContacts(lead);
+        const primaryContact = mobile || landline;
+        if (primaryContact) {
+          const phoneKey = primaryContact.digits;
+          if (phoneKey && seenPhoneNumbers.has(phoneKey) && nameCityKey && seenNameCities.has(nameCityKey)) {
             duplicates.push(lead);
             return false;
           }
-          if (nameCityKey && seenNameCities.has(nameCityKey)) {
-            duplicates.push(lead);
-            return false;
-          }
-
           if (phoneKey) seenPhoneNumbers.add(phoneKey);
           if (nameCityKey) seenNameCities.add(nameCityKey);
 
-          if (contact.isMobile) {
-            lead.phone = contact.displayPhone;
+          if (mobile) {
+            lead.mobilePhone = mobile.displayPhone || mobile.e164;
+            mobileCount++;
+          }
+          if (landline) {
+            lead.landlinePhone = landline.displayPhone || landline.e164;
+            landlineCount++;
+          }
+          if (allFormatted.length) {
+            lead.phones = [...new Set([...allFormatted, ...(Array.isArray(lead.phones) ? lead.phones.filter(p => typeof p === 'string') : [])])];
+          }
+
+          if (mobile) {
+            lead.phone = lead.mobilePhone;
             lead.phoneType = 'mobile';
             lead.isMobile = true;
-            lead.isLandline = false;
+            lead.isLandline = Boolean(landline);
             lead.whatsappAvailable = true;
-            lead.whatsappLink = `https://wa.me/${contact.digits}`;
-            lead.callUrl = contact.callUrl;
-            mobileCount++;
-          } else {
-            // Authentic STD Landline
-            lead.phone = contact.displayPhone;
+            lead.whatsappLink = `https://wa.me/${mobile.digits}`;
+            lead.callUrl = mobile.callUrl;
+          } else if (landline) {
+            lead.phone = lead.landlinePhone;
             lead.phoneType = 'landline';
             lead.isMobile = false;
             lead.isLandline = true;
             lead.whatsappAvailable = false;
             lead.whatsappLink = '';
-            lead.callUrl = contact.callUrl;
-            landlineCount++;
+            lead.callUrl = landline.callUrl;
           }
           return true;
         }

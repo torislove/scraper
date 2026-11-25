@@ -237,13 +237,13 @@ const SOURCES = [
   },
   {
     id: 'cylex-uk',
-    label: 'Cylex UK & Global',
+    label: 'Cylex Global Directory',
     engine: 'cylex',
     homepage: 'https://www.cylex-uk.co.uk',
-    countries: C('GB', 'AU', 'CA', 'AE', 'SG', 'US'),
+    countries: C('GB', 'DE', 'AU', 'CA', 'AE', 'SG', 'US'),
     access: 'public-html',
     enabled: true,
-    note: 'Cylex public local business directory.'
+    note: 'Cylex public local business directory across UK, Germany, US, Canada, Australia, UAE & Singapore.'
   },
   {
     id: 'freeindex-uk',
@@ -476,6 +476,8 @@ const INDIA_ENGINES = [
   'openstreetmap',
   'maps',
   'google-local-finder',
+  'bing-places',
+  'wikidata-businesses',
   'web-discovery',
   'web-contact',
   'social',

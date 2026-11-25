@@ -311,6 +311,7 @@ function buildWorkerSource() {
           const phone = normPhone(tags['contact:phone'] || tags.phone || tags['contact:mobile'] || '');
           const website = String(tags['contact:website'] || tags.website || '').trim();
           const email = String(tags['contact:email'] || tags.email || '').trim();
+          if (!phone && !website && !email) continue;
           const key = rawName.toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + (Number.isFinite(lat) ? lat.toFixed(3) : '');
           if (seen.has(key)) continue;
           seen.add(key);

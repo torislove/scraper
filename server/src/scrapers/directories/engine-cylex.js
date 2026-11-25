@@ -31,6 +31,7 @@ function setDeps(newDeps) {
 const CYLEX_DOMAINS = {
   GB: 'https://www.cylex.co.uk',
   UK: 'https://www.cylex.co.uk',
+  DE: 'https://www.cylex.de',
   AU: 'https://www.cylex.com.au',
   CA: 'https://www.cylex.ca',
   AE: 'https://www.cylex.ae',

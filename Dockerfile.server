@@ -5,13 +5,19 @@
 
 FROM node:20-bookworm-slim AS base
 
-# Install essential runtime utilities & minimal shared libraries
+# Install essential runtime utilities & Chromium for server-side Playwright engines
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     dumb-init \
     ca-certificates \
     procps \
+    chromium \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
+
+ENV SCRAPER_CHROME_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 WORKDIR /app
 

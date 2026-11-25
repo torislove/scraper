@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Filter,
-  Globe2, MapPin, Phone, Search, Star, X
+  Globe2, Loader2, MapPin, MessageCircle, Phone, Search, Smartphone, Sparkles, Star, X
 } from 'lucide-react';
 import { formatNumber, cx } from '../../ui';
 import FilterBar from '../cards/FilterBar';
 import { VendorAvatar, EmptyState } from '../cards/MetricCard';
 import { qualityOf, calculateHaversineKm } from '../../utils/leadHelpers';
-import { isMobilePhone, getDisplayPhone } from '../../../utils/phoneClassify';
+import { getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import FloatingActionDock from '../cards/FloatingActionDock';
 
@@ -28,11 +28,29 @@ export default function LeadsTableView({
   pageCount = 1,
   setPage,
   setPageSize,
-  country = 'IN'
+  country = 'IN',
+  scanning = false,
+  phoneJustFoundIds = null
 }) {
   const originLat = Array.isArray(mapCenter) ? mapCenter[0] : (mapCenter?.lat || null);
   const originLng = Array.isArray(mapCenter) ? mapCenter[1] : (mapCenter?.lng || null);
   const [selectedIds, setSelectedIds] = useState(new Set());
+
+  const { mobileCount, landlineCount, huntingCount } = useMemo(() => {
+    let mobs = 0;
+    let lands = 0;
+    let hunting = 0;
+    for (const v of filteredVendors) {
+      const dual = getAllDisplayPhones(v, v?.country || country);
+      if (dual.mobile || dual.landline) {
+        if (dual.mobile) mobs += 1;
+        if (dual.landline) lands += 1;
+      } else if (scanning || (v?.website && !v?.websiteEnrichedAt)) {
+        hunting += 1;
+      }
+    }
+    return { mobileCount: mobs, landlineCount: lands, huntingCount: hunting };
+  }, [filteredVendors, country, scanning]);
 
   const toggleSelectAll = () => {
     if (selectedIds.size === pageRows.length && pageRows.length > 0) {
@@ -58,7 +76,10 @@ export default function LeadsTableView({
 
   const handleCopyMobiles = () => {
     const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
-    const rawPhones = target.map(l => getDisplayPhone(l)).filter(Boolean);
+    const rawPhones = target.flatMap(l => {
+      const dual = getAllDisplayPhones(l, l.country || country);
+      return [dual.mobile?.display, dual.landline?.display, getDisplayPhone(l)].filter(Boolean);
+    });
     const unique = [...new Set(rawPhones)];
     if (!unique.length) {
       toast.error('No phone numbers found in selected rows.');
@@ -87,13 +108,15 @@ export default function LeadsTableView({
       return;
     }
     const headers = [
-      'Business Name', 'Category', 'Phone', 'Address', 'Area / Mandal',
+      'Business Name', 'Category', 'Phone', 'Mobile Phone', 'Landline / STD', 'Address', 'Area / Mandal',
       'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
       'Map Directions', 'Rating', 'Reviews', 'Website',
       'Instagram', 'Facebook', 'TikTok', 'Twitter / X', 'WhatsApp Link'
     ];
     const lines = [headers.join(',')];
     target.forEach(r => {
+      const dual = getAllDisplayPhones(r, r.country || country);
+      const combinedPhone = [dual.mobile?.display, dual.landline?.display].filter(Boolean).join(' / ') || getDisplayPhone(r) || '';
       const rLat = r.latitude ?? r.lat ?? '';
       const rLng = r.longitude ?? r.lng ?? '';
       const hasGeo = Number.isFinite(Number(rLat)) && Number.isFinite(Number(rLng)) && (Number(rLat) !== 0 || Number(rLng) !== 0);
@@ -103,7 +126,9 @@ export default function LeadsTableView({
       lines.push([
         `"${(r.name || '').replace(/"/g, '""')}"`,
         `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${getDisplayPhone(r) || ''}"`,
+        `"${combinedPhone}"`,
+        `"${dual.mobile?.display || ''}"`,
+        `"${dual.landline?.display || ''}"`,
         `"${(r.address || '').replace(/"/g, '""')}"`,
         `"${(r.mandal || r.locality || '').replace(/"/g, '""')}"`,
         `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
@@ -200,6 +225,50 @@ export default function LeadsTableView({
         </button>
       </div>
 
+      <style>{'@keyframes lxSpin{to{transform:rotate(360deg)}} @keyframes lxHunterGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.22)}50%{box-shadow:0 0 0 4px rgba(16,185,129,0.08)}}'}</style>
+
+      {scanning && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            padding: '10px 14px',
+            borderRadius: 12,
+            background: 'linear-gradient(95deg, rgba(16,185,129,0.10) 0%, rgba(245,158,11,0.10) 55%, rgba(6,182,212,0.10) 100%)',
+            border: '1px solid rgba(16,185,129,0.28)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 10,
+            flexWrap: 'wrap',
+            animation: 'lxHunterGlow 2.4s ease-in-out infinite'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
+            <Loader2 size={15} color="#059669" style={{ flexShrink: 0, animation: 'lxSpin 1.1s linear infinite' }} />
+            <div style={{ fontSize: 12, lineHeight: 1.35, color: '#0f172a' }}>
+              <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact Hunter is delivering your numbers live!</b>{' '}
+              <span style={{ color: '#475569' }}>
+                JustDial, Google Maps, OpenStreetMap &amp; our 12-lane Website Crawler are extracting direct Mobile &amp; Landline numbers in real time.
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.16)', color: '#065f46' }}>
+              ✓ {formatNumber(mobileCount)} Mobiles
+            </span>
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#1d4ed8' }}>
+              ☎ {formatNumber(landlineCount)} Landlines
+            </span>
+            {huntingCount > 0 && (
+              <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(245,158,11,0.16)', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Cards…
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="v2-table-shell">
         <div className="v2-table-scroll">
           <table className="lx-clean-table">
@@ -215,7 +284,7 @@ export default function LeadsTableView({
                   />
                 </th>
                 <th>Business &amp; Location</th>
-                <th>Direct Contact &amp; Web</th>
+                <th>Direct Mobile, Landline &amp; Web</th>
                 <th style={{ width: 110 }}>Rating</th>
                 <th style={{ width: 36 }} />
               </tr>
@@ -237,8 +306,9 @@ export default function LeadsTableView({
                   seenParts.add(key);
                   return true;
                 }).join(', ');
-                const displayPhone = getDisplayPhone(vendor);
-                const isMob = displayPhone ? isMobilePhone(displayPhone, vendor.country || country) : false;
+                const dual = getAllDisplayPhones(vendor, vendor.country || country);
+                const hasAnyPhone = Boolean(dual.mobile || dual.landline);
+                const isPhonePop = Boolean(phoneJustFoundIds?.has(vendor.id || rowKey));
                 const hasGeo = Number.isFinite(Number(vLat)) && Number.isFinite(Number(vLng)) && (Number(vLat) !== 0 || Number(vLng) !== 0);
                 const pinUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hasGeo ? `${vLat},${vLng}` : `${vendor.name || ''} ${leadAddress}`)}`;
 
@@ -279,27 +349,84 @@ export default function LeadsTableView({
                     </td>
                     <td>
                       <div className="lx-contact-stack">
-                        {displayPhone ? (
-                          <div className="lx-phone-row">
-                            <a
-                              href={vendor.callUrl || `tel:${String(displayPhone).replace(/\s+/g, '')}`}
-                              className={cx('lx-phone-pill', isMob ? 'is-mob' : 'is-land')}
-                              title="Tap to call"
-                              onClick={event => event.stopPropagation()}
-                            >
-                              <Phone size={11} /> {displayPhone}
-                            </a>
-                            <button
-                              type="button"
-                              className="lx-copy-chip"
-                              onClick={event => handleCopyPhone(displayPhone, event)}
-                              title="Copy phone number"
-                            >
-                              <Copy size={10} /> Copy
-                            </button>
+                        {hasAnyPhone ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {dual.mobile && (
+                              <div className="lx-phone-row">
+                                <a
+                                  href={dual.mobile.callUrl || `tel:${String(dual.mobile.display).replace(/\s+/g, '')}`}
+                                  className={cx('lx-phone-pill is-mob', isPhonePop && 'lx-phone-pop')}
+                                  title="Tap to call mobile"
+                                  onClick={event => event.stopPropagation()}
+                                >
+                                  <Smartphone size={11} /> {dual.mobile.display}
+                                  <span className="lx-phone-tag is-mob">MOB</span>
+                                </a>
+                                {dual.mobile.whatsappUrl && (
+                                  <a
+                                    href={dual.mobile.whatsappUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="lx-wa-mini"
+                                    title="Message on WhatsApp"
+                                    onClick={event => event.stopPropagation()}
+                                  >
+                                    <MessageCircle size={11} />
+                                  </a>
+                                )}
+                                <button
+                                  type="button"
+                                  className="lx-copy-chip"
+                                  onClick={event => handleCopyPhone(dual.mobile.display, event)}
+                                  title="Copy mobile number"
+                                >
+                                  <Copy size={10} /> Copy
+                                </button>
+                              </div>
+                            )}
+                            {dual.landline && (
+                              <div className="lx-phone-row">
+                                <a
+                                  href={dual.landline.callUrl || `tel:${String(dual.landline.display).replace(/\s+/g, '')}`}
+                                  className={cx('lx-phone-pill is-land', isPhonePop && 'lx-phone-pop')}
+                                  title="Tap to call landline / STD"
+                                  onClick={event => event.stopPropagation()}
+                                >
+                                  <Phone size={11} /> {dual.landline.display}
+                                  <span className="lx-phone-tag is-land">STD</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  className="lx-copy-chip"
+                                  onClick={event => handleCopyPhone(dual.landline.display, event)}
+                                  title="Copy landline / STD number"
+                                >
+                                  <Copy size={10} /> Copy
+                                </button>
+                              </div>
+                            )}
                           </div>
+                        ) : (scanning || (vendor.website && !vendor.websiteEnrichedAt)) ? (
+                          <span
+                            className="lx-phone-scanning"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '4px 10px',
+                              borderRadius: 999,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              color: '#065f46',
+                              background: 'linear-gradient(90deg, rgba(16,185,129,0.12) 0%, rgba(245,158,11,0.15) 50%, rgba(16,185,129,0.12) 100%)',
+                              border: '1px solid rgba(16,185,129,0.28)'
+                            }}
+                          >
+                            <Loader2 size={11} style={{ animation: 'lxSpin 1.1s linear infinite' }} />
+                            {vendor.website ? 'Scanning website & Maps for phone…' : 'Hunting mobile & landline live…'}
+                          </span>
                         ) : (
-                          <span className="lx-muted-text">No phone listed</span>
+                          <span className="lx-muted-text">No public phone listed</span>
                         )}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
                           {vendor.website ? (

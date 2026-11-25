@@ -334,9 +334,9 @@ registerTask('scrapeJustDial', async (cat, loc, dummy, sessionId) => {
 registerTask('scrapeWeddingBazaar', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeWeddingBazaar(cat, loc, sessionId), 'WeddingBazaar Scrape', addLog, 'weddingbazaar'));
 registerTask('scrapeWeddingWire', async (cat, loc, dummy, sessionId, countryCode) => safeExecute(() => scrapeWeddingWire(cat, loc, sessionId, countryCode), 'WeddingWire Scrape', addLog, 'weddingwire'));
 registerTask('scrapeMandap', async (cat, loc, dummy, sessionId) => safeExecute(() => scrapeMandap(cat, loc, sessionId), 'Mandap Scrape', addLog, 'mandap'));
-registerTask('scrapeOpenStreetMap', async (cat, loc, dummy, sessionId, lat, lng, radiusKm) => {
+registerTask('scrapeOpenStreetMap', async (cat, loc, dummy, sessionId, lat, lng, radiusKm, countryHint) => {
   const res = await safeExecute(
-    () => scrapeOpenStreetMap(cat, loc, sessionId, lat, lng, radiusKm),
+    () => scrapeOpenStreetMap(cat, loc, sessionId, lat, lng, radiusKm, countryHint),
     'OpenStreetMap Scrape',
     addLog,
     'openstreetmap'

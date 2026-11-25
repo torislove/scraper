@@ -38,8 +38,8 @@ const OVERPASS_MIRRORS = [
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter'
 ];
-const OVERPASS_TIMEOUT_MS = 4000;
-const MIRROR_COOLDOWN_MS = 10 * 60 * 1000;
+const OVERPASS_TIMEOUT_MS = 10000;
+const MIRROR_COOLDOWN_MS = 5 * 60 * 1000;
 // A host that just failed is skipped for ten minutes, so a dead mirror costs
 // one timeout per ten minutes instead of one per search.
 const mirrorDownUntil = new Map();
@@ -715,12 +715,24 @@ async function scrapeOpenStreetMap(category, location, sessionId = 'legacy', cen
     if (!vendor.zoneName) vendor.zoneName = vendor.locality || city;
 
     const primaryMobile = phones.find(phone => phone.isMobile);
+    const primaryLandline = phones.find(phone => phone.isLandline);
     if (primaryMobile) {
       // digits already contains the country code; never assume +91.
+      vendor.mobilePhone = primaryMobile.displayPhone || primaryMobile.e164;
       vendor.whatsapp = `https://wa.me/${primaryMobile.digits}`;
       vendor.whatsappLink = vendor.whatsapp;
       vendor.whatsappAvailable = true;
-      if (!vendor.phone) vendor.phone = primaryMobile.e164;
+      vendor.isMobile = true;
+      vendor.phone = vendor.mobilePhone;
+      vendor.phoneType = 'mobile';
+    }
+    if (primaryLandline) {
+      vendor.landlinePhone = primaryLandline.displayPhone || primaryLandline.e164 || primaryLandline.national;
+      vendor.isLandline = true;
+      if (!vendor.phone) {
+        vendor.phone = vendor.landlinePhone;
+        vendor.phoneType = 'landline';
+      }
     }
 
     const fidelity = require('../../services/categoryFidelity');

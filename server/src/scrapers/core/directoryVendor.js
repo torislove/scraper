@@ -311,7 +311,9 @@ function buildDirectoryVendor(input = {}) {
   const cleanAddress = cleanText(address, 800);
   const cleanPincode = cleanText(pincode, 10) || extractPincode(cleanAddress);
   const phoneList = Array.isArray(phones) ? phones.filter(p => p && p.isValid !== false && p.e164) : [];
-  const bestPhone = phoneList.find(p => p.isMobile) || phoneList[0] || null;
+  const bestMobile = phoneList.find(p => p.isMobile) || null;
+  const bestLandline = phoneList.find(p => p.isLandline) || null;
+  const bestPhone = bestMobile || bestLandline || phoneList[0] || null;
   const imageList = uniqueStrings(images, 30);
   const now = new Date().toISOString();
   const categoryValue = cleanText(category, 120) || 'Business';
@@ -336,13 +338,15 @@ function buildDirectoryVendor(input = {}) {
     businessStatus: '',
 
     phone: bestPhone ? (bestPhone.displayPhone || bestPhone.e164) : '',
+    mobilePhone: bestMobile ? (bestMobile.displayPhone || bestMobile.e164) : '',
+    landlinePhone: bestLandline ? (bestLandline.displayPhone || bestLandline.e164 || bestLandline.national) : '',
     phones: phoneList,
     phoneType: bestPhone ? (bestPhone.isMobile ? 'mobile' : (bestPhone.isLandline ? 'landline' : 'unknown')) : '',
     callUrl: bestPhone ? (bestPhone.callUrl || `tel:${bestPhone.digits || bestPhone.national}`) : '',
-    isMobile: Boolean(bestPhone && bestPhone.isMobile),
-    isLandline: Boolean(bestPhone && bestPhone.isLandline),
-    whatsapp: bestPhone && bestPhone.isMobile ? bestPhone.e164 : '',
-    whatsappAvailable: Boolean(bestPhone && bestPhone.isMobile),
+    isMobile: Boolean(bestMobile),
+    isLandline: Boolean(bestLandline),
+    whatsapp: bestMobile ? bestMobile.e164 : '',
+    whatsappAvailable: Boolean(bestMobile),
     email: cleanText(email, 240),
     emails: email ? [cleanText(email, 240)] : [],
 

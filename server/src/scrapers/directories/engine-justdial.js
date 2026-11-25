@@ -357,8 +357,8 @@ async function fetchListing({ ncatid, label, city, state, area = '', attempt = 0
     return data;
   } catch (error) {
     if (attempt < 1) {
-      await sleep(400);
-      return fetchListing({ ncatid, label, city, state, attempt: attempt + 1 });
+      await sleep(300);
+      return fetchListing({ ncatid, label, city, state, area, attempt: attempt + 1 });
     }
     deps.logger(`[JustDial] Listing fetch failed for ${label} in ${city}: ${error.message}`);
     return null;
@@ -595,15 +595,15 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
     resolvedCategories.push(resolved);
   }
 
-  // Harvest orchestrated areas for the city/mandal to sweep high-density local nodes
+  // Harvest orchestrated areas for the city/mandal to sweep up to 32 high-density local pockets in parallel
   let targetAreas = [''];
   try {
     const { resolveUniversalZones } = require('../../utils/universalGeoCluster');
     const targetZones = resolveUniversalZones(city, baseCategory);
     const subAreas = targetZones
       .map(z => z.zoneName)
-      .filter(z => !z.toLowerCase().includes('central') && !z.toLowerCase().includes('core'))
-      .slice(0, 8);
+      .filter(z => z && !z.toLowerCase().includes('central') && !z.toLowerCase().includes('core') && !z.includes('·') && !/\bgrid\b/i.test(z))
+      .slice(0, 32);
     if (subAreas.length) targetAreas = ['', ...subAreas];
   } catch (e) { }
 
@@ -682,23 +682,34 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
     }
 
     const primaryMobile = (item.phones || []).find(phone => phone && phone.isMobile);
+    const primaryLandline = (item.phones || []).find(phone => phone && phone.isLandline);
     if (primaryMobile) {
       const tenDigits = primaryMobile.national ? primaryMobile.national.slice(-10) : primaryMobile.e164.replace(/\D/g, '').slice(-10);
+      vendor.mobilePhone = primaryMobile.displayPhone || primaryMobile.e164;
       vendor.whatsapp = `https://wa.me/91${tenDigits}?text=Hi%20${encodeURIComponent(vendor.name || '')}%2C%20I%20found%20your%20business%20on%20Scraper.co.in%20and%20wanted%20to%20connect.`;
       vendor.whatsappLink = vendor.whatsapp;
       vendor.whatsappAvailable = true;
-      if (!vendor.phone) vendor.phone = primaryMobile.e164;
+      vendor.phone = vendor.mobilePhone;
       vendor.phoneType = 'mobile';
-      vendor.callUrl = primaryMobile.callUrl || `tel:${tenDigits}`;
+      vendor.isMobile = true;
+      vendor.callUrl = primaryMobile.callUrl || `tel:+91${tenDigits}`;
     } else {
       vendor.whatsapp = '';
       vendor.whatsappAvailable = false;
-      const primaryLandline = (item.phones || []).find(phone => phone && phone.isLandline) || item.phones[0];
-      if (primaryLandline && !vendor.phone) {
-        vendor.phone = primaryLandline.displayPhone || primaryLandline.e164 || primaryLandline.national;
+    }
+    if (primaryLandline) {
+      vendor.landlinePhone = primaryLandline.displayPhone || primaryLandline.national || primaryLandline.e164;
+      vendor.isLandline = true;
+      if (!vendor.phone) {
+        vendor.phone = vendor.landlinePhone;
         vendor.phoneType = 'landline';
         vendor.callUrl = primaryLandline.callUrl || `tel:${primaryLandline.national || primaryLandline.e164}`;
       }
+    } else if (!vendor.phone && item.phones && item.phones[0]) {
+      const anyP = item.phones[0];
+      vendor.phone = anyP.displayPhone || anyP.e164 || anyP.national;
+      vendor.phoneType = 'landline';
+      vendor.callUrl = anyP.callUrl || `tel:${anyP.national || anyP.e164}`;
     }
 
     const result = dv.saveDirectoryVendor(vendor, sessionId);
@@ -728,7 +739,7 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
     let added = 0;
     for (const row of rows) {
       if (deps.abortSignal && deps.abortSignal.aborted) break;
-      if (parsed.length >= 300) break;
+      if (parsed.length >= 1200) break;
       const vendor = parseRow(row, {
         category: task.label || baseCategory,
         city,
@@ -793,11 +804,11 @@ async function scrapeJustDial(categoryOrOptions, locationInput, modeOrSessionId 
   }
   try { if (typeof dbAdapter.flushSync === 'function') dbAdapter.flushSync(); } catch (e) { }
 
-  // WAVE 2: Sub-areas in concurrent batches of 4, streaming leads per chunk
-  const CHUNK_SIZE = 4;
+  // WAVE 2: Sub-areas in ultra-blazing concurrent batches of 8, streaming leads per chunk
+  const CHUNK_SIZE = 8;
   for (let i = 0; i < wave2Tasks.length; i += CHUNK_SIZE) {
     if (deps.abortSignal && deps.abortSignal.aborted) break;
-    if (parsed.length >= 300) break;
+    if (parsed.length >= 1200) break;
 
     const chunk = wave2Tasks.slice(i, i + CHUNK_SIZE);
     const chunkResults = await Promise.allSettled(chunk.map(t => fetchListing(t)));

@@ -807,7 +807,8 @@ export default function CommandCenter() {
               const merged = mergeSingleVendor(existing, v, countryHint);
               const nextPhone = getDisplayPhone(merged);
               const nowMob = isMobilePhone(nextPhone, merged.country || countryHint);
-              if ((!prevPhone && nextPhone) || (!wasMob && nowMob)) {
+              const gainedDual = (!existing.mobilePhone && merged.mobilePhone) || (!existing.landlinePhone && merged.landlinePhone);
+              if ((!prevPhone && nextPhone) || (!wasMob && nowMob) || gainedDual) {
                 upgradedPhoneIds.push(v.id);
               }
               map.set(v.id, merged);
@@ -2287,7 +2288,19 @@ export default function CommandCenter() {
         if (areaA !== areaB) return areaA.localeCompare(areaB);
         return String(a.name || '').localeCompare(String(b.name || ''));
       }
-      // Default 'newest': deterministic arrival/scrapedAt order during and after completion (no post-run jump)
+      // Contact-first live ordering: pin verified Mobile + Landline leads to Page 1 so users see instant numbers immediately
+      const rankOf = v => {
+        const p = getDisplayPhone(v);
+        const hasMob = Boolean(v.mobilePhone || (p && isMobilePhone(p, v.country || searchCountry)));
+        const hasLand = Boolean(v.landlinePhone || (p && !hasMob));
+        if (hasMob && hasLand) return 4;
+        if (hasMob) return 3;
+        if (hasLand) return 2;
+        if (v.website) return 1;
+        return 0;
+      };
+      const rDiff = rankOf(b) - rankOf(a);
+      if (rDiff !== 0) return rDiff;
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
     });
 
@@ -2957,6 +2970,8 @@ export default function CommandCenter() {
                 setPage={setPage}
                 setPageSize={setPageSize}
                 country={searchCountry}
+                scanning={Boolean(scanning || run?.status === 'running')}
+                phoneJustFoundIds={phoneJustFoundIds}
               />
             )}
 

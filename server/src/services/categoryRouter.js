@@ -63,62 +63,62 @@ const FAMILY_DEFINITIONS = {
   retail: {
     label: 'Retail & showrooms',
     description: 'Stores, showrooms, boutiques and consumer brands',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
-    cityEngines: ['justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   health: {
     label: 'Health & medical',
     description: 'Clinics, hospitals, dentists, pharmacies and diagnostics',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
-    cityEngines: ['justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'wikidata-businesses', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'wikidata-businesses', 'social']
   },
   beauty: {
     label: 'Beauty & wellness',
     description: 'Salons, spas, makeup artists and wellness studios',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   food: {
     label: 'Food & dining',
     description: 'Restaurants, cafes, bakeries, caterers and cloud kitchens',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'tripadvisor', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   auto: {
     label: 'Automotive',
     description: 'Car and bike showrooms, garages, service centres and parts',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
-    cityEngines: ['justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   'real-estate': {
     label: 'Real estate & property',
     description: 'Builders, property dealers, architects and construction',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   education: {
     label: 'Education & training',
     description: 'Schools, colleges, coaching centres and skill institutes',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'wikidata-businesses', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'wikidata-businesses', 'social']
   },
   professional: {
     label: 'Professional services',
     description: 'Lawyers, accountants, agencies, IT and business services',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'social'],
-    cityEngines: ['justdial', 'openstreetmap', 'social']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   industrial: {
     label: 'Industrial & B2B',
     description: 'Manufacturers, wholesalers, distributors and suppliers',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
-    cityEngines: ['justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   logistics: {
     label: 'Logistics & Transport',
     description: 'Packers, movers, transport companies, couriers, freight and warehouses',
-    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap'],
-    cityEngines: ['justdial', 'openstreetmap']
+    engines: ['google-local-finder', 'maps', 'justdial', 'openstreetmap', 'bing-places', 'web-discovery', 'social'],
+    cityEngines: ['justdial', 'openstreetmap', 'bing-places', 'social']
   },
   hospitality: {
     label: 'Hotels & Travel',
