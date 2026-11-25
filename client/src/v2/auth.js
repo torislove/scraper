@@ -1,18 +1,58 @@
 /**
  * auth.js
  *
- * Unified authentication & session client for Scraper.co.in.
- * Supports Sign In, Sign Up, Google Sign-In, Password Change, 6-Digit Reset,
- * Sliding Session Refresh, Live Server Config Sync, and Global Sign-Out.
+ * Unified authentication & session client for Scraper.co.in (Client).
+ * Supports Free Firebase Auth (Email/Password + Google Sign-In on Spark plan)
+ * bridged cleanly to signed backend sessions, plus resilient local server
+ * fallback, 7-day free launch access metadata, sliding refresh, and sign-out.
  */
 
 import { useEffect, useState } from 'react';
 import { API_URL, DIRECT_BACKEND_URL } from '../apiConfig';
+import {
+  firebaseLogout,
+  sendResetEmail,
+  signInWithEmail,
+  signInWithGooglePopup,
+  signUpWithEmail
+} from '../firebase';
 
 const SESSION_KEY = 'scraper.session.v1';
 const CONFIG_CACHE_KEY = 'scraper.auth.config.v1';
 
 export const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === '1';
+
+function mapFirebaseError(err, fallbackMsg) {
+  const code = String(err?.code || '');
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+    return 'Google sign-in popup was closed before completing.';
+  }
+  if (code === 'auth/popup-blocked') {
+    return 'Your browser blocked the Google sign-in popup. Allow popups for this site and try again.';
+  }
+  if (code === 'auth/unauthorized-domain') {
+    return 'Add this domain under Firebase Console -> Authentication -> Settings -> Authorized domains.';
+  }
+  if (code === 'auth/operation-not-allowed' || code === 'auth/configuration-not-found') {
+    return 'Enable Google & Email/Password providers in Firebase Console -> Authentication -> Sign-in method.';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'An account with this email already exists. Try signing in instead.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password must be at least 8 characters long.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'Enter a valid email address.';
+  }
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
+    return 'That email and password do not match an account.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Wait a minute and try again.';
+  }
+  return err?.message || fallbackMsg;
+}
 
 export function getSession() {
   try {
@@ -116,7 +156,14 @@ export function getCachedAuthConfig() {
     const raw = sessionStorage.getItem(CONFIG_CACHE_KEY);
     if (raw) return JSON.parse(raw);
   } catch (e) { }
-  return { authRequired: AUTH_REQUIRED, allowSelfSignup: true, googleEnabled: false };
+  return {
+    authRequired: AUTH_REQUIRED,
+    allowSelfSignup: true,
+    firebaseAuthEnabled: true,
+    googleEnabled: false,
+    freeTrialDays: 7,
+    paymentRequired: false
+  };
 }
 
 export async function fetchAuthConfig() {
@@ -127,7 +174,45 @@ export async function fetchAuthConfig() {
   return cfg;
 }
 
+export async function loginWithFirebaseIdToken(idToken, { name = '', company = '', plan = 'starter', remember = true } = {}) {
+  const result = await request('/auth/firebase', {
+    method: 'POST',
+    body: JSON.stringify({ idToken, name, company, plan, remember })
+  });
+  return setSession(
+    { token: result.token, expiresAt: result.expiresAt, user: result.user },
+    { persistent: remember }
+  );
+}
+
+export async function loginWithFirebaseGoogle({ remember = true } = {}) {
+  try {
+    const { user, idToken } = await signInWithGooglePopup();
+    return await loginWithFirebaseIdToken(idToken, {
+      name: user?.displayName || '',
+      remember
+    });
+  } catch (err) {
+    throw new Error(mapFirebaseError(err, 'Google sign-in failed.'), { cause: err });
+  }
+}
+
 export async function registerWithPassword({ name, email, password, company = '', plan = 'starter', remember = true }) {
+  try {
+    const { idToken } = await signUpWithEmail({ name, email, password });
+    return await loginWithFirebaseIdToken(idToken, { name, company, plan, remember });
+  } catch (fbErr) {
+    const code = String(fbErr?.code || '');
+    const canFallbackLocal =
+      code === 'auth/operation-not-allowed' ||
+      code === 'auth/configuration-not-found' ||
+      code === 'auth/network-request-failed' ||
+      code === 'auth/unauthorized-domain';
+    if (!canFallbackLocal) {
+      throw new Error(mapFirebaseError(fbErr, 'Could not create account.'), { cause: fbErr });
+    }
+  }
+
   const result = await request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, email, password, company, plan, remember })
@@ -139,9 +224,32 @@ export async function registerWithPassword({ name, email, password, company = ''
 }
 
 export async function loginWithPassword(email, password, { remember = true } = {}) {
+  const cleanIdentifier = String(email || '').trim();
+  if (cleanIdentifier.includes('@')) {
+    try {
+      const { user, idToken } = await signInWithEmail(cleanIdentifier, password);
+      return await loginWithFirebaseIdToken(idToken, {
+        name: user?.displayName || '',
+        remember
+      });
+    } catch (fbErr) {
+      const code = String(fbErr?.code || '');
+      const tryLocalFallback =
+        code === 'auth/operation-not-allowed' ||
+        code === 'auth/configuration-not-found' ||
+        code === 'auth/network-request-failed' ||
+        code === 'auth/unauthorized-domain' ||
+        code === 'auth/user-not-found' ||
+        code === 'auth/invalid-credential';
+      if (!tryLocalFallback) {
+        throw new Error(mapFirebaseError(fbErr, 'Sign-in failed.'), { cause: fbErr });
+      }
+    }
+  }
+
   const result = await request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, username: email, password, remember })
+    body: JSON.stringify({ email: cleanIdentifier, username: cleanIdentifier, password, remember })
   });
   return setSession(
     { token: result.token, expiresAt: result.expiresAt, user: result.user },
@@ -200,7 +308,26 @@ export async function changePassword(currentPassword, newPassword) {
   return result;
 }
 
-export function requestPasswordReset(email) {
+export async function requestPasswordReset(email) {
+  try {
+    await sendResetEmail(String(email || '').trim());
+    return {
+      success: true,
+      firebaseEmailSent: true,
+      message: 'Password reset link sent to your email! Check your inbox (and Spam folder).'
+    };
+  } catch (fbErr) {
+    const code = String(fbErr?.code || '');
+    const tryLocal =
+      code === 'auth/operation-not-allowed' ||
+      code === 'auth/configuration-not-found' ||
+      code === 'auth/network-request-failed' ||
+      code === 'auth/unauthorized-domain' ||
+      code === 'auth/user-not-found';
+    if (!tryLocal) {
+      throw new Error(mapFirebaseError(fbErr, 'Could not send reset email.'), { cause: fbErr });
+    }
+  }
   return request('/auth/forgot-password', {
     method: 'POST',
     body: JSON.stringify({ email })
@@ -216,6 +343,7 @@ export function confirmPasswordReset({ email, code, newPassword }) {
 
 export function logout() {
   clearSession();
+  firebaseLogout();
   fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => { });
 }
 
@@ -223,6 +351,7 @@ export async function logoutAll() {
   try {
     await request('/auth/logout-all', { method: 'POST' });
   } catch (e) { }
+  firebaseLogout();
   clearSession();
 }
 

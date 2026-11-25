@@ -114,6 +114,12 @@ function readLicenseFile(file) {
 
 function createLicenseGate() {
   return function licenseGate(req, res, next) {
+    // 7-day free launch override: never enforce paid walls when PAYMENT_ENFORCEMENT !== '1'
+    // or while inside LAUNCH_FREE_UNTIL.
+    const launchUntil = process.env.LAUNCH_FREE_UNTIL ? Date.parse(process.env.LAUNCH_FREE_UNTIL) : 0;
+    if (Number.isFinite(launchUntil) && launchUntil > Date.now()) return next();
+    if (process.env.PAYMENT_ENFORCEMENT === '0') return next();
+
     // Only the packaged desktop build opts in. Self-hosted and development
     // deployments keep the historical open behaviour.
     if (process.env.LICENSE_ENFORCE !== '1') return next();

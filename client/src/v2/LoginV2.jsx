@@ -7,7 +7,7 @@ import {
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
 import {
-  AUTH_REQUIRED, confirmPasswordReset, fetchAuthConfig, loginWithGoogle,
+  AUTH_REQUIRED, confirmPasswordReset, fetchAuthConfig, loginWithFirebaseGoogle, loginWithGoogle,
   loginWithPassword, registerWithPassword, requestPasswordReset
 } from './auth';
 import './login.css';
@@ -80,7 +80,14 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [config, setConfig] = useState({ googleEnabled: false, authRequired: AUTH_REQUIRED, allowSelfSignup: true });
+  const [config, setConfig] = useState({
+    googleEnabled: false,
+    firebaseAuthEnabled: true,
+    freeTrialDays: 7,
+    paymentRequired: false,
+    authRequired: AUTH_REQUIRED,
+    allowSelfSignup: true
+  });
 
   const googleSlot = useRef(null);
   const googleInit = useRef(false);
@@ -113,7 +120,7 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
   }, [navigate, nextPath, isMaster]);
 
   useEffect(() => {
-    if (!config.googleEnabled || !config.googleClientId || mode === 'reset') return;
+    if (config.firebaseAuthEnabled !== false || !config.googleEnabled || !config.googleClientId || mode === 'reset') return;
 
     const render = () => {
       if (!window.google?.accounts?.id || !googleSlot.current) return;
@@ -229,12 +236,18 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
         setBusy(true);
         try {
           const res = await requestPasswordReset(email.trim());
-          setResetRequested(true);
-          setNotice(
-            res.devCode
-              ? `Reset code generated (local dev code: ${res.devCode}). Enter it below with your new password.`
-              : (res.message || 'Check your email or ask your workspace administrator for your 6-digit reset code.')
-          );
+          if (res?.firebaseEmailSent) {
+            setResetRequested(false);
+            setMode('signin');
+            setNotice(res.message || 'Password reset link sent to your email! Check your inbox and Spam folder.');
+          } else {
+            setResetRequested(true);
+            setNotice(
+              res.devCode
+                ? `Reset code generated (local dev code: ${res.devCode}). Enter it below with your new password.`
+                : (res.message || 'Check your email or ask your workspace administrator for your 6-digit reset code.')
+            );
+          }
         } catch (err) {
           setError(err.message || 'Could not request reset code.');
         } finally {
@@ -266,13 +279,18 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
     }
   }
 
-  function handleGooglePlaceholder() {
+  async function handleFirebaseGoogle() {
     setError('');
-    setNotice(
-      config.googleEnabled
-        ? 'Google Sign-In is still loading. Try again in a moment or sign in with email below.'
-        : 'Sign in or create an account directly with your email and password below — zero extra setup needed.'
-    );
+    setNotice('');
+    setBusy(true);
+    try {
+      const session = await loginWithFirebaseGoogle({ remember });
+      finish(session);
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   const strength = passwordStrength(password);
@@ -368,6 +386,26 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
               </span>
               <h2>{headingByMode.title}</h2>
               <p>{headingByMode.sub}</p>
+              {!isMaster && !config.paymentRequired && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 11px',
+                    borderRadius: 999,
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.35)',
+                    color: '#065f46',
+                    fontSize: 11.5,
+                    fontWeight: 700
+                  }}
+                >
+                  <Sparkles size={12} color="#059669" />
+                  <span>{config.freeTrialDays || 7}-Day Free Launch Access · No Card or Payment Required</span>
+                </div>
+              )}
             </div>
 
             {!isMaster && (
@@ -416,10 +454,10 @@ export default function LoginV2({ variant = 'client', initialMode = 'signin' }) 
 
             {mode !== 'reset' && (
               <>
-                {config.googleEnabled ? (
+                {config.firebaseAuthEnabled === false && config.googleEnabled && config.googleClientId ? (
                   <div className="login-google-slot" ref={googleSlot} />
                 ) : (
-                  <button type="button" className="login-google-btn" onClick={handleGooglePlaceholder}>
+                  <button type="button" className="login-google-btn" onClick={handleFirebaseGoogle} disabled={busy}>
                     <GoogleMark size={18} />
                     <span>Continue with Google</span>
                   </button>

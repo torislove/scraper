@@ -11,6 +11,7 @@ import AccountMenu from './AccountMenu';
 import NotificationBell from '../NotificationBell';
 import SystemCheckPill from './SystemCheckPill';
 import { openMasterWorkspace } from '../utils/editionSwitch';
+import { useAuthSession } from '../auth';
 
 export default function CommandCenterHeader({
   navigate,
@@ -33,6 +34,10 @@ export default function CommandCenterHeader({
   exportFolder,
   refresh
 }) {
+  const session = useAuthSession();
+  const showFreeLaunchPill = session?.user?.role !== 'master' && !session?.user?.trial?.paymentRequired;
+  const freeDaysLeft = session?.user?.trial?.daysRemaining ?? 7;
+
   return (
     <header className="v2-cmd-top">
       <div className="v2-cmd-brand">
@@ -58,6 +63,12 @@ export default function CommandCenterHeader({
       </div>
 
       <div className="v2-cmd-top-status">
+        {showFreeLaunchPill && (
+          <StatusPill tone="lime">
+            <Sparkles size={11} />
+            FREE ACCESS · {freeDaysLeft}D LEFT
+          </StatusPill>
+        )}
         <StatusPill tone={isEngineReady ? 'lime' : sseStatus === 'connecting' ? 'amber' : 'red'} pulse={isEngineReady}>
           {isEngineReady ? <Wifi size={11} /> : <WifiOff size={11} />}
           {isEngineReady ? 'LIVE' : sseStatus === 'connecting' ? 'CONNECTING' : 'RECONNECTING'}

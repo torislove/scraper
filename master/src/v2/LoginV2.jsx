@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import BrandLogo from './components/BrandLogo';
 import Country3DFlag from './components/Country3DFlag';
-import { AUTH_REQUIRED, fetchAuthConfig, loginWithGoogle, loginWithPassword } from './auth';
+import { AUTH_REQUIRED, fetchAuthConfig, loginWithFirebaseGoogle, loginWithGoogle, loginWithPassword } from './auth';
 import './login.css';
 
 const MARKETS = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'IE', 'ZA', 'DE'];
@@ -32,7 +32,7 @@ export default function LoginV2({ variant = 'master' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [config, setConfig] = useState({ googleEnabled: false, authRequired: AUTH_REQUIRED });
+  const [config, setConfig] = useState({ googleEnabled: false, firebaseAuthEnabled: true, authRequired: AUTH_REQUIRED });
 
   const googleSlot = useRef(null);
   const googleInit = useRef(false);
@@ -61,7 +61,7 @@ export default function LoginV2({ variant = 'master' }) {
   }, [navigate, nextPath]);
 
   useEffect(() => {
-    if (!config.googleEnabled || !config.googleClientId) return;
+    if (config.firebaseAuthEnabled !== false || !config.googleEnabled || !config.googleClientId) return;
 
     const render = () => {
       if (!window.google?.accounts?.id || !googleSlot.current) return;
@@ -114,6 +114,20 @@ export default function LoginV2({ variant = 'master' }) {
     document.head.appendChild(script);
     return () => script.removeEventListener('load', render);
   }, [config.googleEnabled, config.googleClientId, finish]);
+
+  async function handleFirebaseGoogle() {
+    setError('');
+    setNotice('');
+    setBusy(true);
+    try {
+      const session = await loginWithFirebaseGoogle({ remember });
+      finish(session);
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -223,16 +237,17 @@ export default function LoginV2({ variant = 'master' }) {
               </div>
             )}
 
-            {config.googleEnabled ? (
+            {config.firebaseAuthEnabled === false && config.googleEnabled && config.googleClientId ? (
               <div className="login-google-slot" ref={googleSlot} />
             ) : (
               <button
                 type="button"
                 className="login-google-btn"
-                onClick={() => setNotice('Sign in using your Master administrator credentials below.')}
+                onClick={handleFirebaseGoogle}
+                disabled={busy}
               >
                 <GoogleMark size={18} />
-                <span>Master Google SSO</span>
+                <span>Continue with Google (Master SSO)</span>
               </button>
             )}
 

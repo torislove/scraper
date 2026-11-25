@@ -39,6 +39,38 @@ const SECRET_FILE = path.join(DATA_DIR, '.session-secret');
 const TOKEN_TTL_LONG = Number(process.env.SESSION_TTL_SECONDS || 60 * 60 * 24 * 7); // 7 days
 const TOKEN_TTL_SHORT = Number(process.env.SESSION_SHORT_TTL_SECONDS || 60 * 60 * 24); // 24 hours
 const RESET_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const FREE_TRIAL_DAYS = Math.max(1, Number(process.env.FREE_TRIAL_DAYS || 7));
+const FIREBASE_PROJECT_ID = String(process.env.FIREBASE_PROJECT_ID || 'scraper-37c72').trim();
+
+function computeTrialMetadata(user = {}) {
+  const role = user.role || 'client';
+  if (role === 'master' || role === 'admin') {
+    return {
+      active: false,
+      unlimited: true,
+      daysRemaining: null,
+      endsAt: null,
+      paymentRequired: false
+    };
+  }
+  const paymentEnforced = process.env.PAYMENT_ENFORCEMENT === '1';
+  const launchUntilMs = process.env.LAUNCH_FREE_UNTIL ? Date.parse(process.env.LAUNCH_FREE_UNTIL) : 0;
+  const startedMs = Date.parse(user.trialStartedAt || user.createdAt || '') || Date.now();
+  const explicitEndMs = Date.parse(user.trialEndsAt || '') || 0;
+  const endsAtMs = Math.max(
+    explicitEndMs || (startedMs + FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000),
+    Number.isFinite(launchUntilMs) ? launchUntilMs : 0
+  );
+  const remainingMs = Math.max(0, endsAtMs - Date.now());
+  const daysRemaining = remainingMs > 0 ? Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000))) : 0;
+  return {
+    active: remainingMs > 0 || !paymentEnforced,
+    unlimited: false,
+    daysRemaining: remainingMs > 0 ? daysRemaining : FREE_TRIAL_DAYS,
+    endsAt: new Date(endsAtMs).toISOString(),
+    paymentRequired: Boolean(paymentEnforced && remainingMs <= 0)
+  };
+}
 
 const authRateLimit = security.createAuthLimiter({ windowMs: 15 * 60_000, max: 14, name: 'Authentication' });
 
@@ -246,6 +278,7 @@ function enrichUserWithPlan(user) {
   const role = user.role || 'client';
   const clientId = user.clientId || (role === 'master' ? 'master' : user.id);
   const record = role === 'master' ? null : masterStore.getClientRecord(clientId);
+  const trial = computeTrialMetadata(user);
   return {
     id: user.id,
     email: user.email || null,
@@ -253,8 +286,9 @@ function enrichUserWithPlan(user) {
     company: user.company || '',
     role,
     clientId,
-    plan: role === 'master' ? 'sovereign' : (record?.plan || user.plan || 'starter'),
-    credits: role === 'master' ? null : (record?.credits ?? 2000),
+    plan: role === 'master' ? 'sovereign' : (record?.plan || user.plan || 'launch_free_7d'),
+    credits: role === 'master' ? null : (record?.credits ?? 5000),
+    trial,
     status: user.status === 'suspended' || record?.status === 'suspended' ? 'suspended' : 'active',
     tokenVersion: Number(user.tokenVersion || 1),
     lastLoginAt: user.lastLoginAt || null
@@ -272,6 +306,7 @@ function publicUser(user) {
     clientId: enriched.clientId,
     plan: enriched.plan,
     credits: enriched.credits,
+    trial: enriched.trial,
     status: enriched.status
   };
 }
@@ -603,6 +638,170 @@ function userFromGoogleClaims(claims) {
 }
 
 /* ---------------------------------------------------------------------------
+ * Firebase ID token verification (zero-key: Google SecureToken X.509 certs)
+ * ------------------------------------------------------------------------- */
+
+const FIREBASE_CERTS_URL =
+  'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+let firebaseCertCache = { certs: null, expiresAt: 0 };
+
+async function getFirebasePublicCerts(forceRefresh = false) {
+  if (!forceRefresh && firebaseCertCache.certs && Date.now() < firebaseCertCache.expiresAt) {
+    return firebaseCertCache.certs;
+  }
+  const response = await fetch(FIREBASE_CERTS_URL, { headers: { accept: 'application/json' } });
+  if (!response.ok) {
+    const err = new Error('firebase_certs_unavailable');
+    err.status = 503;
+    throw err;
+  }
+  const certs = await response.json();
+  const cc = String(response.headers.get('cache-control') || '');
+  const maxAgeMatch = /max-age=(\d+)/i.exec(cc);
+  const ttlSec = maxAgeMatch ? Math.max(60, Number(maxAgeMatch[1])) : 3600;
+  firebaseCertCache = { certs, expiresAt: Date.now() + ttlSec * 1000 };
+  return certs;
+}
+
+async function verifyFirebaseIdToken(idToken) {
+  const parts = String(idToken || '').split('.');
+  if (parts.length !== 3) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+  let header;
+  let claims;
+  try {
+    header = JSON.parse(fromBase64url(parts[0]).toString('utf8'));
+    claims = JSON.parse(fromBase64url(parts[1]).toString('utf8'));
+  } catch (e) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+
+  if (header.alg !== 'RS256' || !header.kid) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+
+  let certs = await getFirebasePublicCerts(false);
+  let certPem = certs?.[header.kid];
+  if (!certPem) {
+    certs = await getFirebasePublicCerts(true);
+    certPem = certs?.[header.kid];
+  }
+  if (!certPem) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+
+  const verifier = crypto.createVerify('RSA-SHA256');
+  verifier.update(`${parts[0]}.${parts[1]}`);
+  verifier.end();
+  const signatureOk = verifier.verify(certPem, fromBase64url(parts[2]));
+  if (!signatureOk) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+  if (
+    claims.aud !== FIREBASE_PROJECT_ID ||
+    claims.iss !== expectedIssuer ||
+    !claims.sub ||
+    !claims.exp ||
+    claims.exp < nowSec - 30 ||
+    (claims.iat && claims.iat > nowSec + 120)
+  ) {
+    const err = new Error('firebase_audience_mismatch');
+    err.status = 401;
+    throw err;
+  }
+
+  return claims;
+}
+
+function userFromFirebaseClaims(claims, extra = {}) {
+  const email = String(claims.email || '').trim().toLowerCase();
+  const uid = String(claims.user_id || claims.sub || '').trim();
+  if (!email && !uid) {
+    const err = new Error('firebase_token_invalid');
+    err.status = 401;
+    throw err;
+  }
+
+  const masterEmails = String(process.env.GOOGLE_MASTER_EMAILS || '')
+    .split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  const masterDomain = String(process.env.GOOGLE_MASTER_DOMAIN || '').trim().toLowerCase();
+  const domain = email.split('@')[1] || '';
+  const isMasterEligible = Boolean(email && (masterEmails.includes(email) || (masterDomain && domain === masterDomain)));
+
+  const users = getUsers();
+  const existingIdx = users.findIndex(
+    u => (email && String(u.email || '').toLowerCase() === email) || (uid && u.firebaseUid === uid)
+  );
+
+  if (existingIdx !== -1) {
+    const existing = users[existingIdx];
+    const upgradedRole = isMasterEligible ? 'master' : (existing.role || 'client');
+    users[existingIdx] = {
+      ...existing,
+      firebaseUid: uid || existing.firebaseUid,
+      name: existing.name || extra.name || claims.name || (email ? email.split('@')[0] : 'Workspace User'),
+      company: existing.company || String(extra.company || '').trim().slice(0, 100),
+      role: upgradedRole,
+      clientId: upgradedRole === 'master' ? 'master' : existing.clientId,
+      plan: upgradedRole === 'master' ? 'sovereign' : (existing.plan || 'launch_free_7d'),
+      lastLoginAt: new Date().toISOString()
+    };
+    saveUsers(users);
+    const enriched = enrichUserWithPlan(users[existingIdx]);
+    if (enriched.status === 'suspended') {
+      const err = new Error('account_suspended');
+      err.status = 403;
+      throw err;
+    }
+    return enriched;
+  }
+
+  if (!isMasterEligible && process.env.ALLOW_SELF_SIGNUP === '0') {
+    const err = new Error('signup_disabled');
+    err.status = 403;
+    throw err;
+  }
+
+  const role = isMasterEligible ? 'master' : 'client';
+  const nowIso = new Date().toISOString();
+  const trialEndIso = new Date(Date.now() + FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const created = {
+    id: `usr_${crypto.randomBytes(6).toString('hex')}`,
+    email: email || null,
+    name: String(extra.name || claims.name || (email ? email.split('@')[0] : 'Workspace User')).trim().slice(0, 80),
+    company: String(extra.company || '').trim().slice(0, 100),
+    role,
+    clientId: role === 'master' ? 'master' : `ws_${crypto.randomBytes(5).toString('hex')}`,
+    plan: role === 'master' ? 'sovereign' : 'launch_free_7d',
+    firebaseUid: uid,
+    trialStartedAt: nowIso,
+    trialEndsAt: role === 'master' ? null : trialEndIso,
+    tokenVersion: 1,
+    status: 'active',
+    createdAt: nowIso,
+    lastLoginAt: nowIso
+  };
+  users.push(created);
+  saveUsers(users);
+  syncClientToMasterStore(created);
+  return enrichUserWithPlan(created);
+}
+
+/* ---------------------------------------------------------------------------
  * Routes
  * ------------------------------------------------------------------------- */
 
@@ -612,12 +811,53 @@ router.get('/config', (req, res) => {
     authRequired: process.env.AUTH_REQUIRED === '1',
     allowSelfSignup: process.env.ALLOW_SELF_SIGNUP !== '0',
     localLogin: true,
+    firebaseAuthEnabled: true,
+    firebaseProjectId: FIREBASE_PROJECT_ID,
     googleEnabled: Boolean(googleClientId),
     googleClientId,
+    freeTrialDays: FREE_TRIAL_DAYS,
+    paymentRequired: process.env.PAYMENT_ENFORCEMENT === '1',
     hasAdmin: Boolean(getAdminCredentials()),
-    provider: googleClientId ? 'google+password' : 'password',
+    provider: 'firebase+password',
     masterHost: process.env.MASTER_HOST || null
   });
+});
+
+router.post('/firebase', authRateLimit, async (req, res) => {
+  const { idToken, name = '', company = '', remember = true } = req.body || {};
+  if (!idToken) {
+    return res.status(400).json({
+      success: false,
+      error: 'missing_token',
+      message: 'Firebase authentication token is required.'
+    });
+  }
+  try {
+    const claims = await verifyFirebaseIdToken(idToken);
+    const user = userFromFirebaseClaims(claims, { name, company });
+    const { token, payload, ttl } = signToken(user, { remember: Boolean(remember) });
+    attachSessionCookie(req, res, token, ttl);
+    return res.json({
+      success: true,
+      token,
+      expiresAt: new Date(payload.exp * 1000).toISOString(),
+      user: publicUser(user)
+    });
+  } catch (error) {
+    const status = error.status || 401;
+    const messages = {
+      firebase_certs_unavailable: 'Could not reach Google authentication certificates. Please try again.',
+      firebase_token_invalid: 'Could not verify your Firebase sign-in token. Please sign in again.',
+      firebase_audience_mismatch: 'Firebase project mismatch on authentication token.',
+      account_suspended: 'This workspace is currently paused. Contact your administrator.',
+      signup_disabled: 'New self-serve registrations are currently paused.'
+    };
+    return res.status(status).json({
+      success: false,
+      error: error.message || 'firebase_auth_failed',
+      message: messages[error.message] || 'Authentication failed. Please try again.'
+    });
+  }
 });
 
 router.post('/register', authRateLimit, (req, res) => {
@@ -657,6 +897,7 @@ router.post('/register', authRateLimit, (req, res) => {
     : 'starter';
 
   const now = new Date().toISOString();
+  const trialEndsAt = new Date(Date.now() + FREE_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const created = {
     id: `usr_${crypto.randomBytes(6).toString('hex')}`,
     email: cleanEmail,
@@ -664,8 +905,10 @@ router.post('/register', authRateLimit, (req, res) => {
     company: String(company || '').trim().slice(0, 100),
     role: 'client',
     clientId: `ws_${crypto.randomBytes(5).toString('hex')}`,
-    plan: safePlan,
+    plan: safePlan || 'launch_free_7d',
     passwordHash: hashPassword(password),
+    trialStartedAt: now,
+    trialEndsAt,
     tokenVersion: 1,
     status: 'active',
     createdAt: now,

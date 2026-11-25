@@ -10,6 +10,7 @@ import ExtensionGatewayModal from '../components/modals/ExtensionGatewayModal';
 
 const VERIFIED_KEY = 'scraper_master_ext_verified_v1';
 const SKIP_EXTENSION_KEY = 'scraper_skip_extension';
+const EASY_SCRAPE_MODE = import.meta.env.VITE_EASY_SCRAPE !== '0';
 
 const DEFAULT_EXTENSION_CONTEXT = {
   ext: { installed: false, version: null, ready: false, transport: 'none' },
@@ -253,6 +254,13 @@ export function ExtensionProvider({ children }) {
         }).catch(() => {});
       }
       relayRef.current?.poke?.();
+      if (typeof onReady === 'function') await onReady();
+      return true;
+    }
+
+    // 1-click easy scraping mode: run immediately on server engine when extension isn't installed yet
+    if (EASY_SCRAPE_MODE && !srv?.extensionOnly) {
+      setSkippedExtension(true);
       if (typeof onReady === 'function') await onReady();
       return true;
     }

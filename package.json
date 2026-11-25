@@ -17,6 +17,7 @@
     "build:master": "cd master && npm run build",
     "build:admin": "cd admin && npm run build",
     "deploy:web": "npm run build && firebase deploy --only hosting",
+    "setup:firebase-cicd": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-firebase-cicd.ps1",
     "package:extension": "node scripts/package-extension.cjs",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix master install"
   }
