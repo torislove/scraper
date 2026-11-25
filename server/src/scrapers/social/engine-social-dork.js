@@ -4,6 +4,7 @@ const { extractPhones, normalizePhone, extractSocialContacts } = require('../../
 const { searchBingHtml } = require('../search/bingSearch');
 const { scrapeSocialProfile } = require('./socialMediaScraper');
 const { launchStealthBrowser, applyAdvancedStealth } = require('../core/browserFactory');
+const { acquireBrowserSlot, isMemoryUnderPressure } = require('../../utils/browserBudget');
 
 // Shared logging utility callback
 let logCallback = console.log;
@@ -91,7 +92,17 @@ async function directSocialDiscovery(platformDomain, category, location, meta = 
   const isTwitter = platformDomain.includes('twitter') || platformDomain.includes('x.com');
 
   let handle;
+  let browserSlot = null;
   try {
+    if (isMemoryUnderPressure()) {
+      addLog(`[Social Discovery] Skipping direct browser discovery for ${platformDomain} (system memory under pressure).`);
+      return [];
+    }
+    browserSlot = await acquireBrowserSlot({ kind: 'discovery', label: `social-dork:${platformDomain}`, timeoutMs: 10000 }).catch(() => null);
+    if (!browserSlot) {
+      addLog(`[Social Discovery] Browser budget busy; skipping direct browser discovery for ${platformDomain}.`);
+      return [];
+    }
     handle = await launchStealthBrowser(false, null, true);
     const context = await handle.browser.newContext({
       viewport: { width: 1280, height: 900 },
@@ -263,6 +274,7 @@ async function directSocialDiscovery(platformDomain, category, location, meta = 
     addLog(`[Social Discovery] Direct discovery note: ${err.message}`);
   } finally {
     if (handle?.browser) await handle.browser.close().catch(() => {});
+    if (browserSlot) browserSlot.release();
   }
 
   return results;
@@ -324,13 +336,18 @@ async function scrapeDuckDuckGoDork(
       return { totalScraped: 0, found: 0 };
     }
 
-    const results = searchResults;
-    addLog(`[Social Discovery] Found ${results.length} ${platformName} candidate profiles for "${exactQuery}"`);
+    const results = searchResults.slice(0, 6);
+    addLog(`[Social Discovery] Found ${searchResults.length} ${platformName} candidate profiles (processing top ${results.length}) for "${exactQuery}"`);
 
     let totalInserted = 0;
+    const dorkDeadlineMs = Date.now() + 22000;
 
     for (const item of results) {
       if (globalAbortSignal.aborted) throw new Error('Master Stop Aborted');
+      if (Date.now() > dorkDeadlineMs) {
+        addLog(`[Social Discovery] Reached 22s social extraction budget for ${platformName}; yielding worker slot immediately.`);
+        break;
+      }
       
       const profileUrl = item.url;
       if (!profileUrl || /\/(reel|explore|p|stories|groups|events|watch|popular|about|legal|accounts|help)\//.test(profileUrl)) continue;
@@ -389,18 +406,23 @@ async function scrapeDuckDuckGoDork(
       // Deep Profile Harvester: Run stealth Playwright scraper (or OpenGraph fast-path)
       // to dismiss login modals, expand bio ('... more'), and harvest real physical address, email & phone
       let socialIntel = null;
-      try {
-        socialIntel = await scrapeSocialProfile(profileUrl, country);
-        if (socialIntel && socialIntel.ok) {
-          if (!phone && socialIntel.phones?.length) {
-            phone = socialIntel.phones[0];
-            isMobile = true;
+      if (!isMemoryUnderPressure() && Date.now() < (dorkDeadlineMs - 4000)) {
+        try {
+          socialIntel = await Promise.race([
+            scrapeSocialProfile(profileUrl, country),
+            new Promise((resolve) => setTimeout(() => resolve(null), 6500))
+          ]);
+          if (socialIntel && socialIntel.ok) {
+            if (!phone && socialIntel.phones?.length) {
+              phone = socialIntel.phones[0];
+              isMobile = true;
+            }
+            if (!whatsappLink && socialIntel.whatsappLink) {
+              whatsappLink = socialIntel.whatsappLink;
+            }
           }
-          if (!whatsappLink && socialIntel.whatsappLink) {
-            whatsappLink = socialIntel.whatsappLink;
-          }
-        }
-      } catch (e) {}
+        } catch (e) {}
+      }
 
       // A social profile without phone or followers or clear business relevance is skipped
       if (!phone && !followers && (!socialIntel || !socialIntel.bio)) {

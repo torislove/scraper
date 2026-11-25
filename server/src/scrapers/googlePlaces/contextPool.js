@@ -1,66 +1,68 @@
 /**
  * contextPool.js
- * Reusable Chromium browser context pooling with memory containment and lifecycle management.
+ * Reusable Chromium browser context + hot-tab pooling with adaptive hardware RAM containment.
  */
 
 const { applyAdvancedStealth, optimizePageForSpeed } = require('../browserFactory');
+const browserBudget = require('../../utils/browserBudget');
 
-/**
- * Zone context pool.
- *
- * A fresh Chromium context per zone costs ~0.4–0.6 s warm and ~5.5 s when five
- * are created at once on a cold browser. Reusing a small pool also keeps the
- * Maps JS bundle in the HTTP cache, so the next zone's navigation is cheaper.
- * Contexts are recycled after a fixed number of zones so cookies, memory and
- * any accumulated state cannot grow without bound.
- */
-const ZONE_CONTEXT_POOL_SIZE = Math.max(1, Math.min(8, Number(process.env.SCRAPER_CONTEXT_POOL) || 6));
-const ZONE_CONTEXT_MAX_USES = Math.max(1, Number(process.env.SCRAPER_CONTEXT_USES) || 25);
+const ZONE_CONTEXT_MAX_USES = Math.max(1, Number(process.env.SCRAPER_CONTEXT_USES) || 20);
 const zoneContextPool = [];
+
+function getDynamicPoolSize() {
+  const envCap = Number(process.env.SCRAPER_CONTEXT_POOL);
+  const hwCap = Math.max(1, Math.min(8, Number(browserBudget.TOTAL_SLOTS) || 4));
+  if (Number.isFinite(envCap) && envCap > 0) return Math.min(8, Math.max(1, envCap), hwCap);
+  return hwCap;
+}
+
+async function prepareHotPage(slot) {
+  if (slot.page && !slot.page.isClosed()) {
+    return slot.page;
+  }
+  const page = await slot.context.newPage();
+  page.setDefaultTimeout(8000);
+  await applyAdvancedStealth(page);
+  await optimizePageForSpeed(page);
+  slot.page = page;
+  return page;
+}
 
 function makeZoneContext(browser) {
   return browser.newContext({
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     viewport: { width: 1280, height: 800 }
-  }).then(context => {
-    const slot = { context, browser, uses: 0, dead: false };
+  }).then(async (context) => {
+    const slot = { context, page: null, browser, uses: 0, dead: false, consented: false };
     try {
       context.on('close', () => { slot.dead = true; });
+      await prepareHotPage(slot);
     } catch (e) { }
     return slot;
   });
 }
 
-/**
- * Build the pool before the first wave.
- *
- * Creating five contexts at once on a cold browser costs ~5 s of wall time
- * (they contend for the same CPU). Creating them one after another costs a
- * fraction of that, and the first wave then starts with a warm pool. Called
- * by the orchestrator before it dispatches zones.
- */
-async function warmZoneContextPool(browser, count = ZONE_CONTEXT_POOL_SIZE) {
-  if (!browser) return 0;
-  const started = Date.now();
-  let made = 0;
-  const target = Math.min(count, ZONE_CONTEXT_POOL_SIZE) - zoneContextPool.length;
+async function warmZoneContextPool(browser, count = getDynamicPoolSize()) {
+  if (!browser || browserBudget.isMemoryUnderPressure()) return 0;
+  const maxPool = getDynamicPoolSize();
+  const target = Math.min(count, maxPool) - zoneContextPool.length;
   if (target <= 0) return 0;
-  // Warm in small parallel batches of 3 to overlap cold Chromium context setup without CPU thrashing
-  const batchSize = 3;
+  let made = 0;
+  const batchSize = Math.min(3, target);
   for (let i = 0; i < target; i += batchSize) {
+    if (browserBudget.isMemoryUnderPressure()) break;
     const n = Math.min(batchSize, target - i);
     const settled = await Promise.allSettled(
       Array.from({ length: n }, () => makeZoneContext(browser))
     );
     for (const res of settled) {
-      if (res.status === 'fulfilled' && res.value && zoneContextPool.length < ZONE_CONTEXT_POOL_SIZE) {
+      if (res.status === 'fulfilled' && res.value && zoneContextPool.length < maxPool) {
         zoneContextPool.push(res.value);
         made++;
+      } else if (res.status === 'fulfilled' && res.value?.context) {
+        try { await res.value.context.close(); } catch (e) { }
       }
     }
-  }
-  if (process.env.SCRAPER_TRACE_ZONE === '1') {
-    addLog(`[Zone Timing] pool warm · ${made} context(s) in ${Date.now() - started}ms`);
   }
   return made;
 }
@@ -71,26 +73,41 @@ async function acquireZoneContext(browser) {
     const reusable = slot
       && slot.browser === browser
       && !slot.dead
-      && slot.uses < ZONE_CONTEXT_MAX_USES;
+      && slot.uses < ZONE_CONTEXT_MAX_USES
+      && !browserBudget.isMemoryUnderPressure();
     if (reusable) {
       slot.uses++;
-      return slot;
+      try {
+        await prepareHotPage(slot);
+        return slot;
+      } catch (e) {
+        try { await slot.context.close(); } catch (cErr) { }
+      }
+    } else if (slot?.context) {
+      try { await slot.context.close(); } catch (e) { }
     }
-    try { await slot.context.close(); } catch (e) { }
   }
 
   const slot = await makeZoneContext(browser);
+  await prepareHotPage(slot);
   slot.uses = 1;
   return slot;
 }
 
 async function releaseZoneContext(slot, { recycle = false } = {}) {
   if (!slot || !slot.context) return;
+  const maxPool = getDynamicPoolSize();
   const keep = !recycle
     && !slot.dead
     && slot.uses < ZONE_CONTEXT_MAX_USES
-    && zoneContextPool.length < ZONE_CONTEXT_POOL_SIZE;
+    && zoneContextPool.length < maxPool
+    && !browserBudget.isMemoryUnderPressure();
   if (keep) {
+    try {
+      if (slot.page && !slot.page.isClosed()) {
+        await slot.page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 1500 }).catch(() => { });
+      }
+    } catch (e) { }
     zoneContextPool.push(slot);
     return;
   }
@@ -105,7 +122,7 @@ async function closeZoneContextPool() {
 }
 
 module.exports = {
-  ZONE_CONTEXT_POOL_SIZE,
+  get ZONE_CONTEXT_POOL_SIZE() { return getDynamicPoolSize(); },
   ZONE_CONTEXT_MAX_USES,
   zoneContextPool,
   makeZoneContext,

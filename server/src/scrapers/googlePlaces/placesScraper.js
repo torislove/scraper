@@ -99,12 +99,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
   try {
     zoneSlot = await acquireZoneContext(browser);
     context = zoneSlot.context;
-    page = await context.newPage();
-    page.setDefaultTimeout(8000);
-    await applyAdvancedStealth(page);
-
-    // Optimize page for ultra-fast scraping (aborts media, fonts, and tracking scripts)
-    await optimizePageForSpeed(page);
+    page = zoneSlot.page && !zoneSlot.page.isClosed() ? zoneSlot.page : await context.newPage();
+    page.setDefaultTimeout(7500);
+    if (!zoneSlot.page) {
+      await applyAdvancedStealth(page);
+      await optimizePageForSpeed(page);
+      zoneSlot.page = page;
+    }
     markZone('context+page');
 
     const searchUrl = exactQuery.startsWith('http')
@@ -122,16 +123,19 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
         return `/@${lat.toFixed(5)},${lng.toFixed(5)},${zoom}z`;
       })()}?hl=en&gl=${countryGl}`;
     addLog(`[Cyber Core] Navigating to satellite target: ${searchUrl}`);
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 12000 }).catch(e => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => addLog(`[Cyber Core] Load timed out, continuing with partial DOM...`));
     markZone('goto(domcontentloaded)');
 
-    const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
-    try {
-      if (await consentBtn.count() > 0) {
-        await consentBtn.first().click({ timeout: 3000 }).catch(() => { });
-        markZone('consent');
-      }
-    } catch (e) { }
+    if (!zoneSlot.consented) {
+      const consentBtn = page.locator('button:has-text("Accept all"), button:has-text("Reject all"), button:has-text("I agree"), button:has-text("Agree")');
+      try {
+        if (await consentBtn.count() > 0) {
+          await consentBtn.first().click({ timeout: 2200 }).catch(() => { });
+          markZone('consent');
+        }
+        zoneSlot.consented = true;
+      } catch (e) { }
+    }
 
     try {
       await Promise.race([
@@ -192,7 +196,21 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
       let enrichedData = { email: '', instagram: '', facebook: '', instagramFollowers: '', facebookFollowers: '', images: [], logo: '' };
       if (website) {
-        enrichedData = await scrapeWebsiteForSocials(browser, website, name);
+        try {
+          const webQuick = await fastWebsiteExtract(website, name, { defaultCountry: countryCode, allowInternational: countryCode !== 'IN', timeoutMs: 3000 });
+          if (webQuick) {
+            enrichedData = {
+              email: webQuick.email || (webQuick.emails?.[0] || ''),
+              instagram: webQuick.instagram || '',
+              facebook: webQuick.facebook || '',
+              instagramFollowers: '',
+              facebookFollowers: '',
+              images: [],
+              logo: webQuick.logo || ''
+            };
+            if (!phone && webQuick.phone) phone = webQuick.phone;
+          }
+        } catch (e) { }
       }
 
       // Prioritize authentic website brand logo if discovered
@@ -759,13 +777,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
               }
             });
 
-            // Fast network settle check (400ms instead of 650ms)
+            // Fast network settle check (280ms instead of 400ms)
             await page.waitForFunction((before) => {
               const feed = document.querySelector('div[role="feed"]');
               if (!feed) return false;
               return feed.querySelectorAll('div.Nv2PK').length > before.cards
                 || feed.scrollHeight > before.height + 10;
-            }, beforeScroll, { timeout: 400, polling: 40 }).catch(() => { });
+            }, beforeScroll, { timeout: 280, polling: 35 }).catch(() => { });
 
             const added = mergeCards(await collectVisibleCards());
 
@@ -790,10 +808,10 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
 
             if (added === 0) {
               staleTicks++;
-              if (staleTicks >= 2) {
-                // Rapid PageDown bounce confirmation before cleanly bailing
+              if (staleTicks >= 2 || accumulatedCards.size === 0) {
+                // Rapid PageDown confirmation before cleanly exiting zone
                 await page.keyboard.press('PageDown').catch(() => {});
-                await page.waitForTimeout(180);
+                await page.waitForTimeout(100);
                 const recoveryAdded = mergeCards(await collectVisibleCards());
                 if (recoveryAdded === 0) {
                   addLog(`[Cyber Core] Zone feed completed (${accumulatedCards.size} cards). Drained cleanly.`);
@@ -805,14 +823,8 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
                 await page.evaluate(() => {
                   const feed = document.querySelector('div[role="feed"]');
                   if (feed) {
-                    feed.scrollTop = Math.max(0, feed.scrollTop - 200);
-                  }
-                }).catch(() => { });
-                await page.waitForTimeout(50);
-                await page.evaluate(() => {
-                  const feed = document.querySelector('div[role="feed"]');
-                  if (feed) {
-                    feed.scrollTop = feed.scrollHeight;
+                    feed.scrollTop = Math.max(0, feed.scrollTop - 160);
+                    feed.scrollTop = feed.scrollHeight + 800;
                     feed.dispatchEvent(new WheelEvent('wheel', { deltaY: 2800, bubbles: true }));
                   }
                 }).catch(() => { });
@@ -1179,13 +1191,13 @@ async function scrapeGooglePlaces(exactQuery, category, location, sessionId = "l
     addLog(`[Cyber Core] Worker warning: ${error.message}`);
     return [];
   } finally {
-    if (page) {
+    if (zoneFailed && page && !page.isClosed()) {
       try { await page.close(); } catch (e) { }
     }
     if (zoneSlot) {
       await releaseZoneContext(zoneSlot, { recycle: zoneFailed });
     }
-    // Shared browser must remain open for other concurrent workers
+    // Shared browser & hot zone tab remain warm for instant next-zone handoff
   }
 }
 

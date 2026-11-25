@@ -3344,3 +3344,62 @@ h4,
   color: #92400e !important;
   box-shadow: 0 3px 10px -2px rgba(217, 119, 6, 0.26) !important;
 }
+
+/* ============================================================================
+   GPU-COMPOSITED 3D SOCIAL ICONS, HUNTER ANIMATIONS & TABLE CONTAINMENT
+   ============================================================================ */
+@keyframes lx3dFloat {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.94;
+  }
+  50% {
+    transform: translate3d(0, -3px, 0) scale(1.07);
+    opacity: 1;
+  }
+}
+
+.lx-3d-social-float {
+  animation: lx3dFloat 1.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  will-change: transform, opacity;
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lx-3d-social-badge {
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.lx-social-pill-3d {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px 2px 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  color: #0f172a;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 #ffffff, 0 2px 4px -1px rgba(15, 23, 42, 0.1);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+  will-change: transform;
+}
+
+.lx-social-pill-3d:hover {
+  transform: translate3d(0, -1.5px, 0) scale(1.03);
+}
+
+.lx-clean-table tbody tr {
+  contain: layout style;
+}
+
+.lx-map-mode-pill {
+  cursor: pointer;
+  transition: transform 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lx-map-mode-pill:hover {
+  transform: translate3d(0, -1px, 0);
+}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -89,7 +89,7 @@ import MapViewTab from './components/views/MapViewTab';
 import FoldersGridView from './components/views/FoldersGridView';
 import IntelligenceView from './components/views/IntelligenceView';
 import DeepJobsView from './components/views/DeepJobsView';
-import { extractLeadArea, CarriedBadge, qualityOf, mergeSingleVendor, mergeVendorLists } from './utils/leadHelpers';
+import { extractLeadArea, CarriedBadge, qualityOf, mergeSingleVendor, mergeVendorLists, computeContactRank, withVendorRanks } from './utils/leadHelpers';
 import { leadSourceMeta } from './utils/leadSource';
 import CommandCenterHeader from './components/CommandCenterHeader';
 import CountryFlagStrip from './components/CountryFlagStrip';
@@ -814,7 +814,7 @@ export default function CommandCenter() {
               map.set(v.id, merged);
               hasChanges = true;
             } else {
-              map.set(v.id, v);
+              map.set(v.id, withVendorRanks(v, countryHint));
               freshIds.push(v.id);
               newArrivalIds.push(v.id);
               hasChanges = true;
@@ -2288,24 +2288,18 @@ export default function CommandCenter() {
         if (areaA !== areaB) return areaA.localeCompare(areaB);
         return String(a.name || '').localeCompare(String(b.name || ''));
       }
-      // Contact-first live ordering: pin verified Mobile + Landline leads to Page 1 so users see instant numbers immediately
-      const rankOf = v => {
-        const p = getDisplayPhone(v);
-        const hasMob = Boolean(v.mobilePhone || (p && isMobilePhone(p, v.country || searchCountry)));
-        const hasLand = Boolean(v.landlinePhone || (p && !hasMob));
-        if (hasMob && hasLand) return 4;
-        if (hasMob) return 3;
-        if (hasLand) return 2;
-        if (v.website) return 1;
-        return 0;
-      };
-      const rDiff = rankOf(b) - rankOf(a);
+      // Contact-first live ordering: O(1) rank lookup precomputed on ingest
+      const rankA = a._contactRank ?? computeContactRank(a, searchCountry);
+      const rankB = b._contactRank ?? computeContactRank(b, searchCountry);
+      const rDiff = rankB - rankA;
       if (rDiff !== 0) return rDiff;
       return new Date(b.scrapedAt || 0) - new Date(a.scrapedAt || 0);
     });
 
     return list;
   }, [vendors, filters, sessionFilter, effectiveSessionFilter, selectedAreaFilter, run?.status, run?.sessionId, run?.id, runLeadCount, autoQuery, form.category, searchCountry]);
+
+  const deferredMapVendors = useDeferredValue(filteredVendors);
 
   useEffect(() => { setPage(1); }, [filters, effectiveSessionFilter, pageSize]);
 
@@ -2980,7 +2974,7 @@ export default function CommandCenter() {
                 filters={filters}
                 updateFilter={updateFilter}
                 vendors={vendors}
-                filteredVendors={filteredVendors}
+                filteredVendors={deferredMapVendors}
                 run={run}
                 sessionFilter={sessionFilter}
                 mapZones={mapZones}

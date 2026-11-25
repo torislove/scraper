@@ -125,9 +125,20 @@ function freeRamPct() {
   }
 }
 
-// Anti-crash memory thresholds
-const CRITICAL_FLOOR_BYTES = 1.2 * 1024 * 1024 * 1024; // 1.2 GB safety floor
-const EMERGENCY_FLOOR_BYTES = 600 * 1024 * 1024;        // 600 MB emergency threshold
+// Anti-crash memory thresholds (protects user laptop RAM & prevents Node OOM)
+const CRITICAL_FLOOR_BYTES = 1.2 * 1024 * 1024 * 1024; // 1.2 GB free RAM safety floor
+const EMERGENCY_FLOOR_BYTES = 700 * 1024 * 1024;        // 700 MB free RAM emergency threshold
+const MAX_NODE_RSS_BYTES = 1.6 * 1024 * 1024 * 1024;    // 1.6 GB Node process ceiling
+
+function isMemoryUnderPressure() {
+  try {
+    const freeBytes = os.freemem();
+    const rssBytes = process.memoryUsage().rss;
+    return freeBytes < EMERGENCY_FLOOR_BYTES || rssBytes > MAX_NODE_RSS_BYTES;
+  } catch (e) {
+    return false;
+  }
+}
 
 /**
  * Discovery may use every slot the enricher is not holding, bounded by
@@ -137,7 +148,8 @@ function discoveryLimit() {
   let ramCap = dynamicTotalSlots;
   try {
     const freeBytes = os.freemem();
-    if (freeBytes < EMERGENCY_FLOOR_BYTES) {
+    const rssBytes = process.memoryUsage().rss;
+    if (freeBytes < EMERGENCY_FLOOR_BYTES || rssBytes > MAX_NODE_RSS_BYTES) {
       // Emergency floor: soft throttle to 1 slot to prevent OS crash
       ramCap = 1;
     } else if (freeBytes < CRITICAL_FLOOR_BYTES) {
@@ -148,8 +160,12 @@ function discoveryLimit() {
   return Math.max(1, Math.min(ramCap, dynamicTotalSlots - enrichmentActive - externalActive));
 }
 
-/** Enrichment gets dedicated slots that run continuously alongside discovery. */
+/** Enrichment gets dedicated slots that pause cleanly under low RAM (HTTP 12-lane crawler stays active!). */
 function enrichmentLimit() {
+  if (isMemoryUnderPressure()) return 0;
+  try {
+    if (os.freemem() < CRITICAL_FLOOR_BYTES && discoveryQueued > 0) return 0;
+  } catch (e) { }
   if (ENRICH_YIELD && discoveryQueued > 0) return 0;
   const slotsRemaining = dynamicTotalSlots - enrichmentActive;
   if (slotsRemaining <= 0) return 0;
@@ -245,5 +261,6 @@ module.exports = {
   setEnrichmentActive,
   acquireBrowserSlot,
   onSlotChange,
+  isMemoryUnderPressure,
   getStatus
 };

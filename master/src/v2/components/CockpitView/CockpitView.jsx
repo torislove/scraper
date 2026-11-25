@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useDeferredValue, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download,
@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import CommandMap from '../../CommandMap';
 import { EmptyState, VendorAvatar } from '../cards/MetricCard';
-import { CarriedBadge, calculateHaversineKm } from '../../utils/leadHelpers';
+import { CarriedBadge, calculateHaversineKm, countSocialProfiles } from '../../utils/leadHelpers';
+import { SocialHunterBadgeRow, VendorSocialPills } from '../icons/Social3DIcons';
 import { formatLeadPhone, getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import { cx, formatNumber } from '../../ui';
@@ -165,11 +166,12 @@ export default function CockpitView({
     return filteredVendors.filter(v => Number.isFinite(Number(v.latitude))).slice(0, 200);
   }, [filteredVendors, run?.id, run?.sessionId, sessionFilter]);
 
-  const { phoneCount, mobileCount, landlineCount, huntingCount } = useMemo(() => {
+  const { phoneCount, mobileCount, landlineCount, huntingCount, socialCount } = useMemo(() => {
     let totalPhones = 0;
     let totalMobiles = 0;
     let totalLandlines = 0;
     let totalHunting = 0;
+    let totalSocials = 0;
     for (const v of filteredVendors) {
       const dual = getAllDisplayPhones(v, v?.country || searchCountry);
       if (dual.mobile || dual.landline) {
@@ -179,9 +181,11 @@ export default function CockpitView({
       } else if (scanning || runStatus === 'running' || (v?.website && !v?.websiteEnrichedAt)) {
         totalHunting += 1;
       }
+      if ((v?._socialCount ?? countSocialProfiles(v)) > 0) totalSocials += 1;
     }
-    return { phoneCount: totalPhones, mobileCount: totalMobiles, landlineCount: totalLandlines, huntingCount: totalHunting };
+    return { phoneCount: totalPhones, mobileCount: totalMobiles, landlineCount: totalLandlines, huntingCount: totalHunting, socialCount: totalSocials };
   }, [filteredVendors, searchCountry, scanning, runStatus]);
+  const deferredMapVendors = useDeferredValue(mapVendors);
   const plottedCount = useMemo(
     () => mapVendors.filter(v => Number.isFinite(Number(v.latitude))).length,
     [mapVendors]
@@ -287,22 +291,26 @@ export default function CockpitView({
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
               <Loader2 size={15} color="#059669" style={{ flexShrink: 0, animation: 'lxSpin 1.1s linear infinite' }} />
               <div style={{ fontSize: 12, lineHeight: 1.35, color: '#0f172a' }}>
-                <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact Hunter is delivering your numbers live!</b>{' '}
+                <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact &amp; Social Hunter is delivering your numbers live!</b>{' '}
                 <span style={{ color: '#475569' }}>
-                  Google Maps, JustDial, OpenStreetMap &amp; our 12-lane Website Crawler are extracting direct Mobile &amp; Landline numbers in real time.
+                  Google Maps, JustDial, Instagram, Facebook &amp; our 12-lane Website Crawler are extracting direct Mobile, Landline &amp; Social handles in real time.
                 </span>
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+              <SocialHunterBadgeRow scanning={Boolean(scanning || runStatus === 'running')} />
               <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.16)', color: '#065f46' }}>
                 ✓ {formatNumber(mobileCount)} Mobiles
               </span>
               <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#1d4ed8' }}>
                 ☎ {formatNumber(landlineCount)} Landlines
               </span>
+              <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(225,48,108,0.12)', color: '#be185d' }}>
+                ✨ {formatNumber(socialCount)} Socials
+              </span>
               {huntingCount > 0 && (
                 <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(245,158,11,0.16)', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                  <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Cards…
+                  <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Profiles…
                 </span>
               )}
             </div>
@@ -460,6 +468,7 @@ export default function CockpitView({
                           <a href={pinUrl} target="_blank" rel="noreferrer" className="lx-pin-link" title="Open street pin & directions">
                             <MapPin size={10} /> Street Pin
                           </a>
+                          <VendorSocialPills vendor={vendor} max={3} />
                         </div>
                       </div>
                     </td>
@@ -547,7 +556,7 @@ export default function CockpitView({
 
         <div className="lx-map-frame">
           <CommandMap
-            vendors={mapVendors}
+            vendors={deferredMapVendors}
             zones={mapZones}
             activeZone={activeZone}
             scanning={scanning}

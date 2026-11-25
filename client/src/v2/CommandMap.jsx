@@ -24,17 +24,47 @@ try {
   });
 } catch (e) { }
 
-// 100% Same-Origin Disk-Cached & Procedural Offline-Capable Basemaps (Zero API Keys Required)
-const TILE_VOYAGER = `${API_URL}/map-tiles/voyager/{z}/{x}/{y}.png`;
-const TILE_VOYAGER_ATTRIBUTION = '&copy; CARTO &copy; OpenStreetMap &copy; Local Offline Vector';
-const TILE_STREETS = `${API_URL}/map-tiles/streets/{z}/{x}/{y}.png`;
-const TILE_SATELLITE = `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`;
-const TILE_SATELLITE_LABELS = `${API_URL}/map-tiles/labels/{z}/{x}/{y}.png`;
-const TILE_LIGHT_CANVAS = `${API_URL}/map-tiles/light/{z}/{x}/{y}.png`;
-const TILE_OSM = `${API_URL}/map-tiles/osm/{z}/{x}/{y}.png`;
-const TILE_DARK_CANVAS = `${API_URL}/map-tiles/dark/{z}/{x}/{y}.png`;
-const TILE_OFFLINE = `${API_URL}/map-tiles/offline/{z}/{x}/{y}.svg`;
-const TILE_ATTRIBUTION = '&copy; Esri Satellite &copy; OpenStreetMap &copy; Local Cache';
+// 100% Free Keyless Multi-CDN + Same-Origin Disk-Cached Basemaps (0 API Keys)
+const BASEMAP_STYLES = {
+  streets: {
+    label: 'Streets',
+    icon: '🗺️',
+    urls: [
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      `${API_URL}/map-tiles/voyager/{z}/{x}/{y}.png`
+    ],
+    attribution: '&copy; CARTO &copy; OpenStreetMap'
+  },
+  light: {
+    label: 'Light',
+    icon: '☀️',
+    urls: [
+      'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+      `${API_URL}/map-tiles/light/{z}/{x}/{y}.png`
+    ],
+    attribution: '&copy; CARTO &copy; OpenStreetMap'
+  },
+  satellite: {
+    label: 'Satellite',
+    icon: '🛰️',
+    urls: [
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      `${API_URL}/map-tiles/satellite/{z}/{x}/{y}.png`
+    ],
+    labelsUrl: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; Esri &copy; CARTO'
+  },
+  dark: {
+    label: 'Dark',
+    icon: '🌙',
+    urls: [
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      `${API_URL}/map-tiles/dark/{z}/{x}/{y}.png`
+    ],
+    attribution: '&copy; CARTO &copy; OpenStreetMap'
+  }
+};
 
 // Maximum leads plotted simultaneously to guarantee silky-smooth 60 FPS
 const MAX_MAP_PLOTTED_LEADS = 300;
@@ -271,7 +301,7 @@ function InitialFit({ points, zonePoints = [], fitKey = 'default' }) {
   return null;
 }
 
-export default function CommandMap({
+function CommandMap({
   vendors = [],
   zones = [],
   activeZone = null,
@@ -292,10 +322,34 @@ export default function CommandMap({
 }) {
   const mapRef = useRef(null);
   const [is3DMode, setIs3DMode] = useState(false);
-  const [tileMode, setTileMode] = useState('satellite'); // Locked 100% HD Satellite Live Zone Radar
+  const [tileMode, setTileMode] = useState('streets');
+  const [tileFailoverIdx, setTileFailoverIdx] = useState(0);
+  const [showZones, setShowZones] = useState(false);
   const tileErrorTrackerRef = useRef({ count: 0, since: 0 });
-  const TILE_FAILOVER_ORDER = ['satellite'];
-  const handleTileError = useMemo(() => () => {}, []);
+  const activeStyle = BASEMAP_STYLES[tileMode] || BASEMAP_STYLES.streets;
+  const activeTileUrl = activeStyle.urls[Math.min(tileFailoverIdx, activeStyle.urls.length - 1)];
+
+  const handleTileModeChange = (mode) => {
+    setTileMode(mode);
+    setTileFailoverIdx(0);
+    tileErrorTrackerRef.current = { count: 0, since: 0 };
+  };
+
+  const handleTileError = useMemo(() => () => {
+    const now = Date.now();
+    const tracker = tileErrorTrackerRef.current;
+    if (now - tracker.since > 4000) {
+      tracker.count = 1;
+      tracker.since = now;
+    } else {
+      tracker.count += 1;
+    }
+    if (tracker.count >= 2) {
+      tracker.count = 0;
+      tracker.since = now;
+      setTileFailoverIdx(prev => (prev + 1 < activeStyle.urls.length ? prev + 1 : prev));
+    }
+  }, [activeStyle.urls.length]);
 
   const coverage = useMemo(
     () => zones.map((zone, index) => ({
@@ -487,20 +541,28 @@ export default function CommandMap({
         attributionControl={false}
         zoomControl={false}
       >
-        {/* Locked 100% HD Satellite World Imagery + Crisp Place/Road Boundaries */}
+        {/* Free Keyless Multi-CDN Basemap + Local Cache Failover */}
         <TileLayer
-          url={TILE_SATELLITE}
-          attribution={TILE_ATTRIBUTION}
+          key={`${tileMode}-${tileFailoverIdx}`}
+          url={activeTileUrl}
+          attribution={activeStyle.attribution}
           maxNativeZoom={18}
           maxZoom={19}
+          keepBuffer={3}
+          updateWhenZooming={false}
+          eventHandlers={{
+            tileerror: handleTileError
+          }}
         />
-        <TileLayer
-          url={TILE_SATELLITE_LABELS}
-          attribution={TILE_ATTRIBUTION}
-          maxNativeZoom={18}
-          maxZoom={19}
-          opacity={0.92}
-        />
+        {tileMode === 'satellite' && activeStyle.labelsUrl && (
+          <TileLayer
+            url={activeStyle.labelsUrl}
+            attribution={activeStyle.attribution}
+            maxNativeZoom={18}
+            maxZoom={19}
+            opacity={0.92}
+          />
+        )}
 
         <SmartMapController
           center={safeCenter}
@@ -526,21 +588,23 @@ export default function CommandMap({
           />
         )}
 
-        {/* Always-On Live Hub-and-Spoke Vector Network over Satellite Terrain */}
-        {coverage.length > 1 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && coverage.map((zone, idx) => (
-          <Polyline
-            key={`spoke-${zone.index || idx}`}
-            positions={[safeCenter, [zone.lat, zone.lng]]}
+        {/* Single Clean Territory Perimeter Outline (Zero Cluttered Blue Spokes or Overlapping Circles) */}
+        {!showZones && coverage.length > 0 && Number.isFinite(safeCenter[0]) && Number.isFinite(safeCenter[1]) && (
+          <Circle
+            center={safeCenter}
+            radius={Math.max(4000, Math.min(35000, coverage.reduce((mx, z) => Math.max(mx, Math.hypot((z.lat - safeCenter[0]) * 111000, (z.lng - safeCenter[1]) * 95000)), 6000)))}
+            interactive={false}
             pathOptions={{
-              color: '#38bdf8',
-              weight: scanning ? 2.0 : 1.5,
-              opacity: scanning ? 0.65 : 0.45,
-              dashArray: '5 7'
+              color: '#059669',
+              weight: 1.5,
+              opacity: 0.42,
+              fillOpacity: 0,
+              dashArray: '6 8'
             }}
           />
-        ))}
+        )}
 
-        {/* Territory Regions, Glowing Coverage Radar Rings & Animated Live Zone Beacons */}
+        {/* Active Scanning Beacon (Always Visible Live) + Full Zone Grid Only When Toggled */}
         {coverage.map((zone, index) => {
           const norm = str => String(str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
           const cleanZoneName = norm(zone.name);
@@ -548,35 +612,36 @@ export default function CommandMap({
           const isNameMatch = cleanActiveName && (cleanActiveName === cleanZoneName || cleanZoneName.includes(cleanActiveName) || cleanActiveName.includes(cleanZoneName));
           const isCoordMatch = Boolean(activePoint && Math.abs(zone.lat - activePoint[0]) < 0.005 && Math.abs(zone.lng - activePoint[1]) < 0.005);
           const isActive = scanning && (isNameMatch || isCoordMatch);
+          if (!showZones && !isActive) return null;
           const cellInfo = cellStates?.[zone.name] || null;
           const cellState = isActive ? 'scanning' : (cellInfo?.state || (zone.approximate ? 'approx' : 'queued'));
           const tone = cellState === 'scanning'
-            ? '#06b6d4'
+            ? '#059669'
             : (cellState === 'saturated' || cellInfo?.splitDepth > 0)
-              ? '#c084fc'
+              ? '#9333ea'
               : cellState === 'done'
-                ? '#34d399'
+                ? '#10b981'
                 : (cellState === 'dry' || cellState === 'approx')
-                  ? '#fbbf24'
+                  ? '#d97706'
                   : cellState === 'resting'
-                    ? '#fb7185'
-                    : '#38bdf8';
+                    ? '#e11d48'
+                    : '#0284c7';
 
           return (
             <React.Fragment key={`zone-${zone.index || index}-${zone.name}`}>
               <Circle
                 center={[zone.lat, zone.lng]}
-                radius={Math.max(850, Math.min(8000, (zone.radiusKm || (zone.approximate ? 5 : 2.5)) * 1000))}
+                radius={Math.max(850, Math.min(5500, (zone.radiusKm || (zone.approximate ? 3.5 : 2.2)) * 1000))}
                 eventHandlers={{
                   click: () => onSelectZone?.(zone.name)
                 }}
                 pathOptions={{
                   color: tone,
-                  weight: cellState === 'scanning' ? 3.8 : cellState === 'saturated' || cellState === 'done' ? 2.4 : 1.7,
-                  opacity: cellState === 'scanning' ? 1 : cellState === 'done' || cellState === 'saturated' ? 0.92 : 0.65,
+                  weight: isActive ? 3 : 1.5,
+                  opacity: isActive ? 0.95 : 0.65,
                   fillColor: tone,
-                  fillOpacity: cellState === 'scanning' ? 0.32 : cellState === 'saturated' ? 0.18 : cellState === 'done' ? 0.14 : 0.08,
-                  dashArray: cellState === 'scanning' || cellState === 'done' ? undefined : '5 7'
+                  fillOpacity: isActive ? 0.14 : 0.03,
+                  dashArray: isActive || cellState === 'done' ? undefined : '5 7'
                 }}
               >
                 <Tooltip direction="top" opacity={0.95}>
@@ -595,7 +660,7 @@ export default function CommandMap({
                   </div>
                 </Tooltip>
               </Circle>
-              {(isActive || (!compact && index < 36)) && (
+              {(isActive || showZones) && index < 24 && (
                 <Marker
                   position={[zone.lat, zone.lng]}
                   icon={zoneBeaconIcon(zone.name, cellState, cellInfo?.leads || 0)}
@@ -782,11 +847,28 @@ export default function CommandMap({
         </button>
       </div>
 
-      {/* Live Satellite Zone Radar Telemetry Pill */}
-      <div className="lx-map-mode-bar">
-        <span className="lx-map-mode-pill is-active">
-          🛰️ HD SATELLITE LIVE RADAR · {formatNumber(coverage.length || 1)} ZONES
-        </span>
+      {/* Free Keyless Basemap Style Switcher & Optional Zone Grid Toggle */}
+      <div className="lx-map-mode-bar" style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        {Object.entries(BASEMAP_STYLES).map(([modeKey, cfg]) => (
+          <button
+            key={modeKey}
+            type="button"
+            className={cx('lx-map-mode-pill', tileMode === modeKey && 'is-active')}
+            onClick={() => handleTileModeChange(modeKey)}
+            title={`Switch to ${cfg.label} map view (100% Free)`}
+          >
+            {cfg.icon} {cfg.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          className={cx('lx-map-mode-pill', showZones && 'is-active')}
+          onClick={() => setShowZones(z => !z)}
+          title="Show or hide territory zone rings"
+        >
+          <Layers size={11} style={{ marginRight: 4, verticalAlign: '-1px' }} />
+          Zones ({formatNumber(coverage.length || 1)})
+        </button>
       </div>
 
       {scanning && (
@@ -828,3 +910,5 @@ export default function CommandMap({
     </div>
   );
 }
+
+export default React.memo(CommandMap);

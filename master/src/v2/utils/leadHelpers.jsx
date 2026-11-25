@@ -289,7 +289,7 @@ export function mergeSingleVendor(existing, incoming, countryHint = 'IN') {
     ...(Array.isArray(incoming.sessionIds) ? incoming.sessionIds : (incoming.sessionId ? [incoming.sessionId] : []))
   ])).filter(Boolean);
 
-  return {
+  return withVendorRanks({
     ...existing,
     ...incoming,
     phone: mergedPhone || mergedMobilePhone || mergedLandlinePhone,
@@ -312,6 +312,43 @@ export function mergeSingleVendor(existing, incoming, countryHint = 'IN') {
     crmStatus: existing.crmStatus || incoming.crmStatus || 'new',
     crmNotes: existing.crmNotes || incoming.crmNotes,
     crmTasks: existing.crmTasks || incoming.crmTasks
+  }, countryHint);
+}
+
+/** O(1) contact tier rank: 4=Mob+Land, 3=Mob, 2=Land, 1=Website, 0=None. */
+export function computeContactRank(v, countryHint = 'IN') {
+  if (!v) return 0;
+  const p = getDisplayPhone(v);
+  const hasMob = Boolean(v.mobilePhone || (p && isMobilePhone(p, v.country || countryHint)));
+  const hasLand = Boolean(v.landlinePhone || (p && !hasMob));
+  if (hasMob && hasLand) return 4;
+  if (hasMob) return 3;
+  if (hasLand) return 2;
+  if (v.website) return 1;
+  return 0;
+}
+
+/** Count populated social/chat URLs on a vendor record. */
+export function countSocialProfiles(v) {
+  if (!v) return 0;
+  let n = 0;
+  if (v.whatsappLink) n += 1;
+  if (v.instagram) n += 1;
+  if (v.facebook) n += 1;
+  if (v.linkedin) n += 1;
+  if (v.tiktok) n += 1;
+  if (v.twitter) n += 1;
+  if (v.youtube) n += 1;
+  return n;
+}
+
+/** Attach precomputed `_contactRank` and `_socialCount` once on ingest for O(1) live sorting. */
+export function withVendorRanks(v, countryHint = 'IN') {
+  if (!v || typeof v !== 'object') return v;
+  return {
+    ...v,
+    _contactRank: computeContactRank(v, countryHint),
+    _socialCount: countSocialProfiles(v)
   };
 }
 
@@ -321,7 +358,7 @@ export function mergeVendorLists(prev = [], incoming = [], { countryHint = 'IN' 
   const order = [];
   for (const v of prev) {
     if (!v || !v.id) continue;
-    map.set(v.id, v);
+    map.set(v.id, v._contactRank !== undefined ? v : withVendorRanks(v, countryHint));
     order.push(v.id);
   }
   const prependIds = [];
@@ -331,7 +368,7 @@ export function mergeVendorLists(prev = [], incoming = [], { countryHint = 'IN' 
     if (existing) {
       map.set(v.id, mergeSingleVendor(existing, v, countryHint));
     } else {
-      map.set(v.id, v);
+      map.set(v.id, withVendorRanks(v, countryHint));
       prependIds.push(v.id);
     }
   }

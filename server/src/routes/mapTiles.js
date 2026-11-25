@@ -10,13 +10,33 @@ const router = express.Router();
 const TILE_CACHE_DIR = path.join(DATA_DIR, 'tile-cache');
 
 const STYLE_TEMPLATES = {
-  voyager: (z, x, y) => `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
-  osm: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
-  streets: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
-  satellite: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
-  labels: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`,
-  light: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`,
-  dark: (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`
+  voyager: [
+    (z, x, y) => `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://b.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+  ],
+  osm: [
+    (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://b.tile.openstreetmap.org/${z}/${x}/${y}.png`
+  ],
+  streets: [
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/${z}/${y}/${x}`,
+    (z, x, y) => `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`
+  ],
+  satellite: [
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`
+  ],
+  labels: [
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`
+  ],
+  light: [
+    (z, x, y) => `https://a.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/${z}/${y}/${x}`
+  ],
+  dark: [
+    (z, x, y) => `https://a.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`,
+    (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/${z}/${y}/${x}`
+  ]
 };
 
 function tile2lng(x, z) {
@@ -46,30 +66,28 @@ function renderOfflineVectorTile(style, z, x, y) {
   const latLabel = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'}`;
   const lngLabel = `${Math.abs(lng).toFixed(2)}°${lng >= 0 ? 'E' : 'W'}`;
 
-  const isSat = style === 'satellite';
-  const isDark = style === 'dark' || style === 'offline' || isSat;
-  const bg = isSat ? '#061a23' : style === 'dark' ? '#0b1220' : style === 'offline' ? '#0f172a' : '#f4f8fc';
-  const gridMajor = isSat ? 'rgba(56, 189, 248, 0.22)' : isDark ? 'rgba(56, 189, 248, 0.16)' : 'rgba(15, 23, 42, 0.08)';
-  const gridMinor = isSat ? 'rgba(16, 185, 129, 0.12)' : isDark ? 'rgba(124, 58, 237, 0.10)' : 'rgba(6, 182, 212, 0.07)';
-  const roadStroke = isSat ? 'rgba(52, 211, 153, 0.35)' : isDark ? 'rgba(16, 185, 129, 0.28)' : 'rgba(14, 165, 233, 0.24)';
-  const accentRing = isDark ? 'rgba(56, 189, 248, 0.24)' : 'rgba(16, 185, 129, 0.16)';
-  const labelColor = isSat ? 'rgba(125, 211, 252, 0.78)' : isDark ? 'rgba(148, 163, 184, 0.72)' : 'rgba(71, 85, 105, 0.72)';
+  const isDark = style === 'dark' || style === 'satellite';
+  const bg = isDark ? '#0f172a' : '#f4f6f9';
+  const blockFill = isDark ? '#162235' : '#e9eef4';
+  const roadMajor = isDark ? 'rgba(148, 163, 184, 0.25)' : '#ffffff';
+  const roadMinor = isDark ? 'rgba(100, 116, 139, 0.16)' : 'rgba(203, 213, 225, 0.55)';
+  const gridHairline = isDark ? 'rgba(148, 163, 184, 0.12)' : 'rgba(148, 163, 184, 0.2)';
+  const labelColor = isDark ? 'rgba(148, 163, 184, 0.6)' : 'rgba(100, 116, 139, 0.65)';
 
   const hash = Math.abs((x * 73856093) ^ (y * 19349663) ^ (z * 83492791));
-  const cx1 = 40 + (hash % 170);
-  const cy1 = 40 + ((hash >> 4) % 170);
-  const r1 = 28 + (hash % 36);
-  const offset = hash % 64;
+  const bx = 24 + (hash % 48);
+  const by = 24 + ((hash >> 3) % 48);
+  const offset = hash % 56;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
   <rect width="256" height="256" fill="${bg}"/>
-  <path d="M64 0V256M128 0V256M192 0V256M0 64H256M0 128H256M0 192H256" stroke="${gridMinor}" stroke-width="1"/>
-  <rect x="0.5" y="0.5" width="255" height="255" fill="none" stroke="${gridMajor}" stroke-width="1"/>
-  <path d="M-16 ${96 + offset} Q 128 ${76 + (offset % 40)}, 272 ${144 - offset}" fill="none" stroke="${roadStroke}" stroke-width="1.6"/>
-  <path d="M${88 + (offset % 48)} -16 Q ${140 - (offset % 32)} 128, ${180 - offset} 272" fill="none" stroke="${roadStroke}" stroke-width="1.3"/>
-  <circle cx="${cx1}" cy="${cy1}" r="${r1}" fill="none" stroke="${accentRing}" stroke-width="1.2" stroke-dasharray="4 4"/>
-  <circle cx="${cx1}" cy="${cy1}" r="${Math.round(r1 * 0.45)}" fill="${accentRing}" fill-opacity="0.25"/>
-  <text x="10" y="18" fill="${labelColor}" font-family="monospace" font-size="9" font-weight="700">${latLabel} · ${lngLabel} · ${isSat ? 'SAT-' : ''}Z${z}</text>
+  <rect x="${bx}" y="${by}" width="72" height="58" rx="4" fill="${blockFill}"/>
+  <rect x="${bx + 96}" y="${by + 68}" width="84" height="64" rx="4" fill="${blockFill}"/>
+  <path d="M0 ${64 + (offset % 24)}H256M0 ${176 - (offset % 24)}H256M${72 + (offset % 28)} 0V256M${184 - (offset % 28)} 0V256" fill="none" stroke="${roadMinor}" stroke-width="2"/>
+  <path d="M-12 ${118 + (offset % 32)} L268 ${102 + (offset % 32)}" fill="none" stroke="${roadMajor}" stroke-width="5" stroke-linecap="round"/>
+  <path d="M${122 + (offset % 24)} -12 L${136 - (offset % 24)} 268" fill="none" stroke="${roadMajor}" stroke-width="4.5" stroke-linecap="round"/>
+  <rect x="0.5" y="0.5" width="255" height="255" fill="none" stroke="${gridHairline}" stroke-width="1"/>
+  <text x="10" y="18" fill="${labelColor}" font-family="system-ui, sans-serif" font-size="9" font-weight="600">${latLabel}, ${lngLabel}</text>
 </svg>`;
 }
 
@@ -112,33 +130,37 @@ router.get('/:style/:z/:x/:yRaw', async (req, res) => {
     }
   } catch (e) { /* fall through to fetch or vector fallback */ }
 
-  // 2. Fast upstream fetch with 1.8s timeout, cached to disk for offline resilience
-  try {
-    const url = STYLE_TEMPLATES[safeStyle](z, x, y);
-    const upstream = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 1800,
-      headers: {
-        'User-Agent': 'LeadHarvestAutonomousGeo/3.2 (+https://leadharvest.local/geo-policy)',
-        Accept: 'image/avif,image/webp,image/png,image/*;q=0.8'
-      }
-    });
-
-    if (upstream.status === 200 && upstream.data && upstream.data.byteLength > 100) {
-      const contentType = upstream.headers['content-type'] || 'image/png';
-      const buf = Buffer.from(upstream.data);
-      fs.mkdir(cacheDir, { recursive: true }, (mkdirErr) => {
-        if (mkdirErr) return;
-        fs.writeFile(binFile, buf, () => {});
-        fs.writeFile(metaFile, JSON.stringify({ contentType }), () => {});
+  // 2. Fast upstream fetch with mirror failover + 4.0s timeout, cached to disk for offline resilience
+  const templates = Array.isArray(STYLE_TEMPLATES[safeStyle]) ? STYLE_TEMPLATES[safeStyle] : [STYLE_TEMPLATES[safeStyle]];
+  for (const buildUrl of templates) {
+    if (typeof buildUrl !== 'function') continue;
+    try {
+      const url = buildUrl(z, x, y);
+      const upstream = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 4000,
+        headers: {
+          'User-Agent': 'ScraperCoIn-GeoMap/1.0 (+https://scraper.co.in; free-carto)',
+          Accept: 'image/avif,image/webp,image/png,image/*;q=0.8'
+        }
       });
-      res.set('Content-Type', contentType);
-      res.set('Cache-Control', 'public, max-age=604800');
-      res.set('X-Tile-Source', 'upstream-cached');
-      return res.send(buf);
+
+      if (upstream.status === 200 && upstream.data && upstream.data.byteLength > 100) {
+        const contentType = upstream.headers['content-type'] || 'image/png';
+        const buf = Buffer.from(upstream.data);
+        fs.mkdir(cacheDir, { recursive: true }, (mkdirErr) => {
+          if (mkdirErr) return;
+          fs.writeFile(binFile, buf, () => {});
+          fs.writeFile(metaFile, JSON.stringify({ contentType }), () => {});
+        });
+        res.set('Content-Type', contentType);
+        res.set('Cache-Control', 'public, max-age=604800');
+        res.set('X-Tile-Source', 'upstream-cached');
+        return res.send(buf);
+      }
+    } catch (err) {
+      /* try next mirror */
     }
-  } catch (err) {
-    /* upstream unavailable or offline — degrade gracefully to procedural SVG */
   }
 
   // 3. Guaranteed 200 Offline Vector Cartographic SVG fallback

@@ -84,22 +84,26 @@ function loadQueue() {
   }
 }
 
-// Atomic write: temp file + rename. A process killed mid-write used to leave a
-// half-written jobs.json, which the next boot read as an empty queue.
-function _flushQueueToDisk() {
+// Atomic async write: temp file + rename so queuing 100+ zones never blocks Node's event loop.
+let _diskWriteInFlight = false;
+async function _flushQueueToDisk() {
+  if (_diskWriteInFlight) return;
+  _diskWriteInFlight = true;
   const tmp = `${JOBS_FILE}.tmp`;
   try {
-    fs.writeFileSync(tmp, JSON.stringify(inMemoryQueue));
-    fs.renameSync(tmp, JOBS_FILE);
+    await fs.promises.writeFile(tmp, JSON.stringify(inMemoryQueue));
+    await fs.promises.rename(tmp, JOBS_FILE);
   } catch (err) {
     console.error('[Queue] Failed to write persistent jobs file:', err.message);
-    try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ }
+    try { await fs.promises.unlink(tmp); } catch (e) { /* ignore */ }
+  } finally {
+    _diskWriteInFlight = false;
   }
 }
 
 function savePersistentQueue() {
   clearTimeout(queueWriteTimeout);
-  queueWriteTimeout = setTimeout(_flushQueueToDisk, 500);
+  queueWriteTimeout = setTimeout(_flushQueueToDisk, 750);
   if (typeof queueWriteTimeout.unref === 'function') queueWriteTimeout.unref();
 }
 
@@ -133,9 +137,7 @@ let isProcessing = false;
 let activeCount = 0;
 let playwrightActiveCount = 0;
 
-// Browser-backed tasks must be throttled by the Playwright slot count. Without
-// this, directory engines were counted as HTTP jobs and could launch a dozen
-// Chromium contexts at once, which is what made runs slow and unstable.
+// Pure HTTP tasks run concurrently on high-throughput HTTP lanes without blocking Chromium slots.
 const PLAYWRIGHT_TASKS = new Set([
   'scrapeGooglePlaces',
   'scrapeGoogleLocalFinder',
@@ -150,8 +152,7 @@ const PLAYWRIGHT_TASKS = new Set([
   'scrapeBingPlaces',
   'scrapeTripAdvisor',
   'scrapeBraveDork',
-  'scrapeDuckDuckGoDork',
-  'scrapeSocialDorkIntl'
+  'scrapeDuckDuckGoDork'
 ]);
 
 // Dynamic Concurrency Calculator based on client hardware profile & real-time system RAM availability

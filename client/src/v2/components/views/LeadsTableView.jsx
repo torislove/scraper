@@ -7,10 +7,11 @@ import {
 import { formatNumber, cx } from '../../ui';
 import FilterBar from '../cards/FilterBar';
 import { VendorAvatar, EmptyState } from '../cards/MetricCard';
-import { qualityOf, calculateHaversineKm } from '../../utils/leadHelpers';
+import { qualityOf, calculateHaversineKm, countSocialProfiles } from '../../utils/leadHelpers';
 import { getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
 import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import FloatingActionDock from '../cards/FloatingActionDock';
+import { SocialHunterBadgeRow, VendorSocialPills } from '../icons/Social3DIcons';
 
 export default function LeadsTableView({
   sessionFilter,
@@ -36,10 +37,11 @@ export default function LeadsTableView({
   const originLng = Array.isArray(mapCenter) ? mapCenter[1] : (mapCenter?.lng || null);
   const [selectedIds, setSelectedIds] = useState(new Set());
 
-  const { mobileCount, landlineCount, huntingCount } = useMemo(() => {
+  const { mobileCount, landlineCount, huntingCount, socialCount } = useMemo(() => {
     let mobs = 0;
     let lands = 0;
     let hunting = 0;
+    let socials = 0;
     for (const v of filteredVendors) {
       const dual = getAllDisplayPhones(v, v?.country || country);
       if (dual.mobile || dual.landline) {
@@ -48,8 +50,9 @@ export default function LeadsTableView({
       } else if (scanning || (v?.website && !v?.websiteEnrichedAt)) {
         hunting += 1;
       }
+      if ((v?._socialCount ?? countSocialProfiles(v)) > 0) socials += 1;
     }
-    return { mobileCount: mobs, landlineCount: lands, huntingCount: hunting };
+    return { mobileCount: mobs, landlineCount: lands, huntingCount: hunting, socialCount: socials };
   }, [filteredVendors, country, scanning]);
 
   const toggleSelectAll = () => {
@@ -247,22 +250,26 @@ export default function LeadsTableView({
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
             <Loader2 size={15} color="#059669" style={{ flexShrink: 0, animation: 'lxSpin 1.1s linear infinite' }} />
             <div style={{ fontSize: 12, lineHeight: 1.35, color: '#0f172a' }}>
-              <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact Hunter is delivering your numbers live!</b>{' '}
+              <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact &amp; Social Hunter is delivering your numbers live!</b>{' '}
               <span style={{ color: '#475569' }}>
-                JustDial, Google Maps, OpenStreetMap &amp; our 12-lane Website Crawler are extracting direct Mobile &amp; Landline numbers in real time.
+                JustDial, Google Maps, Instagram, Facebook &amp; our 12-lane Website Crawler are extracting direct Mobile, Landline &amp; Social handles in real time.
               </span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
+            <SocialHunterBadgeRow scanning={scanning} />
             <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.16)', color: '#065f46' }}>
               ✓ {formatNumber(mobileCount)} Mobiles
             </span>
             <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#1d4ed8' }}>
               ☎ {formatNumber(landlineCount)} Landlines
             </span>
+            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(225,48,108,0.12)', color: '#be185d' }}>
+              ✨ {formatNumber(socialCount)} Socials
+            </span>
             {huntingCount > 0 && (
               <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(245,158,11,0.16)', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Cards…
+                <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Profiles…
               </span>
             )}
           </div>
@@ -458,66 +465,7 @@ export default function LeadsTableView({
                               Email
                             </a>
                           )}
-                          {vendor.whatsappLink && (
-                            <a
-                              href={vendor.whatsappLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                              style={{ borderColor: 'rgba(34, 197, 94, 0.4)', color: '#22c55e', background: 'rgba(34, 197, 94, 0.08)' }}
-                              title="Open WhatsApp chat"
-                            >
-                              WhatsApp
-                            </a>
-                          )}
-                          {vendor.instagram && (
-                            <a
-                              href={vendor.instagram}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                              style={{ borderColor: 'rgba(225, 48, 108, 0.4)', color: '#E1306C', background: 'rgba(225, 48, 108, 0.08)' }}
-                              title={`Instagram ${vendor.instagramFollowers ? `(${vendor.instagramFollowers})` : ''}`}
-                            >
-                              IG {vendor.instagramFollowers ? `· ${vendor.instagramFollowers}` : ''}
-                            </a>
-                          )}
-                          {vendor.facebook && (
-                            <a
-                              href={vendor.facebook}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                              style={{ borderColor: 'rgba(24, 119, 242, 0.4)', color: '#1877F2', background: 'rgba(24, 119, 242, 0.08)' }}
-                              title={`Facebook ${vendor.facebookFollowers ? `(${vendor.facebookFollowers})` : ''}`}
-                            >
-                              FB {vendor.facebookFollowers ? `· ${vendor.facebookFollowers}` : ''}
-                            </a>
-                          )}
-                          {vendor.tiktok && (
-                            <a
-                              href={vendor.tiktok}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                              style={{ borderColor: 'rgba(0, 242, 254, 0.4)', color: '#00F2FE', background: 'rgba(0, 242, 254, 0.08)' }}
-                              title={`TikTok ${vendor.tiktokFollowers ? `(${vendor.tiktokFollowers})` : ''}`}
-                            >
-                              TikTok {vendor.tiktokFollowers ? `· ${vendor.tiktokFollowers}` : ''}
-                            </a>
-                          )}
-                          {vendor.twitter && (
-                            <a
-                              href={vendor.twitter}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                              style={{ borderColor: 'rgba(148, 163, 184, 0.4)', color: '#94a3b8', background: 'rgba(148, 163, 184, 0.08)' }}
-                              title="Twitter / X profile"
-                            >
-                              X
-                            </a>
-                          )}
+                          <VendorSocialPills vendor={vendor} max={4} />
                         </div>
                       </div>
                     </td>

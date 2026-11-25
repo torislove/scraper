@@ -1083,6 +1083,13 @@ async function runOmniSearchOrchestrator(
               if (typeof setWkDeps === 'function') setWkDeps({ logger: addLog, emitVendorEvent: guardedEmitVendorEvent, abortSignal: sessionAbortSignal });
               burstTasks.push(runBurst('wikidata', 'Wikidata', () => scrapeWikidata(category, cleanBaseCity, sessionId, countryCode)));
             }
+            if (hasEngine('social') || hasEngine('social-dork') || hasEngine('social-dork-intl')) {
+              const { scrapeSocialDorkIntl, setDeps: setSdIntlDeps } = require('../../scrapers/engine-social-dork-intl');
+              if (typeof setSdIntlDeps === 'function') {
+                setSdIntlDeps({ logger: addLog, emitVendorEvent: guardedEmitVendorEvent, abortSignal: sessionAbortSignal });
+              }
+              burstTasks.push(runBurst('social', 'Social & 3D Profile Hunter', () => scrapeSocialDorkIntl(category, cleanBaseCity, sessionId, countryCode)));
+            }
             if (hasEngine('trustpilot')) {
               const { scrapeTrustpilot, setDeps: setTpDeps } = require('../../scrapers/engine-trustpilot');
               if (typeof setTpDeps === 'function') setTpDeps({ logger: addLog, emitVendorEvent: guardedEmitVendorEvent, abortSignal: sessionAbortSignal });
@@ -1147,7 +1154,7 @@ async function runOmniSearchOrchestrator(
         continue;
       }
       try {
-        const jobPriority = taskName === 'scrapeDuckDuckGoDork' ? 4 : 12;
+        const jobPriority = taskName === 'scrapeDuckDuckGoDork' ? 2 : 12;
         await addScrapeJob(taskName, args, jobPriority, {
           lat: baseGeo?.lat || null,
           lng: baseGeo?.lng || null,
@@ -1238,7 +1245,9 @@ async function runOmniSearchOrchestrator(
       const basePriority = isGridZone(z)
         ? Math.max(3, 10 - Math.floor(zi / 4))
         : Math.max(10, 30 - Math.floor(zi / 5));
-      const zonePriority = zoneAlreadyCovered ? 2 : basePriority;
+      // Keep repeat-covered Maps zones above slow background social dork jobs (priority 2)
+      // so zones 29..N are never starved mid-city.
+      const zonePriority = zoneAlreadyCovered ? 6 : basePriority;
 
       if (allowMaps) {
         await addScrapeJob(
@@ -1252,7 +1261,7 @@ async function runOmniSearchOrchestrator(
         await addScrapeJob(
           'scrapeGoogleLocalFinder',
           [zoneQuery, category, z.zoneName, sessionId, 6, targetDistrict, targetState, zoneGeo, baseLocation, Boolean(allowMaps), isMaster, zoneScope, countryCode],
-          Math.max(2, zonePriority - 1),
+          Math.max(4, zonePriority - 1),
           meta
         );
       }
@@ -1279,6 +1288,8 @@ async function runOmniSearchOrchestrator(
     // 86-zone sweep promised 10 minutes and took 18.8. A recent window makes
     // the ETA react within a handful of zones.
     const completionTimes = [];
+    let lastTallyLeadCount = -1;
+    let lastTallyDoneZones = -1;
     while (true) {
       if (isAborted()) break;
 
@@ -1288,6 +1299,9 @@ async function runOmniSearchOrchestrator(
       const belongsToSession = (job) => Array.isArray(job.args) && job.args.includes(sessionId);
       const pendingForSession = currentQueue.filter(belongsToSession);
       const runningForSession = running.filter(belongsToSession);
+      const isAuxSocialTask = (job) => ['scrapeDuckDuckGoDork', 'scrapeSocialDorkIntl'].includes(job?.taskName);
+      const primaryPendingForSession = pendingForSession.filter(j => !isAuxSocialTask(j));
+      const primaryRunningForSession = runningForSession.filter(j => !isAuxSocialTask(j));
 
       const sessionState = activeSessions[sessionId] || {};
       const targetMap = sessionState.completedTargetsMap || {};
@@ -1369,112 +1383,116 @@ async function runOmniSearchOrchestrator(
       const nextZone = activeZones.find(zone => targetMap[zoneKey(zone)] !== 'completed');
       const activeZoneName = activeRunningJob?.meta?.locationName || nextZone?.zoneName || 'Finalizing';
 
-      // Tally live per-zone lead yields & trigger adaptive micro-splits on saturated zones
+      // Tally live per-zone lead yields & trigger adaptive micro-splits only when lead count or zone completions advance
       try {
         const sessionLeadsNow = dbAdapter.getVendorsBySession(sessionId) || [];
-        const zoneTallies = new Map();
-        for (const lead of sessionLeadsNow) {
-          if (!lead) continue;
-          const rawZ = String(lead.mandal || lead.zone || lead.locality || lead.locationName || '').toLowerCase().trim();
-          let matchedKey = rawZ && targetMap[rawZ] !== undefined ? rawZ : '';
-          if (!matchedKey && Number.isFinite(Number(lead.latitude)) && Number.isFinite(Number(lead.longitude))) {
-            let bestDist = 3.5;
-            for (const az of activeZones) {
-              const aLat = Number(az.lat ?? az.latitude);
-              const aLng = Number(az.lng ?? az.longitude);
-              if (!Number.isFinite(aLat) || !Number.isFinite(aLng)) continue;
-              const dk = getDistanceKm(aLat, aLng, Number(lead.latitude), Number(lead.longitude));
-              if (dk < bestDist) { bestDist = dk; matchedKey = zoneKey(az); }
+        if (sessionLeadsNow.length !== lastTallyLeadCount || completedZones !== lastTallyDoneZones) {
+          lastTallyLeadCount = sessionLeadsNow.length;
+          lastTallyDoneZones = completedZones;
+          const zoneTallies = new Map();
+          for (const lead of sessionLeadsNow) {
+            if (!lead) continue;
+            const rawZ = String(lead.mandal || lead.zone || lead.locality || lead.locationName || '').toLowerCase().trim();
+            let matchedKey = rawZ && targetMap[rawZ] !== undefined ? rawZ : '';
+            if (!matchedKey && Number.isFinite(Number(lead.latitude)) && Number.isFinite(Number(lead.longitude))) {
+              let bestDist = 3.5;
+              for (const az of activeZones) {
+                const aLat = Number(az.lat ?? az.latitude);
+                const aLng = Number(az.lng ?? az.longitude);
+                if (!Number.isFinite(aLat) || !Number.isFinite(aLng)) continue;
+                const dk = getDistanceKm(aLat, aLng, Number(lead.latitude), Number(lead.longitude));
+                if (dk < bestDist) { bestDist = dk; matchedKey = zoneKey(az); }
+              }
             }
+            if (!matchedKey) continue;
+            const t = zoneTallies.get(matchedKey) || { total: 0, mobiles: 0 };
+            t.total += 1;
+            if (hasValidMobile(lead.phone, countryCode)) t.mobiles += 1;
+            zoneTallies.set(matchedKey, t);
           }
-          if (!matchedKey) continue;
-          const t = zoneTallies.get(matchedKey) || { total: 0, mobiles: 0 };
-          t.total += 1;
-          if (hasValidMobile(lead.phone, countryCode)) t.mobiles += 1;
-          zoneTallies.set(matchedKey, t);
-        }
 
-        const runningNames = new Set(runningForSession.map(j => String(j?.meta?.zoneName || j?.meta?.locationName || '').toLowerCase().trim()));
-        for (let zi = 0; zi < activeZones.length; zi++) {
-          const az = activeZones[zi];
-          const zK = zoneKey(az);
-          const tState = targetMap[zK];
-          const tally = zoneTallies.get(zK) || { total: 0, mobiles: 0 };
-          let statusLabel = 'queued';
-          if (runningNames.has(zK) || (zK && zK === String(activeZoneName).toLowerCase().trim() && !tState)) {
-            statusLabel = 'scanning';
-          } else if (tState === 'completed') {
-            statusLabel = tally.total >= 18 ? 'saturated' : tally.total === 0 ? 'dry' : 'done';
-          } else if (tState === 'failed' || tState === 'error') {
-            statusLabel = 'resting';
-          }
-          cellStates[az.zoneName || az.name || `Zone ${zi + 1}`] = {
-            state: statusLabel,
-            leads: tally.total,
-            mobiles: tally.mobiles,
-            splitDepth: az._splitDepth || 0
-          };
+          const runningNames = new Set(runningForSession.map(j => String(j?.meta?.zoneName || j?.meta?.locationName || '').toLowerCase().trim()));
+          for (let zi = 0; zi < activeZones.length; zi++) {
+            const az = activeZones[zi];
+            const zK = zoneKey(az);
+            const tState = targetMap[zK];
+            const tally = zoneTallies.get(zK) || { total: 0, mobiles: 0 };
+            let statusLabel = 'queued';
+            if (runningNames.has(zK) || (zK && zK === String(activeZoneName).toLowerCase().trim() && !tState)) {
+              statusLabel = 'scanning';
+            } else if (tState === 'completed') {
+              statusLabel = tally.total >= 18 ? 'saturated' : tally.total === 0 ? 'dry' : 'done';
+            } else if (tState === 'failed' || tState === 'error') {
+              statusLabel = 'resting';
+            }
+            cellStates[az.zoneName || az.name || `Zone ${zi + 1}`] = {
+              state: statusLabel,
+              leads: tally.total,
+              mobiles: tally.mobiles,
+              splitDepth: az._splitDepth || 0
+            };
 
-          // Adaptive quad-split: when a cell hits >=18 leads (or >=12 for high-density categories like dentists/hospitals/wedding), subdivide into 4 tighter 1.2km micro-cells
-          const azLat = Number(az.lat ?? az.latitude);
-          const azLng = Number(az.lng ?? az.longitude);
-          const isHighDensityCategory = /\b(dentist|dental|doctor|clinic|hospital|wedding|venue|hall|photograph)\b/i.test(category);
-          const splitThreshold = isHighDensityCategory ? 12 : 18;
-          if (
-            tState === 'completed'
-            && tally.total >= splitThreshold
-            && !az._splitDepth
-            && !adaptiveSplitDone.has(zK)
-            && adaptiveSplitsUsed < MAX_ADAPTIVE_SPLITS
-            && Number.isFinite(azLat) && Number.isFinite(azLng)
-            && hasEngine('maps')
-            && !isAborted()
-          ) {
-            adaptiveSplitDone.add(zK);
-            const offsets = [
-              { tag: 'NE', dLat: 0.0075, dLng: 0.0075 },
-              { tag: 'NW', dLat: 0.0075, dLng: -0.0075 },
-              { tag: 'SE', dLat: -0.0075, dLng: 0.0075 },
-              { tag: 'SW', dLat: -0.0075, dLng: -0.0075 }
-            ];
-            for (const off of offsets) {
-              if (adaptiveSplitsUsed >= MAX_ADAPTIVE_SPLITS) break;
-              const subLat = Number((azLat + off.dLat).toFixed(5));
-              const subLng = Number((azLng + off.dLng).toFixed(5));
-              const subName = `${az.zoneName || az.name} Â· ${off.tag}`;
-              const subKey = String(subName).toLowerCase().trim();
-              const subQuery = `${searchPhrase} near ${subLat},${subLng}`;
-              const subZone = {
-                zoneName: subName,
-                queryText: subQuery,
-                district: az.district || baseLocation,
-                state: az.state || regionLabel,
-                lat: subLat,
-                lng: subLng,
-                radiusKm: 1.2,
-                coverageKind: 'split',
-                _splitDepth: 1,
-                index: activeZones.length + 1
-              };
-              activeZones.push(subZone);
-              zones.push(subZone);
-              targetMap[subKey] = 'queued';
-              cellStates[subName] = { state: 'queued', leads: 0, mobiles: 0, splitDepth: 1 };
-              totalZones += 1;
-              adaptiveSplitsUsed += 1;
-              await addScrapeJob(
-                'scrapeGooglePlaces',
-                [subQuery, category, subName, sessionId, subLat, subLng, 1.2, 'broad', az.district || baseLocation, az.state || regionLabel, null, baseLocation, isMaster, az.scope || null, az.mandal || null, countryCode],
-                18,
-                { lat: subLat, lng: subLng, zoneName: subName, locationName: subName, district: az.district || baseLocation, state: az.state || regionLabel, country: countryCode, sessionId, userId, isMaster, active: true, coverageKind: 'split', boundaryKm: 3 }
-              );
+            // Adaptive quad-split: when a cell hits >=18 leads (or >=12 for high-density categories like dentists/hospitals/wedding), subdivide into 4 tighter 1.2km micro-cells
+            const azLat = Number(az.lat ?? az.latitude);
+            const azLng = Number(az.lng ?? az.longitude);
+            const isHighDensityCategory = /\b(dentist|dental|doctor|clinic|hospital|wedding|venue|hall|photograph)\b/i.test(category);
+            const splitThreshold = isHighDensityCategory ? 12 : 18;
+            if (
+              tState === 'completed'
+              && tally.total >= splitThreshold
+              && !az._splitDepth
+              && !adaptiveSplitDone.has(zK)
+              && adaptiveSplitsUsed < MAX_ADAPTIVE_SPLITS
+              && Number.isFinite(azLat) && Number.isFinite(azLng)
+              && hasEngine('maps')
+              && !isAborted()
+            ) {
+              adaptiveSplitDone.add(zK);
+              const offsets = [
+                { tag: 'NE', dLat: 0.0075, dLng: 0.0075 },
+                { tag: 'NW', dLat: 0.0075, dLng: -0.0075 },
+                { tag: 'SE', dLat: -0.0075, dLng: 0.0075 },
+                { tag: 'SW', dLat: -0.0075, dLng: -0.0075 }
+              ];
+              for (const off of offsets) {
+                if (adaptiveSplitsUsed >= MAX_ADAPTIVE_SPLITS) break;
+                const subLat = Number((azLat + off.dLat).toFixed(5));
+                const subLng = Number((azLng + off.dLng).toFixed(5));
+                const subName = `${az.zoneName || az.name} · ${off.tag}`;
+                const subKey = String(subName).toLowerCase().trim();
+                const subQuery = `${searchPhrase} near ${subLat},${subLng}`;
+                const subZone = {
+                  zoneName: subName,
+                  queryText: subQuery,
+                  district: az.district || baseLocation,
+                  state: az.state || regionLabel,
+                  lat: subLat,
+                  lng: subLng,
+                  radiusKm: 1.2,
+                  coverageKind: 'split',
+                  _splitDepth: 1,
+                  index: activeZones.length + 1
+                };
+                activeZones.push(subZone);
+                zones.push(subZone);
+                targetMap[subKey] = 'queued';
+                cellStates[subName] = { state: 'queued', leads: 0, mobiles: 0, splitDepth: 1 };
+                totalZones += 1;
+                adaptiveSplitsUsed += 1;
+                await addScrapeJob(
+                  'scrapeGooglePlaces',
+                  [subQuery, category, subName, sessionId, subLat, subLng, 1.2, 'broad', az.district || baseLocation, az.state || regionLabel, null, baseLocation, isMaster, az.scope || null, az.mandal || null, countryCode],
+                  18,
+                  { lat: subLat, lng: subLng, zoneName: subName, locationName: subName, district: az.district || baseLocation, state: az.state || regionLabel, country: countryCode, sessionId, userId, isMaster, active: true, coverageKind: 'split', boundaryKm: 3 }
+                );
+              }
+              if (activeSessions[sessionId]) {
+                activeSessions[sessionId].totalMandals = totalZones;
+                activeSessions[sessionId].totalMandalsAcrossAll = totalZones;
+                activeSessions[sessionId].overallTotalMandals = totalZones;
+              }
+              addLog(`[Adaptive Radar] ⚡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
             }
-            if (activeSessions[sessionId]) {
-              activeSessions[sessionId].totalMandals = totalZones;
-              activeSessions[sessionId].totalMandalsAcrossAll = totalZones;
-              activeSessions[sessionId].overallTotalMandals = totalZones;
-            }
-            addLog(`[Adaptive Radar] ⚡ Hotspot "${az.zoneName}" (${tally.total} leads) split into 4 micro-cells for max extraction.`);
           }
         }
       } catch (adaptiveErr) { /* best-effort adaptive split */ }
@@ -1565,7 +1583,7 @@ async function runOmniSearchOrchestrator(
         }
       } catch (e) {}
 
-      if (finishedZones >= totalZones && pendingForSession.length === 0 && runningForSession.length === 0) {
+      if (finishedZones >= totalZones && primaryPendingForSession.length === 0 && primaryRunningForSession.length === 0) {
         if (!allZonesCompleteAt) allZonesCompleteAt = Date.now();
         if (Date.now() - allZonesCompleteAt > 1500) {
           addLog(`[Orchestrator] All ${totalZones} planned zones completed and queue fully drained. Proceeding to final contact scouts.`);
@@ -1575,7 +1593,7 @@ async function runOmniSearchOrchestrator(
         allZonesCompleteAt = null;
       }
 
-      if (pendingForSession.length === 0 && runningForSession.length === 0) {
+      if (primaryPendingForSession.length === 0 && primaryRunningForSession.length === 0) {
         const remainingUnfinished = activeZones.filter(z => {
           const state = targetMap[zoneKey(z)] || targetMap[String(z.zoneName || z.name || '').toLowerCase().trim()];
           return !['completed', 'deferred', 'error', 'failed'].includes(state);
@@ -1589,7 +1607,7 @@ async function runOmniSearchOrchestrator(
             await addScrapeJob('scrapeGooglePlaces', [
               rzQuery, category, rzLabel, sessionId, rzGeo?.lat || null, rzGeo?.lng || null, 3.5, 'broad',
               targetDistrict, targetState, rzGeo?.boundingbox || null, baseLocation, isMaster, zoneScope, rz.mandal || null, countryCode
-            ], 10, {
+            ], 14, {
               lat: rzGeo?.lat || null,
               lng: rzGeo?.lng || null,
               zoneName: rzLabel,
