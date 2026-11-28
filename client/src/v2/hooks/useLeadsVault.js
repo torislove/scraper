@@ -70,6 +70,7 @@ export function useLeadsVault({ country = 'IN' } = {}) {
   const [mobileOnly, setMobileOnly] = useState(false);
   const [landlineOnly, setLandlineOnly] = useState(false);
   const [whatsappOnly, setWhatsappOnly] = useState(false);
+  const [decisionMakerOnly, setDecisionMakerOnly] = useState(false);
   const [websiteOnly, setWebsiteOnly] = useState(false);
   const [noWebsiteOnly, setNoWebsiteOnly] = useState(false);
   const [emailOnly, setEmailOnly] = useState(false);
@@ -205,6 +206,7 @@ export function useLeadsVault({ country = 'IN' } = {}) {
     setMobileOnly(false);
     setLandlineOnly(false);
     setWhatsappOnly(false);
+    setDecisionMakerOnly(false);
     setWebsiteOnly(false);
     setNoWebsiteOnly(false);
     setEmailOnly(false);
@@ -253,7 +255,10 @@ export function useLeadsVault({ country = 'IN' } = {}) {
       });
     }
     if (whatsappOnly) {
-      list = list.filter((v) => Boolean(getAllDisplayPhones(v, resolveLeadCountry(v, country)).mobile?.whatsappUrl));
+      list = list.filter((v) => Boolean(getAllDisplayPhones(v, resolveLeadCountry(v, country)).mobile?.whatsappUrl || v.whatsappLink || v.whatsappAvailable));
+    }
+    if (decisionMakerOnly) {
+      list = list.filter((v) => Boolean(v.decisionMaker?.name || v.proprietor || v.owner));
     }
     if (websiteOnly) {
       list = list.filter((v) => Boolean(v.website || v.url));
@@ -370,8 +375,8 @@ export function useLeadsVault({ country = 'IN' } = {}) {
   return {
     vendors, filteredVendors, pageRows, currentPage: safePage, pageSize, pageCount,
     metrics, freshLeadIds, phoneJustFoundIds, latestLead, syncNonce,
-    filters: { searchQuery, sourceFilter, mobileOnly, landlineOnly, whatsappOnly, websiteOnly, noWebsiteOnly, emailOnly, deepOnly, minRating, sortOrder },
-    setSearchQuery, setSourceFilter, setMobileOnly, setLandlineOnly, setWhatsappOnly, setWebsiteOnly, setNoWebsiteOnly, setEmailOnly, setDeepOnly, setMinRating, setSortOrder,
+    filters: { searchQuery, sourceFilter, mobileOnly, landlineOnly, whatsappOnly, decisionMakerOnly, websiteOnly, noWebsiteOnly, emailOnly, deepOnly, minRating, sortOrder },
+    setSearchQuery, setSourceFilter, setMobileOnly, setLandlineOnly, setWhatsappOnly, setDecisionMakerOnly, setWebsiteOnly, setNoWebsiteOnly, setEmailOnly, setDeepOnly, setMinRating, setSortOrder,
     setCurrentPage, setPageSize, resetFilters, ingestLead, loadSessionLeads,
     exportCsv, exportVcf, clearVault, replaceLeads
   };

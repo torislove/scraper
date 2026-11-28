@@ -176,10 +176,10 @@ app.get('/api/taxonomy/expand', (req, res) => {
 const searchSuggest = require('./src/services/searchSuggest');
 const { normalizeScrapeIntent } = require('./src/services/queryNormalizer');
 
-app.get(['/api/search/suggest', '/api/search/suggestions'], (req, res) => {
+app.get(['/api/search/suggest', '/api/search/suggestions'], async (req, res) => {
   const q = String(req.query.q || req.query.query || '');
   const country = String(req.query.country || 'IN');
-  const result = searchSuggest.suggest({ q, country });
+  const result = await searchSuggest.suggest({ q, country });
   res.json(result);
 });
 

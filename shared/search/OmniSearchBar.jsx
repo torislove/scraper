@@ -280,7 +280,10 @@ export default function OmniSearchBar({
     if (pickedCc !== country) {
       setCountry?.(pickedCc);
     }
-    const cleanCity = String(item.city || '').split(',')[0].trim();
+    const baseCity = item.isDisambiguated && item.parentCity && item.parentCity !== item.city
+      ? `${item.city}, ${item.parentCity}`
+      : String(item.city || '').split(',')[0].trim();
+    const cleanCity = baseCity || String(item.city || '').trim();
     const fullText = item.category && cleanCity ? `${item.category} in ${cleanCity}` : (item.text || '');
     selfEmitRef.current = { q: item.category || query, c: cleanCity || city };
     setRawInput(fullText);

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { COUNTRIES, getCountryByCode } from '../data/countries';
 import { PURITY_SHOWCASE_CASES } from '../data/taxonomyClient';
+import { getCountryPricing } from '../data/pricingModels';
 import FlagChip, { FlagSphere } from '../ui/FlagChip';
 import LiquidButton from '../ui/LiquidButton';
 import {
@@ -34,6 +35,7 @@ export default function LandingStorySections({
   freeTrialDays = 7
 }) {
   const activeCountry = getCountryByCode(country);
+  const pricing = getCountryPricing(country || 'IN');
   const [purityCaseId, setPurityCaseId] = useState('hospitals');
   const activeCase = PURITY_SHOWCASE_CASES.find((c) => c.id === purityCaseId) || PURITY_SHOWCASE_CASES[0];
 
@@ -278,6 +280,10 @@ export default function LandingStorySections({
               <p style={{ margin: 0, fontSize: 13, color: 'var(--lp-ink-3)', lineHeight: 1.6 }}>
                 Target any single city across all municipal wards, filter verified mobile vs. landline leads in real time, and export clean CRM spreadsheets or vCards.
               </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 0' }}>
+                <span style={{ fontSize: 22, fontWeight: 850, color: 'var(--lp-ink)' }}>{pricing.symbol}{pricing.clientProMonthly.toLocaleString()}</span>
+                <span style={{ fontSize: 12, fontWeight: 650, color: '#64748b' }}>/ mo · {pricing.highlightRail}</span>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <LiquidButton variant="gold" size="md" icon={Rocket} onClick={onOpenClient}>
@@ -306,6 +312,10 @@ export default function LandingStorySections({
               <p style={{ margin: 0, fontSize: 13, color: 'var(--lp-ink-3)', lineHeight: 1.6 }}>
                 Run automated territory sweeps across HQ urban wards, surrounding towns, and mandals / counties / boroughs with unified multi-zone exports.
               </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, margin: '12px 0 0' }}>
+                <span style={{ fontSize: 22, fontWeight: 850, color: 'var(--lp-ink)' }}>{pricing.symbol}{pricing.masterFleetMonthly.toLocaleString()}</span>
+                <span style={{ fontSize: 12, fontWeight: 650, color: '#64748b' }}>/ mo · {pricing.highlightRail}</span>
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <LiquidButton variant="obsidian" size="md" icon={Rocket} onClick={onOpenMaster}>

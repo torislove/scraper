@@ -4,6 +4,7 @@ import { X, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
 import LiquidButton from './LiquidButton';
 import { Pin3DIcon, TerritoryGlobe3DIcon } from './Sculpted3DIcons';
 import { CLIENT_ORIGIN, MASTER_ORIGIN } from '../../client/src/v2/utils/editionSwitch';
+import { getCountryPricing } from '../data/pricingModels';
 
 const SKIP_KEY = 'lp_skip_edition_modal';
 
@@ -38,6 +39,7 @@ export default function EditionCompareModal({
   }, [isOpen, onClose]);
 
   const isTargetMaster = targetEdition === 'master';
+  const pricing = getCountryPricing(context?.country || 'IN');
   const handleConfirm = () => {
     try { localStorage.setItem(SKIP_KEY, skipNext ? '1' : '0'); } catch (_) {}
     onClose?.();
@@ -117,6 +119,10 @@ export default function EditionCompareModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={13} color="#059669" /> Instant mobile, STD &amp; WhatsApp separation</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={13} color="#059669" /> Interactive lead table + CSV / vCard exports</span>
                 </div>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(15,23,42,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ fontWeight: 800, color: '#047857' }}>{pricing.symbol}{pricing.clientProMonthly.toLocaleString()} / mo</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>{pricing.highlightRail}</span>
+                </div>
               </div>
 
               <div style={{ padding: 18, borderRadius: 18, background: isTargetMaster ? '#fffbeb' : '#f8fafc', border: `2px solid ${isTargetMaster ? '#d97706' : 'rgba(15,23,42,0.08)'}` }}>
@@ -134,6 +140,10 @@ export default function EditionCompareModal({
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={13} color="#d97706" /> 3-Tier Cascade: HQ Wards → Towns → Mandals</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={13} color="#d97706" /> District &amp; State disambiguation across 5 nations</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><CheckCircle2 size={13} color="#d97706" /> Consolidated multi-zone Folders &amp; exports</span>
+                </div>
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(15,23,42,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ fontWeight: 800, color: '#b45309' }}>{pricing.symbol}{pricing.masterFleetMonthly.toLocaleString()} / mo</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>{pricing.highlightRail}</span>
                 </div>
               </div>
             </div>

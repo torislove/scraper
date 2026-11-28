@@ -238,12 +238,26 @@ function isWithinCityBounds(lead, targetLocation, resolvedGeo = null) {
   }
 
   if (!conf) return true;
-  const targetCityLower = String(conf.city || conf.cityName || targetLocation || '').toLowerCase();
-  const hasTargetCity = targetCityLower && (addr.includes(targetCityLower) || cityField.includes(targetCityLower));
+  const rawTargetLow = String(targetLocation || '').toLowerCase().trim();
+  const targetCityLower = String(conf.city || conf.cityName || rawTargetLow).toLowerCase();
+  const hasTargetCity = (targetCityLower && (addr.includes(targetCityLower) || cityField.includes(targetCityLower))) ||
+    (rawTargetLow && (addr.includes(rawTargetLow) || cityField.includes(rawTargetLow)));
 
   if (!hasTargetCity && Array.isArray(conf.rejectTerms)) {
-    for (const term of conf.rejectTerms) {
-      if (addr.includes(term)) return false;
+    const isExplicitSubTarget = rawTargetLow && conf.rejectTerms.some((t) => rawTargetLow.includes(t));
+    if (!isExplicitSubTarget) {
+      for (const term of conf.rejectTerms) {
+        if (addr.includes(term)) {
+          if (hasCoords && conf.center) {
+            const cLat = Number(conf.center.lat);
+            const cLng = Number(conf.center.lng);
+            if (Number.isFinite(cLat) && Number.isFinite(cLng) && haversineKm(lat, lng, cLat, cLng) <= 45) {
+              continue;
+            }
+          }
+          return false;
+        }
+      }
     }
   }
 

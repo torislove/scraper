@@ -439,7 +439,7 @@ function saveVendor(arg1, arg2, arg3) {
   if (lead.query || lead.searchCategory) {
     const relScore = computeRelevanceScore(lead);
     lead.relevanceScore = relScore;
-    if (relScore < 40) return null;
+    if (relScore < 20) return null;
   }
 
   if (sessionId) lead.sessionId = sessionId;

@@ -54,7 +54,7 @@ export default function CommandCenter({ edition = EDITION_CONFIG }) {
   const scrapedFolders = useScrapedFolders();
   const cityZones = useCityZones({ city, country, initialMode: initialZoneMode });
   const [filterState, setFilterState] = useState({
-    query: '', phoneOnly: false, landlineOnly: false, websiteOnly: false, noWebsiteOnly: false, emailOnly: false, deepOnly: false, primeOnly: false, minRating: 0, sort: 'newest'
+    query: '', phoneOnly: false, landlineOnly: false, whatsAppOnly: false, dmOnly: false, websiteOnly: false, noWebsiteOnly: false, emailOnly: false, deepOnly: false, primeOnly: false, minRating: 0, sort: 'newest'
   });
 
   const handleFilterChange = useCallback((key, val) => {
@@ -63,6 +63,8 @@ export default function CommandCenter({ edition = EDITION_CONFIG }) {
     if (key === 'source') vault.setSourceFilter(val || 'all');
     if (key === 'phoneOnly') { vault.setMobileOnly(val); if (val) vault.setLandlineOnly(false); }
     if (key === 'landlineOnly') { vault.setLandlineOnly(val); if (val) vault.setMobileOnly(false); }
+    if (key === 'whatsAppOnly') vault.setWhatsappOnly(Boolean(val));
+    if (key === 'dmOnly') vault.setDecisionMakerOnly(Boolean(val));
     if (key === 'websiteOnly') { vault.setWebsiteOnly(val); if (val) vault.setNoWebsiteOnly(false); }
     if (key === 'noWebsiteOnly') { vault.setNoWebsiteOnly(val); if (val) vault.setWebsiteOnly(false); }
     if (key === 'emailOnly') vault.setEmailOnly(Boolean(val));
@@ -73,7 +75,7 @@ export default function CommandCenter({ edition = EDITION_CONFIG }) {
   }, [vault]);
 
   const handleResetFilters = useCallback(() => {
-    setFilterState({ query: '', source: 'all', phoneOnly: false, landlineOnly: false, websiteOnly: false, noWebsiteOnly: false, emailOnly: false, deepOnly: false, primeOnly: false, minRating: 0, sort: 'newest' });
+    setFilterState({ query: '', source: 'all', phoneOnly: false, landlineOnly: false, whatsAppOnly: false, dmOnly: false, websiteOnly: false, noWebsiteOnly: false, emailOnly: false, deepOnly: false, primeOnly: false, minRating: 0, sort: 'newest' });
     vault.resetFilters();
   }, [vault]);
 
@@ -142,11 +144,16 @@ export default function CommandCenter({ edition = EDITION_CONFIG }) {
       toast.error('Enter a business category and city on the Search page first.');
       return;
     }
+    if (qRun !== query) setQuery(qRun);
+    if (cRun !== city) setCity(cRun);
+    if (ccRun !== country) setCountry(ccRun);
     const subs = Array.isArray(customSubcategories) ? customSubcategories : undefined;
+    const isSameCity = cityZones.zoneData?.city &&
+      cityZones.zoneData.city.toLowerCase() === cRun.toLowerCase();
     const chosenZones =
       Array.isArray(explicitZones)
         ? explicitZones
-        : (cityZones.selectedZoneNames && ccRun === country)
+        : (isSameCity && cityZones.selectedZoneNames && ccRun === country)
           ? cityZones.effectiveZones
           : undefined;
     setActiveSubcategories(subs);

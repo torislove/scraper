@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Globe2, Mail, Phone, Search, Smartphone, Star, X, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Globe2, Mail, Phone, Search, Smartphone, Star, X, RotateCcw, MessageSquare, UserCheck } from 'lucide-react';
 import { cx, formatNumber } from '../../ui';
 import { LEAD_SORT_OPTIONS, LEAD_SOURCE_OPTIONS } from '@shared/cockpit/sortOptions';
 
@@ -7,9 +7,9 @@ export default function FilterBar({ filters = {}, onChange = () => {}, onReset, 
   const safeFilters = filters || {};
   const currentQuery = safeFilters.query || '';
   const hasActiveFilter = Boolean(
-    currentQuery || safeFilters.phoneOnly || safeFilters.landlineOnly || safeFilters.websiteOnly ||
-    safeFilters.noWebsiteOnly || safeFilters.emailOnly || safeFilters.deepOnly || safeFilters.primeOnly ||
-    (safeFilters.source && safeFilters.source !== 'all') ||
+    currentQuery || safeFilters.phoneOnly || safeFilters.landlineOnly || safeFilters.whatsAppOnly ||
+    safeFilters.dmOnly || safeFilters.websiteOnly || safeFilters.noWebsiteOnly || safeFilters.emailOnly ||
+    safeFilters.deepOnly || safeFilters.primeOnly || (safeFilters.source && safeFilters.source !== 'all') ||
     Number(safeFilters.minRating || 0) > 0 || (safeFilters.sort && safeFilters.sort !== 'newest')
   );
 
@@ -40,11 +40,27 @@ export default function FilterBar({ filters = {}, onChange = () => {}, onReset, 
         </button>
         <button
           type="button"
+          className={cx(safeFilters.whatsAppOnly && 'is-active')}
+          onClick={() => onChange('whatsAppOnly', !safeFilters.whatsAppOnly)}
+          title="100% WhatsApp-ready verified direct mobile contacts"
+        >
+          <MessageSquare size={12} /> WhatsApp
+        </button>
+        <button
+          type="button"
           className={cx(safeFilters.phoneOnly && 'is-active')}
           onClick={() => onChange('phoneOnly', !safeFilters.phoneOnly)}
           title="Direct mobile numbers ready for WhatsApp & SMS"
         >
           <Smartphone size={12} /> Mobiles Only
+        </button>
+        <button
+          type="button"
+          className={cx(safeFilters.dmOnly && 'is-active')}
+          onClick={() => onChange('dmOnly', !safeFilters.dmOnly)}
+          title="Verified Decision-Maker / Owner profiles"
+        >
+          <UserCheck size={12} /> Decision-Maker
         </button>
         <button
           type="button"

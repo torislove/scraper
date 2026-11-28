@@ -107,6 +107,13 @@ function LeadTableRow({
                 </span>
               )}
             </div>
+
+            {vendor.decisionMaker?.name && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 6, background: '#f0fdf4', border: '1px solid rgba(5,150,105,0.25)', color: '#047857', fontSize: 10.5, fontWeight: 750, width: 'fit-content' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', display: 'inline-block' }} />
+                <span>{vendor.decisionMaker.title || 'Owner'}: <b>{vendor.decisionMaker.name}</b></span>
+              </div>
+            )}
           </div>
         </div>
       </td>

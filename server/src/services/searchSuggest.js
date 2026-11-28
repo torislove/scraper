@@ -11,6 +11,7 @@ const { resolveNaics, resolveCommodity, resolveNiche, getSubvectorsForQuery } = 
 const { resolveUmbrella } = require('../taxonomy/umbrellas');
 const { normalizeScrapeIntent } = require('./queryNormalizer');
 const { KNOWN_CITIES } = require('../geo');
+const { disambiguateLocation } = require('../geo/locationDisambiguator');
 
 const COUNTRY_FLAGS = {
   IN: { name: 'India', flag: '🇮🇳' },
@@ -146,7 +147,7 @@ function cleanNaturalLanguageIntent(raw) {
   return text.trim();
 }
 
-function suggest({ q = '', country = 'IN' }) {
+async function suggest({ q = '', country = 'IN' }) {
   const t0 = Date.now();
   const activeCountry = String(country || 'IN').toUpperCase();
   const { cleanedQuery: rawCleaned, directives } = extractPowerDirectives(cleanNaturalLanguageIntent(q));
@@ -175,12 +176,39 @@ function suggest({ q = '', country = 'IN' }) {
 
   const suggestions = [];
   const primaryLabel = umbrella?.key || commodity?.label || niche?.label || categoryPart;
+
+  // Check for multi-location / homonymous places (e.g. Siripuram, Springfield, Richmond, etc.)
+  const targetLoc = locationPart || (!norm.correctedLocation ? categoryPart : '');
+  const disambiguated = targetLoc.length >= 2 ? await disambiguateLocation(targetLoc, effectiveCountry) : [];
+
+  if (disambiguated.length > 0) {
+    for (const d of disambiguated.slice(0, 6)) {
+      const qHead = locationPart ? primaryLabel : 'Businesses';
+      suggestions.push({
+        type: 'location',
+        text: `${qHead} in ${d.label || d.name}`,
+        subtitle: `${d.label || d.name} · ${COUNTRY_FLAGS[d.country]?.name || d.country}`,
+        badge: d.badge || `${d.district || d.state} · ${d.country}`,
+        category: qHead,
+        city: d.name,
+        parentCity: d.parentCity || d.name,
+        district: d.district || '',
+        state: d.state || '',
+        country: d.country || effectiveCountry,
+        coordinates: { lat: d.lat, lng: d.lng },
+        isDisambiguated: true,
+        autoSwitchCountry: d.country !== activeCountry,
+        naics
+      });
+    }
+  }
+
   const matchedPlace = SOVEREIGN_PLACES.find((p) => p.name.toLowerCase() === String(locationPart || '').toLowerCase());
   const fullDisplayLoc = matchedPlace ? `${matchedPlace.label}, ${matchedPlace.state}` : locationPart;
-  const purePlaceMatch = !locationPart && SOVEREIGN_PLACES.find((p) => p.name.toLowerCase() === String(categoryPart || '').toLowerCase());
+  const purePlaceMatch = !locationPart && (SOVEREIGN_PLACES.find((p) => p.name.toLowerCase() === String(categoryPart || '').toLowerCase()) || disambiguated.length > 0);
 
   // 1. Direct matched parsed intent with full City + State + Country context
-  if (!purePlaceMatch) {
+  if (!purePlaceMatch && suggestions.length < 4) {
     const directText = fullDisplayLoc ? `${primaryLabel} in ${fullDisplayLoc}` : primaryLabel;
     suggestions.push({
       type: locationPart ? 'location' : 'intent',
@@ -198,7 +226,7 @@ function suggest({ q = '', country = 'IN' }) {
 
   // 2. Location gazetteer matches across effective + cross-market cities when user types city prefix
   const locLower = String(locationPart || cleanedQuery || '').toLowerCase();
-  if (locLower.length >= 2) {
+  if (locLower.length >= 2 && suggestions.length < 8) {
     for (const place of SOVEREIGN_PLACES) {
       if (place.name.toLowerCase().startsWith(locLower) || place.state.toLowerCase().startsWith(locLower) || place.label.toLowerCase().includes(locLower)) {
         const qHead = (locationPart && !purePlaceMatch) ? primaryLabel : 'Hospitals';
@@ -217,7 +245,7 @@ function suggest({ q = '', country = 'IN' }) {
   }
 
   // 3. Localized Subcategories with full location context (skip when user only typed a bare city name)
-  if (!purePlaceMatch) {
+  if (!purePlaceMatch && suggestions.length < 8) {
     for (const sub of subvectors.slice(0, 5)) {
       if (sub.toLowerCase() !== primaryLabel.toLowerCase()) {
         suggestions.push({

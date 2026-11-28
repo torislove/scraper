@@ -93,6 +93,7 @@ function extractJsonLdSignals(html, signals) {
       const items = Array.isArray(raw) ? raw : [raw];
       for (const obj of items) {
         if (!obj || typeof obj !== 'object') continue;
+        signals.objects.push(obj);
         if (obj.telephone) signals.phones.push(String(obj.telephone));
         if (obj.email) signals.emails.push(String(obj.email).replace(/^mailto:/i, '').trim().toLowerCase());
         const sameAs = Array.isArray(obj.sameAs) ? obj.sameAs : (obj.sameAs ? [obj.sameAs] : []);
@@ -116,7 +117,7 @@ function matchSocialHandle(html, extraLinksText, regex, ignoredSet) {
 
 function parseContactDataFromHtml(html, countryCode = 'IN') {
   if (!html) return null;
-  const ldSignals = { phones: [], emails: [], links: [] };
+  const ldSignals = { phones: [], emails: [], links: [], objects: [] };
   extractJsonLdSignals(html, ldSignals);
 
   const mailtoMatches = [];
@@ -165,6 +166,34 @@ function parseContactDataFromHtml(html, countryCode = 'IN') {
   if (!landlinePhone && fromText.landlinePhone) landlinePhone = fromText.landlinePhone;
   if (!whatsappLink && fromText.whatsappLink) whatsappLink = fromText.whatsappLink;
 
+  let decisionMaker = null;
+  for (const obj of ldSignals.objects || []) {
+    if (obj['@type'] === 'Person' || obj.founder || obj.director) {
+      const p = obj.founder || obj.director || (obj['@type'] === 'Person' ? obj : null);
+      if (p && (p.name || typeof p === 'string')) {
+        decisionMaker = {
+          name: String(p.name || p).trim(),
+          title: String(p.jobTitle || 'Founder / Director').trim(),
+          source: 'json-ld'
+        };
+        break;
+      }
+    }
+  }
+
+  if (!decisionMaker) {
+    const dmRe = /\b(?:proprietor|founder|co-founder|owner|managing\s+director|director|ceo|principal)\s*(?::|-|–|—|\bis\b)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/i;
+    const dmM = strippedText.match(dmRe);
+    if (dmM && dmM[1] && dmM[1].length < 35 && !/^(about|contact|our|the|team|services|home|privacy)/i.test(dmM[1])) {
+      const titleMatch = dmM[0].match(/\b(proprietor|founder|owner|managing\s+director|director|ceo|principal)\b/i);
+      decisionMaker = {
+        name: dmM[1].trim(),
+        title: titleMatch ? titleMatch[1].toUpperCase() : 'Owner / Executive',
+        source: 'page-text'
+      };
+    }
+  }
+
   const extraLinksText = ldSignals.links.join('\n');
   const igHandle = matchSocialHandle(html, extraLinksText, /instagram\.com\/([a-zA-Z0-9_.-]+)/gi, IGNORE_IG);
   const fbHandle = matchSocialHandle(html, extraLinksText, /facebook\.com\/([a-zA-Z0-9_.-]+)/gi, IGNORE_FB);
@@ -177,6 +206,7 @@ function parseContactDataFromHtml(html, countryCode = 'IN') {
     mobilePhone,
     landlinePhone,
     whatsappLink,
+    decisionMaker,
     instagram: igHandle ? sanitizeSocialUrl(`https://instagram.com/${igHandle}`, 'instagram') || null : null,
     facebook: fbHandle ? sanitizeSocialUrl(`https://facebook.com/${fbHandle}`, 'facebook') || null : null,
     linkedin: liMatch ? sanitizeSocialUrl(`https://linkedin.com/${liMatch[1]}`, 'linkedin') || null : null,
@@ -230,6 +260,10 @@ async function mergeParsedContacts(lead, parsed, countryCode) {
   if (parsed.whatsappLink && !lead.whatsappLink) {
     lead.whatsappLink = parsed.whatsappLink;
     lead.whatsappAvailable = true;
+    changed = true;
+  }
+  if (parsed.decisionMaker && !lead.decisionMaker) {
+    lead.decisionMaker = parsed.decisionMaker;
     changed = true;
   }
   for (const field of ['instagram', 'facebook', 'linkedin', 'twitter', 'youtube']) {
