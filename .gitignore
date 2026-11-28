@@ -19,10 +19,13 @@ firebase-debug.log*
 
 # scraped data and local databases (never publish customer leads)
 server/data/
-server/db/user_sessions/
-data/
-db/
+server/db/
+/data/
+/db/
 !server/db/india_villages.json
+# Shared data directory containing sovereign places, countries, and taxonomies
+!shared/data/
+!shared/data/**
 # ...but the generated country list is source code, not customer data.
 !client/src/v2/data/
 !client/src/v2/data/**

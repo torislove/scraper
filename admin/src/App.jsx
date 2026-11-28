@@ -3,10 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import AdminLayout from './components/AdminLayout';
 
 const AdminOverview = lazy(() => import('./views/AdminOverview'));
-const AdminCustomers = lazy(() => import('./views/AdminCustomers'));
-const AdminTrending = lazy(() => import('./views/AdminTrending'));
 const AdminDataVault = lazy(() => import('./views/AdminDataVault'));
-const AdminPopupStudio = lazy(() => import('./views/AdminPopupStudio'));
 const AdminCountries = lazy(() => import('./views/AdminCountries'));
 const AdminClients = lazy(() => import('./views/AdminClients'));
 
@@ -36,12 +33,13 @@ export default function App() {
       <Routes>
         <Route path="/" element={<AdminLayout />}>
           <Route index element={<AdminOverview />} />
-          <Route path="customers" element={<AdminCustomers />} />
-          <Route path="trending" element={<AdminTrending />} />
           <Route path="data-vault" element={<AdminDataVault />} />
-          <Route path="popups" element={<AdminPopupStudio />} />
           <Route path="countries" element={<AdminCountries />} />
           <Route path="clients" element={<AdminClients />} />
+          {/* Backward compatibility redirects */}
+          <Route path="customers" element={<Navigate to="/clients" replace />} />
+          <Route path="trending" element={<Navigate to="/countries" replace />} />
+          <Route path="popups" element={<Navigate to="/" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

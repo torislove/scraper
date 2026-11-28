@@ -110,12 +110,57 @@ jobs:
       - name: Server syntax check
         run: |
           node --check server/index.js
-          node --check server/src/routes/auth.js
-          node --check server/src/middleware/security.js
-          node --check server/src/services/liveStreams.js
-          node --check server/src/config/paths.js
-          node --check server/src/scrapers/browserFactory.js
-          node --check server/src/middleware/licenseGate.js
+          node --check server/server.js
+          node --check server/src/auth.js
+          node --check server/src/orchestrator.js
+          node --check server/src/store.js
+          node --check server/src/geo.js
+          node --check server/src/taxonomy.js
+          node --check server/src/sse.js
+          node --check server/src/folderStore.js
+          node --check server/src/master/adminRegistry.js
+          node --check server/src/master/masterOrchestrator.js
+          node --check server/src/master/masterRoutes.js
+          node --check server/src/engines/contract.js
+          node --check server/src/engines/phoneUtils.js
+          node --check server/src/engines/tlsSidecar/index.js
+          node --check server/src/engines/gmapDirect/index.js
+          node --check server/src/engines/osmPoi/index.js
+          node --check server/src/engines/gosom/index.js
+          node --check server/src/engines/lightpanda/index.js
+          node --check server/src/engines/serp/index.js
+          node --check server/src/engines/socialDork/index.js
+          node --check server/src/services/leadEnricher.js
+          node --check server/src/services/addressParser.js
+          node --check server/src/services/concurrency.js
+          node --check server/src/services/goldenMerger.js
+          node --check server/src/services/hardwareSafety.js
+
+      - name: Full server source tree recursive syntax check
+        run: |
+          node -e "
+          const fs = require('fs');
+          const path = require('path');
+          const { execSync } = require('child_process');
+          function walk(dir) {
+            let files = [];
+            for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+              const full = path.join(dir, item.name);
+              if (item.isDirectory()) {
+                if (item.name !== 'node_modules' && item.name !== 'bin') files.push(...walk(full));
+              } else if (item.name.endsWith('.js')) {
+                files.push(full);
+              }
+            }
+            return files;
+          }
+          const all = walk('server/src');
+          console.log('Verifying ' + all.length + ' server modules for syntax validity...');
+          for (const f of all) {
+            execSync('node --check ' + f, { stdio: 'inherit' });
+          }
+          console.log('All ' + all.length + ' server modules passed syntax check cleanly.');
+          "
 
       - name: Optional Desktop syntax check
         run: |

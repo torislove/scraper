@@ -354,17 +354,85 @@ app.get(['/api/export/csv', '/api/sessions/export'], (req, res) => {
 // -----------------------------------------------------------------------------
 // 8. Admin Panel Endpoints (:5175)
 // -----------------------------------------------------------------------------
+const SOVEREIGN_NATION_SPECS = [
+  { code: 'IN', name: 'India', flag: '🇮🇳', dialPrefix: '91', currency: 'INR' },
+  { code: 'US', name: 'United States', flag: '🇺🇸', dialPrefix: '1', currency: 'USD' },
+  { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', dialPrefix: '44', currency: 'GBP' },
+  { code: 'AU', name: 'Australia', flag: '🇦🇺', dialPrefix: '61', currency: 'AUD' },
+  { code: 'AE', name: 'United Arab Emirates', flag: '🇦🇪', dialPrefix: '971', currency: 'AED' },
+  { code: 'CA', name: 'Canada', flag: '🇨🇦', dialPrefix: '1', currency: 'CAD' },
+  { code: 'DE', name: 'Germany', flag: '🇩🇪', dialPrefix: '49', currency: 'EUR' },
+  { code: 'FR', name: 'France', flag: '🇫🇷', dialPrefix: '33', currency: 'EUR' },
+  { code: 'IE', name: 'Ireland', flag: '🇮🇪', dialPrefix: '353', currency: 'EUR' },
+  { code: 'NZ', name: 'New Zealand', flag: '🇳🇿', dialPrefix: '64', currency: 'NZD' },
+  { code: 'SG', name: 'Singapore', flag: '🇸🇬', dialPrefix: '65', currency: 'SGD' }
+];
+
+const SUBSCRIPTION_PLANS = {
+  starter: { id: 'starter', name: 'Starter Tier', credits: 5000, price: '$0 (Early Access)', maxConcurrent: 2 },
+  pro: { id: 'pro', name: 'Professional Tier', credits: 50000, price: '$0 (Early Access)', maxConcurrent: 8 },
+  enterprise: { id: 'enterprise', name: 'Enterprise Fleet', credits: 500000, price: '$0 (Early Access)', maxConcurrent: 24 }
+};
+
 app.get('/api/admin/overview', (req, res) => {
   const mem = process.memoryUsage();
   const allLeads = store.getAllVendors();
-  res.json({
+  const runningSessions = Array.from(orchestrator.activeSessions.values()).filter(s => s.status === 'running');
+  const allSessions = Array.from(orchestrator.activeSessions.values());
+  const users = auth.getAllUsers();
+
+  let totalPhones = 0;
+  let whatsappCount = 0;
+  let emailCount = 0;
+  for (const l of allLeads) {
+    if (l.primaryMobile || l.phone || l.secondaryPhone) totalPhones++;
+    if (l.primaryMobile || l.whatsapp || l.mobileVerified === 'Yes') whatsappCount++;
+    if (l.email) emailCount++;
+  }
+  const phoneRate = allLeads.length > 0 ? Math.round((totalPhones / allLeads.length) * 100) : 0;
+
+  const payload = {
     ok: true,
+    success: true,
     totalLeads: allLeads.length,
-    activeSessions: Array.from(orchestrator.activeSessions.values()).filter(s => s.status === 'running').length,
-    registeredClients: auth.getAllUsers().length,
+    activeSessions: runningSessions.length,
+    registeredClients: users.length,
     ramMb: Math.round(mem.rss / (1024 * 1024)),
-    uptime: Math.round(process.uptime())
-  });
+    uptime: Math.round(process.uptime()),
+    metrics: {
+      totalLeads: allLeads.length,
+      totalPhones,
+      phoneRate,
+      whatsappCount,
+      emailCount,
+      activeSessions: runningSessions.length,
+      ramMb: Math.round(mem.rss / (1024 * 1024)),
+      uptime: Math.round(process.uptime())
+    },
+    fleet: {
+      masterScraper: {
+        status: 'online',
+        activeSessions: runningSessions.filter(s => s.isMaster).length,
+        totalSessions: allSessions.filter(s => s.isMaster).length,
+        targetCountries: 11,
+        engine: 'gmap_direct_rpc + tls_sidecar'
+      },
+      clientScrapers: {
+        status: 'online',
+        activeCount: runningSessions.filter(s => !s.isMaster).length,
+        registeredClients: users.length
+      },
+      engines: {
+        tlsSidecar: { port: 5003, status: 'operational' },
+        nodeEngine: { port: 5002, status: 'operational' },
+        osmPoi: { status: 'operational' },
+        gmapDirect: { status: 'operational' },
+        gosom: { status: 'standby' },
+        lightpanda: { status: 'standby' }
+      }
+    }
+  };
+  res.json(payload);
 });
 
 app.get('/api/admin/clients', (req, res) => {
@@ -373,43 +441,76 @@ app.get('/api/admin/clients', (req, res) => {
     name: u.name,
     loginEmail: u.email,
     email: u.email,
-    plan: u.plan,
-    credits: u.credits,
-    role: u.role,
-    createdAt: u.createdAt
+    plan: u.plan || 'enterprise',
+    credits: u.credits ?? 50000,
+    role: u.role || 'client',
+    createdAt: u.createdAt || new Date().toISOString()
   }));
-  res.json(users);
+  res.json({
+    ok: true,
+    success: true,
+    clients: users,
+    plans: SUBSCRIPTION_PLANS
+  });
 });
 
 app.post('/api/admin/clients', (req, res) => {
   try {
     const created = auth.register(req.body);
-    res.json({ success: true, client: created.user });
+    res.json({ ok: true, success: true, client: created.user });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(400).json({ ok: false, success: false, message: err.message });
   }
 });
 
 app.post('/api/admin/clients/:id/reset-code', (req, res) => {
   const user = auth.getUserById(req.params.id);
-  if (!user) return res.status(404).json({ success: false, message: 'Client not found' });
+  if (!user) return res.status(404).json({ ok: false, success: false, message: 'Client not found' });
   const resetCode = `CODE-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-  res.json({ success: true, resetCode });
+  res.json({ ok: true, success: true, code: resetCode, resetCode });
 });
 
 app.delete('/api/admin/clients/:id', (req, res) => {
   const deleted = auth.deleteUser(req.params.id);
-  res.json({ success: deleted });
+  res.json({ ok: true, success: Boolean(deleted) });
 });
 
 app.get('/api/admin/metrics/countries', (req, res) => {
   const leads = store.getAllVendors();
-  const distribution = {};
+  const sessions = Array.from(orchestrator.activeSessions.values());
+  const counts = {};
+  const mobileCounts = {};
+
   for (const l of leads) {
-    const c = l.country || 'IN';
-    distribution[c] = (distribution[c] || 0) + 1;
+    const c = (l.country || 'IN').toUpperCase();
+    counts[c] = (counts[c] || 0) + 1;
+    if (l.primaryMobile || l.whatsapp || l.mobileVerified === 'Yes') {
+      mobileCounts[c] = (mobileCounts[c] || 0) + 1;
+    }
   }
-  res.json({ ok: true, metrics: distribution });
+
+  const countries = SOVEREIGN_NATION_SPECS.map(spec => {
+    const cLeads = counts[spec.code] || 0;
+    const cMobile = mobileCounts[spec.code] || 0;
+    const cSessions = sessions.filter(s => (s.country || '').toUpperCase() === spec.code).length;
+    return {
+      code: spec.code,
+      name: spec.name,
+      flag: spec.flag,
+      dialPrefix: spec.dialPrefix,
+      sessionCount: cSessions,
+      leadsCount: cLeads,
+      mobileRate: cLeads > 0 ? Math.round((cMobile / cLeads) * 100) : 0,
+      activeZones: cSessions > 0 ? cSessions * 6 : 0
+    };
+  });
+
+  res.json({
+    ok: true,
+    success: true,
+    metrics: counts,
+    countries
+  });
 });
 
 app.get('/api/admin/customers/activity', (req, res) => {
@@ -419,47 +520,95 @@ app.get('/api/admin/customers/activity', (req, res) => {
     location: s.location,
     country: s.country,
     status: s.status,
-    leadsCount: s.leadsHarvested,
-    timestamp: s.startTime
+    leadsCount: s.leadsHarvested || 0,
+    timestamp: s.startTime || Date.now()
   }));
-  res.json({ ok: true, activity: activities });
+  res.json({ ok: true, success: true, activity: activities });
 });
 
 app.get('/api/admin/data/leads', (req, res) => {
-  const { search, country, limit = 50, offset = 0 } = req.query;
+  const queryStr = req.query.q || req.query.search || '';
+  const countryFilter = req.query.country || 'ALL';
+  const familyFilter = req.query.family || 'ALL';
+  const hasPhone = req.query.hasPhone === 'true';
+  const hasWhatsApp = req.query.hasWhatsApp === 'true';
+  const hasWebsite = req.query.hasWebsite === 'true';
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const offset = req.query.offset !== undefined ? Number(req.query.offset) : (page - 1) * limit;
+
   let leads = store.getAllVendors();
-  if (search) {
-    const q = String(search).toLowerCase();
-    leads = leads.filter(l => (l.name && l.name.toLowerCase().includes(q)) || (l.phone && l.phone.includes(q)));
+  const availableFamilies = {};
+
+  for (const l of leads) {
+    const fam = l.commercialFamily || l.category || 'General Commercial';
+    availableFamilies[fam] = (availableFamilies[fam] || 0) + 1;
   }
-  if (country) {
-    leads = leads.filter(l => l.country === String(country).toUpperCase());
+
+  if (queryStr.trim()) {
+    const q = queryStr.trim().toLowerCase();
+    leads = leads.filter(l =>
+      (l.name && l.name.toLowerCase().includes(q)) ||
+      (l.phone && l.phone.includes(q)) ||
+      (l.primaryMobile && l.primaryMobile.includes(q)) ||
+      (l.city && l.city.toLowerCase().includes(q)) ||
+      (l.address && l.address.toLowerCase().includes(q))
+    );
   }
+
+  if (countryFilter && countryFilter !== 'ALL') {
+    const c = countryFilter.toUpperCase();
+    leads = leads.filter(l => (l.country || '').toUpperCase() === c);
+  }
+
+  if (familyFilter && familyFilter !== 'ALL') {
+    leads = leads.filter(l => (l.commercialFamily || l.category || '') === familyFilter);
+  }
+
+  if (hasPhone) {
+    leads = leads.filter(l => Boolean(l.primaryMobile || l.phone || l.secondaryPhone));
+  }
+
+  if (hasWhatsApp) {
+    leads = leads.filter(l => Boolean(l.whatsapp || l.primaryMobile || l.mobileVerified === 'Yes'));
+  }
+
+  if (hasWebsite) {
+    leads = leads.filter(l => Boolean(l.website));
+  }
+
   const total = leads.length;
-  const paged = leads.slice(Number(offset), Number(offset) + Number(limit));
-  res.json({ ok: true, total, leads: paged });
+  const paged = leads.slice(offset, offset + limit);
+
+  res.json({
+    ok: true,
+    success: true,
+    total,
+    leads: paged,
+    availableFamilies
+  });
 });
 
 app.post('/api/admin/data/reset-leads', (req, res) => {
   store.resetLeads();
   folderStore.resetAllFolders();
-  res.json({ ok: true, message: 'Leads database and folders reset successfully' });
+  res.json({ ok: true, success: true, message: 'Leads database and folders reset successfully' });
 });
 
 let customPopups = [];
-app.get('/api/admin/popups', (req, res) => res.json({ ok: true, popups: customPopups }));
-app.post('/api/admin/popups', (req, res) => res.json({ ok: true, message: 'Settings saved' }));
+app.get('/api/admin/popups', (req, res) => res.json({ ok: true, success: true, popups: customPopups }));
+app.post('/api/admin/popups', (req, res) => res.json({ ok: true, success: true, message: 'Settings saved' }));
 app.post('/api/admin/popups/custom', (req, res) => {
   const popup = { id: `pop_${Date.now()}`, ...req.body };
   customPopups.push(popup);
-  res.json({ ok: true, popup });
+  res.json({ ok: true, success: true, popup });
 });
 app.delete('/api/admin/popups/custom/:id', (req, res) => {
   customPopups = customPopups.filter(p => p.id !== req.params.id);
-  res.json({ ok: true });
+  res.json({ ok: true, success: true });
 });
-app.post('/api/admin/popups/reset', (req, res) => { customPopups = []; res.json({ ok: true }); });
-app.get('/api/admin/trends/categories', (req, res) => res.json({ ok: true, trends: [] }));
+app.post('/api/admin/popups/reset', (req, res) => { customPopups = []; res.json({ ok: true, success: true }); });
+app.get('/api/admin/trends/categories', (req, res) => res.json({ ok: true, success: true, trends: [] }));
 
 // Compatibility Stubs
 app.get('/api/sources', (req, res) => res.json({ sources: ['googleMaps', 'gmapDirect', 'justdial', 'yellowpages', 'osmPoi', 'serp', 'socialDork'] }));

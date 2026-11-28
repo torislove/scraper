@@ -7,11 +7,15 @@ import BrandLogo from './BrandLogo';
 export default function AdminNavbar() {
   const [engineAlive, setEngineAlive] = useState(true);
 
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const masterUrl = import.meta.env.VITE_MASTER_URL || (isLocal ? 'http://localhost:5174/command' : 'https://master.scraper.co.in/command');
+  const clientUrl = import.meta.env.VITE_CLIENT_URL || (isLocal ? 'http://localhost:5173/command' : 'https://scraper.co.in/command');
+
   useEffect(() => {
     let alive = true;
     const check = async () => {
       try {
-        const res = await fetch('/api/health');
+        const res = await fetch('/api/admin/overview');
         if (alive) setEngineAlive(res.ok);
       } catch (e) {
         if (alive) setEngineAlive(false);
@@ -26,13 +30,10 @@ export default function AdminNavbar() {
   }, []);
 
   const navLinks = [
-    { to: '/', label: '01 Overview', end: true },
-    { to: '/customers', label: '02 Customers' },
-    { to: '/trending', label: '03 Trending' },
-    { to: '/data-vault', label: '04 Data Vault' },
-    { to: '/popups', label: '05 Popups' },
-    { to: '/countries', label: '06 11 Nations' },
-    { to: '/clients', label: '07 Clients' }
+    { to: '/', label: '01 Fleet Overview', end: true },
+    { to: '/data-vault', label: '02 Universal Data Vault' },
+    { to: '/countries', label: '03 11 Sovereign Nations' },
+    { to: '/clients', label: '04 Client Accounts' }
   ];
 
   return (
@@ -68,7 +69,7 @@ export default function AdminNavbar() {
                 fontSize: 11.5,
                 fontWeight: isActive ? 850 : 650,
                 color: isActive ? '#92400e' : '#475569',
-                padding: '5px 11px',
+                padding: '5px 12px',
                 borderRadius: 999,
                 whiteSpace: 'nowrap',
                 transition: 'color 0.16s ease'
@@ -127,7 +128,7 @@ export default function AdminNavbar() {
           </div>
 
           <a
-            href="http://localhost:5174/command"
+            href={masterUrl}
             target="_blank"
             rel="noreferrer"
             style={{
@@ -143,7 +144,7 @@ export default function AdminNavbar() {
               alignItems: 'center',
               gap: 5
             }}
-            title="Open Master Fleet Command (Port 5174)"
+            title={`Open Master Fleet Command (${masterUrl})`}
           >
             <Server size={11} color="#fbbf24" />
             <span>Master Fleet</span>
@@ -151,7 +152,7 @@ export default function AdminNavbar() {
           </a>
 
           <a
-            href="http://localhost:5173/command"
+            href={clientUrl}
             target="_blank"
             rel="noreferrer"
             className="admin-btn-gold"
@@ -165,7 +166,7 @@ export default function AdminNavbar() {
               alignItems: 'center',
               gap: 5
             }}
-            title="Open Client Cockpit (Port 5173)"
+            title={`Open Client Cockpit (${clientUrl})`}
           >
             <Laptop size={11} />
             <span>Client Cockpit</span>

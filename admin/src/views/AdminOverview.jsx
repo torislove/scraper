@@ -19,11 +19,15 @@ export default function AdminOverview() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const masterUrl = import.meta.env.VITE_MASTER_URL || (isLocal ? 'http://localhost:5174/command' : 'https://master.scraper.co.in/command');
+  const clientUrl = import.meta.env.VITE_CLIENT_URL || (isLocal ? 'http://localhost:5173/command' : 'https://scraper.co.in/command');
+
   const fetchOverview = async () => {
     try {
       const res = await fetch('/api/admin/overview');
       const json = await res.json();
-      if (json.success) setData(json);
+      if (json.success || json.ok) setData(json);
     } catch (e) {
       console.error('Failed to fetch admin overview', e);
     } finally {
@@ -193,7 +197,7 @@ export default function AdminOverview() {
           </div>
 
           <a
-            href="http://localhost:5174/command"
+            href={masterUrl}
             target="_blank"
             rel="noreferrer"
             className="admin-btn-gold"
@@ -209,7 +213,7 @@ export default function AdminOverview() {
               gap: 8
             }}
           >
-            <span>Launch Master Fleet Command (Port 5174)</span>
+            <span>Launch Master Fleet Command</span>
             <ExternalLink size={14} />
           </a>
         </div>
@@ -273,7 +277,7 @@ export default function AdminOverview() {
           </div>
 
           <a
-            href="http://localhost:5173/command"
+            href={clientUrl}
             target="_blank"
             rel="noreferrer"
             className="admin-btn-gold"
@@ -289,7 +293,7 @@ export default function AdminOverview() {
               gap: 8
             }}
           >
-            <span>Launch Client Cockpit (Port 5173)</span>
+            <span>Launch Client Cockpit</span>
             <ExternalLink size={14} />
           </a>
         </div>
