@@ -20,6 +20,8 @@ const citiesIe = require('./geo/cities_ie');
 const { resolveDynamicCity, getCachedCity } = require('./geo/dynamicZones');
 const { haversineKm } = require('./geo/osmPolygon');
 const { parseAddress, US_STATE_NAMES, AU_STATE_NAMES } = require('./services/addressParser');
+const { WORLD_COUNTRIES, ALL_COUNTRY_CODES, COUNTRY_CENTROIDS, getCountry } = require('./geo/worldCountries');
+const { findPlaceByName } = require('./geo/geonamesIndex');
 
 const KNOWN_CITIES = {
   ...citiesIn,
@@ -35,15 +37,7 @@ const KNOWN_CITIES = {
   ...citiesIe
 };
 
-const ACTIVE_MARKETS = ['IN', 'US', 'GB', 'AU', 'AE'];
-
-const COUNTRY_CENTROIDS = {
-  IN: { lat: 20.5937, lng: 78.9629 },
-  US: { lat: 37.0902, lng: -95.7129 },
-  GB: { lat: 55.3781, lng: -3.4360 },
-  AU: { lat: -25.2744, lng: 133.7751 },
-  AE: { lat: 23.4241, lng: 53.8478 }
-};
+const ACTIVE_MARKETS = ALL_COUNTRY_CODES;
 
 function resolveCityKey(rawLocation, countryCode = '') {
   if (!rawLocation) return null;
@@ -51,6 +45,7 @@ function resolveCityKey(rawLocation, countryCode = '') {
   if (!lower) return null;
   const ccFilter = countryCode ? String(countryCode).toUpperCase() : '';
 
+  // Tier 1: Curated Known City Packs
   for (const [key, conf] of Object.entries(KNOWN_CITIES)) {
     if (ccFilter && conf.country !== ccFilter) continue;
     const cityClean = conf.city.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -61,6 +56,34 @@ function resolveCityKey(rawLocation, countryCode = '') {
     const cityClean = conf.city.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (lower.includes(cityClean)) return key;
   }
+
+  // Tier 2: Offline GeoNames Global Index (matches towns, mandals, and municipalities worldwide)
+  const gnPlace = findPlaceByName(rawLocation, ccFilter || 'IN');
+  if (gnPlace) {
+    const gnKey = `gn_${gnPlace.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+    if (!KNOWN_CITIES[gnKey]) {
+      const radiusKm = gnPlace.pop > 100000 ? 12 : gnPlace.pop > 30000 ? 8 : 5;
+      const degPad = radiusKm / 111.0;
+      KNOWN_CITIES[gnKey] = {
+        city: gnPlace.name,
+        country: ccFilter || 'IN',
+        center: { lat: gnPlace.lat, lng: gnPlace.lng },
+        bounds: {
+          north: gnPlace.lat + degPad,
+          south: gnPlace.lat - degPad,
+          east: gnPlace.lng + degPad * 1.3,
+          west: gnPlace.lng - degPad * 1.3
+        },
+        radiusKm,
+        isGeoNames: true,
+        zones: [
+          { name: gnPlace.name, lat: gnPlace.lat, lng: gnPlace.lng, radiusKm, isCentral: true }
+        ]
+      };
+    }
+    return gnKey;
+  }
+
   return null;
 }
 

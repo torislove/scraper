@@ -79,6 +79,68 @@ function computeQualityScore(lead = {}) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+const UNIVERSAL_MISMATCH_RE = /\b(?:book\s*store|stationery|computer\s*(?:store|shop|repair)|electronics\s*store|cell\s*phone\s*store|sporting\s*goods|saw\s*mill|timber|seed\s*store|fertilizer\s*shop|shoe\s*store|clothing\s*store|apparel|supermarket|bakery|beauty\s*salon)\b/i;
+const STOP_QUERY_WORDS = new Set(['stores', 'store', 'shops', 'shop', 'dealers', 'dealer', 'suppliers', 'supplier', 'services', 'service', 'contractors', 'contractor', 'center', 'centre', 'companies', 'company', 'agency', 'agencies', 'in', 'at', 'near', 'around', 'the', 'and', 'for', 'best', 'top', 'all']);
+
+function computeRelevanceScore(lead = {}, queryContext = {}) {
+  const query = String(queryContext.query || lead.query || lead.searchCategory || '').trim().toLowerCase();
+  const targetCity = String(queryContext.city || lead.searchCity || lead.targetCity || '').trim().toLowerCase();
+  if (!query) return 100;
+
+  let score = 0;
+  const leadCat = String(lead.category || lead.matchedSubcategory || lead.subcategory || '').toLowerCase();
+  const leadName = String(lead.name || lead.title || '').toLowerCase();
+  const leadCity = String(lead.city || lead.locality || lead.address || '').toLowerCase();
+
+  const queryTokens = query
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 3 && !STOP_QUERY_WORDS.has(t));
+
+  const isNoiseCat = UNIVERSAL_MISMATCH_RE.test(leadCat);
+  const queryWantsNoise = UNIVERSAL_MISMATCH_RE.test(query);
+
+  let hasMismatchedCat = false;
+  if (isNoiseCat && !queryWantsNoise) {
+    hasMismatchedCat = true;
+  } else if (queryContext.rejectRe && queryContext.rejectRe instanceof RegExp && queryContext.rejectRe.test(leadCat)) {
+    hasMismatchedCat = true;
+  }
+
+  // 1. Category alignment (+45 or -50)
+  if (hasMismatchedCat) {
+    score -= 50;
+  } else if (leadCat) {
+    const catMatchesQuery = queryTokens.some((tok) => leadCat.includes(tok) || (tok.length >= 4 && leadCat.includes(tok.slice(0, 4))));
+    if (catMatchesQuery) {
+      score += 45;
+    } else if (lead.matchedSubcategory) {
+      score += 35;
+    } else {
+      score += 15;
+    }
+  }
+
+  // 2. Core query keyword in business name (+35)
+  const nameMatchesQuery = queryTokens.some((tok) => leadName.includes(tok) || (tok.length >= 4 && leadName.includes(tok.slice(0, 4))));
+  if (nameMatchesQuery) {
+    score += 35;
+  }
+
+  // 3. Within target city/geo boundary (+20)
+  if (targetCity) {
+    if (leadCity.includes(targetCity)) {
+      score += 20;
+    } else if (lead.lat && lead.lng) {
+      score += 15;
+    }
+  } else if (lead.city || (lead.lat && lead.lng)) {
+    score += 20;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
 function dedupeByCompanyDomain(leads = []) {
   const out = [];
   const byDom = new Map();
@@ -164,6 +226,12 @@ function applyUniversalFilters(leads = [], filters = {}) {
   if (Number.isFinite(maxRev) && maxRev > 0) list = list.filter((l) => Number(l.reviewsCount || 0) <= maxRev);
   const minQ = Number(f.minQualityScore ?? f.min_quality_score);
   if (Number.isFinite(minQ) && minQ > 0) list = list.filter((l) => computeQualityScore(l) >= minQ);
+  const minRel = Number(f.minRelevanceScore ?? f.min_relevance_score);
+  if (Number.isFinite(minRel) && minRel > 0) {
+    list = list.filter((l) => computeRelevanceScore(l, f) >= minRel);
+  } else if (f.filterRelevance !== false && (f.query || f.searchCategory)) {
+    list = list.filter((l) => computeRelevanceScore(l, f) >= 40);
+  }
   const minS = Number(f.minSourcesCount ?? f.min_sources_count);
   if (Number.isFinite(minS) && minS > 1) list = list.filter((l) => Number(l.sourceCount || (Array.isArray(l.sources) ? l.sources.length : 1)) >= minS);
 
@@ -179,6 +247,7 @@ module.exports = {
   trustRank,
   tokenSetRatio,
   computeQualityScore,
+  computeRelevanceScore,
   dedupeByCompanyDomain,
   applyUniversalFilters
 };

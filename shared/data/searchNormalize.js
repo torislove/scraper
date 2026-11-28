@@ -36,10 +36,13 @@ export const STATIC_WORD_TYPOS = {
   wholesle: 'wholesale', wholsalers: 'wholesalers', logstics: 'logistics', warehousng: 'warehousing',
   fitnes: 'fitness', photogrpher: 'photographers', photogrpaher: 'photographers',
   veterinry: 'veterinary', veternary: 'veterinary', vetinary: 'veterinary',
-  softwre: 'software companies', softwere: 'software companies', jewellry: 'jewellery', jwellery: 'jewellery', furinture: 'furniture'
+  softwre: 'software companies', softwere: 'software companies', jewellry: 'jewellery', jwellery: 'jewellery', furinture: 'furniture',
+  turmaric: 'turmeric', tumeric: 'turmeric', turmairc: 'turmeric', paspu: 'pasupu', mirchi: 'chilli',
+  chemcal: 'chemical', chemcals: 'chemicals', waterproffing: 'waterproofing', waterprofing: 'waterproofing'
 };
 
 export const CITY_ALIASES = {
+  teanli: 'Tenali', tenali: 'Tenali', chilakaluripet: 'Chilakaluripet', chilakaluripeta: 'Chilakaluripet', chlkpet: 'Chilakaluripet',
   hyderbad: 'Hyderabad', hydrabad: 'Hyderabad', hyderabd: 'Hyderabad', hyd: 'Hyderabad', secunderbad: 'Secunderabad',
   vijaywada: 'Vijayawada', vijayawad: 'Vijayawada', vijaywda: 'Vijayawada',
   visakapatnam: 'Visakhapatnam', vishakapatnam: 'Visakhapatnam', vizag: 'Visakhapatnam',
@@ -67,12 +70,14 @@ const CANONICAL_CATEGORIES = [
   'retail', 'supermarkets', 'electronics', 'jewellery', 'furniture', 'clothing',
   'software', 'digital marketing', 'logistics', 'packers and movers', 'warehousing',
   'fitness', 'gyms', 'yoga', 'events', 'wedding planners', 'photographers', 'catering',
-  'veterinary', 'pet clinics', 'physiotherapy', 'pest control', 'interior design', 'architects', 'solar'
+  'veterinary', 'pet clinics', 'physiotherapy', 'pest control', 'interior design', 'architects', 'solar',
+  'turmeric', 'spices', 'mills', 'flour mills', 'chilli', 'paint', 'waterproofing', 'chemicals'
 ];
 
 export const ALL_KNOWN_CITIES = Array.from(
   new Set(
     COUNTRIES.flatMap((c) => c.cities || []).concat([
+      'Tenali', 'Chilakaluripet', 'Bapatla', 'Narasaraopet', 'Ongole', 'Machilipatnam', 'Gudivada',
       'Texas', 'California', 'Florida', 'Illinois', 'Georgia', 'Washington', 'Arizona', 'Colorado', 'Massachusetts',
       'Andhra Pradesh', 'Telangana', 'Maharashtra', 'Karnataka', 'Tamil Nadu', 'Gujarat', 'Rajasthan', 'Kerala',
       'England', 'Scotland', 'Greater London', 'Greater Manchester', 'New South Wales', 'Victoria', 'Queensland',

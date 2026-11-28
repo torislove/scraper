@@ -4,8 +4,6 @@ const path = require('path');
 const meta = require('../../server/node_modules/libphonenumber-js/metadata.max.json');
 const display = new Intl.DisplayNames(['en'], { type: 'region' });
 
-// A small currency map for the countries people search most. Everything else
-// falls back to '' and the UI simply omits the currency chip.
 const CURRENCY = {
   IN: 'INR', US: 'USD', GB: 'GBP', CA: 'CAD', AU: 'AUD', AE: 'AED', SG: 'SGD',
   NZ: 'NZD', ZA: 'ZAR', IE: 'EUR', MY: 'MYR', SA: 'SAR', QA: 'QAR', KW: 'KWD',
@@ -20,76 +18,73 @@ const CURRENCY = {
   SK: 'EUR', SI: 'EUR', LT: 'EUR', LV: 'EUR', EE: 'EUR'
 };
 
+const CENTROIDS = {
+  IN: { lat: 20.5937, lng: 78.9629 }, US: { lat: 37.0902, lng: -95.7129 },
+  GB: { lat: 55.3781, lng: -3.4360 }, AU: { lat: -25.2744, lng: 133.7751 },
+  AE: { lat: 23.4241, lng: 53.8478 }, CA: { lat: 56.1304, lng: -106.3468 },
+  DE: { lat: 51.1657, lng: 10.4515 }, FR: { lat: 46.2276, lng: 2.2137 },
+  SG: { lat: 1.3521, lng: 103.8198 }, NZ: { lat: -40.9006, lng: 174.8860 },
+  IE: { lat: 53.1424, lng: -7.6921 }, ZA: { lat: -30.5595, lng: 22.9375 },
+  MY: { lat: 4.2105, lng: 101.9758 }, SA: { lat: 23.8859, lng: 45.0792 },
+  JP: { lat: 36.2048, lng: 138.2529 }, BR: { lat: -14.2350, lng: -51.9253 },
+  IT: { lat: 41.8719, lng: 12.5674 }, ES: { lat: 40.4637, lng: -3.7492 },
+  NL: { lat: 52.1326, lng: 5.2913 }, MX: { lat: 23.6345, lng: -102.5528 }
+};
+
 const rows = [];
+const countriesMap = {};
+const centroidsMap = {};
+
 for (const code of Object.keys(meta.countries).sort()) {
   if (code === '001') continue;
   const entry = meta.countries[code];
   const calling = Array.isArray(entry) ? entry[0] : '';
   const name = display.of(code) || code;
-  rows.push({
+  const centroid = CENTROIDS[code] || { lat: 0, lng: 0 };
+  const currency = CURRENCY[code] || 'USD';
+  const callingCode = calling ? String(calling) : '';
+
+  const item = {
     code,
     name,
-    currency: CURRENCY[code] || '',
-    phone: calling ? `+${calling}` : '',
-    topTerm: 'Region',
-    secondTerm: 'District',
-    localTerm: 'City',
-    subdivisionTerm: 'Districts'
-  });
+    nativeName: name,
+    centroid,
+    defaultLang: ['FR'].includes(code) ? 'fr' : ['DE'].includes(code) ? 'de' : ['ES'].includes(code) ? 'es' : ['IT'].includes(code) ? 'it' : ['AE', 'SA', 'EG'].includes(code) ? 'ar' : 'en',
+    callingCode,
+    currency
+  };
+
+  rows.push(item);
+  countriesMap[code] = item;
+  centroidsMap[code] = centroid;
 }
 
-const header = `/**
- * worldCountries.js — every ISO 3166-1 country, offline.
- *
- * The keyless engines (OpenStreetMap, public Maps results, web discovery) work
- * anywhere. This file makes the rest of the app agree: country detection, the
- * country picker and the coverage report all understand the full world, not
- * only the sixteen countries with hand-written profiles.
- *
- * Generated data; keep it in sync with libphonenumber's country list. The
- * curated profiles in countries.js still win for India and the other major
- * markets because they carry real region names.
+const geoDir = path.join(__dirname, '../../server/src/geo');
+fs.mkdirSync(geoDir, { recursive: true });
+
+const serverFile = `'use strict';
+
+/**
+ * worldCountries.js — authoritative 195+ ISO 3166-1 country registry.
  */
 
-const WORLD_COUNTRIES = ${JSON.stringify(rows, null, 2)};
+const WORLD_COUNTRIES = ${JSON.stringify(countriesMap, null, 2)};
 
-module.exports = { WORLD_COUNTRIES };
+const ALL_COUNTRY_CODES = Object.keys(WORLD_COUNTRIES);
+const COUNTRY_CENTROIDS = ${JSON.stringify(centroidsMap, null, 2)};
+
+function getCountry(code) {
+  return WORLD_COUNTRIES[String(code || '').toUpperCase()] || null;
+}
+
+module.exports = {
+  WORLD_COUNTRIES,
+  ALL_COUNTRY_CODES,
+  COUNTRY_CENTROIDS,
+  getCountry
+};
 `;
 
-fs.writeFileSync(path.join(__dirname, '../../server/src/services/localBrain/worldCountries.js'), header);
-
-// The dashboards need the same list. Ship only code + name + flag so the
-// bundle stays small; flags are derived from the ISO code (no image files).
-const frontend = `/**
- * countries.js — flag buttons for the dashboard. Generated from the same ISO
- * list as the server, so every country the backend can search is selectable.
- */
-
-export function flagOf(code) {
-  const value = String(code || '').toUpperCase();
-  if (!/^[A-Z]{2}$/.test(value)) return '🌍';
-  return String.fromCodePoint(...[...value].map(char => 127397 + char.charCodeAt(0)));
-}
-
-export const COUNTRIES = ${JSON.stringify(rows.map(r => ({ code: r.code, name: r.name, phone: r.phone, currency: r.currency })), null, 2)};
-
-export const POPULAR_CODES = ['IN', 'US', 'GB', 'CA', 'AU', 'AE', 'SG', 'NZ', 'ZA', 'IE', 'MY', 'SA'];
-
-export const POPULAR_COUNTRIES = POPULAR_CODES
-  .map(code => COUNTRIES.find(country => country.code === code))
-  .filter(Boolean);
-
-export function findCountry(code) {
-  const value = String(code || '').toUpperCase();
-  return COUNTRIES.find(country => country.code === value) || null;
-}
-`;
-
-for (const app of ['client', 'master']) {
-  const dir = path.join(__dirname, `../../${app}/src/v2/data`);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'countries.js'), frontend);
-}
-
-console.log(`wrote ${rows.length} countries (server + client + master)`);
+fs.writeFileSync(path.join(geoDir, 'worldCountries.js'), serverFile, 'utf8');
+console.log(`Generated server/src/geo/worldCountries.js with ${rows.length} countries.`);
 

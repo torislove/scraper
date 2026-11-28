@@ -11,7 +11,7 @@
  *   4. 'b2b'     -> Wholesalers, Stockists, Distributors, Manufacturers, Factories
  */
 
-const EXPLICIT_B2B_RE = /\b(wholesal\w*|distribut\w*|stockist\w*|manufactur\w*|factor(?:y|ies)|exporter\w*|importer\w*|supplier\w*|bulk\b|b2b|industrial\s*unit|gro[sß]handel|grossiste|usine)\b/i;
+const EXPLICIT_B2B_RE = /\b(wholesal\w*|distribut\w*|stockist\w*|manufactur\w*|factor(?:y|ies)|exporter\w*|importer\w*|supplier\w*|bulk\b|b2b|industrial\s*unit|gro[sß]handel|grossiste|usine|tooling|machin\w*|cnc|equipment|equipamento\w*|min(?:ing|eraç\w*)|processing\s*unit|cold\s*chain)\b/i;
 const EXPLICIT_STORE_RE = /\b(stores?|shops?|showrooms?|dealers?|retail\w*|merchants?|malls?|shopping\s*cent(?:er|re)s?|plazas?|supermarkets?|hypermarkets?|mart\b|emporium|outlets?|boutiques?|supply|supplies|warehaus|fachhandel|gesch[aä]ft|kaufhaus|einkaufszentrum|magasin|boutique|centre\s*commercial)\b/i;
 const EXPLICIT_SERVICE_RE = /\b(services?|plumbers?|plumbing|electricians?|contractors?|repairs?|maintenance|mechanics?|installers?|installation|cleaning|pest\s*control|doctors?|physicians?|dentists?|surgeons?|lawyers?|advocates?|attorneys?|solicitors?|accountants?|consultants?|agencies|agency|packers|movers|salons?|parlours?|spas?|architects?|therapists?|photographers?|catering|technicians?|engineers?|klempner|elektriker|plombier|[eé]lectricien)\b/i;
 const EXPLICIT_VENUE_RE = /\b(hospitals?|schools?|colleges?|universit(?:y|ies)|hotels?|resorts?|restaurants?|cafes?|diagnostics?|labs?|pathology|gyms?|fitness|banquet|klinik|krankenhaus|h[oô]pital|schule|[eé]cole)\b/i;
@@ -52,17 +52,48 @@ const PRODUCT_TO_STORE_REGISTRY = [
     }
   },
   {
-    key: 'building_hardware_products',
-    matchRe: /\b(ceramic\s*tiles?|vitrified\s*tiles?|tiles?|marble|granite|cement|steel\s*bars?|tmt\s*bars?|plywood|laminates?|veneer|paints?|asian\s*paints?|waterproofing\s*chemicals?|tools?|power\s*tools?|hardware)\b/i,
-    label: 'Hardware, Tiles, Plywood & Building Material Stores',
-    strictFilterRe: /(hardware|tile|ceramic|marble|granite|plywood|timber|laminate|paint|cement|steel|tool|building\s*material|store|shop|showroom|dealer)/i,
+    key: 'paint_waterproofing_chemicals',
+    matchRe: /\b(paints?|asian\s*paints?|berger\s*paints?|nerolac|dulux|waterproofing|waterproofing\s*chemicals?|construction\s*chemicals?|wall\s*putty|distemper|enamel|primer|coatings?|pidilite|dr\.?\s*fixit|fosroc|sika)\b/i,
+    label: 'Paint & Waterproofing Chemical Stores',
+    strictFilterRe: /(?:paint|coating|waterproof|chemi|distemper|enamel|primer|wall\s*putty|dr\.?\s*fixit|asian\s*paints?|berger|nerolac|dulux|pidilite|sika|fosroc|hardware\s*(?:&|and)\s*paint)/i,
+    rejectRe: /(?:book\s*(?:store|shop)|stationery|computer|laptop|mobile\s*phone|electronics|saw\s*mill|timber|seed\s*store|fertilizer|pesticide|pharmacy|chemist|dental|hospital|clinic|doctor|jewell?er|clothing|apparel|shoe\s*store|bakery|restaurant|hotel)/i,
     byCountry: {
-      IN: ['Hardware & Power Tool Stores', 'Ceramic Tiles, Marble & Granite Showrooms', 'Plywood, Timber & Laminate Dealers', 'Paint & Waterproofing Chemical Stores'],
-      US: ['Hardware & Tool Stores', 'Tile, Stone & Flooring Showrooms', 'Lumber & Building Supply Yards', 'Paint & Coating Retail Stores'],
-      GB: ['Builders Merchants & Hardware', 'Tile & Natural Stone Showrooms', 'Timber & Joinery Supplies', 'Paint & Decorating Centres'],
-      AU: ['Hardware & Timber Yards', 'Tile & Stone Showrooms', 'Power Tool & Trade Stores', 'Paint & Waterproofing Outlets'],
-      AE: ['Building Materials & Hardware Trading', 'Marble, Granite & Tile Showrooms', 'Paint & Waterproofing Stores', 'Power Tools & Fastener Shops'],
-      default: ['Hardware & Power Tool Stores', 'Ceramic Tiles, Marble & Granite Showrooms', 'Plywood, Timber & Laminate Dealers', 'Paint & Building Material Stores']
+      IN: ['Paint Stores & Asian Paints Dealers', 'Waterproofing Chemical Suppliers', 'Construction Chemical & Wall Putty Dealers', 'Berger Paints & Nerolac Showrooms'],
+      US: ['Paint & Coating Stores', 'Waterproofing Supply Centers', 'Architectural Coatings & Primers', 'Commercial Paint Centers'],
+      GB: ['Paint & Decorating Centres', 'Waterproofing Specialists', 'Trade Paint Merchants', 'Coating Suppliers'],
+      AU: ['Paint & Trade Centres', 'Waterproofing Supplies', 'Protective Coatings Showrooms'],
+      AE: ['Paint & Waterproofing Trading Stores', 'Protective Coatings & Construction Chemicals', 'Paint Galleries'],
+      default: ['Paint Stores & Dealers', 'Waterproofing Chemical Suppliers', 'Construction Chemical Showrooms']
+    }
+  },
+  {
+    key: 'tiles_marble_granite',
+    matchRe: /\b(ceramic\s*tiles?|vitrified\s*tiles?|tiles?|marble|granite|natural\s*stone|quartz|slabs?)\b/i,
+    label: 'Ceramic Tiles, Marble & Granite Showrooms',
+    strictFilterRe: /(tile|ceramic|marble|granite|stone|quartz|flooring|slab|showroom|dealer|merchant)/i,
+    rejectRe: /(saw\s*mill|book\s*store|computer|laptop|mobile|pharmacy|hospital|clinic|clothing|shoe)/i,
+    byCountry: {
+      IN: ['Ceramic Tiles, Marble & Granite Showrooms', 'Vitrified Tile Galleries', 'Natural Stone & Granite Slabs'],
+      US: ['Tile & Stone Showrooms', 'Granite & Marble Fabricators', 'Ceramic Tile Supply'],
+      GB: ['Tile & Natural Stone Showrooms', 'Granite & Quartz Worktops', 'Porcelain Tile Specialists'],
+      AU: ['Tile & Stone Galleries', 'Marble & Granite Showrooms', 'Paver & Tile Stores'],
+      AE: ['Marble & Granite Trading Galleries', 'Porcelain & Ceramic Tile Showrooms'],
+      default: ['Ceramic Tiles, Marble & Granite Showrooms', 'Tile & Stone Galleries']
+    }
+  },
+  {
+    key: 'plywood_laminates_hardware',
+    matchRe: /\b(cement|steel\s*bars?|tmt\s*bars?|plywood|laminates?|veneer|tools?|power\s*tools?|hardware)\b/i,
+    label: 'Hardware, Plywood & Building Material Stores',
+    strictFilterRe: /(hardware|plywood|laminate|timber|cement|steel|tool|power\s*tool|building\s*material|store|shop|showroom|dealer)/i,
+    rejectRe: /(book\s*store|computer|laptop|mobile|pharmacy|hospital|clinic|clothing|shoe)/i,
+    byCountry: {
+      IN: ['Hardware & Power Tool Stores', 'Plywood, Timber & Laminate Dealers', 'Cement & TMT Steel Stockists'],
+      US: ['Hardware & Tool Stores', 'Lumber & Building Supply Yards', 'Fastener & Power Tool Houses'],
+      GB: ['Builders Merchants & Hardware', 'Timber & Joinery Supplies', 'Fixings & Fastener Suppliers'],
+      AU: ['Hardware & Timber Yards', 'Power Tool & Trade Stores', 'Fastener & Tool Centres'],
+      AE: ['Building Materials & Hardware Trading', 'Plywood & Timber Suppliers', 'Fastener & Power Tool Shops'],
+      default: ['Hardware & Power Tool Stores', 'Plywood, Timber & Laminate Dealers']
     }
   },
   {
@@ -157,8 +188,8 @@ const NON_ENGLISH_STORE_RE = /(దుకాణం|సరఫరా|స్టో�
 
 const GENERIC_NON_SERVICE_CAT_TOKEN_RE = /\b(suppliers?|dealers?|distributors?|wholesalers?|stockists?|manufacturers?|traders?|stores?|showrooms?|malls?|supermarkets?|hypermarkets?|emporiums?|outlets?|boutiques?|marts?)\b/i;
 const GENERIC_SHOP_RE = /\bshops?\b/i;
-const ALLOWED_SHOP_SERVICE_CAT_RE = /\b(barber\s*shop|auto\s*(?:repair|body)\s*shop|car\s*(?:repair|body)\s*shop|motorcycle\s*repair\s*shop)\b/i;
-const SERVICE_EXEMPT_KEYS = new Set(['automotive', 'salons']);
+const ALLOWED_SHOP_SERVICE_CAT_RE = /\b(barber\s*shop|auto\s*(?:repair|body)\s*shop|car\s*(?:repair|body)\s*shop|motorcycle\s*repair\s*shop|machine\s*shop|fabrication\s*shop|welding\s*shop|print\s*shop|repair\s*shop|mechanic\s*shop)\b/i;
+const SERVICE_EXEMPT_KEYS = new Set(['automotive', 'salons', 'solar_energy', 'contractors', 'manufacturing', 'wholesale', 'it_software']);
 const PLUMBING_NON_SERVICE_NAME_RE = /\b(sanitary\s*(?:ware|mart|store|shop|showroom)|sanitations?|pvc\s*products|pipe\s*fittings?\s*store|water\s*tank\s*(?:dealer|supply|supplier)|bathroom\s*(?:supply|fittings?|gallery)|tiles?\s*(?:&|and)\s*sanitary|hardware\s*(?:&|and)\s*sanitary|paints?\s*(?:&|and)\s*(?:pipe|sanitary|hardware)|colourideas|plymart|brand\s*store|tools\s*on\s*rent)\b/i;
 
 function getLocalizedStoreSubs(entry, countryCode = 'IN') {

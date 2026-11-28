@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { isUnsafeLeadOrUrl, isValidBusinessEmail, isSharedDirectoryHost, getRegistrableDomain, sanitizeSocialUrl } = require('./taxonomy/safetyFilter');
 const { haversineKm } = require('./geo/osmPolygon');
-const { trustRank, tokenSetRatio, computeQualityScore, dedupeByCompanyDomain, applyUniversalFilters } = require('./services/goldenMerger');
+const { trustRank, tokenSetRatio, computeQualityScore, computeRelevanceScore, dedupeByCompanyDomain, applyUniversalFilters } = require('./services/goldenMerger');
 const { parseAddress } = require('./services/addressParser');
 
 const SANDBOX_SLUG = String(process.env.SANDBOX_USER_ID || '').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -101,6 +101,9 @@ function indexLeadKeys(lead) {
   }
   indexGeoBucket(lead);
   lead.qualityScore = computeQualityScore(lead);
+  if (lead.query || lead.searchCategory) {
+    lead.relevanceScore = computeRelevanceScore(lead);
+  }
 }
 
 function findExistingLead(lead) {
@@ -433,6 +436,12 @@ function saveVendor(arg1, arg2, arg3) {
   if (!lead || (!lead.name && !lead.title) || isUnsafeLeadOrUrl(lead)) return null;
   sanitizeStoredLead(lead);
 
+  if (lead.query || lead.searchCategory) {
+    const relScore = computeRelevanceScore(lead);
+    lead.relevanceScore = relScore;
+    if (relScore < 40) return null;
+  }
+
   if (sessionId) lead.sessionId = sessionId;
   if (!lead.id) lead.id = `vnd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
@@ -518,7 +527,7 @@ function buildCsvForLeads(leads = []) {
   const headers = [
     'Name', 'Category', 'Subcategory', 'Ward', 'Phone', 'Mobile', 'Mobile Verified', 'WhatsApp', 'Email', 'Email Verified', 'Website',
     'Address', 'Area', 'City', 'State', 'Postal Code', 'Country',
-    'Rating', 'ReviewsCount', 'Quality Score', 'Source Count', 'Sources Found',
+    'Rating', 'ReviewsCount', 'Quality Score', 'Relevance Score', 'Source Count', 'Sources Found',
     'Instagram', 'Facebook', 'LinkedIn', 'YouTube', 'MapsLink', 'Source'
   ];
   const rows = [headers.join(',')];
@@ -546,6 +555,7 @@ function buildCsvForLeads(leads = []) {
       escape(l.rating),
       escape(l.reviewsCount),
       escape(l.qualityScore ?? computeQualityScore(l)),
+      escape(l.relevanceScore ?? computeRelevanceScore(l)),
       escape(l.sourceCount || sourcesList.length),
       escape(sourcesList.join(', ')),
       escape(l.instagram),
@@ -563,7 +573,8 @@ function buildCsvForLeads(leads = []) {
 
 function exportCsv(sessionId = null, filters = {}) {
   const base = sessionId ? getVendorsBySession(sessionId) : Array.from(leadsById.values());
-  const filtered = Object.keys(filters || {}).length ? applyUniversalFilters(base, filters) : base;
+  const effectiveFilters = { filterRelevance: true, ...filters };
+  const filtered = Object.keys(effectiveFilters || {}).length ? applyUniversalFilters(base, effectiveFilters) : base;
   return buildCsvForLeads(filtered);
 }
 

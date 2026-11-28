@@ -11,10 +11,11 @@
 
 const { resolveUmbrella, UMBRELLA_REGISTRY } = require('./umbrellas');
 const { SPECIALIST_NICHES } = require('./specialists');
+const { resolveCommodity } = require('./commodities');
 const { detectIntentAndProduct, isServiceStoreMismatch, resolveIntentForUmbrellaKey, shouldRejectByCrossDomain } = require('./intentDifferentiator');
 const { isUnsafeLeadOrUrl } = require('./safetyFilter');
 
-const UNIVERSAL_NOISE_CATEGORY_RE = /\b(furniture\s*(?:maker|manufacturer|store|shop)|supermarket|grocery\s*store|kirana|atm\b|petrol\s*pump|gas\s*station|temple|church|mosque|bus\s*stop|auto\s*stand|metro\s*station|railway\s*station|jewelry\s*store|jeweller|clothing\s*store|apparel|shoe\s*store|hardware\s*(?:store|shop)|toy\s*store|canteen|cafeteria|apartment\s*building|housing\s*society|residential\s*society|training\s*cent(?:er|re)|corporate\s*office|publisher|warehouse|paint\s*store|tile\s*store|mirror\s*shop|electronics\s*store|home\s*goods\s*store|building\s*materials?\s*store|electric\s*motor\s*store|electrical\s*(?:supply\s*)?(?:store|shop)|public\s*bathroom|public\s*toilet|restroom)\b/i;
+const UNIVERSAL_NOISE_CATEGORY_RE = /\b(furniture\s*(?:maker|manufacturer|store|shop)|supermarket|grocery\s*store|kirana|atm\b|petrol\s*pump|gas\s*station|temple|church|mosque|bus\s*stop|auto\s*stand|metro\s*station|railway\s*station|jewelry\s*store|jeweller|clothing\s*store|apparel|shoe\s*store|hardware\s*(?:store|shop)|toy\s*store|canteen|cafeteria|apartment\s*building|housing\s*society|residential\s*society|training\s*cent(?:er|re)|corporate\s*office|publisher|warehouse|paint\s*store|tile\s*store|mirror\s*shop|electronics\s*store|home\s*goods\s*store|building\s*materials?\s*store|electric\s*motor\s*store|electrical\s*(?:supply\s*)?(?:store|shop)|public\s*bathroom|public\s*toilet|restroom|book\s*(?:store|shop)|stationery|sporting\s*goods|seed\s*(?:store|shop)|agricultural|auto\s*parts|car\s*wash|saw\s*mill|timber|computer\s*(?:store|shop)|mobile\s*phone\s*shop|appliance\s*store|bakery|salon|beauty\s*parlou?r)\b/i;
 const PRIMARY_STRUCTURED_SOURCES = new Set(['gosom_google_maps_fast', 'gmap_direct_rpc', 'justdial_turbo', 'justdial_tls', 'yellowpages_tls', 'openstreetmap_poi']);
 const CONTAINER_CATEGORY_RE = /^(?:hospital|private\s*hospital|medical\s*cent(?:er|re)|medical\s*clinic|clinic|clinics|doctor|doctors|polyclinic|healthcare|health\s*cent(?:er|re))$/i;
 
@@ -24,7 +25,21 @@ const CONTAINER_CATEGORY_RE = /^(?:hospital|private\s*hospital|medical\s*cent(?:
  *   (e.g., Srikara Hospitals or Germanten Hospitals under Orthopedic Hospitals).
  * - Rejects landmark-only empty pins, explicit incompatible specialties (rejectRe), and unrelated public/retail POIs.
  */
-function passesUniversalPurityGate(lead, specificity) {
+function passesUniversalPurityGate(leadOrName, specificityOrCategory, ...rest) {
+  let lead = leadOrName;
+  let specificity = specificityOrCategory;
+
+  if (typeof leadOrName === 'string') {
+    lead = { name: leadOrName, category: specificityOrCategory };
+    specificity = {
+      strictFilterRe: rest[0],
+      rejectRe: rest[1],
+      intentType: rest[2],
+      isProductQuery: rest[3],
+      label: rest[4]
+    };
+  }
+
   if (!lead || !lead.name || isUnsafeLeadOrUrl(lead)) return false;
   const rawName = String(lead.name).trim();
   const rawCat = String(lead.category || '').trim();
@@ -36,10 +51,27 @@ function passesUniversalPurityGate(lead, specificity) {
   if (shouldRejectByCrossDomain(lead, nameWithoutLandmark, specificity)) return false;
   if (isServiceStoreMismatch(lead, specificity)) return false;
 
+  const purityText = `${nameWithoutLandmark} ${rawCat}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Strict domain reject rule: if specificity defines rejectRe, block immediately on match
+  if (specificity?.rejectRe && specificity.rejectRe.test(purityText)) {
+    return false;
+  }
+
+  // Universal Noise Category Filter
   if (rawCat && UNIVERSAL_NOISE_CATEGORY_RE.test(rawCat)) {
     const queryLower = String(specificity?.label || lead.query || '').toLowerCase();
     const catMatchedSearch = specificity?.strictFilterRe ? specificity.strictFilterRe.test(rawCat) : rawCat.toLowerCase().includes(queryLower);
-    if (!catMatchedSearch) return false;
+    if (!catMatchedSearch) {
+      const nameMatchedSearch = specificity?.strictFilterRe && specificity.strictFilterRe.test(nameWithoutLandmark);
+      if (!nameMatchedSearch) return false;
+    }
+  }
+
+  // Category-First Veto: explicit cross-sector Google Maps category mismatch with no query domain tokens in name
+  const isExplicitMismatchedCategory = /\b(book\s*store|stationery|computer\s*(?:store|shop)|electronics\s*store|sporting\s*goods|saw\s*mill|seed\s*store|clothing|apparel|shoe\s*store|grocery|supermarket)\b/i.test(rawCat);
+  if (isExplicitMismatchedCategory && specificity?.strictFilterRe && !specificity.strictFilterRe.test(nameWithoutLandmark)) {
+    return false;
   }
 
   // Drop bare empty locality pins with no category and no phone (e.g. "Purani Haveli")
@@ -71,7 +103,6 @@ function passesUniversalPurityGate(lead, specificity) {
   }
 
   // Never include echoed matchedSubcategory here; match strictly against authentic business name + category
-  const purityText = `${nameWithoutLandmark} ${rawCat}`.toLowerCase();
   if (specificity?.strictFilterRe && !specificity.strictFilterRe.test(purityText)) return false;
 
   return true;
@@ -448,52 +479,99 @@ function classifyQuery(query, countryCode = 'IN') {
     }
   }
 
-  // Multi-word & compound niche fallback: split `&` / `/` / `and` as OR clauses; match any core stem on single compound clauses safely
+  // 4. Check Pan-India & Global Commodity Trade Entities (Turmeric, Chilli, Cotton, Rice, Steel, etc.)
+  const commodity = resolveCommodity(lower);
+  if (commodity) {
+    return {
+      key: `commodity_${commodity.key}`,
+      isGeneric: false,
+      isParticular: true,
+      intentType: 'b2b',
+      businessModelLabel: 'Commodity Mandi & Mill Processing Unit',
+      isProductQuery: false,
+      mode: 'laser_domain_purity',
+      label: commodity.label,
+      categoryFamily: 'agro_commodity',
+      countryCode: code,
+      strictFilterRe: new RegExp(`(?:${commodity.key}|mill|processing|trader|wholesal|mandi|apmc|agro)`, 'i'),
+      rejectRe: /\b(book\s*store|computer|laptop|mobile|shoe|clothing|hospital|clinic|doctor|dentist|salon)\b/i,
+      subvectors: commodity.subvectors
+    };
+  }
+
+  // Multi-word & compound niche fallback: split `&` / `/` / `and` as OR clauses; match any core domain noun cleanly
   const clauses = lower
     .split(/\s*(?:&|\/|\band\b|,)\s*/i)
     .map((c) => c.trim())
     .filter(Boolean);
 
-  const clausePatterns = [];
-  const allStems = [];
+  const domainTokens = [];
+  const intentWords = [];
+  const ENTITY_TERMS = /^(near|with|best|top|service|services|center|centre|company|companies|care|clinic|clinics|hospital|hospitals|store|stores|shop|shops|dealer|dealers|supplier|suppliers|merchant|merchants|distributor|distributors|contractor|contractors|wholesale|wholesaler|wholesalers)$/i;
+
   for (const clause of clauses) {
-    const words = clause
-      .split(/\s+/)
-      .map((w) => w.replace(/[^a-z0-9]/g, ''))
-      .filter((w) => w.length >= 4 && !/^(near|with|best|top|service|services|center|centre|company|companies|care|clinic|clinics|hospital|hospitals|store|stores|shop|shops)$/.test(w))
-      .map((w) => w.slice(0, 5).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const fallbackWords = words.length ? words : clause.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, '')).filter((w) => w.length >= 4).slice(0, 1).map((w) => w.slice(0, 5).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    if (fallbackWords.length === 1) {
-      clausePatterns.push(fallbackWords[0]);
-      allStems.push(fallbackWords[0]);
-    } else if (fallbackWords.length >= 2) {
-      clausePatterns.push(fallbackWords.map((s) => `(?=.*${s})`).join(''));
-      allStems.push(...fallbackWords);
+    const normalizedClause = clause.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const rawWords = normalizedClause.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, '')).filter(Boolean);
+    for (const w of rawWords) {
+      if (w.length < 3) continue;
+      if (ENTITY_TERMS.test(w)) {
+        intentWords.push(w);
+      } else {
+        domainTokens.push(w);
+      }
     }
   }
 
-  let customFilter = null;
-  if (clausePatterns.length === 1) {
-    customFilter = new RegExp(clausePatterns[0], 'i');
-  } else if (clausePatterns.length > 1) {
-    // Compound "A & B" -> match ANY clause cleanly (never force A AND B simultaneously)
-    customFilter = new RegExp(clausePatterns.map((p) => `(?:${p})`).join('|'), 'i');
+  // Deduplicate domain tokens and form clean search stems (min length 3, strip trailing suffixes)
+  const uniqueStems = [];
+  for (const w of Array.from(new Set(domainTokens))) {
+    const stripped = w.replace(/(?:ing|ers?|ies|ed|s)$/i, '');
+    const baseStem = (stripped.length >= 3 ? stripped : w).slice(0, 6).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    uniqueStems.push(baseStem);
+    if (w.startsWith('semiconductor')) uniqueStems.push('semi');
+  }
+  const stems = uniqueStems.length > 0 ? uniqueStems : ['commercial'];
+
+  // Build OR-based filter: matches ANY valid domain noun (never force simultaneous AND-lookaheads on multiple domains)
+  const customFilter = new RegExp(stems.map((s) => `(?:${s})`).join('|'), 'i');
+
+  // Sector-aware reject regex: if chemical/paint/construction, strictly block book stores, electronics, saw mills, seeds
+  let sectorRejectRe = null;
+  const isChemicalPaintQuery = /(?:paint|waterproof|chemi|coat|hardware|tile|marble|granite|cement|steel)/i.test(lower);
+  if (isChemicalPaintQuery) {
+    sectorRejectRe = /\b(book\s*(?:store|shop)|stationery|computer|laptop|mobile\s*phone|electronics\s*store|saw\s*mill|timber|seed\s*store|fertilizer|pesticide|pharmacy|chemist|dental|hospital|clinic|doctor|jewell?er|clothing|apparel|shoe\s*store|bakery|restaurant|hotel)\b/i;
   }
 
+  // Generate 3-5 clean, authentic subvectors dynamically
+  const isStoreIntent = intent.intentType === 'store' || /store|shop|dealer|showroom|supplier/i.test(lower);
+  const headTerm = isStoreIntent ? 'Stores & Dealers' : intent.intentType === 'service' ? 'Services & Contractors' : 'Enterprises';
+  const dynamicSubvectors = [];
+  for (const clause of clauses) {
+    const cleanClause = clause.replace(ENTITY_TERMS, '').trim();
+    if (cleanClause.length >= 3) {
+      const capClause = cleanClause.charAt(0).toUpperCase() + cleanClause.slice(1);
+      dynamicSubvectors.push(`${capClause} ${headTerm}`);
+    }
+  }
+  if (isChemicalPaintQuery) {
+    dynamicSubvectors.push('Paint Stores & Dealers', 'Waterproofing Chemical Suppliers', 'Construction Chemical Dealers');
+  }
+  const cleanSubvectors = Array.from(new Set(dynamicSubvectors)).slice(0, 5);
+
   return {
-    key: `custom_${allStems.slice(0, 3).join('_') || 'query'}`,
+    key: `custom_${stems.slice(0, 3).join('_')}`,
     isGeneric: false,
-    isParticular: clausePatterns.length > 0,
+    isParticular: true,
     intentType: intent.intentType,
     businessModelLabel: intent.businessModelLabel,
     isProductQuery: intent.isProductQuery,
-    mode: clausePatterns.length > 0 ? 'direct_niche' : 'direct_query',
+    mode: 'direct_niche',
     label: clean,
-    categoryFamily: intent.intentType === 'store' ? 'retail_store' : 'custom',
+    categoryFamily: isChemicalPaintQuery ? 'construction_chemicals' : intent.intentType === 'store' ? 'retail_store' : 'custom',
     countryCode: code,
     strictFilterRe: customFilter,
-    rejectRe: null,
-    subvectors: intent.intentType === 'store' && clean ? [`${clean} Stores`, `${clean} Showrooms`, `${clean} Dealers`] : []
+    rejectRe: sectorRejectRe,
+    subvectors: cleanSubvectors
   };
 }
 

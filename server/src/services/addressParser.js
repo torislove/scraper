@@ -169,6 +169,16 @@ function parseAddress(rawAddress = '', countryCode = 'IN', fallbackCity = '') {
     return out;
   }
 
+  // Generic postal code & city extraction for any of the 195+ countries
+  if (!out.postalCode) {
+    const pcMatch = addr.match(/\b([A-Z\d]{2,4}[-\s]?[A-Z\d]{2,4})\b/i) || addr.match(/\b(\d{4,6})\b/);
+    if (pcMatch) out.postalCode = pcMatch[1];
+  }
+  if (!out.city && parts.length >= 2) {
+    out.city = parts[parts.length - 1].replace(/^[,\s-]+|[,\s-]+$/g, '');
+    out.area = parts[parts.length - 2].replace(/^[,\s-]+|[,\s-]+$/g, '');
+  }
+
   if (!out.city && fallbackCity) out.city = fallbackCity;
   return out;
 }

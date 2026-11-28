@@ -157,7 +157,40 @@ async function queryNearbyPlaces(countryCode, centerLat, centerLng, radiusKm = 1
   return { wards, otherTowns };
 }
 
+function findPlaceByName(placeName, countryCode = 'IN') {
+  if (!placeName) return null;
+  const code = String(countryCode || 'IN').toUpperCase();
+  const rows = loadCachedCountry(code);
+  if (!rows || !rows.length) return null;
+
+  const target = String(placeName).trim().toLowerCase();
+  const targetClean = target.replace(/[^a-z0-9]/g, '');
+  if (!targetClean) return null;
+
+  // 1. Exact match
+  for (const r of rows) {
+    const nameClean = r[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (nameClean === targetClean) {
+      return { name: r[0], lat: r[1], lng: r[2], fcode: r[3], pop: r[4] };
+    }
+  }
+
+  // 2. Starts with / contains match (prefer higher population or ADM)
+  let best = null;
+  for (const r of rows) {
+    const nameLower = r[0].toLowerCase();
+    if (nameLower.startsWith(target) || nameLower.includes(target)) {
+      if (!best || (r[4] || 0) > (best.pop || 0)) {
+        best = { name: r[0], lat: r[1], lng: r[2], fcode: r[3], pop: r[4] };
+      }
+    }
+  }
+
+  return best;
+}
+
 module.exports = {
   buildCountryIndex,
-  queryNearbyPlaces
+  queryNearbyPlaces,
+  findPlaceByName
 };

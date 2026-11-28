@@ -25,13 +25,29 @@ const sgTaxonomy = require('./international/sg');
 const nzTaxonomy = require('./international/nz');
 const ieTaxonomy = require('./international/ie');
 
+const globalTaxonomy = require('./international/global');
+const { ALL_COUNTRY_CODES } = require('../geo/worldCountries');
+
 const COUNTRY_TAXONOMIES = {
   IN: inTaxonomy,
   US: usTaxonomy,
   GB: gbTaxonomy,
   AU: auTaxonomy,
-  AE: aeTaxonomy
+  CA: caTaxonomy,
+  DE: deTaxonomy,
+  FR: frTaxonomy,
+  AE: aeTaxonomy,
+  SG: sgTaxonomy,
+  NZ: nzTaxonomy,
+  IE: ieTaxonomy
 };
+
+function getTaxonomyForCountry(code = 'IN') {
+  const norm = String(code || 'IN').toUpperCase();
+  if (COUNTRY_TAXONOMIES[norm]) return COUNTRY_TAXONOMIES[norm];
+  if (globalTaxonomy[norm]) return globalTaxonomy[norm];
+  return usTaxonomy;
+}
 
 /**
  * Returns localized subvectors for any search query and country code.

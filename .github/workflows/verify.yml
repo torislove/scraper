@@ -56,7 +56,9 @@ jobs:
           cache-dependency-path: master/package-lock.json
 
       - name: Install Master dependencies
-        run: npm install --prefix master --no-audit --no-fund
+        run: |
+          npm install --prefix client --no-audit --no-fund
+          npm install --prefix master --no-audit --no-fund
 
       - name: Master ESLint check
         working-directory: master
@@ -161,6 +163,9 @@ jobs:
           }
           console.log('All ' + all.length + ' server modules passed syntax check cleanly.');
           "
+
+      - name: Run Precision Benchmark & Cross-Sector Leakage Verification
+        run: node scripts/verify/precision-benchmark.test.cjs
 
       - name: Optional Desktop syntax check
         run: |

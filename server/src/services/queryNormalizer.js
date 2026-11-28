@@ -34,7 +34,9 @@ const WORD_TYPOS = {
   wholesle: 'wholesale', logstics: 'logistics', warehousng: 'warehousing',
   fitnes: 'fitness', photogrpher: 'photographers', photogrpaher: 'photographers',
   veterinry: 'veterinary', veternary: 'veterinary', vetinary: 'veterinary',
-  softwre: 'software companies', jewellry: 'jewellery', jwellery: 'jewellery', furinture: 'furniture'
+  softwre: 'software companies', jewellry: 'jewellery', jwellery: 'jewellery', furinture: 'furniture',
+  turmaric: 'turmeric', tumeric: 'turmeric', turmairc: 'turmeric', paspu: 'pasupu', mirchi: 'chilli',
+  chemcal: 'chemical', chemcals: 'chemicals', waterproffing: 'waterproofing', waterprofing: 'waterproofing'
 };
 
 const CITY_ALIASES = {
@@ -65,7 +67,9 @@ const CANONICAL_CATEGORIES = [
   'retail', 'supermarkets', 'electronics', 'jewellery', 'furniture', 'clothing',
   'software', 'digital marketing', 'logistics', 'packers and movers', 'warehousing',
   'fitness', 'gyms', 'yoga', 'events', 'wedding planners', 'photographers', 'catering',
-  'veterinary', 'pet clinics', 'physiotherapy', 'pest control', 'interior design', 'architects', 'solar'
+  'veterinary', 'pet clinics', 'physiotherapy', 'pest control', 'interior design', 'architects', 'solar',
+  'tooling', 'tools', 'machining', 'equipment', 'fabrication', 'welding', 'cnc', 'mining', 'semiconductor',
+  'inverter', 'chemicals', 'waterproofing', 'paint', 'turmeric', 'spices', 'mills'
 ];
 
 const KNOWN_CITY_NAMES = Array.from(
@@ -111,15 +115,23 @@ function fuzzyMatchWord(token, candidates) {
   const clean = token.toLowerCase().replace(/[^a-z]/g, '');
   if (clean.length < 4) return null;
   if (candidates.some((c) => c.toLowerCase() === clean)) return null;
-  const maxDist = clean.length >= 7 ? 2 : 1;
+  const maxDist = clean.length >= 6 ? 2 : 1;
   let best = null;
-  let bestDist = Infinity;
+  let bestScore = Infinity;
   for (const cand of candidates) {
     if (cand.includes(' ') || Math.abs(cand.length - clean.length) > maxDist) continue;
-    const d = damerauLevenshtein(clean, cand);
-    if (d <= maxDist && d < bestDist) {
-      bestDist = d;
-      best = cand;
+    const candLow = cand.toLowerCase();
+    const d = damerauLevenshtein(clean, candLow);
+    const sameFirst = clean[0] === candLow[0] ? 0 : 1;
+    let prefixLen = 0;
+    while (prefixLen < clean.length && prefixLen < candLow.length && clean[prefixLen] === candLow[prefixLen]) prefixLen++;
+    const effectiveMax = clean.length >= 5 && prefixLen >= 2 ? 2 : maxDist;
+    if (d <= effectiveMax && (sameFirst === 0 || d === 1)) {
+      const score = d * 10 + sameFirst * 3 - prefixLen;
+      if (score < bestScore) {
+        bestScore = score;
+        best = cand;
+      }
     }
   }
   return best;
@@ -169,6 +181,17 @@ function normalizeScrapeIntent({ query = '', location = '', country = 'IN' } = {
     if (m) {
       qRaw = m[1].trim();
       locRaw = m[2].trim();
+    } else {
+      const parts = qRaw.split(/\s+/);
+      const lastWord = parts[parts.length - 1];
+      const twoWords = parts.length >= 2 ? parts.slice(-2).join(' ') : '';
+      if (parts.length >= 3 && (CITY_ALIASES[twoWords.toLowerCase().replace(/\s+/g, '')] || KNOWN_CITY_NAMES.some((c) => c.toLowerCase() === twoWords.toLowerCase()))) {
+        qRaw = parts.slice(0, -2).join(' ');
+        locRaw = twoWords;
+      } else if (parts.length >= 2 && (CITY_ALIASES[lastWord.toLowerCase().replace(/\s+/g, '')] || KNOWN_CITY_NAMES.some((c) => c.toLowerCase() === lastWord.toLowerCase()))) {
+        qRaw = parts.slice(0, -1).join(' ');
+        locRaw = lastWord;
+      }
     }
   }
 
