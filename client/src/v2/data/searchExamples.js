@@ -245,6 +245,30 @@ export const SEARCH_EXAMPLES = {
       'Photographers in Hamburg',
       'Cleaning companies in Stuttgart'
     ]
+  },
+
+  FR: {
+    label: 'France',
+    adminPath: 'Régions → Départements → Communes & Arrondissements',
+    units: ['arrondissement', 'commune', 'département', 'région'],
+    cities: [
+      'Paris', '1er Arrondissement Paris', 'Le Marais Paris', 'Montmartre Paris',
+      'Lyon', 'Marseille', 'Toulouse', 'Bordeaux', 'Lille', 'Nice'
+    ],
+    services: [
+      'restaurants gastronomiques', 'bistrots parisiens', 'boulangeries artisanales',
+      'plombiers chauffagistes', 'électriciens certifiés', 'cabinets dentaires',
+      'agences immobilières', 'salons de coiffure', 'garages automobiles'
+    ],
+    prompts: [
+      'Restaurants in Paris',
+      'Bistrots parisiens dans le Marais Paris',
+      'Boulangeries artisanales à Lyon',
+      'Plombiers chauffagistes à Marseille',
+      'Cabinets dentaires à Paris 15e',
+      'Agences immobilières à Bordeaux',
+      'Garages automobiles à Lille'
+    ]
   }
 };
 
@@ -269,8 +293,11 @@ export const GLOBAL_11_COUNTRY_TICKER = [
   { code: 'IE', country: 'Ireland', query: 'Wedding venues in County Cork' },
   { code: 'ZA', country: 'South Africa', query: 'Conference venues in Sandton Johannesburg' },
   { code: 'DE', country: 'Germany', query: 'Catering in Berlin Mitte' },
+  { code: 'FR', country: 'France', query: 'Restaurants in Paris' },
   { code: 'IN', country: 'India', query: 'Photo studios in Tenali Mandal' }
 ];
+
+export const GLOBAL_SOVEREIGN_TICKER = GLOBAL_11_COUNTRY_TICKER;
 
 /**
  * Interleaved "Search Anywhere" examples starting with the active country's top

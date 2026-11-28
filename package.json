@@ -19,6 +19,9 @@
     "deploy:web": "npm run build && firebase deploy --only hosting",
     "setup:firebase-cicd": "node scripts/setup-firebase-cicd.cjs",
     "package:extension": "node scripts/package-extension.cjs",
+    "sandbox:render": "node scripts/provision-sandbox.mjs render",
+    "sandbox:up": "node scripts/provision-sandbox.mjs up",
+    "sandbox:down": "node scripts/provision-sandbox.mjs down",
     "install:all": "npm install && npm --prefix server install && npm --prefix client install && npm --prefix master install"
   }
 }

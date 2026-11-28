@@ -45,7 +45,7 @@
   }
 
   function announce(state) {
-    const version = state?.version || lastState?.version || '1.1.0';
+    const version = state?.version || lastState?.version || '2.0.0';
     const paired = Boolean(state?.paired ?? lastState?.paired);
     stampDom(version, paired);
     post({

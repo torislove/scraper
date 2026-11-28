@@ -17,7 +17,7 @@
  * ============================================================================
  */
 
-const EXTENSION_VERSION = '1.3.0';
+const EXTENSION_VERSION = '2.0.0';
 const HEARTBEAT_ALARM = 'scraper-heartbeat';
 const METRICS_ALARM = 'scraper-metrics-tick';
 const HEARTBEAT_MINUTES = 0.5; // 30 s — server TTL is 90 s
@@ -26,17 +26,18 @@ const MAX_PAIRINGS = 6;
 const SCRAPER_TAB_PATTERNS = [
   'https://scraper.co.in/*',
   'https://*.scraper.co.in/*',
+  'https://master.scraper.co.in/*',
   'http://localhost/*',
   'http://127.0.0.1/*'
 ];
 
-// Realistic Desktop User-Agents for rotation
+// Modern Desktop User-Agents (Chrome 131+ / Edge 131+ / Firefox 132+)
 const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:127.0) Gecko/20100101 Firefox/127.0'
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.7; rv:132.0) Gecko/20100101 Firefox/132.0'
 ];
 
 function getRandomUserAgent() {
@@ -192,6 +193,8 @@ const DEFAULTS = {
   lastRelayAt: '',
   lastError: '',
   enabledOrigins: [],
+  offlineQueue: [],
+  lastOnlineAt: '',
   paused: false
 };
 
@@ -598,11 +601,25 @@ async function heartbeat({ force = false } = {}) {
   }
 
   if (anyOk) {
-    await patchSettings({ lastError: '' });
-    return { ok: true, connected: anyConnected, extensionOnly };
+    if (Array.isArray(settings.offlineQueue) && settings.offlineQueue.length > 0 && pairings[0]) {
+      const base = normaliseBase(pairings[0].apiBase) || `${normaliseBase(pairings[0].serverBase)}/api`;
+      if (base) {
+        try {
+          const syncRes = await fetch(`${base}/scrape/extension-sync-offline`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-scraper-extension': EXTENSION_VERSION, ...(pairings[0].userId ? { 'x-user-id': pairings[0].userId } : {}) },
+            body: JSON.stringify({ items: settings.offlineQueue })
+          });
+          if (syncRes.ok) await patchSettings({ offlineQueue: [] });
+        } catch (_) {}
+      }
+    }
+    await patchSettings({ lastError: '', lastOnlineAt: new Date().toISOString() });
+    return { ok: true, connected: anyConnected, extensionOnly, offline: false };
   }
-  await patchSettings({ lastError: lastFail || 'network' });
-  return { ok: false, reason: lastFail || 'network' };
+  const offlineMode = typeof navigator !== 'undefined' && navigator.onLine === false;
+  await patchSettings({ lastError: offlineMode ? '' : (lastFail || 'standby_offline') });
+  return { ok: false, offline: true, reason: lastFail || 'standby_offline' };
 }
 
 async function postResult(pairing, ticket, result) {
@@ -629,7 +646,56 @@ async function postResult(pairing, ticket, result) {
       })
     });
   } catch (error) {
-    // The server will time the ticket out if unreachable
+    if (result?.ok) {
+      try {
+        const s = await getSettings();
+        const q = Array.isArray(s.offlineQueue) ? s.offlineQueue : [];
+        await patchSettings({
+          offlineQueue: [...q, { name: ticket.businessName || ticket.targetUrl || 'Relay Capture', url: ticket.targetUrl || '', ticketId: ticket.ticketId, capturedAt: new Date().toISOString(), source: 'extension_offline_relay' }].slice(-250)
+        });
+      } catch (_) {}
+    }
+  }
+}
+
+async function extractActiveTabOffline() {
+  if (!chrome.tabs?.query || !chrome.scripting?.executeScript) {
+    return { ok: false, error: 'tab_scripting_unavailable' };
+  }
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !/^https?:\/\//i.test(String(tab.url || ''))) {
+      return { ok: false, error: 'open_webpage_first' };
+    }
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const text = document.body ? document.body.innerText : '';
+        const telLinks = Array.from(document.querySelectorAll('a[href^="tel:"]')).map((a) => (a.getAttribute('href') || '').replace(/^tel:/i, '').trim());
+        const mailLinks = Array.from(document.querySelectorAll('a[href^="mailto:"]')).map((a) => (a.getAttribute('href') || '').replace(/^mailto:/i, '').split('?')[0].trim());
+        const waLinks = Array.from(document.querySelectorAll('a[href*="wa.me"],a[href*="whatsapp.com"]')).map((a) => a.href);
+        const textPhones = text.match(/(?:\+\d{1,3}[\s.-]?)?\(?\d{2,5}\)?[\s.-]?\d{3,5}[\s.-]?\d{3,5}/g) || [];
+        const textEmails = text.match(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/g) || [];
+        const phones = Array.from(new Set([...telLinks, ...textPhones].map((s) => s.trim()).filter((s) => s.replace(/\D/g, '').length >= 7))).slice(0, 12);
+        const emails = Array.from(new Set([...mailLinks, ...textEmails].map((s) => s.toLowerCase().trim()))).slice(0, 8);
+        return { name: document.title || location.hostname, website: location.origin, url: location.href, phones, emails, whatsapp: waLinks[0] || '' };
+      }
+    });
+    const item = injected?.[0]?.result;
+    if (!item) return { ok: false, error: 'empty_tab_result' };
+    const settings = await getSettings();
+    const queue = Array.isArray(settings.offlineQueue) ? settings.offlineQueue : [];
+    const nextQueue = [...queue, { ...item, capturedAt: new Date().toISOString(), source: 'extension_offline_tab' }].slice(-250);
+    await patchSettings({
+      offlineQueue: nextQueue,
+      relayedCount: (Number(settings.relayedCount) || 0) + 1,
+      lastRelayAt: new Date().toISOString()
+    });
+    // Attempt opportunistic online sync without blocking offline success
+    heartbeat({ force: true }).catch(() => {});
+    return { ok: true, item, offlineQueuedCount: nextQueue.length };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || 'extract_failed') };
   }
 }
 
@@ -741,8 +807,8 @@ async function injectIntoOpenScraperTabs() {
 
 const SITE_GROUPS = [
   { id: 'search', label: 'Search engines', origins: ['https://*.bing.com/*', 'https://*.duckduckgo.com/*', 'https://*.search.brave.com/*'] },
-  { id: 'maps', label: 'Maps & places', origins: ['https://*.google.com/*', 'https://*.google.co.in/*', 'https://*.google.co.uk/*', 'https://*.google.ca/*', 'https://*.google.com.au/*', 'https://*.google.ae/*', 'https://*.google.com.sg/*', 'https://*.google.co.nz/*', 'https://*.google.co.za/*', 'https://*.google.ie/*', 'https://*.google.de/*'] },
-  { id: 'directories', label: 'Business directories', origins: ['https://*.justdial.com/*', 'https://*.indiamart.com/*', 'https://*.yelp.com/*', 'https://*.yelp.ca/*', 'https://*.yelp.com.au/*', 'https://*.yellowpages.com/*', 'https://*.yellowpages.ca/*', 'https://*.yellowpages.com.au/*', 'https://*.yellowpages.co.za/*', 'https://*.yellowpages.ae/*', 'https://*.yellowpages.com.sg/*', 'https://*.yellow.co.nz/*', 'https://*.yell.com/*', 'https://*.cylex.us.com/*', 'https://*.cylex.co.uk/*', 'https://*.cylex.ca/*', 'https://*.cylex.com.au/*', 'https://*.cylex.ae/*', 'https://*.cylex.com.sg/*', 'https://*.freeindex.co.uk/*', 'https://*.goldenpages.ie/*', 'https://*.trustpilot.com/*', 'https://*.weddingwire.com/*', 'https://*.weddingwire.in/*', 'https://*.weddingbazaar.com/*', 'https://*.mandap.com/*'] },
+  { id: 'maps', label: 'Maps & places (5 Markets)', origins: ['https://*.google.com/*', 'https://*.google.co.in/*', 'https://*.google.co.uk/*', 'https://*.google.com.au/*', 'https://*.google.ae/*'] },
+  { id: 'directories', label: '5-Market directories', origins: ['https://*.justdial.com/*', 'https://*.indiamart.com/*', 'https://*.sulekha.com/*', 'https://*.yelp.com/*', 'https://*.yelp.com.au/*', 'https://*.yellowpages.com/*', 'https://*.yellowpages.com.au/*', 'https://*.yellowpages.ae/*', 'https://*.yell.com/*', 'https://*.cylex.us.com/*', 'https://*.cylex.co.uk/*', 'https://*.cylex.com.au/*', 'https://*.cylex.ae/*', 'https://*.freeindex.co.uk/*', 'https://*.trustpilot.com/*'] },
   { id: 'geo', label: 'Open maps data', origins: ['https://*.openstreetmap.org/*', 'https://*.overpass-api.de/*', 'https://*.wikidata.org/*'] }
 ];
 
@@ -890,8 +956,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           lanes,
           capabilities: capabilities().caps,
           relayedCount: Number(settings.relayedCount) || 0,
+          offlineQueuedCount: Array.isArray(settings.offlineQueue) ? settings.offlineQueue.length : 0,
+          offlineQueue: Array.isArray(settings.offlineQueue) ? settings.offlineQueue : [],
           lastRelayAt: settings.lastRelayAt || '',
+          lastOnlineAt: settings.lastOnlineAt || '',
           lastError: settings.lastError || '',
+          offlineMode: typeof navigator !== 'undefined' ? navigator.onLine === false : false,
           paired: pairings.length > 0,
           serverBase: settings.serverBase || pairings[0]?.serverBase || '',
           pairings,
@@ -926,6 +996,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case 'SCRAPER_EXT_REQUEST_SITES':
       requestWildcardAccess().then(sendResponse);
+      return true;
+
+    case 'SCRAPER_EXT_EXTRACT_TAB':
+      extractActiveTabOffline().then(sendResponse);
+      return true;
+
+    case 'SCRAPER_EXT_CLEAR_OFFLINE':
+      patchSettings({ offlineQueue: [] }).then(() => sendResponse({ ok: true }));
       return true;
 
     default:

@@ -1,5 +1,4 @@
 import React, { useId } from 'react';
-import ThreeGoldenPinLogo from './three/ThreeGoldenPinLogo';
 
 /**
  * Scraper.co.in brand mark: a map pin with a bold "S".
@@ -137,11 +136,7 @@ export default function BrandLogo({
       }}
       aria-label="Scraper.co.in"
     >
-      {use3d ? (
-        <ThreeGoldenPinLogo size={iconSize + 2} />
-      ) : (
-        <BrandIcon size={iconSize} />
-      )}
+      <BrandIcon size={iconSize} />
 
       {!isIconOnly && (
         <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, textAlign: 'left' }}>

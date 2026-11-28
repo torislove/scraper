@@ -28,6 +28,10 @@
     bytesRelayed: document.getElementById('bytes-relayed'),
     siteCount: document.getElementById('site-count'),
     open: document.getElementById('open-cmd'),
+    openMaster: document.getElementById('open-master'),
+    extractTab: document.getElementById('extract-tab-btn'),
+    syncBtn: document.getElementById('sync-btn'),
+    offlineCount: document.getElementById('offline-count'),
     pair: document.getElementById('pair-btn'),
     diag: document.getElementById('diag-btn'),
     wildcard: document.getElementById('wildcard-btn'),
@@ -136,7 +140,7 @@
       return;
     }
 
-    if (els.version) els.version.textContent = `v${state.version || '1.3.0'}`;
+    if (els.version) els.version.textContent = `v${state.version || '2.0.0'}`;
 
     const ram = Number(state.ramGb) || 8;
     const free = Number(state.freeRamGb) || Math.round(ram * 0.5);
@@ -171,16 +175,22 @@
     const sites = state.sites || {};
     if (els.siteCount) {
       els.siteCount.textContent = sites.ok
-        ? `All ${sites.requiredCount || 47} verified directories & engines active.`
-        : `${sites.grantedCount || 0} of ${sites.requiredCount || 47} directories active.`;
+        ? `All 5 sovereign markets & ${sites.requiredCount || 36} sources active (Client + Master).`
+        : `${sites.grantedCount || 0} of ${sites.requiredCount || 36} sources granted.`;
     }
+
+    const offCount = Number(state.offlineQueuedCount || 0);
+    if (els.offlineCount) els.offlineCount.textContent = String(offCount);
 
     if (state.paused) {
       setTone('warn');
       if (els.status) els.status.textContent = 'PAUSED';
+    } else if (state.offlineMode || state.lastError === 'standby_offline') {
+      setTone('warn');
+      if (els.status) els.status.textContent = offCount > 0 ? `OFFLINE VAULT · ${offCount} CACHED` : 'OFFLINE EDGE READY';
     } else if (!state.paired) {
       setTone('live');
-      if (els.status) els.status.textContent = 'STANDBY · READY TO PAIR';
+      if (els.status) els.status.textContent = offCount > 0 ? `STANDBY · ${offCount} CACHED` : 'READY · OFFLINE & ONLINE';
     } else if (!sites.ok) {
       setTone('warn');
       if (els.status) els.status.textContent = 'PERMISSIONS NEEDED';
@@ -190,7 +200,7 @@
     }
 
     if (els.wildcard) els.wildcard.hidden = Boolean(sites.wildcard) || !state.paired;
-    setError(state.lastError ? `Last warning: ${state.lastError}` : '');
+    setError(state.lastError && state.lastError !== 'standby_offline' ? `Notice: ${state.lastError}` : '');
   }
 
   async function refresh() {
@@ -216,13 +226,21 @@
     return 'https://scraper.co.in';
   }
 
-  els.open?.addEventListener('click', async () => {
+  async function openWorkspace(edition = 'client') {
     const base = await resolveBase();
-    const target = `${base}/command`;
+    let target = `${base}/command`;
+    if (edition === 'master') {
+      target = /localhost|127\.0\.0\.1/.test(base)
+        ? base.replace(/:\d+$/, ':5174') + '/command'
+        : 'https://master.scraper.co.in/command';
+    } else if (/:\d+$/.test(base)) {
+      target = base.replace(/:\d+$/, ':5173') + '/command';
+    }
+    const targetOrigin = new URL(target).origin;
     try {
       if (chrome?.tabs?.query) {
         const tabs = await chrome.tabs.query({});
-        const match = (tabs || []).find((t) => String(t.url || '').startsWith(base));
+        const match = (tabs || []).find((t) => String(t.url || '').startsWith(targetOrigin));
         if (match?.id) {
           await chrome.tabs.update(match.id, { active: true });
           if (chrome.windows?.update && match.windowId) {
@@ -239,20 +257,48 @@
       }
     } catch (e) {}
     if (!isFile) window.open(target, '_blank', 'noopener');
+  }
+
+  els.open?.addEventListener('click', () => openWorkspace('client'));
+  els.openMaster?.addEventListener('click', () => openWorkspace('master'));
+
+  els.extractTab?.addEventListener('click', async () => {
+    if (els.extractTab) els.extractTab.disabled = true;
+    const res = await send('SCRAPER_EXT_EXTRACT_TAB');
+    if (els.extractTab) els.extractTab.disabled = false;
+    if (res?.ok && res.item) {
+      setError(`Saved offline: ${res.item.phones?.length || 0} phone(s), ${res.item.emails?.length || 0} email(s).`);
+    } else {
+      setError(res?.error === 'open_webpage_first' ? 'Open any http/https business page tab first.' : (res?.error || 'Could not extract tab.'));
+    }
+    await refresh();
+  });
+
+  els.syncBtn?.addEventListener('click', async () => {
+    if (els.syncBtn) els.syncBtn.disabled = true;
+    await send('SCRAPER_EXT_HEARTBEAT');
+    if (els.syncBtn) els.syncBtn.disabled = false;
+    await refresh();
   });
 
   els.pair?.addEventListener('click', async () => {
     if (els.pair) els.pair.disabled = true;
     const result = await send('SCRAPER_EXT_HEARTBEAT');
+    try {
+      const h = await fetch('http://127.0.0.1:5002/api/health');
+      if (h.ok) setError('');
+      else if (result?.ok === false) setError(result.reason || 'Backend health check returned ' + h.status);
+    } catch (_) {
+      if (result?.ok === false) setError(result.reason || 'Backend :5002 offline — start dev server.');
+    }
     if (els.pair) els.pair.disabled = false;
-    if (result?.ok === false) setError(result.reason || 'Could not reconnect yet.');
     await refresh();
   });
 
   els.diag?.addEventListener('click', async () => {
     const info = {
       timestamp: new Date().toISOString(),
-      extensionVersion: '1.3.0',
+      extensionVersion: '2.0.0',
       hardware: {
         ram: els.ramUsageText?.textContent || '',
         cpu: els.hwCpu?.textContent || '',

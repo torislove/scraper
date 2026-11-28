@@ -7,15 +7,27 @@
  * to the same key before anything is displayed or filtered.
  */
 
-import { classifyPhone } from '../../utils/phoneClassify.js';
+import { getAllDisplayPhones, resolveLeadCountry } from '../../utils/phoneClassify.js';
 
 const SOURCE_MAP = {
-  'google-places': { key: 'google', label: 'Google Maps', short: 'Google', tone: 'google' },
-  'google maps': { key: 'google', label: 'Google Maps', short: 'Google', tone: 'google' },
-  google: { key: 'google', label: 'Google Maps', short: 'Google', tone: 'google' },
+  'google-places': { key: 'google', label: 'Google Maps', short: 'Google Maps', tone: 'google' },
+  'google maps': { key: 'google', label: 'Google Maps', short: 'Google Maps', tone: 'google' },
+  'gosom google maps fast': { key: 'google', label: 'Google Maps', short: 'Google Maps', tone: 'google' },
+  'gmap direct rpc': { key: 'gmap-direct', label: 'Direct Maps RPC', short: 'Direct Maps', tone: 'google' },
+  google: { key: 'google', label: 'Google Maps', short: 'Google Maps', tone: 'google' },
+  'google-local-finder': { key: 'google-local-finder', label: 'Google More Places', short: 'More Places', tone: 'google' },
+  'google search local finder': { key: 'google-local-finder', label: 'Google More Places', short: 'More Places', tone: 'google' },
+  'google local finder': { key: 'google-local-finder', label: 'Google More Places', short: 'More Places', tone: 'google' },
+  'overture-maps': { key: 'overture-maps', label: 'Overture 55M', short: 'Overture 55M', tone: 'cyan' },
+  'overture maps': { key: 'overture-maps', label: 'Overture 55M', short: 'Overture 55M', tone: 'cyan' },
+  overture: { key: 'overture-maps', label: 'Overture 55M', short: 'Overture 55M', tone: 'cyan' },
   'google-serp': { key: 'google-serp', label: 'Google Search', short: 'Google Web', tone: 'google' },
+  'deep web serp': { key: 'web-discovery', label: 'Web Discovery', short: 'Web', tone: 'osm' },
   justdial: { key: 'justdial', label: 'JustDial', short: 'JustDial', tone: 'justdial' },
+  'justdial turbo': { key: 'justdial', label: 'JustDial', short: 'JustDial', tone: 'justdial' },
+  'justdial tls': { key: 'justdial', label: 'JustDial', short: 'JustDial', tone: 'justdial' },
   openstreetmap: { key: 'osm', label: 'OpenStreetMap', short: 'OSM', tone: 'osm' },
+  'openstreetmap poi': { key: 'osm', label: 'OpenStreetMap', short: 'OSM', tone: 'osm' },
   osm: { key: 'osm', label: 'OpenStreetMap', short: 'OSM', tone: 'osm' },
   'web discovery': { key: 'web-discovery', label: 'Web Discovery', short: 'Web', tone: 'osm' },
   'web-discovery': { key: 'web-discovery', label: 'Web Discovery', short: 'Web', tone: 'osm' },
@@ -120,64 +132,149 @@ function csvCell(value) {
  * silently mixes in a number that cannot receive WhatsApp.
  */
 export function exportPhones(lead) {
-  const seen = new Set();
-  const numbers = [];
-  for (const value of [lead?.phone, lead?.primaryPhone, lead?.secondaryPhone, ...(Array.isArray(lead?.phones) ? lead.phones : [])]) {
-    const raw = typeof value === 'object' && value
-      ? (value.displayPhone || value.e164 || value.national || value.number || '')
-      : value;
-    const text = String(raw || '').trim();
-    if (!text) continue;
-    const classified = classifyPhone(text);
-    if (!classified || classified.type === 'none') continue;
-    if (classified.digits && seen.has(classified.digits)) continue;
-    if (classified.digits) seen.add(classified.digits);
-    numbers.push(classified);
+  const ccHint = resolveLeadCountry(lead, 'IN');
+  const dual = getAllDisplayPhones(lead, ccHint);
+  if (dual.primary || dual.all.length > 0) {
+    const mobile = dual.mobile;
+    const rest = dual.all.filter(n => n !== mobile);
+    const waUrl = mobile
+      ? (mobile.whatsappUrl || `https://wa.me/${(mobile.e164 || mobile.digits || '').replace(/\D/g, '')}`)
+      : '';
+    return {
+      primary: mobile ? mobile.display || mobile.raw : '',
+      secondary: rest.map(n => n.display || n.raw).filter(Boolean).join(', '),
+      whatsapp: waUrl,
+      isMobile: Boolean(mobile)
+    };
   }
-  const mobile = numbers.find(n => n.isMobile);
-  const rest = numbers.filter(n => n !== mobile);
-  return {
-    primary: mobile ? mobile.display || mobile.raw : '',
-    secondary: rest.map(n => n.display || n.raw).filter(Boolean).join(', '),
-    isMobile: Boolean(mobile),
-  };
+  return { primary: '', secondary: '', whatsapp: '', isMobile: false };
 }
 
 /**
- * Build a spreadsheet-ready CSV for the given leads. The Scrape Source column
- * keeps the engine visible in Excel/Sheets after export.
+ * Build a spreadsheet-ready CSV containing every extracted contact, social,
+ * geo, and provenance column for Excel/Sheets/CRM import.
  */
+const IGNORE_FB_SEG = new Set(['2008', 'profile.php', 'people', 'p', 'sharer.php', 'sharer', 'share.php', 'share', 'wordpresscom', 'tr', 'plugins', 'dialog', 'groups', 'events', 'help', 'pages', 'login', 'recover', 'watch', 'pg']);
+const IGNORE_IG_SEG = new Set(['p', 'reel', 'reels', 'stories', 'explore', 'accounts', 'about', 'legal', 'o1']);
+
+function cleanSocialCell(val, kind = '') {
+  const s = String(val || '').trim();
+  if (!s || /bing\.com\/ck\/a|xnxx|xvideos|xhamster|pornhub|eporner|rat\.xxx/i.test(s)) return '';
+  if (kind === 'fb') {
+    const m = s.match(/facebook\.com\/([^/?#]+)/i);
+    const h = m ? m[1] : '';
+    if (!h || h.length < 3 || IGNORE_FB_SEG.has(h.toLowerCase())) return '';
+  } else if (kind === 'ig') {
+    const m = s.match(/instagram\.com\/([^/?#]+)/i);
+    const h = m ? m[1] : '';
+    if (!h || h.length < 3 || IGNORE_IG_SEG.has(h.toLowerCase())) return '';
+  } else if (kind === 'yt') {
+    const m = s.match(/youtube\.com\/(?:@|channel\/|c\/)?([^/?#]+)/i);
+    const h = m ? m[1] : '';
+    if (!h || h.length < 3) return '';
+    if (/^UC[a-zA-Z0-9_-]{20,}$/.test(h)) return `https://youtube.com/channel/${h}`;
+  }
+  return s;
+}
+
 export function buildLeadCsv(leads, { city = '' } = {}) {
   const headers = [
-    'Business Name', 'Category', 'Primary Phone', 'Mobile Verified', 'Secondary Phone',
-    'Area', 'Village', 'Mandal', 'District', 'State', 'Pincode',
-    'Rating', 'Reviews', 'Website', 'Scrape Source', 'Search Folder',
-    'CRM Stage', 'Google Maps Link'
+    'Business Name', 'Business Intent', 'Subcategory', 'Category', 'Primary Mobile', 'Mobile Verified',
+    'WhatsApp Link', 'Secondary / STD Phone', 'Email', 'All Emails', 'Website',
+    'Instagram', 'Facebook', 'LinkedIn', 'YouTube',
+    'Zone / Ward', 'Area', 'Address', 'City', 'State', 'Pincode', 'Country',
+    'Rating', 'Reviews', 'Google Maps Link', 'Scrape Source', 'Search Folder', 'CRM Stage'
   ];
-  const rows = (Array.isArray(leads) ? leads : []).map(lead => {
-    const source = leadSourceMeta(lead);
-    const area = lead.locality || lead.suburb || lead.area || lead.zoneName || '';
-    const village = lead.village || lead.city || city || '';
+  const seenExport = new Set();
+  const deduped = [];
+  for (const lead of (Array.isArray(leads) ? leads : [])) {
+    if (!lead) continue;
     const phones = exportPhones(lead);
+    const mob10 = (phones.primary || '').replace(/\D/g, '').slice(-10);
+    const sec8 = (phones.secondary || '').split(',')[0].replace(/\D/g, '').slice(-8);
+    const pid = String(lead.placeId || lead.place_id || '').trim();
+    if ((pid && seenExport.has(`p:${pid}`)) || (mob10.length === 10 && seenExport.has(`m:${mob10}`)) || (sec8.length >= 8 && seenExport.has(`s:${sec8}`))) continue;
+    if (pid) seenExport.add(`p:${pid}`);
+    if (mob10.length === 10) seenExport.add(`m:${mob10}`);
+    if (sec8.length >= 8) seenExport.add(`s:${sec8}`);
+    deduped.push({ lead, phones });
+  }
+  const rows = deduped.map(({ lead, phones }) => {
+    const source = leadSourceMeta(lead);
+    const zoneName = lead.searchZone || lead.zone || lead.zoneName || lead.locality || '';
+    const area = lead.area || lead.locality || lead.suburb || zoneName;
+    const rawCity = String(lead.city || lead.village || city || '').trim();
+    const cityVal = /\blondon\s+colony\b/i.test(rawCity) ? 'London' : rawCity;
+    const addr = String(lead.address || '');
+    const cc = String(lead.country || '').toUpperCase();
+    let pinVal = String(lead.postalCode || lead.pincode || '').trim();
+    if (!pinVal && addr) {
+      if (cc === 'GB') {
+        const m = addr.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b/i);
+        if (m) {
+          const c = m[1].toUpperCase().replace(/\s+/g, '');
+          pinVal = c.length > 4 ? `${c.slice(0, -3)} ${c.slice(-3)}` : c;
+        }
+      } else if (cc === 'US' || cc === 'CA') {
+        const m = addr.match(/\b(\d{5})(?:-\d{4})?\b/) || addr.match(/\b([A-Z]\d[A-Z]\s?\d[A-Z]\d)\b/i);
+        if (m) pinVal = m[1].toUpperCase();
+      } else if (cc === 'IN') {
+        const m = addr.match(/\b([1-8]\d{5})\b/);
+        if (m) pinVal = m[1];
+      } else if (cc === 'AU') {
+        const m = addr.match(/\b(\d{4})\b/);
+        if (m) pinVal = m[1];
+      }
+    }
+    let stateVal = String(lead.state || '').trim();
+    if (!stateVal && addr) {
+      if (cc === 'GB') {
+        stateVal = /london/i.test(`${cityVal} ${addr}`) ? 'Greater London' : 'England';
+      } else if (cc === 'US') {
+        const m = addr.match(/\b([A-Z]{2})\s+\d{5}\b/);
+        if (m) stateVal = m[1];
+      } else if (cc === 'AU') {
+        const m = addr.match(/\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b/i);
+        if (m) stateVal = m[1].toUpperCase();
+      } else if (cc === 'AE') {
+        const m = addr.match(/\b(Dubai|Abu Dhabi|Sharjah|Ajman|Ras Al Khaimah|Fujairah|Umm Al Quwain)\b/i);
+        if (m) stateVal = m[1];
+      }
+    }
+    const allEmails = Array.isArray(lead.emails) && lead.emails.length
+      ? lead.emails.join('; ')
+      : (lead.email || '');
     return [
       lead.name || 'Unknown Business',
+      lead.businessModel || lead.intentType || 'Service',
+      lead.matchedSubcategory || lead.subcategory || lead.query || '',
       lead.category || 'Unknown',
       phones.primary,
       phones.isMobile ? 'Yes' : 'No',
+      phones.whatsapp,
       phones.secondary,
+      lead.email || '',
+      allEmails,
+      cleanSocialCell(lead.website),
+      cleanSocialCell(lead.instagram, 'ig'),
+      cleanSocialCell(lead.facebook, 'fb'),
+      cleanSocialCell(lead.linkedin),
+      cleanSocialCell(lead.youtube, 'yt'),
+      zoneName,
       area,
-      village,
-      lead.mandal || '',
-      lead.district || '',
-      lead.state || '',
-      lead.pincode || '',
+      addr,
+      cityVal,
+      stateVal,
+      pinVal,
+      lead.country || '',
       lead.rating != null ? lead.rating : '',
       lead.reviewsCount != null ? lead.reviewsCount : '',
-      lead.website || '',
+      lead.googleMapsUrl || lead.mapsLink || (lead.placeId
+        ? `https://www.google.com/maps/place/?q=place_id:${lead.placeId}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([lead.name, area, cityVal].filter(Boolean).join(', '))}`),
       source.label,
       lead.sessionId || '',
-      lead.crmStage || 'new',
-      lead.googleMapsUrl || lead.mapsLink || ''
+      lead.crmStage || 'new'
     ].map(csvCell).join(',');
   });
   return [headers.map(csvCell).join(','), ...rows].join('\r\n');

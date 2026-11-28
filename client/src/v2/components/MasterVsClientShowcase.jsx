@@ -56,7 +56,7 @@ export default function MasterVsClientShowcase() {
           }}
         >
           <Layers size={12} />
-          <span>DUAL-SCRAPER FLEET ARCHITECTURE · MASTER (11 NATIONS) &amp; CLIENT</span>
+          <span>DUAL-SCRAPER FLEET ARCHITECTURE · MASTER (5 MARKETS) &amp; CLIENT</span>
         </span>
       </div>
 
@@ -84,7 +84,7 @@ export default function MasterVsClientShowcase() {
       </h2>
 
       <p style={{ fontSize: 12.5, color: '#475569', maxWidth: '64ch', margin: '0 auto 16px', lineHeight: 1.45 }}>
-        Choose between the Client Cockpit for targeted local business discovery, or the flagship Master Scraper running unmetered sweeps across all 11 sovereign nations.
+        Choose between the Client Cockpit for targeted local city sweeps, or the Master Scraper running district- &amp; state-scale sweeps across all 5 active revenue markets (IN, US, GB, AU, AE).
       </p>
 
       {/* Side-by-Side Dual Edition Cards */}
@@ -200,25 +200,25 @@ export default function MasterVsClientShowcase() {
                     Edition 02 · Master Scraper
                   </span>
                   <h3 style={{ margin: 0, fontSize: 18, fontWeight: 850, color: '#0f172a' }}>
-                    MASTER SCRAPER (11 COUNTRIES)
+                    MASTER SCRAPER (5 MARKETS)
                   </h3>
                 </div>
               </div>
 
               <span style={{ fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc' }}>
-                UNMETERED · 11 NATIONS
+                UNMETERED · 5 MARKETS
               </span>
             </div>
 
             <p style={{ fontSize: 12, color: '#334155', fontWeight: 650, margin: '0 0 10px', lineHeight: 1.4 }}>
-              Flagship High-Throughput Scraper for All 11 Sovereign Countries with Deep Multi-Zone Sweeps.
+              Flagship High-Throughput District &amp; State Scraper Across All 5 Revenue Markets.
             </p>
 
             {/* Feature Bullets */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, color: '#475569', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <Globe2 size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>11 Sovereign Nations:</strong> Full scraping coverage for IN, US, UK, CA, AU, AE, SG, NZ, ZA, IE, DE.</span>
+                <span><strong>5 Active Revenue Markets:</strong> Full coverage for India (IN), USA (US), UK (GB), Australia (AU), and UAE (AE).</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <Zap size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
@@ -226,7 +226,7 @@ export default function MasterVsClientShowcase() {
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
                 <Database size={14} color="#0891b2" style={{ marginTop: 2, flex: 'none' }} />
-                <span><strong>22 Parallel Engines:</strong> Synchronous directory indexing, multi-channel social enrichment, and cross-engine phone verification.</span>
+                <span><strong>Parallel Multi-Engine Extraction:</strong> Google Maps RPC, Geo-Pinned JustDial, QLever OSM, Website Crawl &amp; Social Enrichment.</span>
               </div>
             </div>
           </div>
@@ -239,7 +239,7 @@ export default function MasterVsClientShowcase() {
               onClick={handleLaunchMaster}
               style={{ width: '100%', justifyContent: 'center' }}
             >
-              Launch Master Scraper (11 Countries)
+              Launch Master Scraper (5 Markets)
             </LiquidButton3D>
           </div>
         </motion.div>

@@ -14,7 +14,8 @@ const LOCKED_COUNTRIES = [
   { code: 'NZ', name: 'New Zealand' },
   { code: 'IE', name: 'Ireland' },
   { code: 'ZA', name: 'South Africa' },
-  { code: 'DE', name: 'Germany' }
+  { code: 'DE', name: 'Germany' },
+  { code: 'FR', name: 'France' }
 ];
 
 export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) {
@@ -41,11 +42,11 @@ export default function CountryFlagStrip({ selected = 'IN', onSelect, onMeta }) 
   }, [code]);
 
   return (
-    <div className="lx-flag-bar" role="region" aria-label="11 Supported Markets">
-      <div className="lx-flag-dock-label" title="Strictly tuned across 11 markets">
+    <div className="lx-flag-bar" role="region" aria-label="12 Supported Markets">
+      <div className="lx-flag-dock-label" title="Strictly tuned across 12 sovereign markets">
         <span className="lx-flag-power-led" aria-hidden="true" />
         <Globe2 size={12} />
-        <span>11 MARKETS</span>
+        <span>12 MARKETS</span>
       </div>
 
       <div className="lx-flag-scroll">

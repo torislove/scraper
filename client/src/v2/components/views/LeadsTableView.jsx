@@ -1,501 +1,386 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import {
-  ArrowRight, CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Filter,
-  Globe2, Loader2, MapPin, MessageCircle, Phone, Search, Smartphone, Sparkles, Star, X
-} from 'lucide-react';
-import { formatNumber, cx } from '../../ui';
+import { Folder, FolderOpen, X, Search, Sparkles } from 'lucide-react';
 import FilterBar from '../cards/FilterBar';
-import { VendorAvatar, EmptyState } from '../cards/MetricCard';
-import { qualityOf, calculateHaversineKm, countSocialProfiles } from '../../utils/leadHelpers';
-import { getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
-import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
 import FloatingActionDock from '../cards/FloatingActionDock';
-import { SocialHunterBadgeRow, VendorSocialPills } from '../icons/Social3DIcons';
+import LeadTableRow from './LeadTableRow';
+import TablePagination from './TablePagination';
+import { EmptyState } from '@shared/ui/Primitives';
+import { exportLeadsToVcf } from '../../../utils/whatsappCatalog';
+import { getAllDisplayPhones, getDisplayPhone } from '../../../utils/phoneClassify';
+import { downloadLeadCsv } from '../../utils/leadSource';
+import { safeLeadId } from '../../utils/safeTypes';
+
+const ROW_HEIGHT = 104;
+const OVERSCAN = 8;
+
+function AutoFolderPill({ folder, active, onOpenFolder }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenFolder?.(folder.id)}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        borderRadius: 10,
+        fontSize: 11.5,
+        fontWeight: 700,
+        background: active ? '#fffbeb' : '#ffffff',
+        color: active ? '#78350f' : 'var(--lp-ink-2)',
+        border: `1.5px solid ${active ? '#d97706' : 'rgba(15, 23, 42, 0.1)'}`,
+        cursor: 'pointer',
+        flexShrink: 0,
+        transition: 'all 120ms ease'
+      }}
+      title="Open saved folder and sub-folders"
+    >
+      <Folder size={12} color="#d97706" fill="#fef3c7" />
+      <span>{folder.title}</span>
+      <span
+        className="lp-tabular"
+        style={{ padding: '1px 6px', borderRadius: 999, fontSize: 10.5, fontWeight: 800, background: active ? '#fde68a' : '#f1f5f9', color: active ? '#78350f' : '#475569' }}
+      >
+        {folder.totalLeads || 0}
+      </span>
+    </button>
+  );
+}
 
 export default function LeadsTableView({
-  sessionFilter,
-  setSessionFilter,
-  filters,
-  updateFilter,
-  setFilters,
-  vendors = [],
+  filters = {},
+  updateFilter = () => {},
   filteredVendors = [],
   pageRows = [],
   mapCenter,
   setSelectedVendor,
   currentPage = 1,
-  pageSize = 100,
+  pageSize = 250,
   pageCount = 1,
   setPage,
   setPageSize,
   country = 'IN',
   scanning = false,
-  phoneJustFoundIds = null
+  freshLeadIds = null,
+  phoneJustFoundIds = null,
+  phoneHunting = false,
+  onSaveToFolder,
+  folders = [],
+  activeSelection = null,
+  onClearFolderSelection,
+  onQuickOpenFolder,
+  onOpenFoldersModal,
+  onDeepEnrichPage,
+  onResetFilters,
+  syncNonce = 0
 }) {
-  const originLat = Array.isArray(mapCenter) ? mapCenter[0] : (mapCenter?.lat || null);
-  const originLng = Array.isArray(mapCenter) ? mapCenter[1] : (mapCenter?.lng || null);
+  const originLat = Array.isArray(mapCenter) ? mapCenter[0] : mapCenter?.lat || null;
+  const originLng = Array.isArray(mapCenter) ? mapCenter[1] : mapCenter?.lng || null;
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(560);
+  const scrollWrapRef = useRef(null);
+  const scrollRafRef = useRef(0);
+  const isLiveHunting = Boolean(scanning || phoneHunting);
 
-  const { mobileCount, landlineCount, huntingCount, socialCount } = useMemo(() => {
-    let mobs = 0;
-    let lands = 0;
-    let hunting = 0;
-    let socials = 0;
-    for (const v of filteredVendors) {
-      const dual = getAllDisplayPhones(v, v?.country || country);
-      if (dual.mobile || dual.landline) {
-        if (dual.mobile) mobs += 1;
-        if (dual.landline) lands += 1;
-      } else if (scanning || (v?.website && !v?.websiteEnrichedAt)) {
-        hunting += 1;
-      }
-      if ((v?._socialCount ?? countSocialProfiles(v)) > 0) socials += 1;
+  useEffect(() => {
+    const el = scrollWrapRef.current;
+    if (!el || typeof ResizeObserver !== 'function') return undefined;
+    setViewportHeight(el.clientHeight || 560);
+    const ro = new ResizeObserver(() => {
+      if (el.clientHeight > 0) setViewportHeight(el.clientHeight);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [pageRows.length]);
+
+  useEffect(() => {
+    const el = scrollWrapRef.current;
+    if (el) el.scrollTop = 0;
+    setScrollTop(0);
+    setSelectedIds(new Set());
+  }, [currentPage, syncNonce, activeSelection?.folderId, activeSelection?.subcategory, activeSelection?.sublocation, activeSelection?.segment]);
+
+  useEffect(() => {
+    const maxTop = Math.max(0, pageRows.length * ROW_HEIGHT - viewportHeight + 48);
+    if (scrollTop > maxTop) {
+      const clamped = Math.max(0, maxTop);
+      if (scrollWrapRef.current) scrollWrapRef.current.scrollTop = clamped;
+      setScrollTop(clamped);
     }
-    return { mobileCount: mobs, landlineCount: lands, huntingCount: hunting, socialCount: socials };
-  }, [filteredVendors, country, scanning]);
+  }, [pageRows.length, viewportHeight, scrollTop]);
+
+  const onScroll = useCallback((e) => {
+    const top = e.currentTarget.scrollTop;
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = 0;
+      setScrollTop(top);
+    });
+  }, []);
+
+  const useVirtual = pageRows.length > 48;
+  const { visibleRows, topSpacer, bottomSpacer } = useMemo(() => {
+    if (!useVirtual) {
+      return { visibleRows: pageRows, topSpacer: 0, bottomSpacer: 0 };
+    }
+    const maxStart = Math.max(0, pageRows.length - 1);
+    const startIdx = Math.min(maxStart, Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN));
+    const endIdx = Math.min(pageRows.length, Math.max(startIdx + 1, Math.ceil((scrollTop + viewportHeight) / ROW_HEIGHT) + OVERSCAN));
+    return {
+      visibleRows: pageRows.slice(startIdx, endIdx),
+      topSpacer: startIdx * ROW_HEIGHT,
+      bottomSpacer: Math.max(0, (pageRows.length - endIdx) * ROW_HEIGHT)
+    };
+  }, [useVirtual, pageRows, scrollTop, viewportHeight]);
 
   const toggleSelectAll = () => {
     if (selectedIds.size === pageRows.length && pageRows.length > 0) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(pageRows.map((v, idx) => v.id || `${v.name}-${v.phone || idx}`)));
+      setSelectedIds(new Set(pageRows.map((v) => safeLeadId(v))));
     }
   };
 
   const toggleSelectOne = (id) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const handleCopyPhone = (phone, e) => {
-    if (e) e.stopPropagation();
+    e?.stopPropagation();
     if (!phone) return;
     navigator.clipboard?.writeText(phone);
     toast.success(`Copied ${phone}`);
   };
 
   const handleCopyMobiles = () => {
-    const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
-    const rawPhones = target.flatMap(l => {
+    const target = pageRows.filter((v) => selectedIds.has(safeLeadId(v)));
+    const rawPhones = target.flatMap((l) => {
       const dual = getAllDisplayPhones(l, l.country || country);
       return [dual.mobile?.display, dual.landline?.display, getDisplayPhone(l)].filter(Boolean);
     });
     const unique = [...new Set(rawPhones)];
-    if (!unique.length) {
-      toast.error('No phone numbers found in selected rows.');
-      return;
-    }
+    if (!unique.length) return toast.error('No phone numbers in selected rows.');
     navigator.clipboard?.writeText(unique.join('\n'));
-    toast.success(`Copied ${unique.length} phone numbers!`);
+    toast.success(`Copied ${unique.length} phone numbers.`);
   };
 
   const handleExportVcf = () => {
-    const target = pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
-    if (!target.length) {
-      toast.error('Select businesses first to save contacts.');
-      return;
-    }
+    const target = pageRows.filter((v) => selectedIds.has(safeLeadId(v)));
+    if (!target.length) return toast.error('Select businesses first.');
     exportLeadsToVcf(target, `business_contacts_${target.length}`);
-    toast.success(`Saved ${target.length} contacts (.vcf) ready for your phone!`);
-  };
-
-  const handleExportCsv = (rowsOverride = null) => {
-    const target = Array.isArray(rowsOverride)
-      ? rowsOverride
-      : pageRows.filter((v, idx) => selectedIds.has(v.id || `${v.name}-${v.phone || idx}`));
-    if (!target.length) {
-      toast.error('Select businesses first to export CSV.');
-      return;
-    }
-    const headers = [
-      'Business Name', 'Category', 'Phone', 'Mobile Phone', 'Landline / STD', 'Address', 'Area / Mandal',
-      'City', 'District', 'State', 'Pincode', 'Latitude', 'Longitude',
-      'Map Directions', 'Rating', 'Reviews', 'Website',
-      'Instagram', 'Facebook', 'TikTok', 'Twitter / X', 'WhatsApp Link'
-    ];
-    const lines = [headers.join(',')];
-    target.forEach(r => {
-      const dual = getAllDisplayPhones(r, r.country || country);
-      const combinedPhone = [dual.mobile?.display, dual.landline?.display].filter(Boolean).join(' / ') || getDisplayPhone(r) || '';
-      const rLat = r.latitude ?? r.lat ?? '';
-      const rLng = r.longitude ?? r.lng ?? '';
-      const hasGeo = Number.isFinite(Number(rLat)) && Number.isFinite(Number(rLng)) && (Number(rLat) !== 0 || Number(rLng) !== 0);
-      const mapUrl = hasGeo
-        ? `https://www.google.com/maps/search/?api=1&query=${rLat},${rLng}`
-        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${r.name || ''} ${r.address || r.city || ''}`)}`;
-      lines.push([
-        `"${(r.name || '').replace(/"/g, '""')}"`,
-        `"${(r.category || '').replace(/"/g, '""')}"`,
-        `"${combinedPhone}"`,
-        `"${dual.mobile?.display || ''}"`,
-        `"${dual.landline?.display || ''}"`,
-        `"${(r.address || '').replace(/"/g, '""')}"`,
-        `"${(r.mandal || r.locality || '').replace(/"/g, '""')}"`,
-        `"${(r.city || r.village || '').replace(/"/g, '""')}"`,
-        `"${(r.district || '').replace(/"/g, '""')}"`,
-        `"${(r.state || '').replace(/"/g, '""')}"`,
-        `"${(r.pincode || '').replace(/"/g, '""')}"`,
-        `"${hasGeo ? rLat : ''}"`,
-        `"${hasGeo ? rLng : ''}"`,
-        `"${mapUrl}"`,
-        `"${r.rating || ''}"`,
-        `"${r.reviewsCount || ''}"`,
-        `"${(r.website || '').replace(/"/g, '""')}"`,
-        `"${(r.instagram || '').replace(/"/g, '""')}"`,
-        `"${(r.facebook || '').replace(/"/g, '""')}"`,
-        `"${(r.tiktok || '').replace(/"/g, '""')}"`,
-        `"${(r.twitter || '').replace(/"/g, '""')}"`,
-        `"${(r.whatsappLink || '').replace(/"/g, '""')}"`
-      ].join(','));
-    });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `business_leads_${target.length}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success(`Exported ${target.length} businesses to CSV!`);
+    toast.success(`Exported ${target.length} vCards.`);
   };
 
   return (
-    <section className="v2-leads-view">
-      {sessionFilter && (
-        <div className="v2-session-banner">
-          <Filter size={13} />
-          <span>Viewing saved list</span>
-          <button type="button" onClick={() => setSessionFilter('')}><X size={12} /> Show all</button>
-        </div>
-      )}
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 280 }}>
-          <FilterBar
-            filters={filters}
-            onChange={updateFilter}
-            total={sessionFilter ? filteredVendors.length : vendors.length}
-            shown={filteredVendors.length}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, gap: 8 }}>
+      {/* Auto-Saved Scraped Folders Strip */}
+      <div className="no-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 6, overflowX: 'auto', paddingBottom: 2, flexShrink: 0 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--lp-ink-4)', display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+          <Folder size={12} color="#d97706" /> Scraped Folders:
+        </span>
+        {activeSelection && (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px 10px',
+              borderRadius: 10,
+              fontSize: 11.5,
+              fontWeight: 800,
+              background: '#f0f9ff',
+              color: '#0369a1',
+              border: '1px solid rgba(2, 132, 199, 0.28)',
+              flexShrink: 0
+            }}
+          >
+            <span>
+              Viewing: {activeSelection.folderTitle}
+              {activeSelection.subcategory ? ` › ${activeSelection.subcategory}` : ''}
+              {activeSelection.sublocation ? ` › ${activeSelection.sublocation}` : ''}
+              {activeSelection.segment ? ` › ${activeSelection.segment}` : ''}
+            </span>
+            {onClearFolderSelection && (
+              <button
+                type="button"
+                onClick={onClearFolderSelection}
+                style={{ border: 'none', background: 'transparent', color: '#0369a1', cursor: 'pointer', padding: 0, display: 'inline-flex' }}
+                title="Clear folder scope"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </span>
+        )}
+        {folders.slice(0, 5).map((fld) => (
+          <AutoFolderPill
+            key={fld.id}
+            folder={fld}
+            active={activeSelection?.folderId === fld.id}
+            onOpenFolder={onQuickOpenFolder}
           />
-        </div>
+        ))}
         <button
           type="button"
-          className="lx-chip-export"
-          style={{ height: 42, padding: '0 15px', borderRadius: 13 }}
-          onClick={() => handleExportCsv(filteredVendors)}
-          disabled={!filteredVendors.length}
-          title="Export all matching leads as CSV"
-        >
-          <Download size={13} /> Export All ({formatNumber(filteredVendors.length)})
-        </button>
-      </div>
-
-      <style>{'@keyframes lxSpin{to{transform:rotate(360deg)}} @keyframes lxHunterGlow{0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.22)}50%{box-shadow:0 0 0 4px rgba(16,185,129,0.08)}}'}</style>
-
-      {scanning && (
-        <div
-          role="status"
-          aria-live="polite"
+          onClick={onOpenFoldersModal}
           style={{
-            padding: '10px 14px',
-            borderRadius: 12,
-            background: 'linear-gradient(95deg, rgba(16,185,129,0.10) 0%, rgba(245,158,11,0.10) 55%, rgba(6,182,212,0.10) 100%)',
-            border: '1px solid rgba(16,185,129,0.28)',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 10,
-            flexWrap: 'wrap',
-            animation: 'lxHunterGlow 2.4s ease-in-out infinite'
+            gap: 5,
+            padding: '4px 10px',
+            borderRadius: 10,
+            fontSize: 11,
+            fontWeight: 700,
+            background: '#fffbeb',
+            color: '#92400e',
+            border: '1px solid rgba(217, 119, 6, 0.34)',
+            cursor: 'pointer',
+            flexShrink: 0
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
-            <Loader2 size={15} color="#059669" style={{ flexShrink: 0, animation: 'lxSpin 1.1s linear infinite' }} />
-            <div style={{ fontSize: 12, lineHeight: 1.35, color: '#0f172a' }}>
-              <b style={{ color: '#065f46' }}>Don&apos;t panic — Parallel Contact &amp; Social Hunter is delivering your numbers live!</b>{' '}
-              <span style={{ color: '#475569' }}>
-                JustDial, Google Maps, Instagram, Facebook &amp; our 12-lane Website Crawler are extracting direct Mobile, Landline &amp; Social handles in real time.
-              </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11, fontWeight: 700 }}>
-            <SocialHunterBadgeRow scanning={scanning} />
-            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(16,185,129,0.16)', color: '#065f46' }}>
-              ✓ {formatNumber(mobileCount)} Mobiles
-            </span>
-            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(59,130,246,0.14)', color: '#1d4ed8' }}>
-              ☎ {formatNumber(landlineCount)} Landlines
-            </span>
-            <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(225,48,108,0.12)', color: '#be185d' }}>
-              ✨ {formatNumber(socialCount)} Socials
-            </span>
-            {huntingCount > 0 && (
-              <span style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(245,158,11,0.16)', color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <Sparkles size={10} /> Hunting {formatNumber(huntingCount)} Websites &amp; Profiles…
-              </span>
-            )}
-          </div>
-        </div>
-      )}
+          <FolderOpen size={12} /> All Folders ({folders.length})
+        </button>
 
-      <div className="v2-table-shell">
-        <div className="v2-table-scroll">
-          <table className="lx-clean-table">
-            <thead>
+        {typeof onDeepEnrichPage === 'function' && pageRows.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onDeepEnrichPage(pageRows)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 10px',
+              borderRadius: 10,
+              fontSize: 11,
+              fontWeight: 700,
+              background: '#f0f9ff',
+              color: '#0369a1',
+              border: '1px solid rgba(2, 132, 199, 0.28)',
+              cursor: 'pointer',
+              flexShrink: 0,
+              marginLeft: 'auto'
+            }}
+          >
+            <Sparkles size={12} /> Deep Enrich Page
+          </button>
+        )}
+      </div>
+
+      <FilterBar
+        filters={filters}
+        onChange={updateFilter}
+        onReset={onResetFilters}
+        total={filteredVendors.length}
+        shown={pageRows.length}
+        compact
+      />
+
+      {/* Virtualised Scroll Container */}
+      <div
+        ref={scrollWrapRef}
+        onScroll={onScroll}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto', borderRadius: 12, border: '1px solid rgba(15, 23, 42, 0.08)', background: '#ffffff' }}
+      >
+        {pageRows.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title={scanning ? 'Scanning municipal wards…' : 'No matching leads in view'}
+            description={scanning ? 'Leads stream into this table as each ward completes.' : 'Adjust your filters above or start a new sweep.'}
+          />
+        ) : (
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr>
-                <th style={{ width: 34 }}>
+                <th style={{ width: 42, padding: '8px 10px' }}>
                   <input
                     type="checkbox"
-                    checked={pageRows.length > 0 && selectedIds.size === pageRows.length}
+                    checked={selectedIds.size > 0 && selectedIds.size === pageRows.length}
                     onChange={toggleSelectAll}
-                    title="Select all on this page"
-                    aria-label="Select all on this page"
+                    aria-label="Select page rows"
                   />
                 </th>
-                <th>Business &amp; Location</th>
-                <th>Direct Mobile, Landline &amp; Web</th>
-                <th style={{ width: 110 }}>Rating</th>
-                <th style={{ width: 36 }} />
+                <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Business & Locality
+                </th>
+                <th style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Contacts & Socials
+                </th>
+                <th style={{ width: 112, textAlign: 'right', padding: '8px 12px', fontSize: 11, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Reviews &amp; Dossier
+                </th>
               </tr>
             </thead>
             <tbody>
-              {(pageRows || []).map((vendor, index) => {
-                const quality = qualityOf(vendor);
-                const rowKey = vendor.id || `${vendor.name}-${vendor.phone || index}`;
-                const vLat = vendor.latitude ?? vendor.lat;
-                const vLng = vendor.longitude ?? vendor.lng;
-                const distKm = calculateHaversineKm(originLat, originLng, vLat, vLng);
-                const locality = vendor.city || vendor.village || vendor.district || '';
-                const rawAddress = vendor.address || vendor.formattedAddress || vendor.street || [vendor.locality, locality, vendor.state].filter(Boolean).join(', ') || 'Address available';
-                const seenParts = new Set();
-                const leadAddress = String(rawAddress).split(',').map(part => part.trim()).filter(part => {
-                  if (!part) return false;
-                  const key = part.toLowerCase();
-                  if (seenParts.has(key)) return false;
-                  seenParts.add(key);
-                  return true;
-                }).join(', ');
-                const dual = getAllDisplayPhones(vendor, vendor.country || country);
-                const hasAnyPhone = Boolean(dual.mobile || dual.landline);
-                const isPhonePop = Boolean(phoneJustFoundIds?.has(vendor.id || rowKey));
-                const hasGeo = Number.isFinite(Number(vLat)) && Number.isFinite(Number(vLng)) && (Number(vLat) !== 0 || Number(vLng) !== 0);
-                const pinUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hasGeo ? `${vLat},${vLng}` : `${vendor.name || ''} ${leadAddress}`)}`;
-
+              {topSpacer > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={4} style={{ height: topSpacer, padding: 0, border: 'none' }} />
+                </tr>
+              )}
+              {visibleRows.map((v, idx) => {
+                const id = safeLeadId(v);
                 return (
-                  <tr
-                    key={rowKey}
-                    className={cx(selectedIds.has(rowKey) && 'is-selected')}
-                    onClick={() => setSelectedVendor(vendor)}
-                  >
-                    <td style={{ width: 34 }} onClick={event => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(rowKey)}
-                        onChange={() => toggleSelectOne(rowKey)}
-                      />
-                    </td>
-                    <td>
-                      <div className="lx-biz-cell">
-                        <VendorAvatar vendor={vendor} />
-                        <div className="lx-biz-info">
-                          <div className="lx-biz-name-row">
-                            <b>{vendor.name || 'Business'}</b>
-                            {vendor.verified && <CheckCircle2 size={13} color="#059669" />}
-                          </div>
-                          <div className="lx-biz-addr" title={leadAddress}>
-                            <MapPin size={11} color="#06b6d4" style={{ flexShrink: 0 }} />
-                            <span>{leadAddress}</span>
-                            {distKm != null && distKm <= 500 && <em>{distKm} km</em>}
-                          </div>
-                          <span className="lx-biz-cat">
-                            {vendor.category || 'Business'}
-                            {vendor.subcategory ? ` · ${vendor.subcategory}` : ''}
-                            {(vendor.mandal || vendor.pincode) ? ` · ${[vendor.mandal, vendor.pincode].filter(Boolean).join(' · ')}` : ''}
-                            {quality != null ? ` · ${quality}% complete` : ''}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="lx-contact-stack">
-                        {hasAnyPhone ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                            {dual.mobile && (
-                              <div className="lx-phone-row">
-                                <a
-                                  href={dual.mobile.callUrl || `tel:${String(dual.mobile.display).replace(/\s+/g, '')}`}
-                                  className={cx('lx-phone-pill is-mob', isPhonePop && 'lx-phone-pop')}
-                                  title="Tap to call mobile"
-                                  onClick={event => event.stopPropagation()}
-                                >
-                                  <Smartphone size={11} /> {dual.mobile.display}
-                                  <span className="lx-phone-tag is-mob">MOB</span>
-                                </a>
-                                {dual.mobile.whatsappUrl && (
-                                  <a
-                                    href={dual.mobile.whatsappUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="lx-wa-mini"
-                                    title="Message on WhatsApp"
-                                    onClick={event => event.stopPropagation()}
-                                  >
-                                    <MessageCircle size={11} />
-                                  </a>
-                                )}
-                                <button
-                                  type="button"
-                                  className="lx-copy-chip"
-                                  onClick={event => handleCopyPhone(dual.mobile.display, event)}
-                                  title="Copy mobile number"
-                                >
-                                  <Copy size={10} /> Copy
-                                </button>
-                              </div>
-                            )}
-                            {dual.landline && (
-                              <div className="lx-phone-row">
-                                <a
-                                  href={dual.landline.callUrl || `tel:${String(dual.landline.display).replace(/\s+/g, '')}`}
-                                  className={cx('lx-phone-pill is-land', isPhonePop && 'lx-phone-pop')}
-                                  title="Tap to call landline / STD"
-                                  onClick={event => event.stopPropagation()}
-                                >
-                                  <Phone size={11} /> {dual.landline.display}
-                                  <span className="lx-phone-tag is-land">STD</span>
-                                </a>
-                                <button
-                                  type="button"
-                                  className="lx-copy-chip"
-                                  onClick={event => handleCopyPhone(dual.landline.display, event)}
-                                  title="Copy landline / STD number"
-                                >
-                                  <Copy size={10} /> Copy
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (scanning || (vendor.website && !vendor.websiteEnrichedAt)) ? (
-                          <span
-                            className="lx-phone-scanning"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              padding: '4px 10px',
-                              borderRadius: 999,
-                              fontSize: 11.5,
-                              fontWeight: 600,
-                              color: '#065f46',
-                              background: 'linear-gradient(90deg, rgba(16,185,129,0.12) 0%, rgba(245,158,11,0.15) 50%, rgba(16,185,129,0.12) 100%)',
-                              border: '1px solid rgba(16,185,129,0.28)'
-                            }}
-                          >
-                            <Loader2 size={11} style={{ animation: 'lxSpin 1.1s linear infinite' }} />
-                            {vendor.website ? 'Scanning website & Maps for phone…' : 'Hunting mobile & landline live…'}
-                          </span>
-                        ) : (
-                          <span className="lx-muted-text">No public phone listed</span>
-                        )}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-                          {vendor.website ? (
-                            <a
-                              href={vendor.website}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="lx-web-mini"
-                            >
-                              <Globe2 size={11} /> Website
-                            </a>
-                          ) : (
-                            <span className="lx-noweb-pill">No Website · Warm Lead</span>
-                          )}
-                          <a
-                            href={pinUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="lx-pin-link"
-                            title="Open street pin & directions"
-                          >
-                            <MapPin size={10} /> Street Pin
-                          </a>
-                          {vendor.email && (
-                            <a
-                              href={`mailto:${vendor.email}`}
-                              className="lx-web-mini"
-                            >
-                              Email
-                            </a>
-                          )}
-                          <VendorSocialPills vendor={vendor} max={4} />
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      {vendor.rating != null ? (
-                        <span className="lx-rating-cell">
-                          <Star size={12} fill="#f59e0b" color="#d97706" />
-                          <b>{Number(vendor.rating).toFixed(1)}</b>
-                          <small>({formatNumber(vendor.reviewsCount || 0)})</small>
-                        </span>
-                      ) : (
-                        <span className="lx-muted-text">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <ArrowRight size={14} className="lx-row-arrow" />
-                    </td>
-                  </tr>
+                  <LeadTableRow
+                    key={id}
+                    vendor={v}
+                    index={idx}
+                    selected={selectedIds.has(id)}
+                    selectedIds={selectedIds}
+                    onToggleSelect={() => toggleSelectOne(id)}
+                    onClick={() => setSelectedVendor?.(v)}
+                    onCopyPhone={handleCopyPhone}
+                    originLat={originLat}
+                    originLng={originLng}
+                    country={country}
+                    isFresh={Boolean(freshLeadIds?.has(id))}
+                    isPhonePop={Boolean(phoneJustFoundIds?.has(id))}
+                    isLiveHunting={isLiveHunting}
+                  />
                 );
               })}
+              {bottomSpacer > 0 && (
+                <tr aria-hidden="true">
+                  <td colSpan={4} style={{ height: bottomSpacer, padding: 0, border: 'none' }} />
+                </tr>
+              )}
             </tbody>
           </table>
-
-          {pageRows.length === 0 && (
-            <EmptyState
-              icon={Search}
-              title="No businesses match this filter."
-              body="Clear your filters or start a new search above to see fresh business leads."
-              action={() => setFilters({ query: '', phoneOnly: false, primeOnly: false, websiteOnly: false, noWebsiteOnly: false, deepOnly: false, conflictsOnly: false, minRating: 0, sort: 'newest', source: 'all' })}
-              actionLabel="Reset filters"
-            />
-          )}
-        </div>
-
-        <footer className="v2-table-foot">
-          <span>
-            Showing <b>{filteredVendors.length ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredVendors.length)}</b> of <b>{formatNumber(filteredVendors.length)}</b>
-          </span>
-          <div className="v2-pagination">
-            <select value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
-              <option value={50}>50 / page</option>
-              <option value={100}>100 / page</option>
-              <option value={250}>250 / page</option>
-              <option value={500}>500 / page</option>
-              <option value={10000}>All Leads</option>
-            </select>
-            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} aria-label="Previous page">
-              <ChevronLeft size={14} />
-            </button>
-            <span>{currentPage} / {pageCount}</span>
-            <button type="button" disabled={currentPage >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))} aria-label="Next page">
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </footer>
+        )}
       </div>
 
-      <FloatingActionDock
-        selectedCount={selectedIds.size}
-        onClear={() => setSelectedIds(new Set())}
-        onCopyMobiles={handleCopyMobiles}
-        onExportVcf={handleExportVcf}
-        onExportCsv={() => handleExportCsv()}
+      <TablePagination
+        currentPage={currentPage}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        totalItems={filteredVendors.length}
+        setPage={setPage}
+        setPageSize={setPageSize}
       />
-    </section>
+
+      {selectedIds.size > 0 && (
+        <FloatingActionDock
+          selectedCount={selectedIds.size}
+          onClear={() => setSelectedIds(new Set())}
+          onCopyMobiles={handleCopyMobiles}
+          onExportVcf={handleExportVcf}
+          onExportCsv={() => {
+            const target = pageRows.filter((v) => selectedIds.has(safeLeadId(v)));
+            if (!target.length) return;
+            downloadLeadCsv(target, `selected_${target.length}_leads.csv`);
+          }}
+          onDeepEnrichSelected={typeof onDeepEnrichPage === 'function' ? () => {
+            const target = pageRows.filter((v) => selectedIds.has(safeLeadId(v)));
+            if (target.length) onDeepEnrichPage(target);
+          } : undefined}
+          onSaveToFolder={() => onSaveToFolder?.(Array.from(selectedIds))}
+        />
+      )}
+    </div>
   );
 }

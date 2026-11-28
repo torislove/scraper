@@ -1,0 +1,10 @@
+primp
+curl_cffi
+beautifulsoup4
+phonenumbers
+h3
+selectolax
+tldextract
+dnspython
+duckdb
+shapely

@@ -1,9 +1,30 @@
 # ==============================================================================
-# Scraper.co.in - Production Docker Compose Orchestration
-# Ultra-Slim Resource Footprint with Client-Hardware Distributed Compute
+# Scraper.co.in - Production Docker Compose Stack (Zero-Chromium)
+# Services: Python TLS Sidecar (:5003) + Node/Go Engine (:5002) + Client + Master
 # ==============================================================================
 
 services:
+  scraper-tls-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    container_name: scraper-tls-sidecar
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5003/health"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+      start_period: 8s
+
   scraper-server:
     build:
       context: .
@@ -15,16 +36,17 @@ services:
     environment:
       - PORT=5002
       - NODE_ENV=production
-      - COMPUTE_MODE=extension_only
-      - SCRAPER_EXTENSION_ONLY=true
-      - USER_RAM_OFFLOAD_ENABLED=1
-      - SCRAPER_ALLOW_REMOTE=1
-      - SCRAPER_BROWSER_SLOTS=0
-      - PLAYWRIGHT_CONCURRENCY=0
+      - COMPUTE_MODE=hybrid
+      - TLS_SIDECAR_URL=http://scraper-tls-sidecar:5003
+      - STORAGE_ROOT=/storage
+      - SANDBOX_USER_ID=prod_shared
       - NODE_OPTIONS=--max-old-space-size=1024
       - AUTH_REQUIRED=1
       - SESSION_SECRET=${SESSION_SECRET:-scraper-production-secure-session-secret-change-me}
       - MASTER_KEY=${MASTER_KEY:-master-admin-production-key-change-me}
+    depends_on:
+      scraper-tls-sidecar:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -33,17 +55,10 @@ services:
         reservations:
           cpus: '0.2'
           memory: 128M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     volumes:
-      # Persistent storage for vaults, lead database, and users
-      - scraper_data:/app/server/data
-      - scraper_db:/app/server/db
+      - scraper_storage:/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/api/health"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5002/api/health"]
       interval: 20s
       timeout: 4s
       retries: 3
@@ -57,6 +72,8 @@ services:
     restart: unless-stopped
     ports:
       - "8081:80"
+    environment:
+      - API_UPSTREAM=http://scraper-server:5002
     deploy:
       resources:
         limits:
@@ -65,11 +82,6 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
     depends_on:
       scraper-server:
         condition: service_healthy
@@ -82,6 +94,8 @@ services:
     restart: unless-stopped
     ports:
       - "8082:80"
+    environment:
+      - API_UPSTREAM=http://scraper-server:5002
     deploy:
       resources:
         limits:
@@ -90,17 +104,10 @@ services:
         reservations:
           cpus: '0.1'
           memory: 64M
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
     depends_on:
       scraper-server:
         condition: service_healthy
 
 volumes:
-  scraper_data:
-    name: scraper_production_data
-  scraper_db:
-    name: scraper_production_db
+  scraper_storage:
+    name: scraper_production_storage

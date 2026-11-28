@@ -31,19 +31,7 @@ client.interceptors.request.use(config => {
   return config;
 });
 
-/* Connection events are EDGE-TRIGGERED.
- *
- * The first version dispatched `leadharvest:server_online` on every successful
- * response. The command centre listened for that event, reconnected the event
- * stream and refreshed every panel. Each refresh produced another successful
- * response, which fired the event again — a self-feeding loop that exhausted
- * the API rate limit within a minute, made the stream flap, and surfaced to the
- * customer as "Reconnecting to Swarm Server … Attempt #473" while the engine
- * was perfectly healthy.
- *
- * The event now fires only on a real offline -> online transition, so it is a
- * genuine recovery signal that a listener may act on once.
- */
+// Edge-triggered online/offline events prevent reconnect storms.
 let serverReachable = true;
 
 function isBackendUnreachableError(error) {
@@ -460,114 +448,15 @@ export async function deleteMasterNotification(id) {
   return data;
 }
 
-/* ------------------------------------------------------ WhatsApp CRM (own account) */
-// Everything here talks to the customer's own WhatsApp Web session. There is no
-// API key anywhere: the only credential is the QR scan the customer performs.
-
-export async function getWaStatus() {
-  const { data } = await client.get('/wa/status');
-  return data;
-}
-
-export async function connectWa() {
-  const { data } = await client.post('/wa/connect');
-  return data;
-}
-
-export async function disconnectWa(wipe = false) {
-  const { data } = await client.post('/wa/disconnect', { wipe });
-  return data;
-}
-
-export async function syncWaChats() {
-  const { data } = await client.post('/wa/sync');
-  return data;
-}
-
-export async function getWaLeads(params = {}) {
-  const { data } = await client.get('/wa/leads', { params });
-  return data?.leads || [];
-}
-
-export async function getWaConversations(params = {}) {
-  const { data } = await client.get('/wa/conversations', { params });
-  return data?.conversations || [];
-}
-
-export async function createWaConversation(body) {
-  const { data } = await client.post('/wa/conversations', body);
-  return data?.conversation;
-}
-
-export async function getWaConversation(id) {
-  const { data } = await client.get(`/wa/conversations/${encodeURIComponent(id)}`);
-  return data;
-}
-
-export async function updateWaConversation(id, patch) {
-  const { data } = await client.patch(`/wa/conversations/${encodeURIComponent(id)}`, patch);
-  return data?.conversation;
-}
-
-export async function sendWaMessage(body) {
-  const { data } = await client.post('/wa/messages', body);
-  return data;
-}
-
-export async function sendWaBulk(body) {
-  const { data } = await client.post('/wa/bulk', body, { timeout: 120000 });
-  return data;
-}
-
-export async function getWaProducts() {
-  const { data } = await client.get('/wa/products');
-  return data?.products || [];
-}
-
-export async function saveWaProduct(body) {
-  const { data } = await client.post('/wa/products', body);
-  return data?.product;
-}
-
-export async function deleteWaProduct(id) {
-  const { data } = await client.delete(`/wa/products/${encodeURIComponent(id)}`);
-  return data;
-}
-
-export async function getWaSnippets() {
-  const { data } = await client.get('/wa/snippets');
-  return data?.snippets || [];
-}
-
-export async function saveWaSnippet(body) {
-  const { data } = await client.post('/wa/snippets', body);
-  return data?.snippet;
-}
-
-export async function deleteWaSnippet(id) {
-  const { data } = await client.delete(`/wa/snippets/${encodeURIComponent(id)}`);
-  return data;
-}
-
-export async function getWaAutomations() {
-  const { data } = await client.get('/wa/automations');
-  return data?.automations || [];
-}
-
-export async function saveWaAutomation(body) {
-  const { data } = await client.post('/wa/automations', body);
-  return data?.automation;
-}
-
-export async function getWaAnalytics() {
-  const { data } = await client.get('/wa/analytics');
-  return data?.analytics || {};
-}
-
-export async function updateWaSettings(patch) {
-  const { data } = await client.patch('/wa/settings', patch);
-  return data?.session;
-}
+import { createWaApi } from './apiWa';
+const waApi = createWaApi(client);
+export const {
+  getWaStatus, connectWa, disconnectWa, syncWaChats, getWaLeads,
+  getWaConversations, createWaConversation, getWaConversation, updateWaConversation,
+  sendWaMessage, sendWaBulk, getWaProducts, saveWaProduct, deleteWaProduct,
+  getWaSnippets, saveWaSnippet, deleteWaSnippet, getWaAutomations, saveWaAutomation,
+  getWaAnalytics, updateWaSettings
+} = waApi;
 
 /* â”€â”€ Master Client Auth Provisioning â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -585,3 +474,25 @@ export async function revokeMasterClientSessions(id) {
   const { data } = await client.post(`/master/clients/${encodeURIComponent(id)}/revoke-sessions`);
   return data;
 }
+
+export async function huntMissingPhones(payload = {}) {
+  const { data } = await client.post('/scrape/enrich-now', payload);
+  return data;
+}
+
+export async function getPhoneHuntStatus(sessionId = '') {
+  const { data } = await client.get('/scrape/hunt-status', {
+    params: sessionId ? { sessionId } : {}
+  });
+  return data;
+}
+
+export async function stopPhoneHunt() {
+  const { data } = await client.post('/scrape/hunt-stop');
+  return data;
+}
+
+export {
+  resolveCityZones, getCountriesOverview, getScrapedFolders,
+  getFolderLeads, getFolderExportUrl, resumeScrapedFolder, deleteScrapedFolder
+} from '@shared/utils/foldersGeoApi';

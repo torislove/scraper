@@ -19,9 +19,6 @@ spec:
     spec:
       terminationGracePeriodSeconds: 45
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
         fsGroup: 1000
       containers:
         - name: server
@@ -37,27 +34,18 @@ spec:
                 name: scraper-secrets
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
             capabilities:
-              drop:
-                - ALL
+              drop: ["ALL"]
           resources:
-            # Zero-Server Distributed Compute:
-            # Client browser Web Workers & RAM Turbo extension offload 95%+ of RAM/CPU
-            # onto client PC hardware, allowing the pod to operate efficiently on <128Mi.
             requests:
               cpu: "100m"
-              memory: "128Mi"
+              memory: "160Mi"
             limits:
-              cpu: "1000m"
-              memory: "768Mi"
+              cpu: "1200m"
+              memory: "1024Mi"
           volumeMounts:
             - name: storage
-              mountPath: /app/server/db
-              subPath: db
-            - name: storage
-              mountPath: /app/server/data
-              subPath: data
+              mountPath: /storage
           livenessProbe:
             httpGet:
               path: /api/health
@@ -65,15 +53,44 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
             timeoutSeconds: 4
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /api/health
               port: 5002
-            initialDelaySeconds: 10
+            initialDelaySeconds: 8
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 2
+        - name: tls-sidecar
+          image: ghcr.io/scraper-coin/scraper-sidecar:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5003
+              name: sidecar
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5003
+            initialDelaySeconds: 8
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5003
+            initialDelaySeconds: 4
+            periodSeconds: 10
       volumes:
         - name: storage
           persistentVolumeClaim:

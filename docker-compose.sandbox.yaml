@@ -1,0 +1,93 @@
+# ==============================================================================
+# Scraper.co.in - Per-User Isolated Docker Sandbox Stack
+# Usage: SANDBOX_ID=alice CLIENT_PORT=8101 MASTER_PORT=8201 docker compose -f docker-compose.sandbox.yaml -p sandbox_alice up -d
+# ==============================================================================
+
+services:
+  tls-sidecar:
+    build:
+      context: .
+      dockerfile: Dockerfile.sidecar
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5003/health"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    environment:
+      - PORT=5002
+      - NODE_ENV=production
+      - COMPUTE_MODE=hybrid
+      - TLS_SIDECAR_URL=http://tls-sidecar:5003
+      - STORAGE_ROOT=/storage
+      - SANDBOX_USER_ID=${SANDBOX_ID:-demo}
+      - AUTH_REQUIRED=1
+      - SESSION_SECRET=${SESSION_SECRET:-sandbox-secret-change-me}
+      - MASTER_KEY=${MASTER_KEY:-sandbox-master-key-change-me}
+    depends_on:
+      tls-sidecar:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1024M
+    volumes:
+      - sandbox_storage:/storage
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5002/api/health"]
+      interval: 15s
+      timeout: 4s
+      retries: 3
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    ports:
+      - "${CLIENT_PORT:-8101}:80"
+    environment:
+      - API_UPSTREAM=http://server:5002
+    depends_on:
+      server:
+        condition: service_healthy
+
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile.master
+    restart: unless-stopped
+    networks:
+      - sandbox_net
+    ports:
+      - "${MASTER_PORT:-8201}:80"
+    environment:
+      - API_UPSTREAM=http://server:5002
+    depends_on:
+      server:
+        condition: service_healthy
+
+networks:
+  sandbox_net:
+    driver: bridge
+
+volumes:
+  sandbox_storage:

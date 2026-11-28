@@ -143,24 +143,42 @@ async function main() {
   const backendListening = backendHealthy || await isPortListening(5002, 250);
   const backendBooting = !backendListening && isBackendLockPidAlive();
 
+  let needStartServer = false;
   if (backendHealthy) {
     console.log('[launcher] Connected to running Backend Engine on http://localhost:5002');
-  } else if (backendListening || backendBooting) {
-    console.log('[launcher] Backend Engine is starting on http://localhost:5002 — waiting for ready signal...');
-    const up = await waitForHealth(35000, () => shuttingDown);
+  } else if (backendListening) {
+    console.log('[launcher] Backend Engine is already bound on http://localhost:5002 (busy or warming up) — verifying health briefly...');
+    const up = await waitForHealth(4000, () => shuttingDown);
     if (shuttingDown) return;
     if (up) {
       console.log('[launcher] Connected to running Backend Engine on http://localhost:5002');
     } else {
-      console.warn('[launcher] Backend health check timed out after 35s; starting frontend anyway...');
+      console.log('[launcher] Proceeding with Vite — active backend will resume /api/health automatically.');
+    }
+  } else if (backendBooting) {
+    console.log('[launcher] Backend Engine was starting on http://localhost:5002 — verifying ready signal...');
+    const up = await waitForHealth(4000, () => shuttingDown);
+    if (shuttingDown) return;
+    if (up) {
+      console.log('[launcher] Connected to running Backend Engine on http://localhost:5002');
+    } else {
+      console.log('[launcher] Previous session lock or unresponsive backend detected; launching fresh Backend Engine...');
+      needStartServer = true;
     }
   } else {
+    needStartServer = true;
+  }
+
+  if (needStartServer) {
     await freePorts([5002]);
     if (shuttingDown) return;
 
-    console.log('[launcher] Auto-starting Backend Engine on http://localhost:5002 ...');
+    const os = require('os');
+    const totalRamGb = os.totalmem() / (1024 * 1024 * 1024);
+    const safeHeapMb = totalRamGb <= 4.5 ? 768 : (totalRamGb <= 10.5 ? 1536 : (totalRamGb <= 22 ? 2048 : 2560));
+    console.log(`[launcher] Auto-starting Backend Engine on http://localhost:5002 (V8 Heap Cap: ${safeHeapMb}MB) ...`);
     startedServer = true;
-    serverChild = spawn(process.execPath, ['--max-old-space-size=4096', 'index.js'], {
+    serverChild = spawn(process.execPath, ['--expose-gc', `--max-old-space-size=${safeHeapMb}`, 'index.js'], {
       cwd: path.join(ROOT, 'server'),
       stdio: 'inherit',
       shell: false,

@@ -222,8 +222,30 @@ export async function deepEnrichVendor(vendorId) {
   return data;
 }
 
+export async function deepEnrichBatch(ids = [], sessionId = null) {
+  const { data } = await client.post('/leads/deep-enrich-batch', { ids, sessionId });
+  return data;
+}
+
 export async function aggressiveEnrichSession(sessionId) {
   const { data } = await client.post(`/sessions/${encodeURIComponent(sessionId)}/aggressive-enrich`);
+  return data;
+}
+
+export async function huntMissingPhones(payload = {}) {
+  const { data } = await client.post('/scrape/enrich-now', payload);
+  return data;
+}
+
+export async function getPhoneHuntStatus(sessionId = '') {
+  const { data } = await client.get('/scrape/hunt-status', {
+    params: sessionId ? { sessionId } : {}
+  });
+  return data;
+}
+
+export async function stopPhoneHunt() {
+  const { data } = await client.post('/scrape/hunt-stop');
   return data;
 }
 
@@ -441,33 +463,32 @@ export async function getWaSnippets() {
   const { data } = await client.get('/wa/snippets');
   return data?.snippets || [];
 }
-
 export async function saveWaSnippet(body) {
   const { data } = await client.post('/wa/snippets', body);
   return data?.snippet;
 }
-
 export async function deleteWaSnippet(id) {
   const { data } = await client.delete(`/wa/snippets/${encodeURIComponent(id)}`);
   return data;
 }
-
 export async function getWaAutomations() {
   const { data } = await client.get('/wa/automations');
   return data?.automations || [];
 }
-
 export async function saveWaAutomation(body) {
   const { data } = await client.post('/wa/automations', body);
   return data?.automation;
 }
-
 export async function getWaAnalytics() {
   const { data } = await client.get('/wa/analytics');
   return data?.analytics || {};
 }
-
 export async function updateWaSettings(patch) {
   const { data } = await client.patch('/wa/settings', patch);
   return data?.session;
 }
+
+export {
+  resolveCityZones, getCountriesOverview, getScrapedFolders,
+  getFolderLeads, getFolderExportUrl, resumeScrapedFolder, deleteScrapedFolder
+} from '@shared/utils/foldersGeoApi';

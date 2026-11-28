@@ -96,10 +96,10 @@ export default function Terms() {
           {/* Section 5 */}
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">
-              5. Quotas, Subscriptions &amp; Guarantee of Accuracy
+              5. Quotas, Subscriptions &amp; Data Classification
             </h2>
             <p>
-              We provide phone classification tiers (L1 WhatsApp Direct, L2 Mobile, L3 Landline) derived from carrier format validation and web crawling. While we guarantee zero duplicate records and verify that extracted leads reflect live web observation, we do not warrant that third-party businesses will maintain active operations indefinitely.
+              We provide phone classification tiers (WhatsApp-capable Mobile and STD Landline) derived from carrier format parsing and public web observation. Records are deduplicated within each session; because public listings change over time, third-party business contact availability should be verified prior to outreach.
             </p>
           </div>
         </div>

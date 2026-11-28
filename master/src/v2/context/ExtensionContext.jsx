@@ -210,6 +210,7 @@ export function ExtensionProvider({ children }) {
 
   const skipAndRunLocal = useCallback(() => {
     try { localStorage.setItem(SKIP_EXTENSION_KEY, '1'); } catch (e) {}
+    readyRef.current = true;
     setSkippedExtension(true);
     setGatewayOpen(false);
     const fn = pendingActionRef.current;
@@ -240,6 +241,7 @@ export function ExtensionProvider({ children }) {
 
     if (detected?.installed || srv?.connected || Boolean(document.documentElement?.dataset?.scraperExtension)) {
       try { localStorage.setItem(VERIFIED_KEY, '1'); } catch (e) {}
+      readyRef.current = true;
       setExt(prev => ({
         ...prev,
         installed: Boolean(detected?.installed || prev.installed),
@@ -260,6 +262,7 @@ export function ExtensionProvider({ children }) {
 
     // 1-click easy scraping mode: run immediately on server engine when extension isn't installed yet
     if (EASY_SCRAPE_MODE && !srv?.extensionOnly) {
+      readyRef.current = true;
       setSkippedExtension(true);
       if (typeof onReady === 'function') await onReady();
       return true;

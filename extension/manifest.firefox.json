@@ -1,0 +1,91 @@
+{
+  "manifest_version": 3,
+  "name": "Scraper.co.in — RAM Turbo",
+  "short_name": "RAM Turbo",
+  "version": "2.0.0",
+  "description": "Zero-Chromium edge accelerator for Scraper.co.in (Client & Master) across 5 sovereign markets (IN, US, GB, AU, AE), with offline capture.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "scraper-ram-turbo@scraper.co.in",
+      "strict_min_version": "115.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://scraper.co.in/*",
+    "https://*.scraper.co.in/*",
+    "https://master.scraper.co.in/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.bing.com/*",
+    "https://*.duckduckgo.com/*",
+    "https://*.search.brave.com/*",
+    "https://*.google.com/*",
+    "https://*.google.co.in/*",
+    "https://*.google.co.uk/*",
+    "https://*.google.com.au/*",
+    "https://*.google.ae/*",
+    "https://*.justdial.com/*",
+    "https://*.indiamart.com/*",
+    "https://*.sulekha.com/*",
+    "https://*.yelp.com/*",
+    "https://*.yelp.com.au/*",
+    "https://*.yellowpages.com/*",
+    "https://*.yellowpages.com.au/*",
+    "https://*.yellowpages.ae/*",
+    "https://*.yell.com/*",
+    "https://*.cylex.us.com/*",
+    "https://*.cylex.co.uk/*",
+    "https://*.cylex.com.au/*",
+    "https://*.cylex.ae/*",
+    "https://*.freeindex.co.uk/*",
+    "https://*.trustpilot.com/*",
+    "https://*.openstreetmap.org/*",
+    "https://*.overpass-api.de/*",
+    "https://*.wikidata.org/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scraper.co.in RAM Turbo",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://scraper.co.in/*",
+        "https://*.scraper.co.in/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["contentBridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

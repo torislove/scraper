@@ -78,27 +78,6 @@ export function formatCleanAreaDisplay(lead, fallbackCity) {
   return unique.join(', ') || '—';
 }
 
-/**
- * Provenance chip for Phase 3 carry-forward. A lead that was verified in an
- * earlier search of the same area + category is reused instead of re-charged.
- */
-export function CarriedBadge({ lead }) {
-  if (!lead || !lead.carriedForward) return null;
-  const from = lead.carriedFrom || {};
-  const sessionId = from.sessionId || (Array.isArray(from.sessionIds) ? from.sessionIds[0] : '');
-  const when = from.scrapedAt || from.addedAt;
-  const date = when ? new Date(when) : null;
-  const detail = [
-    sessionId ? `from ${sessionId}` : null,
-    date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString() : null
-  ].filter(Boolean).join(' · ');
-  return (
-    <span className="v2-carried-badge" title={`Previously verified in an earlier search of this area${detail ? ` (${detail})` : ''}`}>
-      ✓ Verified earlier
-    </span>
-  );
-}
-
 export function qualityOf(vendor) {
   if (!vendor || typeof vendor !== 'object') return null;
   const score = vendor?.profileQuality?.score;

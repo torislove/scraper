@@ -1,0 +1,236 @@
+# ==============================================================================
+# Per-User Isolated Kubernetes Sandbox Template
+# Placeholders: __SANDBOX_ID__, __DOMAIN_SUFFIX__, __SESSION_SECRET__, __MASTER_KEY__
+# Contains: Isolated Namespace + ResourceQuota + NetworkPolicy + PVC
+#           + 4-Container Pod (Client + Master + Server + Python TLS Sidecar)
+# ==============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sandbox-__SANDBOX_ID__
+  labels:
+    app.kubernetes.io/part-of: scraper-sandbox
+    sandbox-user: "__SANDBOX_ID__"
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: sandbox-quota
+  namespace: sandbox-__SANDBOX_ID__
+spec:
+  hard:
+    requests.cpu: "500m"
+    requests.memory: "768Mi"
+    limits.cpu: "2500m"
+    limits.memory: "2560Mi"
+    persistentvolumeclaims: "1"
+    requests.storage: "5Gi"
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-isolation
+  namespace: sandbox-__SANDBOX_ID__
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8081
+        - protocol: TCP
+          port: 8082
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sandbox-pvc
+  namespace: sandbox-__SANDBOX_ID__
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sandbox-secrets
+  namespace: sandbox-__SANDBOX_ID__
+type: Opaque
+stringData:
+  SESSION_SECRET: "__SESSION_SECRET__"
+  MASTER_KEY: "__MASTER_KEY__"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scraper-sandbox
+  namespace: sandbox-__SANDBOX_ID__
+  labels:
+    app: scraper-sandbox
+    sandbox-user: "__SANDBOX_ID__"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: scraper-sandbox
+  template:
+    metadata:
+      labels:
+        app: scraper-sandbox
+        sandbox-user: "__SANDBOX_ID__"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: client
+          image: ghcr.io/scraper-coin/scraper-client:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "sed -i 's/listen 80;/listen 8081;/g' /etc/nginx/templates/default.conf.template && /docker-entrypoint.sh nginx -g 'daemon off;'"]
+          env:
+            - name: API_UPSTREAM
+              value: "http://127.0.0.1:5002"
+          ports:
+            - containerPort: 8081
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "300m", memory: "192Mi" }
+        - name: master
+          image: ghcr.io/scraper-coin/scraper-master:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "sed -i 's/listen 80;/listen 8082;/g' /etc/nginx/templates/default.conf.template && /docker-entrypoint.sh nginx -g 'daemon off;'"]
+          env:
+            - name: API_UPSTREAM
+              value: "http://127.0.0.1:5002"
+          ports:
+            - containerPort: 8082
+          resources:
+            requests: { cpu: "50m", memory: "64Mi" }
+            limits: { cpu: "300m", memory: "192Mi" }
+        - name: server
+          image: ghcr.io/scraper-coin/scraper-server:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "5002"
+            - name: TLS_SIDECAR_URL
+              value: "http://127.0.0.1:5003"
+            - name: STORAGE_ROOT
+              value: "/storage"
+            - name: SANDBOX_USER_ID
+              value: "__SANDBOX_ID__"
+          envFrom:
+            - secretRef: { name: sandbox-secrets }
+          ports:
+            - containerPort: 5002
+          volumeMounts:
+            - name: data
+              mountPath: /storage
+          resources:
+            requests: { cpu: "150m", memory: "256Mi" }
+            limits: { cpu: "1000m", memory: "1024Mi" }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 5002 }
+            initialDelaySeconds: 8
+            periodSeconds: 10
+        - name: tls-sidecar
+          image: ghcr.io/scraper-coin/scraper-sidecar:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5003
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: "100m", memory: "128Mi" }
+            limits: { cpu: "800m", memory: "512Mi" }
+          readinessProbe:
+            httpGet: { path: /health, port: 5003 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: sandbox-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sandbox-service
+  namespace: sandbox-__SANDBOX_ID__
+spec:
+  type: ClusterIP
+  ports:
+    - name: client
+      port: 8081
+      targetPort: 8081
+    - name: master
+      port: 8082
+      targetPort: 8082
+  selector:
+    app: scraper-sandbox
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sandbox-ingress
+  namespace: sandbox-__SANDBOX_ID__
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+spec:
+  rules:
+    - host: client-__SANDBOX_ID__.__DOMAIN_SUFFIX__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sandbox-service
+                port: { number: 8081 }
+    - host: master-__SANDBOX_ID__.__DOMAIN_SUFFIX__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sandbox-service
+                port: { number: 8082 }

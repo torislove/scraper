@@ -39,8 +39,19 @@ function createCleanViteLogger() {
 }
 
 function releaseOnClose(proxy) {
+  proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
+    if (socket && typeof socket.on === 'function') socket.on('error', () => {});
+  });
+  proxy.on('open', (proxySocket) => {
+    if (proxySocket && typeof proxySocket.on === 'function') proxySocket.on('error', () => {});
+  });
   proxy.on('error', (err, _req, res) => {
-    if (!res || res.headersSent || res.writableEnded) return;
+    if (!res) return;
+    if (typeof res.writeHead !== 'function') {
+      try { res.destroy?.(); } catch (e) {}
+      return;
+    }
+    if (res.headersSent || res.writableEnded) return;
     try {
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
@@ -107,8 +118,20 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
+        '@shared': fileURLToPath(new URL('../shared', import.meta.url)),
         react: fileURLToPath(new URL('./node_modules/react', import.meta.url)),
+        'react/jsx-runtime': fileURLToPath(new URL('./node_modules/react/jsx-runtime.js', import.meta.url)),
+        'react/jsx-dev-runtime': fileURLToPath(new URL('./node_modules/react/jsx-dev-runtime.js', import.meta.url)),
         'react-dom': fileURLToPath(new URL('./node_modules/react-dom', import.meta.url)),
+        'react-router-dom': fileURLToPath(new URL('./node_modules/react-router-dom', import.meta.url)),
+        'framer-motion': fileURLToPath(new URL('./node_modules/framer-motion', import.meta.url)),
+        'lucide-react': fileURLToPath(new URL('./node_modules/lucide-react', import.meta.url)),
+        'react-hot-toast': fileURLToPath(new URL('./node_modules/react-hot-toast', import.meta.url)),
+        axios: fileURLToPath(new URL('./node_modules/axios', import.meta.url)),
+        three: fileURLToPath(new URL('./node_modules/three', import.meta.url)),
+        'libphonenumber-js': fileURLToPath(new URL('./node_modules/libphonenumber-js', import.meta.url)),
+        'leaflet/dist/leaflet.css': fileURLToPath(new URL('./node_modules/leaflet/dist/leaflet.css', import.meta.url)),
+        leaflet: fileURLToPath(new URL('./node_modules/leaflet', import.meta.url)),
       },
     },
     define: {

@@ -33,6 +33,35 @@ import {
 export default function ExtensionGatewayModal() {
   const ctx = useExtension();
   const [copiedPath, setCopiedPath] = useState(false);
+  const [ramMode, setRamMode] = useState('auto');
+  const [serverStats, setServerStats] = useState(null);
+
+  React.useEffect(() => {
+    if (!ctx?.gatewayOpen) return;
+    let active = true;
+    fetch('/api/scrape/hardware')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (!active || !d?.ok) return;
+        if (d.ramMode) setRamMode(d.ramMode);
+        setServerStats(d);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [ctx?.gatewayOpen]);
+
+  const applyRamMode = async (mode) => {
+    setRamMode(mode);
+    try {
+      const res = await fetch('/api/scrape/hardware', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode })
+      });
+      const d = await res.json();
+      if (d?.ok) setServerStats(d);
+    } catch {}
+  };
 
   if (!ctx || !ctx.gatewayOpen) return null;
 
@@ -177,6 +206,37 @@ export default function ExtensionGatewayModal() {
                   <span>{req.parallelZones} Zones · {req.speed}</span>
                 </div>
               ))}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, margin: '8px 0 4px', padding: '8px 10px', borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 11 }}>
+              <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                RAM Mode{serverStats?.swap?.coldRows ? ` · Zstd ${serverStats.swap.compressionRatio || 1}x` : ''}:
+              </span>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'auto', label: 'Auto' },
+                  { id: 'eco8', label: '8 GB Safe' },
+                  { id: 'balanced16', label: '16 GB Fast' },
+                  { id: 'turbo32', label: '32 GB Ultra' }
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => applyRamMode(opt.id)}
+                    style={{
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: ramMode === opt.id ? '1.5px solid #059669' : '1px solid #cbd5e1',
+                      background: ramMode === opt.id ? '#ecfdf5' : '#ffffff',
+                      color: ramMode === opt.id ? '#065f46' : '#475569',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="lx-ext-engines-box">

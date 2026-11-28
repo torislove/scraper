@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CircleDot, Globe2, Phone, Search, X, Zap } from 'lucide-react';
 import { StatusPill, cx, formatNumber, relativeTime } from '../../ui';
 
@@ -11,10 +11,13 @@ export function hasValidLogo(vendor) {
 }
 
 export function VendorAvatar({ vendor, size = 36 }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => { setImgFailed(false); }, [vendor?.logo]);
+  const showLogo = !imgFailed && hasValidLogo(vendor);
   return (
     <span className="v2-vendor-avatar" style={{ width: size, height: size }}>
-      {hasValidLogo(vendor)
-        ? <img src={vendor.logo} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} />
+      {showLogo
+        ? <img src={vendor.logo} alt="" loading="lazy" onError={() => setImgFailed(true)} />
         : <b>{vendorInitial(vendor)}</b>}
     </span>
   );
@@ -62,17 +65,6 @@ export function EmptyState({ icon: Icon = CircleDot, title, body, action, action
           {actionLabel}
         </button>
       )}
-    </div>
-  );
-}
-
-export function MapLegend() {
-  return (
-    <div className="v2-map-legend">
-      <span><i className="is-phone" /> Verified mobile</span>
-      <span><i className="is-landline" /> Landline phone</span>
-      <span><i className="is-web" /> Web / Social</span>
-      <span><i className="is-empty" /> Unverified</span>
     </div>
   );
 }

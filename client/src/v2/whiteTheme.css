@@ -843,7 +843,8 @@ body {
 }
 
 /* Map Popups */
-.v2-map-popup .leaflet-popup-content-wrapper {
+.v2-map-popup .leaflet-popup-content-wrapper,
+.v2-map-popup .maplibregl-popup-content {
   background: #ffffff !important;
   color: var(--w-text-primary) !important;
   border-radius: 12px !important;

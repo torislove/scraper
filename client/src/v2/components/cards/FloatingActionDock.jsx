@@ -1,13 +1,15 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Contact, FileSpreadsheet, X, CheckSquare } from 'lucide-react';
+import { Copy, Contact, FileSpreadsheet, X, CheckSquare, Folder, Sparkles } from 'lucide-react';
 
 export default function FloatingActionDock({
   selectedCount = 0,
   onClear,
   onCopyMobiles,
   onExportVcf,
-  onExportCsv
+  onExportCsv,
+  onSaveToFolder,
+  onDeepEnrichSelected
 }) {
   return (
     <AnimatePresence>
@@ -26,6 +28,32 @@ export default function FloatingActionDock({
             </div>
 
             <div className="v2-dock-divider" />
+
+            {onDeepEnrichSelected && (
+              <button
+                type="button"
+                className="v2-dock-btn"
+                style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid rgba(2,132,199,0.28)' }}
+                onClick={onDeepEnrichSelected}
+                title="Run deep contact extraction on selected leads"
+              >
+                <Sparkles size={13} />
+                <span>Deep Enrich</span>
+              </button>
+            )}
+
+            {onSaveToFolder && (
+              <button
+                type="button"
+                className="v2-dock-btn"
+                style={{ background: 'linear-gradient(135deg, #b45309, #f59e0b)', color: '#ffffff', border: 'none' }}
+                onClick={onSaveToFolder}
+                title="Save selected leads to folder"
+              >
+                <Folder size={13} />
+                <span>Save to Folder</span>
+              </button>
+            )}
 
             {onCopyMobiles && (
               <button

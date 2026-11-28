@@ -57,6 +57,7 @@ const PLATFORM_META = {
     g3: '#075985',
     glow: 'rgba(10, 102, 194, 0.34)',
     field: 'linkedin',
+    followersField: 'linkedinFollowers',
     path: (
       <path
         d="M8.1 17.5H6V10.4h2.1v7.1Zm-1.05-8a1.22 1.22 0 1 1 0-2.44 1.22 1.22 0 0 1 0 2.44ZM18 17.5h-2.1v-3.55c0-.85-.02-1.94-1.18-1.94-1.18 0-1.36.92-1.36 1.87v3.62h-2.1V10.4h2.01v.97h.03c.28-.53.97-1.09 1.99-1.09 2.13 0 2.71 1.4 2.71 3.22v4Z"
@@ -103,6 +104,7 @@ const PLATFORM_META = {
     g3: '#b91c1c',
     glow: 'rgba(239, 68, 68, 0.34)',
     field: 'youtube',
+    followersField: 'youtubeSubscribers',
     path: (
       <path
         d="M17.7 9.1c-.14-.55-.58-.99-1.12-1.13C15.58 7.7 12 7.7 12 7.7s-3.58 0-4.58.27a1.55 1.55 0 0 0-1.12 1.13C6.03 10.12 6 12 6 12s.03 1.88.3 2.9c.14.55.58.99 1.12 1.13 1 .27 4.58.27 4.58.27s3.58 0 4.58-.27c.54-.14.98-.58 1.12-1.13.27-1.02.3-2.9.3-2.9s-.03-1.88-.3-2.9Zm-7.05 4.78V10.1l3.2 1.89-3.2 1.89Z"
@@ -112,7 +114,7 @@ const PLATFORM_META = {
   }
 };
 
-const SOCIAL_PLATFORM_KEYS = ['whatsapp', 'instagram', 'facebook', 'linkedin', 'tiktok', 'twitter', 'youtube'];
+const SOCIAL_PLATFORM_KEYS = ['instagram', 'facebook', 'linkedin', 'tiktok', 'twitter', 'youtube'];
 
 export function Social3DIcon({ platform, size = 24, animated = false, delayMs = 0 }) {
   const cfg = PLATFORM_META[platform] || PLATFORM_META.instagram;
@@ -152,19 +154,35 @@ export function Social3DIcon({ platform, size = 24, animated = false, delayMs = 
   );
 }
 
-export function SocialHunterBadgeRow({ scanning = false }) {
-  const activePlatforms = ['whatsapp', 'instagram', 'facebook', 'linkedin', 'tiktok', 'twitter'];
+export function SocialHunterBadgeRow({ scanning = false, mobileCount = 0, landlineCount = 0, socialCount = 0, huntingCount = 0 }) {
+  const activePlatforms = ['instagram', 'facebook', 'linkedin', 'whatsapp'];
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      {activePlatforms.map((key, idx) => (
-        <Social3DIcon
-          key={key}
-          platform={key}
-          size={22}
-          animated={scanning}
-          delayMs={idx * 130}
-        />
-      ))}
+    <div className="flex items-center justify-between gap-2 px-3 py-1 mb-2 bg-slate-50/90 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 flex-shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-lg">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>{Number(mobileCount).toLocaleString()} Mobiles</span>
+        </span>
+        {landlineCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-lg">
+            <span>{Number(landlineCount).toLocaleString()} Landlines</span>
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 text-sky-700 bg-sky-50 border border-sky-200/80 px-2 py-0.5 rounded-lg">
+          <span>{Number(socialCount).toLocaleString()} Socials</span>
+        </span>
+        {huntingCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-lg">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            <span>Hunting {huntingCount} live…</span>
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-1 ml-auto">
+        {activePlatforms.map((key, idx) => (
+          <Social3DIcon key={key} platform={key} size={17} animated={scanning} delayMs={idx * 120} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -198,5 +216,22 @@ export function VendorSocialPills({ vendor, max = 4 }) {
         </a>
       ))}
     </>
+  );
+}
+
+export function SocialPill3D({ platform, url, stat }) {
+  if (!url) return null;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="lx-social-pill-3d"
+      title={platform}
+      onClick={e => e.stopPropagation()}
+    >
+      <Social3DIcon platform={platform} size={17} />
+      <span className="capitalize">{stat || platform}</span>
+    </a>
   );
 }

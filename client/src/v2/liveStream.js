@@ -95,19 +95,13 @@ export function createLiveStream({ url, fallbackUrl = '', onSource, onStatus, on
 
     next.addEventListener('open', markOpen);
 
-    // Named heartbeat or any incoming data frame proves the pipe is live (without re-emitting open)
-    next.addEventListener('heartbeat', () => {
-      touch();
-      if (currentStatus !== 'open') markOpen();
-    });
-    next.addEventListener('init', () => {
-      touch();
-      if (currentStatus !== 'open') markOpen();
-    });
-    next.addEventListener('message', () => {
-      touch();
-      if (currentStatus !== 'open') markOpen();
-    });
+    // Named heartbeat or any live stream frame proves the pipe is alive
+    for (const evName of ['heartbeat', 'init', 'message', 'connected', 'telemetry', 'vendor', 'activePoint', 'progress', 'status']) {
+      next.addEventListener(evName, () => {
+        touch();
+        if (currentStatus !== 'open') markOpen();
+      });
+    }
 
     if (next.readyState === 1) {
       markOpen();

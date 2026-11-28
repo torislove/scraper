@@ -1,66 +1,42 @@
 # ==============================================================================
-# Scraper.co.in - Autonomous Residential Edge Scraper (Production)
-# Zero-Server Footprint: Client PC Hardware & Browser Extension Powered
+# Scraper.co.in - Zero-Chromium Polyglot Backend Server (:5002)
+# Multi-tenant Sandbox Isolation + Native Go & Python Sidecar Integration
 # ==============================================================================
 
 FROM node:20-bookworm-slim AS base
 
-# Install essential runtime utilities & Chromium for server-side Playwright engines
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     dumb-init \
     ca-certificates \
-    procps \
-    chromium \
-    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
-
-ENV SCRAPER_CHROME_PATH=/usr/bin/chromium
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 WORKDIR /app
 
-# Create runtime data dir and copy browser extension beside /app/server (../extension)
-RUN mkdir -p /app/data
 COPY extension/ ./extension/
-
-# Copy server package manifests
 COPY server/package*.json ./server/
 
 WORKDIR /app/server
-
-# Install lean production dependencies
 RUN npm ci --omit=dev && npm cache clean --force
 
-# Copy server source
 COPY server/ ./
+RUN mkdir -p /app/server/data /app/server/db /storage && chmod -R 775 /storage /app/server/data /app/server/db
 
-# Create local fallback and Railway persistent /storage volume directories
-RUN mkdir -p /app/server/data /app/server/db/user_sessions /storage/data /storage/db
-
-# Railway mounts persistent /storage volumes as uid 0, so stay root to avoid EACCES on /storage
-
-# Production Zero-Server Compute Configuration:
-# - All DOM parsing, network transit, and residential scraping run on Client Hardware
-# - Cloud server functions as lightweight JSON coordinator (<50MB RAM idle)
 ENV PORT=5002
 ENV SCRAPER_HOST=0.0.0.0
 ENV NODE_ENV=production
+ENV UV_THREADPOOL_SIZE=8
 ENV COMPUTE_MODE=hybrid
-ENV SCRAPER_EXTENSION_ONLY=false
-ENV USER_RAM_OFFLOAD_ENABLED=1
-ENV SCRAPER_ALLOW_REMOTE=1
+ENV TLS_SIDECAR_URL=http://127.0.0.1:5003
+ENV STORAGE_ROOT=/storage
+ENV SANDBOX_USER_ID=default
 ENV FREE_TRIAL_DAYS=7
-ENV PAYMENT_ENFORCEMENT=0
-ENV FIREBASE_PROJECT_ID=scraper-37c72
 ENV NODE_OPTIONS="--max-old-space-size=1024"
 
 EXPOSE 5002
 
-# Health check probe (uses dynamic Railway $PORT when injected)
 HEALTHCHECK --interval=20s --timeout=4s --start-period=10s --retries=3 \
-  CMD sh -c 'curl -f http://localhost:${PORT:-5002}/api/health || exit 1'
+  CMD sh -c 'curl -f http://127.0.0.1:${PORT:-5002}/api/health || exit 1'
 
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["node", "index.js"]

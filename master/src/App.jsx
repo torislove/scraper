@@ -16,11 +16,10 @@ import './v2/console3d.css';
 
 const LandingLayout = lazyRetry(() => import('./v2/landing/LandingLayout'));
 const LandingHome = lazyRetry(() => import('./v2/landing/LandingHome'));
-const LandingArchitecture = lazyRetry(() => import('./v2/landing/LandingArchitecture'));
-const LandingGlobalCoverage = lazyRetry(() => import('./v2/landing/LandingGlobalCoverage'));
-const LandingFounderStory = lazyRetry(() => import('./v2/landing/LandingFounderStory'));
 const CommandCenter = lazyRetry(() => import('./v2/CommandCenter'));
 const LoginV2 = lazyRetry(() => import('./v2/LoginV2'));
+const SeoLandingPage = lazyRetry(() => import('./pages/SeoLandingPage'));
+const DirectoryPage = lazyRetry(() => import('./pages/DirectoryPage'));
 
 function PageLoader() {
   return (
@@ -62,7 +61,10 @@ class ErrorBoundary extends React.Component {
     return { hasError: true, error };
   }
   componentDidCatch(error, errorInfo) {
-    console.error('App Uncaught Error:', error, errorInfo);
+    try {
+      const errStr = error?.message ? String(error.message) : (typeof error === 'string' ? error : 'Render error');
+      console.error('App Uncaught Error:', errStr);
+    } catch (_) {}
     if (isChunkLoadError(error)) {
       try {
         const last = Number(sessionStorage.getItem('chunkReloadAt') || 0);
@@ -201,11 +203,11 @@ export default function App() {
           <Routes>
             <Route path="/" element={IS_DESKTOP ? <Navigate to="/command" replace /> : <LandingLayout />}>
               <Route index element={<LandingHome />} />
-              <Route path="solutions" element={<Navigate to="/architecture" replace />} />
-              <Route path="architecture" element={<LandingArchitecture />} />
-              <Route path="global-coverage" element={<LandingGlobalCoverage />} />
-              <Route path="hardware" element={<Navigate to="/architecture" replace />} />
-              <Route path="story" element={<LandingFounderStory />} />
+              <Route path="solutions" element={<Navigate to="/#how-it-works" replace />} />
+              <Route path="architecture" element={<Navigate to="/#how-it-works" replace />} />
+              <Route path="global-coverage" element={<Navigate to="/#markets" replace />} />
+              <Route path="hardware" element={<Navigate to="/#how-it-works" replace />} />
+              <Route path="story" element={<Navigate to="/#compliance" replace />} />
             </Route>
             <Route path="/command" element={<RequireAuth><CommandCenter /></RequireAuth>} />
             <Route path="/login" element={<LoginV2 initialMode="signin" />} />
@@ -215,6 +217,12 @@ export default function App() {
 
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
+            <Route path="/directory" element={<DirectoryPage />} />
+            <Route path="/categories" element={<DirectoryPage />} />
+            <Route path="/leads/:countryCode" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug/:citySlug" element={<SeoLandingPage />} />
+            <Route path="/leads/:countryCode/:stateSlug/:citySlug/:subvectorSlug" element={<SeoLandingPage />} />
 
             <Route path="/admin" element={<AdminRedirect />} />
             <Route path="/admin/*" element={<AdminRedirect />} />

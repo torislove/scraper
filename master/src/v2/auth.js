@@ -21,6 +21,31 @@ const CONFIG_CACHE_KEY = 'scraper.auth.config.v1';
 
 export const AUTH_REQUIRED = import.meta.env.VITE_AUTH_REQUIRED === '1';
 
+export function isLocalDev() {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || h.endsWith('.local');
+}
+
+export function loginLocalDevBypass(role = 'admin') {
+  const isMaster = role === 'admin';
+  const session = {
+    user: {
+      id: isMaster ? 'usr_dev_master' : 'usr_dev_client',
+      email: isMaster ? 'admin@scraper.co.in' : 'dev@scraper.co.in',
+      name: isMaster ? 'Master Administrator' : 'Local Developer',
+      company: 'Scraper Local Dev',
+      role: isMaster ? 'admin' : 'user',
+      plan: 'enterprise',
+      credits: 999999
+    },
+    token: 'dev-local-bypass-token',
+    expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
+  };
+  setSession(session, { persistent: true });
+  return session;
+}
+
 function mapFirebaseError(err, fallbackMsg) {
   const code = String(err?.code || '');
   if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {

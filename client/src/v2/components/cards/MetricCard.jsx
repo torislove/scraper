@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CircleDot, Zap } from 'lucide-react';
 import { StatusPill, cx, relativeTime } from '../../ui';
@@ -15,6 +15,9 @@ export function VendorAvatar({ vendor, size = 36 }) {
   const palette = ['#059669', '#0284c7', '#0e7490', '#d97706', '#0891b2', '#db2777'];
   const code = (vendor?.name || 'A').charCodeAt(0) % palette.length;
   const accent = palette[code];
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => { setImgFailed(false); }, [vendor?.logo]);
+  const showLogo = !imgFailed && hasValidLogo(vendor);
   return (
     <span
       className="v2-vendor-avatar"
@@ -26,8 +29,8 @@ export function VendorAvatar({ vendor, size = 36 }) {
         color: accent
       }}
     >
-      {hasValidLogo(vendor)
-        ? <img src={vendor.logo} alt="" loading="lazy" onError={event => { event.currentTarget.style.display = 'none'; }} />
+      {showLogo
+        ? <img src={vendor.logo} alt="" loading="lazy" onError={() => setImgFailed(true)} />
         : <b>{vendorInitial(vendor)}</b>}
     </span>
   );
@@ -115,17 +118,6 @@ export function EmptyState({ icon: Icon = CircleDot, title, body, action, action
           {actionLabel}
         </button>
       )}
-    </div>
-  );
-}
-
-export function MapLegend() {
-  return (
-    <div className="v2-map-legend">
-      <span><i className="is-phone" /> Mobile phone</span>
-      <span><i className="is-landline" /> Office phone</span>
-      <span><i className="is-web" /> Website listed</span>
-      <span><i className="is-empty" /> Location only</span>
     </div>
   );
 }

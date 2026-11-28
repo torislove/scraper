@@ -6,18 +6,14 @@ metadata:
 data:
   PORT: "5002"
   NODE_ENV: "production"
-  COMPUTE_MODE: "extension_only"
-  SCRAPER_EXTENSION_ONLY: "true"
+  COMPUTE_MODE: "hybrid"
+  TLS_SIDECAR_URL: "http://127.0.0.1:5003"
+  STORAGE_ROOT: "/storage"
+  SANDBOX_USER_ID: "prod_shared"
   USER_RAM_OFFLOAD_ENABLED: "1"
   SCRAPER_ALLOW_REMOTE: "1"
-  # Zero-Knowledge Extension-Only cloud deployment: all 6 engines stay on server while user
-  # browser extensions run network fetches on user RAM/IP (0 server Chromium instances needed).
-  SCRAPER_BROWSER_SLOTS: "0"
-  SCRAPER_ENRICH_RESERVE: "1"
-  PLAYWRIGHT_CONCURRENCY: "0"
   NODE_OPTIONS: "--max-old-space-size=1536"
   AUTH_REQUIRED: "1"
   SESSION_TTL_SECONDS: "604800"
   MAX_PARALLEL_JOBS: "25"
   CLIENT_MAX_CONCURRENT_JOBS: "2"
-  SWEEP_POOL_SHARE: "0.4"

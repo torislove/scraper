@@ -926,3 +926,26 @@ body {
   0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
   50% { box-shadow: 0 0 0 6px rgba(5, 150, 105, 0.18); }
 }
+
+/* Sovereign Scrollbar & Futuristic Glass Utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+@keyframes liquid-glow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.liquid-gradient-border {
+  background: linear-gradient(90deg, #6366f1, #38bdf8, #818cf8, #6366f1);
+  background-size: 300% 300%;
+  animation: liquid-glow 8s ease infinite;
+}
+

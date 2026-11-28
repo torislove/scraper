@@ -14,8 +14,8 @@
         <span class="pulse-ring"></span>
       </div>
       <div class="head-meta">
-        <div class="kicker">Residential Edge Engine</div>
-        <h1>RAM Turbo <span id="version" class="version-badge">v1.3.0</span></h1>
+        <div class="kicker">5-Market Edge Accelerator</div>
+        <h1>RAM Turbo <span id="version" class="version-badge">v2.0.0</span></h1>
       </div>
     </div>
 
@@ -76,24 +76,33 @@
     <div class="note">
       <div class="note-header">
         <span class="radar-dot"></span>
-        <strong>11 Sovereign Market Coverage:</strong>
+        <strong>5 Sovereign Markets (IN · US · GB · AU · AE):</strong>
       </div>
-      <p id="site-count">47 business directories, maps &amp; search engines active via residential IP.</p>
+      <p id="site-count">Maps, regional directories &amp; live contact pages active via Client &amp; Master.</p>
     </div>
 
     <!-- Zero Server Resource Notice -->
     <div class="note quiet">
-      <strong>Zero Server Compute Markup:</strong> All DOM rendering and zone requests execute directly inside your browser. Cloud server uses &lt;1.5MB RAM per sweep.
+      <strong>Zero-Chromium Speed:</strong> Native TLS &amp; edge tab routing runs on your hardware with live gateway sync to Backend :5002.
     </div>
 
     <!-- Action Buttons -->
     <div class="actions">
-      <button id="open-cmd" class="btn" type="button">
-        <span>⚡ Open Radar Command Center</span>
-      </button>
       <div class="action-row">
-        <button id="pair-btn" class="btn ghost" type="button">Test Gateway</button>
-        <button id="diag-btn" class="btn ghost" type="button">Diagnostics</button>
+        <button id="open-cmd" class="btn" type="button">
+          <span>Client Radar</span>
+        </button>
+        <button id="open-master" class="btn" type="button" style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fbbf24;">
+          <span>Master Fleet</span>
+        </button>
+      </div>
+      <div class="action-row">
+        <button id="extract-tab-btn" class="btn ghost" type="button">Extract This Page</button>
+        <button id="sync-btn" class="btn ghost" type="button">Sync Offline (<span id="offline-count">0</span>)</button>
+      </div>
+      <div class="action-row">
+        <button id="pair-btn" class="btn ghost" type="button">Check Backend</button>
+        <button id="diag-btn" class="btn ghost" type="button">Copy Telemetry</button>
       </div>
       <button id="wildcard-btn" class="link" type="button" hidden>
         + Enable Direct Business Domain Access

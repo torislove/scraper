@@ -234,13 +234,26 @@ export function detectDeviceHardware() {
   const hasDeviceMem = 'deviceMemory' in navigator && Number(navigator.deviceMemory) > 0;
   const ramGb = hasDeviceMem ? Number(navigator.deviceMemory) : 8;
   const cpuCores = Number(navigator.hardwareConcurrency) > 0 ? Number(navigator.hardwareConcurrency) : 6;
+  const saveData = Boolean(navigator.connection && navigator.connection.saveData);
 
   let tier = 'eco';
   let parallelZones = 3;
   let tierLabel = 'Eco Hardware Mode (3 Parallel Zones)';
   let expectedSpeed = '~55–85 leads/min';
 
-  if (ramGb >= 12 || cpuCores >= 8) {
+  if (saveData || ramGb <= 2 || cpuCores <= 2) {
+    tier = 'lite';
+    parallelZones = 2;
+    tierLabel = 'Lite Mode (2 Parallel Zones)';
+    expectedSpeed = '~35–55 leads/min';
+  } else if (hasDeviceMem && ramGb <= 4) {
+    // Respect actual <=4 GB devices even if they report 6–8 efficiency cores
+    tier = 'eco';
+    parallelZones = 3;
+    tierLabel = 'Eco Hardware Mode (3 Parallel Zones)';
+    expectedSpeed = '~60–90 leads/min';
+  } else if (ramGb >= 12 || (cpuCores >= 12 && (!hasDeviceMem || ramGb >= 8))) {
+    // Note: Chromium caps navigator.deviceMemory at 8 GB on 16–64 GB PCs, so 12+ cores indicates high-spec host
     tier = 'ultra';
     parallelZones = 8;
     tierLabel = 'Ultra Hardware Swarm (8 Parallel Zones)';
@@ -274,7 +287,8 @@ function buildWorkerSource() {
         category = 'Businesses',
         location = '',
         country = 'IN',
-        concurrency = 4
+        concurrency = 4,
+        apiOrigin = ''
       } = payload;
 
       const seen = new Set();
@@ -283,18 +297,10 @@ function buildWorkerSource() {
       const normPhone = (val) => String(val || '').replace(/[^0-9+]/g, '');
 
       const queryNominatim = async (zone) => {
+        if (!apiOrigin) return [];
         const qText = zone.queryText || (category + ' in ' + (zone.zoneName || location));
-        const params = new URLSearchParams({
-          q: qText,
-          format: 'jsonv2',
-          addressdetails: '1',
-          extratags: '1',
-          limit: '25'
-        });
-        if (country && /^[A-Z]{2}$/i.test(country)) {
-          params.set('countrycodes', country.toLowerCase());
-        }
-        const res = await fetch('https://nominatim.openstreetmap.org/search?' + params.toString(), {
+        const params = new URLSearchParams({ q: qText, country });
+        const res = await fetch(apiOrigin + '/api/location/search?' + params.toString(), {
           headers: { 'Accept': 'application/json' }
         });
         if (!res.ok) return [];
@@ -303,30 +309,22 @@ function buildWorkerSource() {
 
         const leads = [];
         for (const item of items) {
-          const tags = item.extratags || {};
-          const rawName = (tags.name || (item.display_name || '').split(',')[0] || '').trim();
+          const rawName = String(item.name || item.display || '').split(',')[0].trim();
           if (!rawName || rawName.length < 2) continue;
           const lat = Number(item.lat);
           const lng = Number(item.lon);
-          const phone = normPhone(tags['contact:phone'] || tags.phone || tags['contact:mobile'] || '');
-          const website = String(tags['contact:website'] || tags.website || '').trim();
-          const email = String(tags['contact:email'] || tags.email || '').trim();
-          if (!phone && !website && !email) continue;
           const key = rawName.toLowerCase().replace(/[^a-z0-9]/g, '') + '|' + (Number.isFinite(lat) ? lat.toFixed(3) : '');
           if (seen.has(key)) continue;
           seen.add(key);
 
           leads.push({
-            id: 'ram_' + (item.place_id || Math.random().toString(36).slice(2, 9)),
+            id: 'ram_' + Math.random().toString(36).slice(2, 9),
             name: rawName,
-            category: tags.amenity || tags.shop || tags.office || category,
+            category: category,
             city: zone.zoneName || location,
-            location: item.display_name || zone.zoneName || location,
-            address: item.display_name || '',
+            location: item.display || zone.zoneName || location,
+            address: item.display || '',
             country,
-            phone,
-            website,
-            email,
             latitude: Number.isFinite(lat) ? lat : null,
             longitude: Number.isFinite(lng) ? lng : null,
             source: 'Client RAM Geo Worker'
@@ -420,56 +418,15 @@ export function startBrowserRamAssist({
       const zones = Array.isArray(planData?.zones) ? planData.zones : [];
       if (!zones.length || stopped) return;
 
-      const blob = new Blob([buildWorkerSource()], { type: 'application/javascript' });
-      blobUrl = URL.createObjectURL(blob);
-      worker = new Worker(blobUrl);
-
-      worker.onmessage = async (event) => {
-        if (stopped) return;
-        const msg = event.data || {};
-        if (msg.type === 'PROGRESS' || msg.type === 'DONE') {
-          onStats?.({
-            hardware,
-            completedZones: msg.completedZones || 0,
-            totalZones: msg.totalZones || zones.length,
-            dedupedInRam: msg.dedupedInRam || 0,
-            done: msg.type === 'DONE'
-          });
-          if (msg.type === 'DONE') cleanup();
-        } else if (msg.type === 'LEADS' && Array.isArray(msg.leads) && msg.leads.length) {
-          try {
-            const ingestRes = await fetch(`${base}/api/scrape/client-ingest`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...headers },
-              signal: controller.signal,
-              body: JSON.stringify({
-                sessionId,
-                category,
-                location,
-                country,
-                leads: msg.leads,
-                deviceSpec: hardware
-              })
-            });
-            if (ingestRes.ok && !stopped) {
-              const data = await ingestRes.json();
-              if (Array.isArray(data?.leads) && data.leads.length) {
-                onLeads?.(data.leads);
-              }
-            }
-          } catch (e) {
-            // Ignore network abort on stop
-          }
-        }
-      };
-
-      worker.postMessage({
-        type: 'START',
-        zones,
-        category: category || 'Businesses',
-        location: location || '',
-        country,
-        concurrency: hardware.parallelZones
+      // V28 Fix: Never inject Nominatim street/place geocoder hits as fake vendor leads ("Unknown" source);
+      // real multi-engine leads stream directly from Google Maps, JustDial, OSM, Overture & Directories,
+      // while this module drives hardware telemetry and the Chrome Extension Relay loop below.
+      onStats?.({
+        hardware,
+        completedZones: 0,
+        totalZones: zones.length,
+        dedupedInRam: 0,
+        done: true
       });
     } catch (e) {
       cleanup();
@@ -526,78 +483,15 @@ export function startBrowserRamAssist({
   };
 }
 
-export const EXTENSION_DOWNLOAD_URL = '/api/scrape/extension-download';
-
-// Set VITE_EXTENSION_STORE_URL once the Chrome Web Store listing is approved.
-// Until then the UI falls back to a clearly-labelled developer build.
-export const EXTENSION_STORE_URL = String(import.meta.env.VITE_EXTENSION_STORE_URL || '').trim();
-
-export function detectRamExtension(timeoutMs = 500) {
-  if (typeof window === 'undefined' || typeof document === 'undefined') {
-    return Promise.resolve({ installed: false, version: '' });
-  }
-  const datasetVer = document.documentElement?.dataset?.scraperExtension;
-  const attrInstalled = document.documentElement?.getAttribute('data-scraper-ext-installed') === 'true';
-  if (datasetVer || attrInstalled) {
-    return Promise.resolve({ installed: true, version: String(datasetVer || '1.2.0') });
-  }
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (val) => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener('message', onMsg);
-      clearTimeout(timer);
-      resolve(val);
-    };
-    const onMsg = (event) => {
-      if (event.source !== window || !event.data) return;
-      if (event.data.source === 'SCRAPER_RAM_EXTENSION' && event.data.type === 'SCRAPER_EXT_PONG') {
-        finish({ installed: true, version: String(event.data.version || '1.0.0') });
-      }
-    };
-    const timer = setTimeout(() => {
-      const retryVer = document.documentElement?.dataset?.scraperExtension;
-      finish(retryVer ? { installed: true, version: String(retryVer) } : { installed: false, version: '' });
-    }, timeoutMs);
-    window.addEventListener('message', onMsg);
-    try {
-      window.postMessage({ type: 'SCRAPER_EXT_PING' }, '*');
-    } catch (e) {
-      finish({ installed: false, version: '' });
-    }
-  });
-}
-
-export function executeBlindTicketInExtension(ticket, timeoutMs = 15000) {
-  if (typeof window === 'undefined' || !ticket?.ticketId) {
-    return Promise.resolve({ ok: false, error: 'Extension bridge unavailable' });
-  }
-  return new Promise((resolve) => {
-    let settled = false;
-    const finish = (res) => {
-      if (settled) return;
-      settled = true;
-      window.removeEventListener('message', onMsg);
-      clearTimeout(timer);
-      resolve(res);
-    };
-    const onMsg = (event) => {
-      if (event.source !== window || !event.data) return;
-      if (
-        event.data.source === 'SCRAPER_RAM_EXTENSION' &&
-        event.data.type === 'SCRAPER_EXT_TICKET_RESULT' &&
-        event.data.ticketId === ticket.ticketId
-      ) {
-        finish(event.data.result || { ok: false, error: 'Empty extension result' });
-      }
-    };
-    const timer = setTimeout(() => finish({ ok: false, ticketId: ticket.ticketId, error: 'Extension timeout' }), timeoutMs);
-    window.addEventListener('message', onMsg);
-    try {
-      window.postMessage({ type: 'SCRAPER_EXT_EXECUTE_TICKET', ticket }, '*');
-    } catch (e) {
-      finish({ ok: false, ticketId: ticket.ticketId, error: e?.message || 'PostMessage failed' });
-    }
-  });
-}
+import {
+  EXTENSION_DOWNLOAD_URL,
+  EXTENSION_STORE_URL,
+  detectRamExtension,
+  executeBlindTicketInExtension
+} from '@shared/utils/extensionBridge';
+export {
+  EXTENSION_DOWNLOAD_URL,
+  EXTENSION_STORE_URL,
+  detectRamExtension,
+  executeBlindTicketInExtension
+};

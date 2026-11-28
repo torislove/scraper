@@ -274,29 +274,36 @@ export function startRelayAgent(options = {}) {
     emit();
 
     const tickets = Array.isArray(data?.tickets) ? data.tickets : [];
-    for (const ticket of tickets) {
+    const devRam = Number(navigator.deviceMemory) || 8;
+    const devCores = Number(navigator.hardwareConcurrency) || 6;
+    const relayConcurrency = devRam <= 4 || devCores <= 2 ? 3 : (devCores >= 12 ? 12 : (devCores >= 8 ? 8 : 5));
+    for (let i = 0; i < tickets.length; i += relayConcurrency) {
       if (!state.running) break;
-      try {
-        current.onTicket(ticket);
-      } catch (error) {
-        // observer only
-      }
-      const result = await executeTicket(ticket);
-      await fetch(`${current.apiBase}/scrape/relay-result`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(current.userId ? { 'x-user-id': current.userId } : {}),
-          ...current.headers
-        },
-        body: JSON.stringify({
-          ticketId: ticket.ticketId,
-          signature: ticket.signature,
-          ...result
-        })
-      }).catch(() => {});
-      if (result?.ok) state.relayed += 1;
-      else state.lastError = String(result?.error || 'relay_failed');
+      const chunk = tickets.slice(i, i + relayConcurrency);
+      await Promise.allSettled(chunk.map(async (ticket) => {
+        if (!state.running) return;
+        try {
+          current.onTicket(ticket);
+        } catch (error) {
+          // observer only
+        }
+        const result = await executeTicket(ticket);
+        await fetch(`${current.apiBase}/scrape/relay-result`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(current.userId ? { 'x-user-id': current.userId } : {}),
+            ...current.headers
+          },
+          body: JSON.stringify({
+            ticketId: ticket.ticketId,
+            signature: ticket.signature,
+            ...result
+          })
+        }).catch(() => {});
+        if (result?.ok) state.relayed += 1;
+        else state.lastError = String(result?.error || 'relay_failed');
+      }));
     }
     emit();
   }

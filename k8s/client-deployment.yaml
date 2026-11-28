@@ -19,6 +19,9 @@ spec:
         - name: client
           image: ghcr.io/scraper-coin/scraper-client:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: API_UPSTREAM
+              value: "http://scraper-server-service:5002"
           ports:
             - containerPort: 80
               name: http

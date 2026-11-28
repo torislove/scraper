@@ -68,6 +68,9 @@ yarn-debug.log*
 yarn-error.log*
 error_crash.log
 server/chrome/
+server/bin/
+*.exe
+*.zip
 .playwright/
 
 # os / editor
