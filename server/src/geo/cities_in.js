@@ -52,6 +52,25 @@ module.exports = {
     ]
   },
 
+  chilakaluripet: {
+    city: 'Chilakaluripet',
+    state: 'Andhra Pradesh',
+    country: 'IN',
+    center: { lat: 16.0892, lng: 80.1672 },
+    bounds: { minLat: 16.04, maxLat: 16.14, minLng: 80.11, maxLng: 80.22 },
+    rejectTerms: ['mumbai', 'hyderabad', 'delhi', 'bangalore'],
+    zones: [
+      { name: 'NH16 Bypass & Service Road', lat: 16.0880, lng: 80.1650, radiusKm: 1.5 },
+      { name: 'Kalamandir Centre', lat: 16.0910, lng: 80.1680, radiusKm: 1.5 },
+      { name: 'Subhash Nagar', lat: 16.0930, lng: 80.1630, radiusKm: 1.5 },
+      { name: 'Pandaripuram', lat: 16.0860, lng: 80.1710, radiusKm: 1.5 },
+      { name: 'Market Yard & Cotton Market', lat: 16.0840, lng: 80.1640, radiusKm: 1.5 },
+      { name: 'RTC Bus Stand Area', lat: 16.0905, lng: 80.1665, radiusKm: 1.5 },
+      { name: 'Ganapathi Nagar', lat: 16.0950, lng: 80.1700, radiusKm: 1.5 },
+      { name: 'Purushothapatnam Road', lat: 16.0929, lng: 80.1550, radiusKm: 2.0 }
+    ]
+  },
+
   vijayawada: {
     city: 'Vijayawada',
     state: 'Andhra Pradesh',
